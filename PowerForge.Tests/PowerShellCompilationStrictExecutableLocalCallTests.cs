@@ -125,20 +125,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_StrictTypedExecutableRejectsUnenforcedLocalFunctionValidationMetadata()
+    public void Build_StrictTypedExecutableEnforcesLocalFunctionValidationMetadata()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Value { param([ValidateRange(1, 5)] [int] $Value) return $Value }; return Get-Value -Value 3");
+            "param([int] $Value); function Get-Value { param([ValidateRange(1, 5)] [int] $InputValue) return $InputValue }; " +
+            "return Get-Value -InputValue $Value");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.TypedLocalValidation",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
 
-        Assert.False(result.Succeeded);
-        Assert.Contains("validation metadata", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var valid = RunProcess(result.ArtifactPath!, "--Value=3");
+        var invalid = RunProcess(result.ArtifactPath!, "--Value=8");
+        Assert.Equal((0, "3", string.Empty), (valid.ExitCode, valid.StandardOutput.Trim(), valid.StandardError.Trim()));
+        Assert.NotEqual(0, invalid.ExitCode);
+        Assert.Contains("outside its validation range", invalid.StandardError, StringComparison.OrdinalIgnoreCase);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
+        Assert.Contains("outside its validation range", generated, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -93,6 +93,26 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return $"({GetVariableIdentifier(name)} = {right})";
     }
 
+    private void EmitDictionaryIndexAssignment(AssignmentStatementAst assignment, IndexExpressionAst index, bool terminate)
+    {
+        if (assignment.Operator.ToString() != "Equals")
+            throw Error(assignment, "Typed dictionary index assignment currently supports only simple '=' mutation.");
+        if (index.Target is not VariableExpressionAst variable ||
+            !_variables.TryGetValue(variable.VariablePath.UserPath, out var targetType) ||
+            targetType != typeof(Dictionary<string, string>) &&
+            targetType != typeof(System.Collections.Specialized.OrderedDictionary) &&
+            !typeof(System.Collections.IDictionary).IsAssignableFrom(targetType))
+            throw Error(index.Target, "Typed indexed assignment currently requires a String dictionary local or IDictionary parameter.");
+        var objectDictionary = targetType != typeof(Dictionary<string, string>) && targetType != typeof(System.Collections.Specialized.OrderedDictionary);
+        if (!objectDictionary && (InferExpressionType(index.Index) != typeof(string) || InferExpressionType(assignment.Right) != typeof(string)))
+            throw Error(assignment, "Typed String dictionary mutation requires String keys and String values.");
+        if (objectDictionary && InferExpressionType(assignment.Right) == typeof(void))
+            throw Error(assignment.Right, "Typed IDictionary mutation requires a value-producing expression.");
+        var target = GetVariableIdentifier(variable.VariablePath.UserPath);
+        var suffix = terminate ? ";" : string.Empty;
+        AppendLine($"{target}[{EmitExpression(index.Index)}] = {EmitExpression(assignment.Right)}{suffix}");
+    }
+
     private bool HasTerminalValue(StatementAst[] statements)
     {
         var terminal = statements.LastOrDefault();

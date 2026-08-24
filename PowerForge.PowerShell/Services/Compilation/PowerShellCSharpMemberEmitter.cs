@@ -113,6 +113,8 @@ internal sealed class PowerShellCSharpMemberEmitter
         var target = ResolveIndexTarget(index);
         if (IsStringDictionary(target.Type))
             return typeof(string);
+        if (IsObjectDictionary(target.Type))
+            return typeof(object);
         if (IsDirectReturnValue(index))
             return typeof(object);
         return target.Type == typeof(string) ? typeof(char) : target.Type.GetElementType()!;
@@ -130,6 +132,8 @@ internal sealed class PowerShellCSharpMemberEmitter
             var temporary = "__powerForgeDictionaryValue" + _temporaryIndex++.ToString(CultureInfo.InvariantCulture);
             return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}.TryGetValue({indexCode}, out var {temporary}) ? {temporary} : null)";
         }
+        if (IsObjectDictionary(target.Type))
+            return $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null dictionary.\") : {targetCode}[{indexCode}])";
         var normalizedIndex = $"(({indexCode}) < 0 ? {targetCode}.Length + ({indexCode}) : ({indexCode}))";
         var missing = $"{normalizedIndex} < 0 || {normalizedIndex} >= {targetCode}.Length";
         var value = $"{targetCode}[{normalizedIndex}]";
@@ -349,12 +353,13 @@ internal sealed class PowerShellCSharpMemberEmitter
         if (index.Target is not VariableExpressionAst and not StringConstantExpressionAst and not ArrayLiteralAst)
             throw _error(index.Target, "Typed indexing requires a side-effect-free local, parameter, string literal, or array literal target.");
         var target = ResolveTarget(index.Target);
-        if (target.IsStatic || target.Type != typeof(string) && !target.Type.IsArray && !IsStringDictionary(target.Type))
-            throw _error(index.Target, "Typed indexing currently supports strings, one-dimensional CLR arrays, and homogeneous string dictionaries only.");
+        if (target.IsStatic || target.Type != typeof(string) && !target.Type.IsArray && !IsStringDictionary(target.Type) && !IsObjectDictionary(target.Type))
+            throw _error(index.Target, "Typed indexing currently supports strings, one-dimensional CLR arrays, homogeneous string dictionaries, and IDictionary parameters only.");
         if (target.Type.IsArray && target.Type.GetArrayRank() != 1)
             throw _error(index.Target, "Typed indexing currently supports one-dimensional CLR arrays only.");
-        var expectedIndexType = IsStringDictionary(target.Type) ? typeof(string) : typeof(int);
-        if (_inferExpressionType(index.Index) != expectedIndexType)
+        var expectedIndexType = IsStringDictionary(target.Type) ? typeof(string) : IsObjectDictionary(target.Type) ? typeof(object) : typeof(int);
+        var actualIndexType = _inferExpressionType(index.Index);
+        if (expectedIndexType != typeof(object) && actualIndexType != expectedIndexType)
             throw _error(index.Index, $"Typed indexing requires one scalar {expectedIndexType.Name} index for this target.");
         if (!IsSideEffectFreeIndex(index.Index))
             throw _error(index.Index, "Typed indexing requires a side-effect-free Int32 variable or constant index.");
@@ -369,6 +374,9 @@ internal sealed class PowerShellCSharpMemberEmitter
 
     private static bool IsOrderedStringDictionary(Type type)
         => type == typeof(System.Collections.Specialized.OrderedDictionary);
+
+    private static bool IsObjectDictionary(Type type)
+        => typeof(System.Collections.IDictionary).IsAssignableFrom(type) && !IsStringDictionary(type);
 
     private static bool IsSideEffectFreeIndex(ExpressionAst index)
         => index is VariableExpressionAst or ConstantExpressionAst ||

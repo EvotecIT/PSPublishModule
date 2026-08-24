@@ -687,8 +687,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Hybrid));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(

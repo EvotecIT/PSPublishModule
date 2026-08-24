@@ -123,7 +123,8 @@ internal static class PowerShellTypedExecutableCompiler
             definition.Function,
             targetFramework,
             PowerShellCompilationCapability.LocalFunctionCalls,
-            signatures).Emit();
+            signatures,
+            definition.Unit.Parameters).Emit();
         var parameters = definition.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
         signatures[name] = new PowerShellLocalFunctionSignature(
             name,
@@ -150,10 +151,15 @@ internal static class PowerShellTypedExecutableCompiler
     private static PowerShellLocalFunctionParameter CreateParameter(ParameterAst parameter, PowerShellCompilationUnitPlan unit)
     {
         var metadata = unit.Parameters.Single(item => item.Name.Equals(parameter.Name.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase));
-        if (metadata.Validations.Length > 0)
-            throw new InvalidOperationException($"Typed local function parameter '-{metadata.Name}' declares validation metadata that direct CLR call binding does not yet enforce.");
         var type = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter) ? typeof(bool) : parameter.StaticType;
-        return new PowerShellLocalFunctionParameter(metadata.Name, type, metadata.IsMandatory, metadata.IsSwitch, metadata.Aliases);
+        return new PowerShellLocalFunctionParameter(
+            metadata.Name,
+            type,
+            metadata.IsMandatory,
+            metadata.IsSwitch,
+            metadata.Aliases,
+            metadata.AllowNull,
+            metadata.Validations);
     }
 
     private static void ValidateCommands(string path, IEnumerable<StatementAst> statements, IReadOnlyDictionary<string, LocalDefinition> definitions)
@@ -254,11 +260,28 @@ internal sealed class PowerShellLocalFunctionSignature
 
 internal sealed class PowerShellLocalFunctionParameter
 {
-    internal PowerShellLocalFunctionParameter(string name, Type type, bool isMandatory, bool isSwitch, string[] aliases)
-    { Name = name; Type = type; IsMandatory = isMandatory; IsSwitch = isSwitch; Aliases = aliases; }
+    internal PowerShellLocalFunctionParameter(
+        string name,
+        Type type,
+        bool isMandatory,
+        bool isSwitch,
+        string[] aliases,
+        bool allowNull,
+        PowerShellCompilationValidation[] validations)
+    {
+        Name = name;
+        Type = type;
+        IsMandatory = isMandatory;
+        IsSwitch = isSwitch;
+        Aliases = aliases;
+        AllowNull = allowNull;
+        Validations = validations;
+    }
     internal string Name { get; }
     internal Type Type { get; }
     internal bool IsMandatory { get; }
     internal bool IsSwitch { get; }
     internal string[] Aliases { get; }
+    internal bool AllowNull { get; }
+    internal PowerShellCompilationValidation[] Validations { get; }
 }

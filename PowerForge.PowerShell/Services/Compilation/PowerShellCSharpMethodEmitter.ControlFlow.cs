@@ -103,24 +103,55 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private void EmitTry(TryStatementAst statement, Type returnType)
     {
-        if (statement.CatchClauses.Any(static clause => clause.CatchTypes.Count > 0))
-            throw Error(statement, "Typed catch filters require PowerShell exception-unwrapping semantics; use one catch-all clause.");
-        if (statement.CatchClauses.Count > 1)
-            throw Error(statement, "A conservative typed try statement accepts at most one catch-all clause.");
+        var catchTypes = statement.CatchClauses
+            .Select(clause => new
+            {
+                Clause = clause,
+                Types = clause.CatchTypes.Select(type => ResolveCatchType(type)).ToArray()
+            })
+            .ToArray();
+        var catchAll = Array.FindIndex(catchTypes, static item => item.Types.Length == 0);
+        if (catchAll >= 0 && catchAll != catchTypes.Length - 1)
+            throw Error(catchTypes[catchAll].Clause, "A catch-all clause must follow all typed catches on the conservative typed path.");
+        var flattened = catchTypes.SelectMany(static item => item.Types.Select(type => new { item.Clause, Type = type })).ToArray();
+        for (var index = 0; index < flattened.Length; index++)
+        {
+            if (flattened.Take(index).Any(previous => previous.Type.IsAssignableFrom(flattened[index].Type)))
+                throw Error(flattened[index].Clause, $"Typed catch '{flattened[index].Type.FullName}' is unreachable after a broader earlier catch.");
+        }
         if (statement.Finally?.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst, searchNestedScriptBlocks: true).Any() == true)
             throw Error(statement.Finally, "Typed finally blocks cannot alter enclosing return, break, or continue control flow.");
         AppendLine("try");
         EmitBlock(statement.Body, returnType);
-        foreach (var clause in statement.CatchClauses)
+        foreach (var item in catchTypes)
         {
-            AppendLine("catch (global::System.Exception)");
-            EmitBlock(clause.Body, returnType);
+            if (item.Types.Length == 0)
+            {
+                AppendLine("catch (global::System.Exception)");
+                EmitBlock(item.Clause.Body, returnType);
+                continue;
+            }
+            foreach (var type in item.Types)
+            {
+                AppendLine($"catch ({GetTypeName(type)})");
+                EmitBlock(item.Clause.Body, returnType);
+            }
         }
         if (statement.Finally is not null)
         {
             AppendLine("finally");
             EmitBlock(statement.Finally, returnType);
         }
+    }
+
+    private Type ResolveCatchType(TypeConstraintAst constraint)
+    {
+        var type = constraint.TypeName.GetReflectionType();
+        if (type is null || !typeof(Exception).IsAssignableFrom(type))
+            throw Error(constraint, $"Typed catch '{constraint.TypeName.FullName}' is not a statically resolvable CLR exception type.");
+        if (!PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework))
+            throw Error(constraint, $"Typed catch '{type.FullName}' is outside the generated project reference set.");
+        return type;
     }
 
     private void EmitBlock(StatementBlockAst block, Type returnType)

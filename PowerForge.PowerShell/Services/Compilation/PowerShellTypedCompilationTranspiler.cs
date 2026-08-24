@@ -37,7 +37,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             typeName,
             targetFramework,
             excludedMethods: null,
-            PowerShellCompilationCapability.PowerShellStreams);
+            PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -73,13 +73,17 @@ public sealed class PowerShellTypedCompilationTranspiler
 
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var parsedFiles = new List<ParsedSource>();
+        var basePath = Path.GetDirectoryName(fullPaths[0]) ?? Directory.GetCurrentDirectory();
+        var combinedPlan = new PowerShellCompilationAnalyzer().AnalyzeFiles(
+            PowerShellCompilationMode.Analyze,
+            fullPaths,
+            basePath,
+            targetFramework,
+            capabilities);
         foreach (var fullPath in fullPaths)
         {
-            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-                fullPath,
-                targetFramework: targetFramework,
-                capabilities: capabilities));
-            var filePlan = plan.Files.Single();
+            var filePlan = combinedPlan.Files.Single(file =>
+                file.FullPath.Equals(fullPath, PowerShellCompilationPathSafety.PathComparison));
             diagnostics.AddRange(filePlan.Diagnostics);
             diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
 
@@ -110,48 +114,72 @@ public sealed class PowerShellTypedCompilationTranspiler
                 return GetMethodKey(item.Path, item.Function.Name, item.Function.Body.Extent.StartLineNumber);
             }))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var declaredFunctionNames = parsedFiles
+            .SelectMany(parsed => parsed.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                .Cast<FunctionDefinitionAst>()
+                .Select(static function => function.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var functionSources = parsedFiles
+            .SelectMany(parsed => parsed.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                .Cast<FunctionDefinitionAst>()
+                .OrderBy(static function => function.Extent.StartOffset)
+                .Select(function => new
+                {
+                    Parsed = parsed,
+                    Function = function,
+                    Unit = parsed.Plan.Units.FirstOrDefault(unit =>
+                        unit.Kind == PowerShellCompilationUnitKind.Function &&
+                        unit.Name.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
+                        unit.StartLine == function.Body.Extent.StartLineNumber)
+                })
+                .Where(static source => source.Unit is not null)
+                .Select(static source => new FunctionSource(source.Parsed, source.Function, source.Unit!)))
+            .ToArray();
+
+        var collidingFunctions = functionSources
+            .Where(source => source.Unit.IsCompilable &&
+                             !duplicateFunctions.Contains(GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber)))
+            .GroupBy(static source =>
+                PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name) + "\0" +
+                string.Join("\0", source.Unit.Parameters.Select(static parameter => parameter.TypeName)),
+                StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .SelectMany(group => group.Select(source =>
+            {
+                diagnostics.Add(new PowerShellCompilationDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                    $"Function '{source.Function.Name}' collides with another generated CLR method signature '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name)}'.",
+                    source.Parsed.Path,
+                    source.Function.Extent.StartLineNumber,
+                    source.Function.Extent.StartColumnNumber));
+                return GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+            }))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var methods = new List<PowerShellCompiledMethod>();
         var methodSources = new List<string>();
-        foreach (var parsed in parsedFiles)
+        if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls))
         {
-            var eligible = parsed.Plan.Units
-                .Where(unit => unit.Kind == PowerShellCompilationUnitKind.Function &&
-                               unit.IsCompilable &&
-                               !duplicateFunctions.Contains(GetMethodKey(parsed.Path, unit.Name, unit.StartLine)))
-                .ToDictionary(static unit => (unit.Name, unit.StartLine));
-            foreach (var function in parsed.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                         .Cast<FunctionDefinitionAst>()
-                         .OrderBy(static function => function.Extent.StartOffset))
+            EmitFunctionGraph(
+                functionSources,
+                declaredFunctionNames,
+                duplicateFunctions,
+                collidingFunctions,
+                excludedMethods,
+                targetFramework,
+                capabilities,
+                methods,
+                methodSources,
+                diagnostics);
+        }
+        else
+        {
+            foreach (var source in functionSources)
             {
-                if (!eligible.TryGetValue((function.Name, function.Body.Extent.StartLineNumber), out var unit))
+                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+                var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
+                if (!source.Unit.IsCompilable || duplicateFunctions.Contains(duplicateKey) || collidingFunctions.Contains(key) || excludedMethods?.Contains(key) == true)
                     continue;
-                if (excludedMethods?.Contains(GetMethodKey(parsed.Path, function.Name, function.Extent.StartLineNumber)) == true)
-                    continue;
-
-                try
-                {
-                    var emitted = new PowerShellCSharpMethodEmitter(parsed.Path, function, targetFramework, capabilities).Emit();
-                    methodSources.Add(emitted.Source);
-                    methods.Add(new PowerShellCompiledMethod(
-                        function.Name,
-                        emitted.GeneratedName,
-                        emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
-                        unit.Parameters,
-                        function.Extent.StartLineNumber,
-                        parsed.Path,
-                        emitted.RequiresPowerShellStreams,
-                        emitted.RequiresPowerShellCommandRegions,
-                        GetFunctionAliases(function)));
-                }
-                catch (PowerShellCSharpEmissionException ex)
-                {
-                    diagnostics.Add(new PowerShellCompilationDiagnostic(
-                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                        ex.Message,
-                        parsed.Path,
-                        ex.Node.Extent.StartLineNumber,
-                        ex.Node.Extent.StartColumnNumber));
-                }
+                TryEmitIndependent(source, targetFramework, capabilities, methods, methodSources, diagnostics);
             }
         }
 
@@ -184,6 +212,189 @@ public sealed class PowerShellTypedCompilationTranspiler
 
         return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics);
     }
+
+    private static void EmitFunctionGraph(
+        IReadOnlyList<FunctionSource> sources,
+        ISet<string> knownNames,
+        ISet<string> duplicateFunctions,
+        ISet<string> collidingFunctions,
+        ISet<string>? excludedMethods,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        List<PowerShellCompiledMethod> methods,
+        List<string> methodSources,
+        List<PowerShellCompilationDiagnostic> diagnostics)
+    {
+        var definitions = sources
+            .GroupBy(static source => source.Function.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() == 1)
+            .ToDictionary(static group => group.Key, static group => group.Single(), StringComparer.OrdinalIgnoreCase);
+        var candidates = definitions.Values
+            .Where(source =>
+            {
+                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+                var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
+                return source.Unit.IsCompilable &&
+                       !duplicateFunctions.Contains(duplicateKey) &&
+                       !collidingFunctions.Contains(key) &&
+                       excludedMethods?.Contains(key) != true;
+            })
+            .ToDictionary(static source => source.Function.Name, StringComparer.OrdinalIgnoreCase);
+        var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
+        var states = new Dictionary<string, FunctionVisitState>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in candidates.Values.OrderBy(static source => source.Parsed.Path, GetPathComparer()).ThenBy(static source => source.Function.Extent.StartOffset))
+        {
+            TryEmitGraphFunction(
+                source,
+                knownNames,
+                candidates,
+                signatures,
+                states,
+                targetFramework,
+                capabilities,
+                methods,
+                methodSources,
+                diagnostics);
+        }
+    }
+
+    private static bool TryEmitGraphFunction(
+        FunctionSource source,
+        ISet<string> knownNames,
+        IReadOnlyDictionary<string, FunctionSource> candidates,
+        Dictionary<string, PowerShellLocalFunctionSignature> signatures,
+        Dictionary<string, FunctionVisitState> states,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        List<PowerShellCompiledMethod> methods,
+        List<string> methodSources,
+        List<PowerShellCompilationDiagnostic> diagnostics)
+    {
+        var name = source.Function.Name;
+        if (states.TryGetValue(name, out var state))
+        {
+            if (state == FunctionVisitState.Complete) return true;
+            if (state == FunctionVisitState.Failed) return false;
+            diagnostics.Add(CreateDiagnostic(source, source.Function, $"Function '{name}' participates in a recursive local-call cycle and remains in PowerShell fallback."));
+            states[name] = FunctionVisitState.Failed;
+            return false;
+        }
+
+        states[name] = FunctionVisitState.Active;
+        foreach (var command in source.Function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        {
+            var dependencyName = command.GetCommandName();
+            if (dependencyName is null || !knownNames.Contains(dependencyName))
+                continue;
+            if (command.InvocationOperator == TokenKind.Unknown &&
+                candidates.TryGetValue(dependencyName, out var dependency) &&
+                TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, targetFramework, capabilities, methods, methodSources, diagnostics))
+                continue;
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+                continue;
+            else
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    source,
+                    command,
+                    $"Function '{name}' depends on local function '{dependencyName}', which is not eligible for the same typed function graph."));
+                states[name] = FunctionVisitState.Failed;
+                return false;
+            }
+        }
+
+        if (states.TryGetValue(name, out state) && state == FunctionVisitState.Failed)
+            return false;
+
+        try
+        {
+            var emitted = new PowerShellCSharpMethodEmitter(
+                source.Parsed.Path,
+                source.Function,
+                targetFramework,
+                capabilities,
+                signatures,
+                source.Unit.Parameters).Emit();
+            signatures[name] = CreateSignature(source, emitted);
+            methodSources.Add(emitted.Source);
+            methods.Add(CreateCompiledMethod(source, emitted));
+            states[name] = FunctionVisitState.Complete;
+            return true;
+        }
+        catch (PowerShellCSharpEmissionException ex)
+        {
+            diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
+            states[name] = FunctionVisitState.Failed;
+            return false;
+        }
+    }
+
+    private static void TryEmitIndependent(
+        FunctionSource source,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        List<PowerShellCompiledMethod> methods,
+        List<string> methodSources,
+        List<PowerShellCompilationDiagnostic> diagnostics)
+    {
+        try
+        {
+            var emitted = new PowerShellCSharpMethodEmitter(
+                source.Parsed.Path,
+                source.Function,
+                targetFramework,
+                capabilities,
+                parameterMetadata: source.Unit.Parameters).Emit();
+            methodSources.Add(emitted.Source);
+            methods.Add(CreateCompiledMethod(source, emitted));
+        }
+        catch (PowerShellCSharpEmissionException ex)
+        {
+            diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
+        }
+    }
+
+    private static PowerShellCompiledMethod CreateCompiledMethod(FunctionSource source, PowerShellCSharpMethodEmission emitted)
+        => new(
+            source.Function.Name,
+            emitted.GeneratedName,
+            emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
+            source.Unit.Parameters,
+            source.Function.Extent.StartLineNumber,
+            source.Parsed.Path,
+            emitted.RequiresPowerShellStreams,
+            emitted.RequiresPowerShellCommandRegions,
+            GetFunctionAliases(source.Function));
+
+    private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
+        => new(
+            source.Function.Name,
+            emitted.GeneratedName,
+            emitted.ReturnType,
+            (source.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
+                .Select(parameter =>
+                {
+                    var metadata = source.Unit.Parameters.Single(item => item.Name.Equals(parameter.Name.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase));
+                    var type = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter) ? typeof(bool) : parameter.StaticType;
+                    return new PowerShellLocalFunctionParameter(
+                        metadata.Name,
+                        type,
+                        metadata.IsMandatory,
+                        metadata.IsSwitch,
+                        metadata.Aliases,
+                        metadata.AllowNull,
+                        metadata.Validations);
+                })
+                .ToArray());
+
+    private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
+        => new(
+            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+            message,
+            source.Parsed.Path,
+            node.Extent.StartLineNumber,
+            node.Extent.StartColumnNumber);
 
     private static PowerShellTypedCompilationResult CreateResult(
         string[] sourcePaths,
@@ -254,6 +465,27 @@ public sealed class PowerShellTypedCompilationTranspiler
         => System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
+
+    private sealed class FunctionSource
+    {
+        internal FunctionSource(ParsedSource parsed, FunctionDefinitionAst function, PowerShellCompilationUnitPlan unit)
+        {
+            Parsed = parsed;
+            Function = function;
+            Unit = unit;
+        }
+
+        internal ParsedSource Parsed { get; }
+        internal FunctionDefinitionAst Function { get; }
+        internal PowerShellCompilationUnitPlan Unit { get; }
+    }
+
+    private enum FunctionVisitState
+    {
+        Active,
+        Complete,
+        Failed
+    }
 
     private sealed class ParsedSource
     {

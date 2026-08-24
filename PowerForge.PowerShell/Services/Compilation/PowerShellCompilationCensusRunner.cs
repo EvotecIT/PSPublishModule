@@ -52,20 +52,25 @@ public sealed class PowerShellCompilationCensusRunner
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
                 .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-            var compiledFiles = resolved.CompilationSourceFiles
-                .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
-                    source,
+            var analyzedCompilation = analyzer.AnalyzeFiles(
                     PowerShellCompilationMode.Analyze,
-                    targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapability.PowerShellStreams)).Files)
-                .ToArray();
+                    resolved.CompilationSourceFiles,
+                    Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
+                    targetFramework,
+                    PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls);
+            var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+                resolved.CompilationSourceFiles,
+                "PowerForge.Census",
+                "CompiledPowerShell",
+                targetFramework);
+            var compiledFiles = ApplyEmittedGraphEvidence(analyzedCompilation.Files, emitted);
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
                 .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
                     source,
                     PowerShellCompilationMode.Analyze,
                     targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapability.PowerShellStreams)).Files)
+                    capabilities: PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls)).Files)
                 .Select(MarkRuntimeOnly)
                 .ToArray();
             var files = compiledFiles.Concat(runtimeOnlyFiles).ToArray();
@@ -79,7 +84,7 @@ public sealed class PowerShellCompilationCensusRunner
                 PowerShellCompilationMode.Analyze,
                 recurse: false,
                 targetFramework: targetFramework,
-                capabilities: PowerShellCompilationCapability.PowerShellStreams));
+                capabilities: PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls));
             sourceFiles = plan.Files.Length;
         }
         stopwatch.Stop();
@@ -177,6 +182,40 @@ public sealed class PowerShellCompilationCensusRunner
                     1)
             }).ToArray())).ToArray();
         return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
+    }
+
+    private static PowerShellCompilationFilePlan[] ApplyEmittedGraphEvidence(
+        IEnumerable<PowerShellCompilationFilePlan> files,
+        PowerShellTypedCompilationResult emitted)
+    {
+        var methods = emitted.Methods
+            .Select(static method => Path.GetFullPath(method.SourcePath) + "\0" + method.SourceName)
+            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        return files.Select(file =>
+        {
+            var fullPath = Path.GetFullPath(file.FullPath);
+            var units = file.Units.Select(unit =>
+            {
+                if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
+                    return unit;
+                return new PowerShellCompilationUnitPlan(
+                    unit.Name,
+                    unit.Kind,
+                    unit.StartLine,
+                    unit.ReturnType,
+                    unit.Parameters,
+                    unit.Diagnostics.Concat(new[]
+                    {
+                        new PowerShellCompilationDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                            "This function did not survive conservative typed function-graph emission and remains on the PowerShell fallback path.",
+                            file.FullPath,
+                            unit.StartLine,
+                            1)
+                    }).ToArray());
+            }).ToArray();
+            return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
+        }).ToArray();
     }
 
     private static string? NormalizeTargetFramework(string? targetFramework)

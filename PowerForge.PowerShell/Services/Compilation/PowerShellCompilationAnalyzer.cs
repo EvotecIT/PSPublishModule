@@ -28,7 +28,8 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static readonly HashSet<Type> SupportedParameterTypes = new()
     {
         typeof(bool), typeof(byte), typeof(sbyte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-        typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(char), typeof(string)
+        typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(char), typeof(string),
+        typeof(System.Collections.IDictionary), typeof(System.Collections.Hashtable), typeof(System.Collections.Specialized.OrderedDictionary)
     };
 
     private static PowerShellCompilationFilePlan AnalyzeFile(
@@ -64,7 +65,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework, capabilities).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework, capabilities, parameterMetadata: scriptUnit.Parameters).Emit();
                     scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)
@@ -119,7 +120,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework, capabilities).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework, capabilities, parameterMetadata: functionUnit.Parameters).Emit();
                     functionUnit = ReplaceUnit(functionUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)
@@ -360,15 +361,16 @@ public sealed partial class PowerShellCompilationAnalyzer
                         conversion.Extent));
                     break;
                 case CommandAst command:
-                    if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
-                         (unitRoot is ScriptBlockAst commandBody &&
-                          PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, out _))))
-                        break;
                     var commandName = command.GetCommandName();
                     if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
                         (command.InvocationOperator == TokenKind.Dot ||
                          commandName is not null && localFunctionNames?.Contains(commandName) == true))
+                        break;
+                    if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
+                         (unitRoot is ScriptBlockAst commandBody &&
+                          (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
+                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _)))))
                         break;
                     diagnostics.Add(CreateDiagnostic(
                         commandName is null ? PowerShellCompilationDiagnosticCode.DynamicCommandInvocation : PowerShellCompilationDiagnosticCode.CommandInvocation,
@@ -408,11 +410,13 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case AssignmentStatementAst assignment:
                     var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+                    if (assignedVariable is null && IsPotentialDictionaryIndexAssignment(assignment, unitRoot))
+                        break;
                     if (assignedVariable is null)
                     {
                         diagnostics.Add(CreateDiagnostic(
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            "Only direct local-variable assignment is supported; indexed and member assignment require PowerShell runtime semantics.",
+                            "Only direct local-variable assignment and simple typed dictionary index assignment are supported; other indexed and member assignment require PowerShell runtime semantics.",
                             file,
                             assignment.Left.Extent));
                     }
@@ -442,10 +446,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case SwitchStatementAst:
                     break;
-                case CatchClauseAst catchClause when catchClause.CatchTypes.Count > 0:
+                case CatchClauseAst catchClause when catchClause.CatchTypes.Any(static type => !IsSupportedCatchType(type)):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                        "Typed catch filters require PowerShell exception-unwrapping semantics; use one catch-all clause on the conservative typed path.",
+                        "Typed catch filters require statically resolvable CLR exception types on the conservative typed path.",
                         file,
                         catchClause.Extent));
                     break;
@@ -498,6 +502,43 @@ public sealed partial class PowerShellCompilationAnalyzer
 
     private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
         => (flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
+
+    private static bool IsSupportedCatchType(TypeConstraintAst constraint)
+    {
+        var type = constraint.TypeName.GetReflectionType();
+        return type is not null && typeof(Exception).IsAssignableFrom(type);
+    }
+
+    private static bool IsPotentialDictionaryIndexAssignment(AssignmentStatementAst assignment, Ast unitRoot)
+    {
+        if (assignment.Operator.ToString() != "Equals" ||
+            assignment.Left is not IndexExpressionAst { Target: VariableExpressionAst target })
+            return false;
+        var name = target.VariablePath.UserPath;
+        if (unitRoot is ScriptBlockAst scriptBlock &&
+            scriptBlock.ParamBlock?.Parameters.FirstOrDefault(parameter =>
+                parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } parameter &&
+            typeof(System.Collections.IDictionary).IsAssignableFrom(parameter.StaticType))
+            return true;
+        return unitRoot.FindAll(
+                node => node is AssignmentStatementAst candidate && candidate.Extent.StartOffset < assignment.Extent.StartOffset,
+                searchNestedScriptBlocks: false)
+            .OfType<AssignmentStatementAst>()
+            .Any(candidate =>
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(candidate.Left) is { } variable &&
+                variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                UnwrapDictionaryLiteral(candidate.Right));
+    }
+
+    private static bool UnwrapDictionaryLiteral(StatementAst right)
+    {
+        Ast current = right;
+        while (current is PipelineAst { PipelineElements.Count: 1 } pipeline)
+            current = pipeline.PipelineElements[0];
+        if (current is CommandExpressionAst expression)
+            current = expression.Expression;
+        return current is HashtableAst || current is ConvertExpressionAst conversion && IsOrderedHashtableConversion(conversion);
+    }
 
     private static bool IsOrderedHashtableConversion(ConvertExpressionAst conversion)
         => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) &&

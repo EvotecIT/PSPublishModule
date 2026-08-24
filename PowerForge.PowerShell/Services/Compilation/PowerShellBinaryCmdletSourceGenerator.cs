@@ -75,7 +75,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             typed.TypeName,
             targetFramework,
             invalid,
-            PowerShellCompilationCapability.PowerShellStreams);
+            PowerShellCompilationCapability.PowerShellStreams | PowerShellCompilationCapability.LocalFunctionCalls);
         return new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
@@ -113,10 +113,21 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine();
         builder.AppendLine($"namespace {typed.NamespaceName};");
         builder.AppendLine();
+        if (cmdlets.Any(static cmdlet => cmdlet.Method.RequiresPowerShellCommandRegions))
+        {
+            builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
+            builder.AppendLine("{");
+            builder.AppendLine("    public static ScriptBlock? Dispatcher { get; set; }");
+            builder.AppendLine("}");
+            builder.AppendLine();
+        }
         foreach (var cmdlet in cmdlets)
             AppendCmdlet(builder, typed, cmdlet);
         return builder.ToString();
     }
+
+    internal static string GetRuntimeRegionHostTypeName(PowerShellTypedCompilationResult typed)
+        => PowerShellCSharpMethodEmitter.SanitizeIdentifier(typed.TypeName + "PowerShellRegionHost");
 
     private static CmdletDescriptor CreateDescriptor(PowerShellCompiledMethod method)
     {
@@ -184,7 +195,11 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         {
             builder.AppendLine("    private void InvokePowerShellRegion(string script, object?[] arguments)");
             builder.AppendLine("    {");
-            builder.AppendLine("        foreach (var value in InvokeCommand.InvokeScript(script, arguments))");
+            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.Dispatcher;");
+            builder.AppendLine("        var values = dispatcher is null");
+            builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
+            builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
+            builder.AppendLine("        foreach (var value in values)");
             builder.AppendLine("            WriteObject(value, enumerateCollection: false);");
             builder.AppendLine("    }");
             builder.AppendLine();

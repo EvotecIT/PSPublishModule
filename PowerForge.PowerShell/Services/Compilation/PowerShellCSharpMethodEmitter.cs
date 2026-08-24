@@ -23,6 +23,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly string? _targetFramework;
     private readonly PowerShellCompilationCapability _capabilities;
     private readonly IReadOnlyDictionary<string, PowerShellLocalFunctionSignature> _localFunctions;
+    private readonly HashSet<string> _localFunctionNames;
+    private readonly IReadOnlyDictionary<string, PowerShellCompilationParameter> _parameterMetadata;
     private bool _requiresPowerShellStreams;
     private bool _requiresPowerShellCommandRegions;
     private int _indent = 1;
@@ -33,8 +35,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         FunctionDefinitionAst function,
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
-        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null)
-        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, capabilities, localFunctions, initialize: true)
+        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null,
+        IEnumerable<PowerShellCompilationParameter>? parameterMetadata = null)
+        : this(filePath, function.Body, function.Name, SanitizeIdentifier(function.Name), null, targetFramework, capabilities, localFunctions, parameterMetadata, initialize: true)
     {
     }
 
@@ -46,8 +49,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         StatementAst[] statements,
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
-        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null)
-        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, capabilities, localFunctions, initialize: true)
+        IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions = null,
+        IEnumerable<PowerShellCompilationParameter>? parameterMetadata = null)
+        : this(filePath, body, sourceName, SanitizeIdentifier(generatedName), statements, targetFramework, capabilities, localFunctions, parameterMetadata, initialize: true)
     {
     }
 
@@ -60,6 +64,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         IReadOnlyDictionary<string, PowerShellLocalFunctionSignature>? localFunctions,
+        IEnumerable<PowerShellCompilationParameter>? parameterMetadata,
         bool initialize)
     {
         _filePath = filePath;
@@ -70,6 +75,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _targetFramework = targetFramework;
         _capabilities = capabilities;
         _localFunctions = localFunctions ?? new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
+        _localFunctionNames = _localFunctions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _parameterMetadata = (parameterMetadata ?? Array.Empty<PowerShellCompilationParameter>())
+            .ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
         _memberEmitter = new PowerShellCSharpMemberEmitter(
             InferExpressionType,
             EmitExpression,
@@ -102,15 +110,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+        var runtimeTailStart = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
+            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(statements, _body, _localFunctionNames)
+            : -1;
+        var typedStatements = runtimeTailStart >= 0 ? statements.Take(runtimeTailStart).ToArray() : statements;
+        InferLocalTypes(typedStatements);
+        var availableVariables = _variables.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _requiresPowerShellStreams = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
             statements.SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
                 .OfType<CommandAst>()
                 .Any(static command => PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _));
         _requiresPowerShellCommandRegions = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            statements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body));
-        InferLocalTypes(statements);
-        ValidateVariableReferences(statements);
-        var returnType = InferReturnType(statements);
+            (runtimeTailStart >= 0 || typedStatements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables)));
+        ValidateVariableReferences(typedStatements);
+        var returnType = runtimeTailStart >= 0 ? typeof(void) : InferReturnType(typedStatements);
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterParts = parameters.Select(parameter =>
@@ -136,6 +149,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
             AppendLine($"{identifier} = {identifier} ?? string.Empty;");
         }
+        EmitParameterValidations(parameters);
         foreach (var name in _predeclaredLocals.OrderBy(name => _firstAssignmentOffsets[name]))
         {
             AppendLine($"{GetTypeName(_variables[name])} {GetVariableIdentifier(name)} = default!;");
@@ -143,11 +157,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         for (var index = 0; index < statements.Length; index++)
         {
-            if (_requiresPowerShellCommandRegions && PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index], _body))
+            if (index == runtimeTailStart)
+            {
+                EmitRuntimeRegion(statements.Skip(index).ToArray());
+                break;
+            }
+            if (_requiresPowerShellCommandRegions && PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index], _body, _localFunctionNames, availableVariables))
             {
                 var region = new List<StatementAst> { statements[index] };
                 while (index + 1 < statements.Length &&
-                       PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index + 1], _body))
+                       PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index + 1], _body, _localFunctionNames, availableVariables))
                 {
                     region.Add(statements[index + 1]);
                     index++;
@@ -172,10 +191,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
     {
-        var parameters = _body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
-        var parameterBlock = "param(" + string.Join(", ", parameters.Select(static parameter => parameter.Name.Extent.Text)) + ")";
+        var referencedNames = statements
+            .SelectMany(static statement => statement.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true))
+            .Cast<VariableExpressionAst>()
+            .Select(static variable => variable.VariablePath.UserPath)
+            .Where(name => _variables.ContainsKey(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(static name => "$" + name)) + ")";
         var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
-        var arguments = string.Join(", ", parameters.Select(parameter => GetVariableIdentifier(parameter.Name.VariablePath.UserPath)));
+        var arguments = string.Join(", ", referencedNames.Select(GetVariableIdentifier));
         AppendLine($"__invokePowerShellRegion({PowerShellCSharpLiteral.QuoteString(script)}, new object?[] {{ {arguments} }});");
     }
 
@@ -189,6 +214,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var assignments = statements
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
+            .Where(static assignment => PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not null)
             .OrderBy(static assignment => assignment.Extent.StartOffset)
             .ToArray();
         foreach (var assignment in assignments.Where(static assignment => !HasAncestor<ForEachStatementAst>(assignment)))
@@ -477,6 +503,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private void EmitAssignment(AssignmentStatementAst assignment, bool terminate)
     {
+        if (assignment.Left is IndexExpressionAst index)
+        {
+            EmitDictionaryIndexAssignment(assignment, index, terminate);
+            return;
+        }
         var variable = FindAssignedVariable(assignment.Left)
             ?? throw Error(assignment.Left, "Only local-variable assignment is supported.");
         var name = variable.VariablePath.UserPath;
