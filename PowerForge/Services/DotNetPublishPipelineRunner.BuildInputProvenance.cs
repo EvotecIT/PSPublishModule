@@ -402,6 +402,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string? pathMap)
                         ? pathMap
                         : null,
+                    verifiedPackageArchives,
                     controlledGeneratedOutputProofs))
             {
                 continue;
@@ -939,11 +940,28 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string?>? environmentVariables,
         TimeSpan timeout)
-        => RunProcessCore(
-            fileName,
+    {
+        string effectiveFileName = fileName;
+        IReadOnlyList<string> effectiveArguments = arguments;
+        if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryResolveTrustedBuildTool(fileName, out effectiveFileName))
+                return (-1, string.Empty, "Trusted build tool could not be resolved.", false);
+        }
+        if (fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveArguments = new[] { "--no-replace-objects" }
+                .Concat(arguments)
+                .ToArray();
+            environmentVariables = CreateTrustedGitEnvironment(environmentVariables);
+        }
+        return RunProcessCore(
+            effectiveFileName,
             workingDirectory,
-            arguments,
+            effectiveArguments,
             timeout,
             environmentVariables);
+    }
 
 }

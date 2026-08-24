@@ -130,6 +130,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 string.IsNullOrWhiteSpace(revision) ? null : revision,
                 null);
         }
+        var replacementRefs = ReadGitRawText(
+            gitRoot!,
+            "for-each-ref --format=\"%(refname)\" refs/replace");
+        bool replacementRefQueryFailed = replacementRefs is null;
+        bool hasReplacementRefs = !string.IsNullOrWhiteSpace(replacementRefs);
 
         var trackedStatus = ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no");
         var hasWriterContext = cleanTrackedGeneratedProvenanceState is not null
@@ -220,6 +225,10 @@ public sealed partial class DotNetPublishPipelineRunner
         var dirtyReasons = new List<string>();
         if (trackedStatus is null || postEvaluationTrackedStatus is null)
             dirtyReasons.Add("tracked Git status query failed");
+        if (replacementRefQueryFailed)
+            dirtyReasons.Add("Git replacement-ref query failed");
+        if (hasReplacementRefs)
+            dirtyReasons.Add("Git replacement refs are active");
         if (untrackedOutput is null || postEvaluationUntrackedOutput is null)
             dirtyReasons.Add("untracked Git status query failed");
         if (statusChangedDuringVerification)
@@ -241,6 +250,7 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyReasons.Add("untrusted evaluated build input(s): " + summary);
         }
         bool? dirty = trackedStatus is null || untrackedOutput is null ||
+                      replacementRefQueryFailed ||
                       postEvaluationTrackedStatus is null || postEvaluationUntrackedOutput is null
             ? null
             : statusChangedDuringVerification
@@ -250,6 +260,7 @@ public sealed partial class DotNetPublishPipelineRunner
               || untrackedSourceFiles.Length > 0
               || untrustedExplicitInput
               || untrustedIgnoredBuildInput
+              || hasReplacementRefs
               || revisionChangedDuringVerification;
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
@@ -1023,12 +1034,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         try
         {
+            if (!TryResolveTrustedBuildTool("git", out string gitPath))
+                return null;
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "git",
-                    Arguments = arguments,
+                    FileName = gitPath,
+                    Arguments = "--no-replace-objects " + arguments,
                     WorkingDirectory = projectRoot,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -1036,6 +1049,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     CreateNoWindow = true
                 }
             };
+            foreach (KeyValuePair<string, string?> variable in CreateTrustedGitEnvironment())
+            {
+                if (variable.Value is null)
+                    process.StartInfo.EnvironmentVariables.Remove(variable.Key);
+                else
+                    process.StartInfo.EnvironmentVariables[variable.Key] = variable.Value;
+            }
             if (!process.Start()) return null;
             var output = process.StandardOutput.ReadToEnd();
             if (!process.WaitForExit(5000) || process.ExitCode != 0) return null;

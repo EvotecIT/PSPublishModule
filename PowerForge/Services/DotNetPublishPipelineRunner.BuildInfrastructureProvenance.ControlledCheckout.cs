@@ -25,6 +25,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string cacheRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "cache")).FullName;
         string homeRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "home")).FullName;
         string temporaryRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "temp")).FullName;
+        string packageRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "packages")).FullName;
         values["APPDATA"] = configurationRoot;
         values["LOCALAPPDATA"] = cacheRoot;
         values["XDG_CONFIG_HOME"] = configurationRoot;
@@ -34,6 +35,7 @@ public sealed partial class DotNetPublishPipelineRunner
         values["TEMP"] = temporaryRoot;
         values["TMP"] = temporaryRoot;
         values["TMPDIR"] = temporaryRoot;
+        values["NUGET_PACKAGES"] = packageRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
             if (variable.Value is null)
@@ -52,6 +54,15 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             values[variable.Key] = remappedValue;
         }
+        if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
+        {
+            controlledEnvironment = values;
+            return false;
+        }
+        string dotNetRoot = Path.GetDirectoryName(dotNetPath)!;
+        values["PATH"] = dotNetRoot;
+        values["DOTNET_ROOT"] = dotNetRoot;
+        values["DOTNET_ROOT(x86)"] = null;
         values["HTTP_PROXY"] = "http://127.0.0.1:1";
         values["HTTPS_PROXY"] = "http://127.0.0.1:1";
         values["ALL_PROXY"] = "http://127.0.0.1:1";
@@ -61,13 +72,10 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool IsApprovedControlledBuildEnvironmentVariable(string name)
-        => name.Equals("PATH", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("PATHEXT", StringComparison.OrdinalIgnoreCase) ||
+        => name.Equals("PATHEXT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("SystemRoot", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("WINDIR", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("ComSpec", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("DOTNET_ROOT", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("DOTNET_ROOT(x86)", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("PROCESSOR_ARCHITECTURE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("PROCESSOR_ARCHITEW6432", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("ProgramFiles", StringComparison.OrdinalIgnoreCase) ||
@@ -147,12 +155,13 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
-    private static bool ContainsRootedBuildValue(string value, string gitRoot)
+    private static bool ContainsRootedBuildValue(string value, string? gitRoot)
     {
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
-        if (value.IndexOf(Path.GetFullPath(gitRoot), comparison) >= 0)
+        if (!string.IsNullOrWhiteSpace(gitRoot) &&
+            value.IndexOf(Path.GetFullPath(gitRoot!), comparison) >= 0)
             return true;
 
         for (int index = 0; index < value.Length; index++)
@@ -294,7 +303,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
-                    if (ContainsNetworkCapableControlledBuildTask(document))
+                    if (ContainsNetworkCapableControlledBuildTask(document) ||
+                        ContainsControlledBuildPropertyEscape(document))
                         return false;
                     if (document.DescendantNodes()
                         .OfType<XText>()
@@ -324,6 +334,50 @@ public sealed partial class DotNetPublishPipelineRunner
              (element.Name.LocalName.Equals("DownloadFile", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static bool ContainsControlledBuildPropertyEscape(XDocument document)
+    {
+        string? localProperties = document.Root?
+            .Attributes()
+            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                "TreatAsLocalProperty",
+                StringComparison.OrdinalIgnoreCase))?
+            .Value;
+        if (string.IsNullOrWhiteSpace(localProperties))
+            return false;
+
+        var protectedProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "RestoreConfigFile",
+            "RestoreSources",
+            "RestoreAdditionalProjectSources",
+            "RestoreFallbackFolders",
+            "RestoreNoCache",
+            "RestoreIgnoreFailedSources",
+            "RestoreLockedMode",
+            "RestorePackagesWithLockFile",
+            "RestoreForceEvaluate",
+            "NuGetLockFilePath",
+            "NuGetAudit",
+            "RunAnalyzers",
+            "RunAnalyzersDuringBuild",
+            "RunAnalyzersDuringLiveAnalysis",
+            "PreBuildEvent",
+            "PostBuildEvent",
+            "RunPostBuildEvent",
+            "UseSharedCompilation",
+            "CscToolPath",
+            "CscToolExe",
+            "VbcToolPath",
+            "VbcToolExe",
+            "FscToolPath",
+            "FscToolExe"
+        };
+        return localProperties!
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.Trim())
+            .Any(protectedProperties.Contains);
     }
 
     private static void RemoveControlledSourceCheckout(

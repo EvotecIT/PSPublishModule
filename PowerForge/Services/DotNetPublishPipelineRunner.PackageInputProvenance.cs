@@ -359,7 +359,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageInputCatalog
+    private sealed partial class VerifiedPackageInputCatalog
     {
         private readonly string[] _packageRoots;
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
@@ -407,6 +407,8 @@ public sealed partial class DotNetPublishPipelineRunner
             TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
             AddSdkManagedPackageHashes(properties, projectDirectory, allRoots, hashes);
             if (allRoots.Count == 0)
+                return null;
+            if (!TryPrimeLockedPackageArchives(allRoots, hashes, archives))
                 return null;
 
             return new VerifiedPackageInputCatalog(allRoots, hashes, archives);
@@ -537,7 +539,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageArchiveCache : IDisposable
+    private sealed partial class VerifiedPackageArchiveCache : IDisposable
     {
         private readonly Dictionary<string, CacheEntry> _archives = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -554,7 +556,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(fullPath, expectedContentHash);
             if (archive is not null)
-                _archives.Add(fullPath, new CacheEntry(expectedContentHash, archive));
+                _archives.Add(fullPath, new CacheEntry(fullPath, expectedContentHash, archive));
             return archive;
         }
 
@@ -567,11 +569,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private sealed class CacheEntry
         {
-            internal CacheEntry(string expectedContentHash, VerifiedPackageArchive archive)
+            internal CacheEntry(
+                string sourcePath,
+                string expectedContentHash,
+                VerifiedPackageArchive archive)
             {
+                SourcePath = sourcePath;
                 ExpectedContentHash = expectedContentHash;
                 Archive = archive;
             }
+
+            internal string SourcePath { get; }
 
             internal string ExpectedContentHash { get; }
 
@@ -579,7 +587,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageArchive : IDisposable
+    private sealed partial class VerifiedPackageArchive : IDisposable
     {
         private readonly FileStream _stream;
         private readonly ZipArchive _archive;

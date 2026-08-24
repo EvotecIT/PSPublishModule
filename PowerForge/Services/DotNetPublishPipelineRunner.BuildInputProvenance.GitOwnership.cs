@@ -9,6 +9,8 @@ public sealed partial class DotNetPublishPipelineRunner
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
+        if (!HasNoGitReplacementRefs(currentRoot))
+            return false;
         while (!string.Equals(currentRoot, outerRoot, comparison))
         {
             string? parentDirectory = Path.GetDirectoryName(currentRoot);
@@ -21,7 +23,8 @@ public sealed partial class DotNetPublishPipelineRunner
             parentRepository = NormalizeBuildInputPathRoot(parentRepository!);
             if (string.Equals(parentRepository, currentRoot, comparison) ||
                 !IsSameOrBelowBuildInputPath(currentRoot, parentRepository) ||
-                !IsSameOrBelowBuildInputPath(parentRepository, outerRoot))
+                !IsSameOrBelowBuildInputPath(parentRepository, outerRoot) ||
+                !HasNoGitReplacementRefs(parentRepository))
             {
                 return false;
             }
@@ -53,5 +56,13 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return true;
+    }
+
+    private static bool HasNoGitReplacementRefs(string repositoryRoot)
+    {
+        string? replacementRefs = ReadGitRawText(
+            repositoryRoot,
+            "for-each-ref --format=\"%(refname)\" refs/replace");
+        return replacementRefs is not null && string.IsNullOrWhiteSpace(replacementRefs);
     }
 }

