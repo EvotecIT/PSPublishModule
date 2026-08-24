@@ -340,6 +340,8 @@ internal static class PowerShellCompiledModuleManifest
     {
         if (string.IsNullOrWhiteSpace(reference))
             return;
+        if (!IsContainedModulePath(reference))
+            return;
         var extension = Path.GetExtension(reference);
         if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase))
             return;

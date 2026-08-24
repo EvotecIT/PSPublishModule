@@ -195,6 +195,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Assets", "data.txt")));
     }
 
+    [Fact]
+    public void Build_HybridModulePreservesExternalNestedModuleSpecificationWithoutFileStaging()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 1 }; function Get-FallbackValue { Get-Date }",
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue', 'Get-FallbackValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); NestedModules = @(@{ ModuleName = 'External.Tools'; ModuleVersion = '1.0' }) }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExternalNestedModule",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var generatedManifest = File.ReadAllText(result.ArtifactPath!);
+        Assert.Contains("ModuleName = 'External.Tools'", generatedManifest, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(result.Manifest!.Files, file =>
+            file.Path.EndsWith("External.Tools", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static PowerShellCompilationBuildResult BuildManifestFixture(ArtifactFixture fixture, string artifactName)
         => new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

@@ -608,6 +608,37 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Fact]
+    public void Build_Net472GeneratedProjectCarriesRestorableReferenceAssemblies()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Net472ReferenceAssemblies",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net472",
+            KeepBuildWorkspace = true
+        });
+
+        try
+        {
+            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+            Assert.NotNull(result.BuildWorkspace);
+            var project = Assert.Single(Directory.EnumerateFiles(result.BuildWorkspace!, "*.csproj"));
+            var projectText = File.ReadAllText(project);
+            Assert.Contains("Microsoft.NETFramework.ReferenceAssemblies", projectText, StringComparison.Ordinal);
+            Assert.Contains("Version=\"1.0.3\"", projectText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(result.BuildWorkspace) && Directory.Exists(result.BuildWorkspace))
+                Directory.Delete(result.BuildWorkspace, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("net8.0", false)]
     [InlineData("net10.0", true)]

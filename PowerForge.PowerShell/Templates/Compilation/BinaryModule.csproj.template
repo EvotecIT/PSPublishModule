@@ -9,6 +9,7 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
+    {{TARGET_REFERENCE}}
     {{POWERSHELL_REFERENCE}}
   </ItemGroup>
 </Project>

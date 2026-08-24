@@ -36,9 +36,13 @@ public sealed class PowerShellCompilationAnalyzer
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
 
+        PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(spec.TargetFramework);
         var files = DiscoverFiles(spec);
         var basePath = Directory.Exists(spec.Path) ? spec.Path : Path.GetDirectoryName(spec.Path) ?? Directory.GetCurrentDirectory();
-        return new PowerShellCompilationPlan(spec.Mode, files.Select(file => AnalyzeFile(file, basePath)).ToArray());
+        return new PowerShellCompilationPlan(
+            spec.Mode,
+            files.Select(file => AnalyzeFile(file, basePath, spec.TargetFramework)).ToArray(),
+            spec.TargetFramework);
     }
 
     private static string[] DiscoverFiles(PowerShellCompilationSpec spec)
@@ -91,7 +95,7 @@ public sealed class PowerShellCompilationAnalyzer
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
              directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
 
-    private static PowerShellCompilationFilePlan AnalyzeFile(string file, string basePath)
+    private static PowerShellCompilationFilePlan AnalyzeFile(string file, string basePath, string? targetFramework)
     {
         Token[] tokens;
         ParseError[] errors;
@@ -119,7 +123,7 @@ public sealed class PowerShellCompilationAnalyzer
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework).Emit();
                     scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)
@@ -172,7 +176,7 @@ public sealed class PowerShellCompilationAnalyzer
             {
                 try
                 {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, function).Emit();
+                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework).Emit();
                     functionUnit = ReplaceUnit(functionUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
                 }
                 catch (PowerShellCSharpEmissionException ex)

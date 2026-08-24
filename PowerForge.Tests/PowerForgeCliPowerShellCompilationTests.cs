@@ -136,6 +136,43 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         }
     }
 
+    [Fact]
+    public async Task Analyze_HonorsRequestedTargetFrameworkMemberSurface()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Target Analysis Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Target Surface.ps1");
+        File.WriteAllText(source, "function New-Version7Guid { return [System.Guid]::CreateVersion7() }");
+
+        try
+        {
+            var net8 = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --mode Strict --framework net8.0 --output json");
+            Assert.Equal(1, net8.ExitCode);
+            using (var document = JsonDocument.Parse(net8.StdOut))
+            {
+                var result = document.RootElement.GetProperty("result");
+                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
+                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
+            }
+
+            var net10 = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --mode Strict --framework net10.0 --output json");
+            Assert.Equal(0, net10.ExitCode);
+            using var net10Document = JsonDocument.Parse(net10.StdOut);
+            var net10Result = net10Document.RootElement.GetProperty("result");
+            Assert.Equal("net10.0", net10Result.GetProperty("targetFramework").GetString());
+            Assert.Equal(1, net10Result.GetProperty("compilableUnits").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string repositoryRoot, string arguments)
     {
         var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");

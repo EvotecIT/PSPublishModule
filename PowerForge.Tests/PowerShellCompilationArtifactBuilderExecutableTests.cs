@@ -168,6 +168,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableRejectsStructuredOutputThatRequiresPowerShellFormatting()
+    {
+        using var fixture = ArtifactFixture.Create("return [System.TimeSpan]::new(0, 0, 1)");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedExecutableStructuredOutput",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("PowerShell formatting semantics", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(result.BuildOutput), result.BuildOutput);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void Build_RejectsOptimizationOutsideSelfContainedStrictTypedExecutable()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");

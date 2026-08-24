@@ -125,11 +125,12 @@ public sealed class PowerShellCompilationFilePlan
 public sealed class PowerShellCompilationPlan
 {
     /// <summary>Creates an aggregate compilation plan.</summary>
-    public PowerShellCompilationPlan(PowerShellCompilationMode mode, PowerShellCompilationFilePlan[] files)
+    public PowerShellCompilationPlan(PowerShellCompilationMode mode, PowerShellCompilationFilePlan[] files, string? targetFramework = null)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
         Mode = mode;
+        TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
@@ -139,6 +140,9 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Requested operating mode.</summary>
     public PowerShellCompilationMode Mode { get; }
+
+    /// <summary>Generated-project target framework used for CLR eligibility, or null for host-runtime analysis.</summary>
+    public string? TargetFramework { get; }
 
     /// <summary>Per-file plans.</summary>
     public PowerShellCompilationFilePlan[] Files { get; }
@@ -168,16 +172,30 @@ public sealed class PowerShellCompilationPlan
 public sealed class PowerShellCompilationSpec
 {
     /// <summary>Creates a compilation specification.</summary>
-    public PowerShellCompilationSpec(string path, PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze, bool recurse = true, string[]? excludeDirectories = null)
+    public PowerShellCompilationSpec(
+        string path,
+        PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
+        bool recurse = true,
+        string[]? excludeDirectories = null,
+        string? targetFramework = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("An input path is required.", nameof(path));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
+        var normalizedTargetFramework = targetFramework?.Trim();
+        if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)
+        {
+            if (!normalizedTargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
+                !normalizedTargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
+                !normalizedTargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("PowerShell compilation analysis currently targets net472, net8.0, or net10.0.", nameof(targetFramework));
+        }
 
         Path = System.IO.Path.GetFullPath(path.Trim().Trim('"'));
         Mode = mode;
         Recurse = recurse;
+        TargetFramework = string.IsNullOrEmpty(normalizedTargetFramework) ? null : normalizedTargetFramework;
         ExcludeDirectories = (excludeDirectories ?? new[] { ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "artifacts", "Artefacts", "Ignore" })
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
@@ -191,6 +209,9 @@ public sealed class PowerShellCompilationSpec
 
     /// <summary>Whether directory analysis recurses.</summary>
     public bool Recurse { get; }
+
+    /// <summary>Optional generated-project target framework used for CLR type and member eligibility.</summary>
+    public string? TargetFramework { get; }
 
     /// <summary>Directory-name fragments excluded from recursive discovery.</summary>
     public string[] ExcludeDirectories { get; }

@@ -8,4 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <ItemGroup>
+    {{TARGET_REFERENCE}}
+  </ItemGroup>
 </Project>

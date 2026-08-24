@@ -35,7 +35,10 @@ public sealed class PowerShellCompilationArtifactBuilder
 
         try
         {
-            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(spec.SourcePath, spec.Mode));
+            var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+                spec.SourcePath,
+                spec.Mode,
+                targetFramework: spec.TargetFramework));
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
 
@@ -128,6 +131,7 @@ public sealed class PowerShellCompilationArtifactBuilder
                     projectPath,
                     projectTemplate
                         .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
+                        .Replace("{{TARGET_REFERENCE}}", PowerShellGeneratedReferenceAssemblyResolver.GetGeneratedProjectReference(spec.TargetFramework))
                         .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName)),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;

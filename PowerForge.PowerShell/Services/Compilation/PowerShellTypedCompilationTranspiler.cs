@@ -41,7 +41,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             throw new ArgumentException("A generated type name is required.", nameof(typeName));
 
         var fullPath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fullPath));
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fullPath, targetFramework: targetFramework));
         var filePlan = plan.Files.Single();
         var diagnostics = new List<PowerShellCompilationDiagnostic>(filePlan.Diagnostics);
         diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
