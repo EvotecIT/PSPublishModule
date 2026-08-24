@@ -25,6 +25,10 @@ public sealed class PowerShellCompilationArtifactBuilder
         ValidateSpec(spec);
 
         Directory.CreateDirectory(spec.OutputDirectory);
+        PowerShellCompilationPathSafety.EnsureNoLinks(
+            spec.OutputDirectory,
+            spec.OutputDirectory,
+            $"PowerShell compilation output directory '{spec.OutputDirectory}' must not be a symbolic link or junction.");
         var artifactName = SanitizeArtifactName(spec.ArtifactName);
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows

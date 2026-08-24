@@ -49,6 +49,7 @@ internal static class PowerShellPackagedScriptRewriter
         ValidateExits(ast, exits);
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
+        var parameterDefaultPaths = FindParameterDefaultPaths(ast).ToArray();
         var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths))
             .Concat(invocationPaths
                 .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
@@ -56,6 +57,12 @@ internal static class PowerShellPackagedScriptRewriter
                     path.Extent.StartOffset,
                     path.Extent.EndOffset,
                     "[System.Environment]::ProcessPath")))
+            .Concat(parameterDefaultPaths.Select(static path => new SourceReplacement(
+                path.Extent.StartOffset,
+                path.Extent.EndOffset,
+                path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
+                    ? "$([System.IO.Path]::GetDirectoryName([System.Environment]::ProcessPath))"
+                    : "$([System.Environment]::ProcessPath)")))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
@@ -139,6 +146,23 @@ internal static class PowerShellPackagedScriptRewriter
         {
             if (!IsTopLevelInvocationPath(member, ast)) continue;
             yield return member;
+        }
+    }
+
+    private static IEnumerable<VariableExpressionAst> FindParameterDefaultPaths(ScriptBlockAst ast)
+    {
+        if (ast.ParamBlock is null) yield break;
+        foreach (var parameter in ast.ParamBlock.Parameters)
+        {
+            if (parameter.DefaultValue is null) continue;
+            foreach (var variable in parameter.DefaultValue
+                         .FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: false)
+                         .Cast<VariableExpressionAst>())
+            {
+                if (variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
+                    variable.VariablePath.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase))
+                    yield return variable;
+            }
         }
     }
 

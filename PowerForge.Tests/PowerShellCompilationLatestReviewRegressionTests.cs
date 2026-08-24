@@ -6,6 +6,75 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
+    public void Build_PackagedExecutablePreservesPathVariablesInOmittedParameterDefaults()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $Config = \"$PSScriptRoot/config.json\", [string] $Command = $PSCommandPath); $Config; $Command");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PackagedDefaultPaths",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal(0, run.ExitCode);
+        var output = run.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, output.Length);
+        AssertPathsEqual(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "config.json"), output[0]);
+        AssertPathsEqual(result.ArtifactPath!, output[1]);
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Fact]
+    public void Build_RejectsLinkedOutputDirectoryBeforeReplacingProtectedSource()
+    {
+        var container = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var physicalOutput = Path.Combine(container, "physical-output");
+        var linkedOutput = Path.Combine(container, "linked-output");
+        const string artifactName = "PowerForge.LinkedOutput";
+        var protectedDirectory = Path.Combine(physicalOutput, artifactName);
+        var sourcePath = Path.Combine(protectedDirectory, "input.ps1");
+        Directory.CreateDirectory(protectedDirectory);
+        File.WriteAllText(sourcePath, "function Get-Value { return 1 }");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedOutput, physicalOutput);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            Directory.Delete(container, recursive: true);
+            return;
+        }
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                    sourcePath,
+                    linkedOutput,
+                    artifactName,
+                    PowerShellCompilationArtifactKind.Library,
+                    PowerShellCompilationMode.Strict)));
+
+            Assert.Contains("symbolic link or junction", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(sourcePath));
+            Assert.Equal("function Get-Value { return 1 }", File.ReadAllText(sourcePath));
+        }
+        finally
+        {
+            try { Directory.Delete(linkedOutput); } catch { }
+            try { Directory.Delete(container, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Build_PackagedExecutableRejectsDotSourcedDependencyBeforePublishing()
     {
         using var fixture = ArtifactFixture.Create(". $PSScriptRoot/Helper.ps1; Get-HelperValue");

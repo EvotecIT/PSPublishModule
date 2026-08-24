@@ -89,7 +89,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             "And" => "&&", "Or" => "||",
             _ => throw Error(binary, $"Binary operator '{binary.Operator}' is not implemented.")
         };
-        if (operation == "Divide" && InferBinaryType(binary) == typeof(double))
+        if (operation is "Divide" or "Rem" && InferBinaryType(binary) == typeof(double))
         {
             left = $"((double)({left}))";
             right = $"((double)({right}))";
@@ -143,7 +143,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             return typeof(string);
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge" or "And" or "Or")
             return typeof(bool);
-        if (operation == "Divide")
+        if (operation is "Divide" or "Rem")
         {
             var left = InferExpressionType(binary.Left);
             var right = InferExpressionType(binary.Right);

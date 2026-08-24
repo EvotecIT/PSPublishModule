@@ -47,6 +47,10 @@ internal static class PowerShellArtifactSetPublisher
 
     internal static void Commit(string stagingDirectory, string outputDirectory, string artifactName, IEnumerable<string> protectedSourcePaths)
     {
+        PowerShellCompilationPathSafety.EnsureNoLinks(
+            outputDirectory,
+            outputDirectory,
+            $"PowerShell compilation output directory '{outputDirectory}' must not be a symbolic link or junction.");
         var stagingPath = NormalizeDirectoryPath(stagingDirectory);
         var outputPath = NormalizeDirectoryPath(outputDirectory);
         if (!string.Equals(Path.GetDirectoryName(stagingPath), outputPath, PathComparison))
