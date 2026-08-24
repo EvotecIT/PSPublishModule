@@ -174,6 +174,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("Double.IsNaN", generated, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("[CmdletBinding()] param([int] $Value)")]
+    [InlineData("param([Parameter()] [int] $Value)")]
+    public void Build_StrictTypedExecutableRejectsAmbiguousAdvancedLocalParameterAbbreviation(string parameterBlock)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"function Get-Value {{ {parameterBlock} return $Value }}; return Get-Value -V 7");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AdvancedLocalAbbreviation",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("ambiguous", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
     [Fact]
     public void Build_StrictTypedExecutableCompilesCatchAllTryStatement()
     {

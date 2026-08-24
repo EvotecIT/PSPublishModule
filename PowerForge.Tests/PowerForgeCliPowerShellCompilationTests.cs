@@ -217,6 +217,11 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         File.WriteAllText(source, "return 1");
         try
         {
+            var defaultAnalyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --output json");
+            Assert.True(defaultAnalyze.ExitCode == 0, FormatFailure("default analyze", defaultAnalyze));
+
             var analyze = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze --mode Strict \"{source}\" --framework net10.0 --output json");

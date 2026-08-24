@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using PowerForge;
 using Xunit;
 
@@ -215,6 +216,38 @@ public sealed class PowerShellCompilationInputResolverTests
         Assert.Equal(
             new[] { function, root }.OrderBy(static path => path),
             resolved.CompilationSourceFiles.OrderBy(static path => path));
+    }
+
+    [Fact]
+    public void Resolve_RecursiveConventionalLoaderSkipsInaccessibleDirectories()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || Environment.UserName.Equals("root", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var fixture = ResolverFixture.Create("InaccessibleLoaderModule");
+        fixture.Write("InaccessibleLoaderModule.psd1", "@{ RootModule = 'InaccessibleLoaderModule.psm1' }");
+        var root = fixture.Write(
+            "InaccessibleLoaderModule.psm1",
+            "$Files = @(Get-ChildItem -Path \"$PSScriptRoot/Sources/*.ps1\" -Recurse -ErrorAction SilentlyContinue); foreach ($File in $Files) { . $File.FullName }");
+        var accessible = fixture.Write("Sources/Get-Accessible.ps1", "function Get-Accessible { return 1 }");
+        var deniedDirectory = Path.Combine(fixture.Root, "Sources", "Denied");
+        Directory.CreateDirectory(deniedDirectory);
+        fixture.Write("Sources/Denied/Get-Denied.ps1", "function Get-Denied { return 2 }");
+        File.SetUnixFileMode(deniedDirectory, UnixFileMode.None);
+        try
+        {
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+            Assert.Equal(
+                new[] { accessible, root }.OrderBy(static path => path),
+                resolved.CompilationSourceFiles.OrderBy(static path => path));
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                deniedDirectory,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     [Fact]

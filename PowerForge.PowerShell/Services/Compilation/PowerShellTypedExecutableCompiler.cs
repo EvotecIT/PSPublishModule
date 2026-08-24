@@ -134,6 +134,7 @@ internal static class PowerShellTypedExecutableCompiler
             method.GeneratedName,
             method.ReturnType,
             parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray(),
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(definition.Function),
             method.RequiresPowerShellBoundParameters,
             method.RequiresPowerShellStreams,
             method.RequiresPowerShellCommandRegions);
@@ -265,6 +266,7 @@ internal sealed class PowerShellLocalFunctionSignature
         string generatedName,
         Type returnType,
         PowerShellLocalFunctionParameter[] parameters,
+        bool isAdvancedFunction,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false)
@@ -273,6 +275,7 @@ internal sealed class PowerShellLocalFunctionSignature
         GeneratedName = generatedName;
         ReturnType = returnType;
         Parameters = parameters;
+        IsAdvancedFunction = isAdvancedFunction;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
@@ -281,6 +284,7 @@ internal sealed class PowerShellLocalFunctionSignature
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
     internal PowerShellLocalFunctionParameter[] Parameters { get; }
+    internal bool IsAdvancedFunction { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }

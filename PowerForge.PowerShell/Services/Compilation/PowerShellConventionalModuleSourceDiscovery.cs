@@ -56,9 +56,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");
             discoveredDirectories.Add(searchRoot);
-            var searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
-            foreach (var file in Directory.EnumerateFiles(searchRoot, "*", searchOption)
+            foreach (var file in EnumerateAccessibleFiles(searchRoot, recurse)
                          .Where(path => wildcard.IsMatch(Path.GetFileName(path))))
             {
                 var fullPath = Path.GetFullPath(file);
@@ -76,6 +75,55 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 .ToArray(),
             loaders.Values.OrderBy(static loader => loader.StartOffset).ToArray());
     }
+
+    private static IEnumerable<string> EnumerateAccessibleFiles(string root, bool recurse)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(current, "*", SearchOption.TopDirectoryOnly);
+            }
+            catch (Exception exception) when (IsAccessFailure(exception))
+            {
+                continue;
+            }
+            foreach (var file in files)
+                yield return file;
+
+            if (!recurse)
+                continue;
+            string[] directories;
+            try
+            {
+                directories = Directory.GetDirectories(current, "*", SearchOption.TopDirectoryOnly);
+            }
+            catch (Exception exception) when (IsAccessFailure(exception))
+            {
+                continue;
+            }
+            foreach (var directory in directories)
+            {
+                try
+                {
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                        throw new InvalidOperationException($"Conventional module source directory '{directory}' is a symbolic link or junction.");
+                    pending.Push(directory);
+                }
+                catch (Exception exception) when (IsAccessFailure(exception))
+                {
+                    // Get-ChildItem access failures are non-terminating for the supported default and SilentlyContinue shapes.
+                }
+            }
+        }
+    }
+
+    private static bool IsAccessFailure(Exception exception)
+        => exception is UnauthorizedAccessException or IOException or System.Security.SecurityException;
 
     private static bool TryReadPathPattern(CommandAst command, out string relativePattern, out bool isLiteralPath)
     {

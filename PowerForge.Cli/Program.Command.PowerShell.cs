@@ -203,7 +203,10 @@ internal static partial class Program
         try
         {
             var recurse = !args.Any(static argument => argument.Equals("--no-recurse", StringComparison.OrdinalIgnoreCase));
-            var resolved = new PowerShellCompilationInputResolver().Resolve(path, kindOverride, mode);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(
+                path,
+                kindOverride,
+                mode == PowerShellCompilationMode.Analyze ? null : mode);
             var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
                 path,
                 mode,

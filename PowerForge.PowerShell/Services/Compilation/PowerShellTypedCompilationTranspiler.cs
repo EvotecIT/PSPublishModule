@@ -391,6 +391,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                         metadata.Validations);
                 })
                 .ToArray(),
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
             emitted.RequiresPowerShellBoundParameters,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions);
