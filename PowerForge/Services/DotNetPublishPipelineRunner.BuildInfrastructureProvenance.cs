@@ -107,15 +107,25 @@ public sealed partial class DotNetPublishPipelineRunner
             "powerforge-provenance-build-" + Guid.NewGuid().ToString("N"));
         string controlledIntermediateRoot = Path.Combine(controlledOutputRoot, "obj");
         string controlledBinaryRoot = Path.Combine(controlledOutputRoot, "bin");
+        string controlledSourceRoot = Path.Combine(controlledOutputRoot, "source");
+        string? controlledGitRoot = null;
         try
         {
             if (!File.Exists(fullCandidatePath))
                 return Cache(false);
             Directory.CreateDirectory(controlledOutputRoot);
+            if (!TryCreateControlledSourceCheckout(
+                    request.ProjectPath,
+                    controlledSourceRoot,
+                    out controlledGitRoot,
+                    out string? controlledProjectPath))
+            {
+                return Cache(false);
+            }
             var arguments = new List<string>
             {
                 "msbuild",
-                request.ProjectPath,
+                controlledProjectPath!,
                 "-nologo",
                 "-verbosity:quiet",
                 "-restore",
@@ -172,22 +182,31 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:IntermediateOutputPath=" + EscapeMsBuildPropertyValue(
                 controlledIntermediateOutputPath + Path.DirectorySeparatorChar));
+            string controlledPathMap = evaluatedPathMap ?? string.Empty;
+            if (!TryBuildControlledPathMap(
+                    controlledSourceRoot,
+                    controlledGitRoot!,
+                    controlledPathMap,
+                    out controlledPathMap))
+            {
+                return Cache(false);
+            }
             if (!string.IsNullOrWhiteSpace(evaluatedIntermediateRoot))
             {
                 if (!TryBuildControlledPathMap(
                         controlledIntermediateRoot,
                         evaluatedIntermediateRoot!,
-                        evaluatedPathMap,
-                        out string? controlledPathMap))
+                        controlledPathMap,
+                        out controlledPathMap))
                 {
                     return Cache(false);
                 }
-                arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
             }
+            arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
-                Path.GetDirectoryName(request.ProjectPath)!,
+                Path.GetDirectoryName(controlledProjectPath!)!,
                 arguments,
                 request.EnvironmentVariables,
                 TimeSpan.FromMinutes(5));
@@ -242,6 +261,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         finally
         {
+            RemoveControlledSourceCheckout(controlledGitRoot, controlledSourceRoot);
             try
             {
                 if (Directory.Exists(controlledOutputRoot))

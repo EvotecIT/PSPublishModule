@@ -86,7 +86,6 @@ public sealed partial class DotNetPublishPipelineRunner
         int peHeaderStart = reader.PEHeaders.PEHeaderStartOffset;
         ZeroRange(image, peHeaderStart - 16, sizeof(uint));
         ZeroRange(image, peHeaderStart + 64, sizeof(uint));
-        ZeroDirectory(image, reader.PEHeaders, peHeader.ImportAddressTableDirectory);
         NormalizeDebugRecords(image, reader, peHeader.DebugTableDirectory);
 
         SectionHeader[] mappedSections = reader.PEHeaders.SectionHeaders

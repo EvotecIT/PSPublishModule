@@ -53,7 +53,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_RechecksGitStateAfterControlledChildBuild()
+    public void ReadSourceProvenance_IsolatesSourceMutationFromControlledChildBuild()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -102,9 +102,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [appProject],
                     buildConfiguration: "Release");
 
-            Assert.Contains("Mutated = 1", File.ReadAllText(trackedPath), StringComparison.Ordinal);
-            Assert.True(provenance.Dirty);
-            Assert.Contains(
+            Assert.Equal("public static class Library { }", File.ReadAllText(trackedPath));
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.DoesNotContain(
                 provenance.DirtyReasons,
                 reason => reason.Contains("Git status changed", StringComparison.OrdinalIgnoreCase));
         }
