@@ -23,10 +23,17 @@ public sealed partial class DotNetPublishPipelineRunner
             "environment");
         string configurationRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "config")).FullName;
         string cacheRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "cache")).FullName;
+        string homeRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "home")).FullName;
+        string temporaryRoot = Directory.CreateDirectory(Path.Combine(environmentRoot, "temp")).FullName;
         values["APPDATA"] = configurationRoot;
         values["LOCALAPPDATA"] = cacheRoot;
         values["XDG_CONFIG_HOME"] = configurationRoot;
         values["XDG_CACHE_HOME"] = cacheRoot;
+        values["HOME"] = homeRoot;
+        values["USERPROFILE"] = homeRoot;
+        values["TEMP"] = temporaryRoot;
+        values["TMP"] = temporaryRoot;
+        values["TMPDIR"] = temporaryRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
             if (variable.Value is null)
@@ -45,6 +52,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             values[variable.Key] = remappedValue;
         }
+        values["HTTP_PROXY"] = "http://127.0.0.1:1";
+        values["HTTPS_PROXY"] = "http://127.0.0.1:1";
+        values["ALL_PROXY"] = "http://127.0.0.1:1";
+        values["NO_PROXY"] = string.Empty;
         controlledEnvironment = values;
         return true;
     }
@@ -55,11 +66,6 @@ public sealed partial class DotNetPublishPipelineRunner
            name.Equals("SystemRoot", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("WINDIR", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("ComSpec", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("TEMP", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("TMP", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("TMPDIR", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("USERPROFILE", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("DOTNET_ROOT", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("DOTNET_ROOT(x86)", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("PROCESSOR_ARCHITECTURE", StringComparison.OrdinalIgnoreCase) ||
@@ -153,7 +159,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (index > 0 &&
                 !char.IsWhiteSpace(value[index - 1]) &&
-                "=,|([{'\"".IndexOf(value[index - 1]) < 0)
+                "=,;|([{'\"".IndexOf(value[index - 1]) < 0)
             {
                 continue;
             }
@@ -288,6 +294,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
+                    if (ContainsNetworkCapableControlledBuildTask(document))
+                        return false;
                     if (document.DescendantNodes()
                         .OfType<XText>()
                         .Select(text => text.Value)
@@ -305,6 +313,17 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static bool ContainsNetworkCapableControlledBuildTask(XDocument document)
+    {
+        return document.Descendants().Any(element =>
+            element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
+            (element.Ancestors().Any(ancestor =>
+                 ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
+             (element.Name.LocalName.Equals("DownloadFile", StringComparison.OrdinalIgnoreCase) ||
+              element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
+              element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase))));
     }
 
     private static void RemoveControlledSourceCheckout(

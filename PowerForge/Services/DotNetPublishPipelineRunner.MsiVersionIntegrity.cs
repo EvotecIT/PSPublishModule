@@ -404,7 +404,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             repositoryRoot = Path.GetFullPath(repositoryRoot!);
             if (!IsSameOrBelowBuildInputPath(repositoryRoot, fullGitRoot) ||
-                !IsSameOrBelowBuildInputPath(fullInput, repositoryRoot))
+                !IsSameOrBelowBuildInputPath(fullInput, repositoryRoot) ||
+                !IsRecordedNestedGitRepository(repositoryRoot, fullGitRoot))
             {
                 return null;
             }

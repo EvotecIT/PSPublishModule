@@ -162,7 +162,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:BuildProjectReferences=" + EscapeMsBuildPropertyValue(
             preservePublishBuildProjectReferences ? buildProjectReferences : "false"));
         if (preservePublishBuildProjectReferences)
-            arguments.Add("-p:BuildingProject=false");
+            arguments.Add("-p:BuildingProject=true");
     }
 
     private static EvaluatedProjectItem? ReadEvaluatedProjectItem(

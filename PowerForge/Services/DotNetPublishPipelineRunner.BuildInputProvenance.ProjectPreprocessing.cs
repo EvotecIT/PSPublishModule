@@ -516,6 +516,22 @@ public sealed partial class DotNetPublishPipelineRunner
         if (executed.Contains(target) || !visiting.Add(target))
             return;
 
+        IEnumerable<IReadOnlyDictionary<string, string>> activeContexts =
+            executionPropertyContexts.Count == 0
+                ? new[] { evaluatedProperties }
+                : executionPropertyContexts.Cast<IReadOnlyDictionary<string, string>>();
+        if (new[]
+            {
+                target.Attribute("DependsOnTargets")?.Value,
+                target.Attribute("BeforeTargets")?.Value,
+                target.Attribute("AfterTargets")?.Value
+            }.Any(expression => activeContexts.Any(context =>
+                HasUnresolvedMsBuildTargetList(expression, context))))
+        {
+            throw new InvalidOperationException(
+                "A reachable MSBuild target list could not be resolved for provenance evaluation.");
+        }
+
         foreach (string dependency in executionPropertyContexts.SelectMany(context =>
                      ReadExpandedMsBuildTargetList(
                          target.Attribute("DependsOnTargets")?.Value,
