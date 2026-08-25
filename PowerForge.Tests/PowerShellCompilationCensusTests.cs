@@ -13,20 +13,65 @@ public sealed class PowerShellCompilationCensusTests
         Directory.CreateDirectory(root);
         File.WriteAllText(
             source,
-            "function Get-One { param([string] $Value) return ($Value -match 'a') }; " +
-            "function Get-Two { param([string] $Value, [string] $Other = 'x') return ($Value -match 'a') }; " +
+            "function Get-One { param([string] $Value) return ($Value -as [string]) }; " +
+            "function Get-Two { param([string] $Value, [string] $Other = 'x') return ($Value -as [string]) }; " +
             "function Get-Three { return 1 }");
         try
         {
             var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
 
-            var match = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.imatch");
-            Assert.Equal(2, match.AffectedUnits);
-            Assert.Equal(2, match.VisibleSoleBlockerUnits);
-            Assert.Equal(3, match.CandidateCompilableUnits);
-            Assert.Equal(100d, match.CandidateCoveragePercentage, precision: 6);
+            var conversion = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.as");
+            Assert.Equal(2, conversion.AffectedUnits);
+            Assert.Equal(2, conversion.VisibleSoleBlockerUnits);
+            Assert.Equal(3, conversion.CandidateCompilableUnits);
+            Assert.Equal(100d, conversion.CandidateCoveragePercentage, precision: 6);
             Assert.DoesNotContain(result.Frontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
             Assert.Equal(result.Frontier.Select(static impact => impact.FeatureId).Distinct(StringComparer.Ordinal).Count(), result.Frontier.Length);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_AttributesPostEmissionFailureToExactCapability()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Emission Attribution", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "function Get-Map { [hashtable] $Map = @{ Name = 'value' }; return $Map }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+
+            var matches = result.FunctionFrontier
+                .Where(impact => impact.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"))
+                .ToArray();
+            Assert.True(matches.Length == 1, string.Join(", ", result.FunctionFrontier.Select(static impact => impact.FeatureId)));
+            var exact = Assert.Single(matches);
+            Assert.Equal(1, exact.VisibleSoleBlockerUnits);
+            Assert.DoesNotContain(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_ReservesFunctionGraphFeatureForActualRecursiveGraphConstraint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Recursive Graph", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "function Get-Repeated { param([int] $Number) return Get-Repeated -Number $Number }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+
+            var graph = Assert.Single(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
+            Assert.Equal(1, graph.VisibleSoleBlockerUnits);
         }
         finally
         {

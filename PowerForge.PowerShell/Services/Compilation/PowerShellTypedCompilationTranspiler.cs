@@ -242,6 +242,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             .ToDictionary(static source => source.Function.Name, StringComparer.OrdinalIgnoreCase);
         var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         var states = new Dictionary<string, FunctionVisitState>(StringComparer.OrdinalIgnoreCase);
+        var provisionalSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var source in candidates.Values.OrderBy(static source => source.Parsed.Path, PowerShellCompilationPathSafety.PathComparer).ThenBy(static source => source.Function.Extent.StartOffset))
         {
@@ -251,6 +252,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 candidates,
                 signatures,
                 states,
+                provisionalSignatures,
                 targetFramework,
                 capabilities,
                 methods,
@@ -265,6 +267,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         IReadOnlyDictionary<string, FunctionSource> candidates,
         Dictionary<string, PowerShellLocalFunctionSignature> signatures,
         Dictionary<string, FunctionVisitState> states,
+        ISet<string> provisionalSignatures,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         List<PowerShellCompiledMethod> methods,
@@ -276,11 +279,23 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             if (state == FunctionVisitState.Complete) return true;
             if (state == FunctionVisitState.Failed) return false;
+            if (provisionalSignatures.Contains(name)) return true;
             diagnostics.Add(CreateDiagnostic(source, source.Function, $"Function '{name}' participates in a recursive local-call cycle and remains in PowerShell fallback."));
             states[name] = FunctionVisitState.Failed;
             return false;
         }
 
+        if (PowerShellRecursiveFunctionPolicy.TryGetDeclaredReturnType(
+                source.Function,
+                source.Unit,
+                knownNames,
+                targetFramework,
+                capabilities,
+                out var declaredReturnType) && declaredReturnType is not null)
+        {
+            signatures[name] = CreateProvisionalSignature(source, declaredReturnType);
+            provisionalSignatures.Add(name);
+        }
         states[name] = FunctionVisitState.Active;
         foreach (var command in source.Function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
         {
@@ -289,7 +304,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 continue;
             if (command.InvocationOperator == TokenKind.Unknown &&
                 candidates.TryGetValue(dependencyName, out var dependency) &&
-                TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, targetFramework, capabilities, methods, methodSources, diagnostics))
+                TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, provisionalSignatures, targetFramework, capabilities, methods, methodSources, diagnostics))
                 continue;
             if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
                 continue;
@@ -316,7 +331,12 @@ public sealed class PowerShellTypedCompilationTranspiler
                 capabilities,
                 signatures,
                 source.Unit.Parameters).Emit();
+            if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != emitted.ReturnType)
+                throw new PowerShellCSharpEmissionException(
+                    source.Function,
+                    $"Declared OutputType '{signatures[name].ReturnType.FullName}' does not match inferred recursive return type '{emitted.ReturnType.FullName}'.");
             signatures[name] = CreateSignature(source, emitted);
+            provisionalSignatures.Remove(name);
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
             states[name] = FunctionVisitState.Complete;
@@ -324,6 +344,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         catch (PowerShellCSharpEmissionException ex)
         {
+            if (provisionalSignatures.Remove(name)) signatures.Remove(name);
             diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
             states[name] = FunctionVisitState.Failed;
             return false;
@@ -371,10 +392,34 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
 
     private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
-        => new(
-            source.Function.Name,
+        => CreateSignature(
+            source,
             emitted.GeneratedName,
             emitted.ReturnType,
+            emitted.RequiresPowerShellBoundParameters,
+            emitted.RequiresPowerShellStreams,
+            emitted.RequiresPowerShellCommandRegions);
+
+    private static PowerShellLocalFunctionSignature CreateProvisionalSignature(FunctionSource source, Type returnType)
+        => CreateSignature(
+            source,
+            PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name),
+            returnType,
+            requiresPowerShellBoundParameters: false,
+            requiresPowerShellStreams: false,
+            requiresPowerShellCommandRegions: false);
+
+    private static PowerShellLocalFunctionSignature CreateSignature(
+        FunctionSource source,
+        string generatedName,
+        Type returnType,
+        bool requiresPowerShellBoundParameters,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions)
+        => new(
+            source.Function.Name,
+            generatedName,
+            returnType,
             (source.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
                 .Select(parameter =>
                 {
@@ -392,9 +437,9 @@ public sealed class PowerShellTypedCompilationTranspiler
                 })
                 .ToArray(),
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
-            emitted.RequiresPowerShellBoundParameters,
-            emitted.RequiresPowerShellStreams,
-            emitted.RequiresPowerShellCommandRegions,
+            requiresPowerShellBoundParameters,
+            requiresPowerShellStreams,
+            requiresPowerShellCommandRegions,
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)

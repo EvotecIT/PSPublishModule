@@ -61,7 +61,7 @@ public sealed class PowerShellCompilationCoverageV2Tests
             Assert.Equal(2, product.Coverage.FallbackFunctions);
             var graph = Assert.Single(result.FunctionFrontier, impact =>
                 impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
-            Assert.Equal(2, graph.VisibleSoleBlockerUnits);
+            Assert.Equal(2, graph.AffectedUnits);
         }
         finally
         {

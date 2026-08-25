@@ -522,6 +522,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ConvertExpressionAst conversion when
                 _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                 PowerShellObjectConstructionPolicy.IsLiteral(conversion) => EmitPowerShellObject(conversion),
+            ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, _targetFramework, _capabilities) =>
+                EmitPowerShellConversion(conversion),
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => EmitBinary(binary),
             UnaryExpressionAst unary => EmitUnary(unary),
@@ -645,9 +647,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ConvertExpressionAst conversion when
                 _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                 PowerShellObjectConstructionPolicy.IsLiteral(conversion) => typeof(System.Management.Automation.PSObject),
+            ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, _targetFramework, _capabilities) =>
+                conversion.StaticType,
             ConvertExpressionAst conversion => throw Error(conversion, "Explicit PowerShell conversion expressions require runtime conversion semantics and are not supported by the typed compiler."),
             BinaryExpressionAst binary => InferBinaryType(binary),
             UnaryExpressionAst unary when IsIncrementOrDecrement(unary) => typeof(void),
+            UnaryExpressionAst unary when unary.TokenKind.ToString() == "Bnot" => InferBitwiseUnaryType(unary),
             UnaryExpressionAst unary => InferExpressionType(unary.Child),
             ArrayLiteralAst array => InferArrayLiteralType(array),
             ArrayExpressionAst array => InferArrayExpressionType(array),

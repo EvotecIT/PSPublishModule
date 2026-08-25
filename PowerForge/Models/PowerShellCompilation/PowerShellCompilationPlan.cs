@@ -41,7 +41,13 @@ public enum PowerShellCompilationCapability
     PipelineParameterBinding = 32,
 
     /// <summary>Generated methods may reference a conservative set of PowerShell host types.</summary>
-    PowerShellHostTypes = 64
+    PowerShellHostTypes = 64,
+
+    /// <summary>Generated methods may use public PowerShell language conversion primitives.</summary>
+    PowerShellLanguageConversions = 128,
+
+    /// <summary>Generated methods may use public PowerShell comparison, wildcard, and membership primitives.</summary>
+    PowerShellLanguageOperators = 256
 }
 
 /// <summary>
@@ -335,7 +341,9 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellObjects |
                               PowerShellCompilationCapability.ExecutableParameterBinding |
                               PowerShellCompilationCapability.PipelineParameterBinding |
-                              PowerShellCompilationCapability.PowerShellHostTypes)) != 0)
+                              PowerShellCompilationCapability.PowerShellHostTypes |
+                              PowerShellCompilationCapability.PowerShellLanguageConversions |
+                              PowerShellCompilationCapability.PowerShellLanguageOperators)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

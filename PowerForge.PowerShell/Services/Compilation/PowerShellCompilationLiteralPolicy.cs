@@ -13,7 +13,7 @@ internal static class PowerShellCompilationLiteralPolicy
         object? raw;
         try
         {
-            raw = expression.SafeGetValue();
+            raw = (expression is ConvertExpressionAst conversion ? conversion.Child : expression).SafeGetValue();
         }
         catch (Exception exception) when (exception is InvalidOperationException or RuntimeException)
         {

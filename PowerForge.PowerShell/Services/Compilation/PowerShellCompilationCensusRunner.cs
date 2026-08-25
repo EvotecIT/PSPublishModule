@@ -541,10 +541,33 @@ public sealed class PowerShellCompilationCensusRunner
         return files.Select(file =>
         {
             var fullPath = Path.GetFullPath(file.FullPath);
-            var units = file.Units.Select(unit =>
+            var units = file.Units.Select((unit, index) =>
             {
                 if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
                     return unit;
+                var nextLine = file.Units
+                    .Skip(index + 1)
+                    .Where(static candidate => candidate.Kind == PowerShellCompilationUnitKind.Function)
+                    .Select(static candidate => candidate.StartLine)
+                    .Where(line => line > unit.StartLine)
+                    .DefaultIfEmpty(int.MaxValue)
+                    .Min();
+                var exact = emitted.Diagnostics
+                    .Where(diagnostic =>
+                        PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, fullPath) &&
+                        diagnostic.Line >= unit.StartLine &&
+                        diagnostic.Line < nextLine)
+                    .ToArray();
+                if (exact.Length > 0)
+                {
+                    return new PowerShellCompilationUnitPlan(
+                        unit.Name,
+                        unit.Kind,
+                        unit.StartLine,
+                        unit.ReturnType,
+                        unit.Parameters,
+                        exact);
+                }
                 return new PowerShellCompilationUnitPlan(
                     unit.Name,
                     unit.Kind,
