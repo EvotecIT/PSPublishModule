@@ -103,6 +103,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Optional contained literal dot-sourced files that participate in the same module compilation scope.</summary>
     public string[] CompilationSourcePaths { get; set; } = Array.Empty<string>();
 
+    /// <summary>All contained authored runtime source files resolved for packaging or Hybrid preservation, including files outside the typed compilation scope.</summary>
+    public string[] RuntimeSourcePaths { get; set; } = Array.Empty<string>();
+
     /// <summary>Destination directory for durable artifacts and the manifest.</summary>
     public string OutputDirectory { get; }
 
@@ -234,6 +237,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>All durable files that form the artifact, including hybrid-module support files.</summary>
     public PowerShellCompilationArtifactFile[] Files { get; set; } = Array.Empty<PowerShellCompilationArtifactFile>();
+
+    /// <summary>Discovered source, module, assembly, and content dependency decisions.</summary>
+    public PowerShellCompilationDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationDependency>();
 
     /// <summary>Source diagnostics retained as honest fallback evidence.</summary>
     public PowerShellCompilationDiagnostic[] Diagnostics { get; set; } = Array.Empty<PowerShellCompilationDiagnostic>();

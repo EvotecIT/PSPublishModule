@@ -44,13 +44,15 @@ public sealed class PowerShellCompilationDiagnostic
         string message,
         string filePath,
         int line,
-        int column)
+        int column,
+        string? featureId = null)
     {
         Code = code;
         Message = message ?? string.Empty;
         FilePath = filePath ?? string.Empty;
         Line = line;
         Column = column;
+        FeatureId = PowerShellCompilationFeatureIds.Resolve(code, Message, featureId);
     }
 
     /// <summary>Stable diagnostic code.</summary>
@@ -67,4 +69,7 @@ public sealed class PowerShellCompilationDiagnostic
 
     /// <summary>One-based source column, or zero when unavailable.</summary>
     public int Column { get; }
+
+    /// <summary>Stable compiler-capability identifier used for coverage planning.</summary>
+    public string FeatureId { get; }
 }

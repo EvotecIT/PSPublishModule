@@ -141,6 +141,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,
+            RuntimeSourcePaths = resolved.SourceFiles,
             TargetFramework = TargetFramework,
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,

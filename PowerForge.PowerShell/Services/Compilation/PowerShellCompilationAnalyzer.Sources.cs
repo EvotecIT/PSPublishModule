@@ -34,12 +34,17 @@ public sealed partial class PowerShellCompilationAnalyzer
             mode,
             targetFramework: targetFramework ?? "net8.0").TargetFramework;
         var capabilityMode = mode == PowerShellCompilationMode.Analyze ? input.Mode : mode;
-        return AnalyzeFiles(
+        var plan = AnalyzeFiles(
             mode,
             input.CompilationSourceFiles,
             input.ModuleRoot,
             normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+        return new PowerShellCompilationPlan(
+            plan.Mode,
+            plan.Files,
+            plan.TargetFramework,
+            new PowerShellCompilationDependencyPlanner().Analyze(input, capabilityMode));
     }
 
     internal PowerShellCompilationPlan AnalyzeFiles(

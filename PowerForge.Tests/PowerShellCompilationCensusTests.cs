@@ -6,6 +6,41 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationCensusTests
 {
     [Fact]
+    public void Run_RanksStableFeaturesByVisibleCounterfactualImpact()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Frontier Tests", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            source,
+            "function Get-One { param([string] $Value) return ($Value -match 'a') }; " +
+            "function Get-Two { param([string] $Value, [string] $Other = 'x') return ($Value -match 'a') }; " +
+            "function Get-Three { return 1 }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+
+            var match = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.imatch");
+            Assert.Equal(2, match.AffectedUnits);
+            Assert.Equal(1, match.VisibleSoleBlockerUnits);
+            Assert.Equal(2, match.CandidateCompilableUnits);
+            Assert.Equal(2d / 3d * 100d, match.CandidateCoveragePercentage, precision: 6);
+            var parameterDefault = Assert.Single(result.Frontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
+            Assert.Equal(1, parameterDefault.AffectedUnits);
+            Assert.Equal(0, parameterDefault.VisibleSoleBlockerUnits);
+            Assert.Contains(result.CoBlockers, pair =>
+                pair.AffectedUnits == 1 &&
+                new[] { pair.FirstFeatureId, pair.SecondFeatureId }.Contains("operator.imatch") &&
+                new[] { pair.FirstFeatureId, pair.SecondFeatureId }.Contains(PowerShellCompilationFeatureIds.ParameterDefault));
+            Assert.Equal(result.Frontier.Select(static impact => impact.FeatureId).Distinct(StringComparer.Ordinal).Count(), result.Frontier.Length);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_MatchesRepeatedDisplayNamesByNormalizedProductPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Identity Tests", Guid.NewGuid().ToString("N"));

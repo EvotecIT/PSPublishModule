@@ -95,6 +95,7 @@ internal static partial class Program
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
+                RuntimeSourcePaths = resolved.SourceFiles,
                 TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
@@ -300,8 +301,28 @@ internal static partial class Program
             foreach (var product in result.Products)
             {
                 logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} typed ({product.CompilationCoveragePercentage:0.0}%), {product.AnalysisMilliseconds:0.0} ms.");
-                foreach (var blocker in product.Blockers.Take(5))
-                    logger.Warn($"  {blocker.Occurrences}x [{blocker.Code}] {blocker.Message}");
+                foreach (var feature in product.FeatureImpacts.Take(5))
+                    logger.Warn($"  [{feature.FeatureId}] {feature.AffectedUnits} affected, {feature.VisibleSoleBlockerUnits} visible sole-blocker candidate(s), candidate coverage {feature.CandidateCoveragePercentage:0.0}%.");
+                var payload = product.DependencySummary.Where(static summary =>
+                    summary.Kind is not PowerShellCompilationDependencyKind.PowerShellSource and not PowerShellCompilationDependencyKind.ModuleManifest).ToArray();
+                if (payload.Length > 0)
+                    logger.Info($"  Dependencies: {payload.Sum(static summary => summary.Files)} item(s), {payload.Sum(static summary => summary.SizeBytes)} byte(s), {payload.Sum(static summary => summary.Missing)} missing.");
+            }
+            if (result.Frontier.Length > 0)
+            {
+                logger.Info("Observed compiler frontier (current visible blockers; not a guarantee that masked blockers will not appear):");
+                var rank = 0;
+                foreach (var feature in result.Frontier.Take(10))
+                {
+                    logger.Info($"  {++rank}. [{feature.FeatureId}] {feature.Title}: {feature.AffectedUnits} affected, {feature.VisibleSoleBlockerUnits} visible sole-blocker candidate(s), {feature.AffectedProducts} product(s), candidate coverage {feature.CandidateCoveragePercentage:0.0}%.");
+                    logger.Info($"     {feature.Recommendation}");
+                }
+            }
+            if (result.CoBlockers.Length > 0)
+            {
+                logger.Info("Frequent co-blockers:");
+                foreach (var pair in result.CoBlockers.Take(5))
+                    logger.Info($"  [{pair.FirstFeatureId}] + [{pair.SecondFeatureId}]: {pair.AffectedUnits} unit(s).");
             }
             foreach (var regression in result.Regressions)
                 logger.Error($"Census regression in {regression.Product}: {regression.Metric} was {regression.Baseline:0.###}, now {regression.Current:0.###}.");
@@ -336,6 +357,19 @@ internal static partial class Program
             }
         }
 
+        if (plan.Dependencies.Length > 0)
+        {
+            logger.Info($"Dependency/resource plan: {plan.Dependencies.Length} item(s), {plan.Dependencies.Sum(static dependency => dependency.SizeBytes)} byte(s).");
+            foreach (var group in plan.Dependencies
+                         .GroupBy(static dependency => new { dependency.Kind, dependency.Disposition })
+                         .OrderBy(static group => group.Key.Kind)
+                         .ThenBy(static group => group.Key.Disposition))
+                logger.Info($"  {group.Key.Kind} / {group.Key.Disposition}: {group.Count()} item(s), {group.Sum(static dependency => dependency.SizeBytes)} byte(s).");
+            foreach (var dependency in plan.Dependencies.Where(static dependency =>
+                         dependency.Disposition is PowerShellCompilationDependencyDisposition.NotIncluded or PowerShellCompilationDependencyDisposition.Missing).Take(20))
+                logger.Warn($"  {dependency.RelativePath}: {dependency.Disposition}. {dependency.Note}");
+        }
+
         if (!plan.CanProceed)
             logger.Error(plan.ParseErrorFiles > 0
                 ? $"Planning failed because {plan.ParseErrorFiles} file(s) contain parser errors."
@@ -343,7 +377,7 @@ internal static partial class Program
     }
 
     private static string FormatPowerShellDiagnostic(string relativePath, PowerShellCompilationDiagnostic diagnostic)
-        => $"{relativePath}:{diagnostic.Line}:{diagnostic.Column} [{diagnostic.Code}] {diagnostic.Message}";
+        => $"{relativePath}:{diagnostic.Line}:{diagnostic.Column} [{diagnostic.Code}/{diagnostic.FeatureId}] {diagnostic.Message}";
 
     private static int WritePowerShellError(bool outputJson, int exitCode, string error, ILogger logger, string command = "powershell.analyze")
     {

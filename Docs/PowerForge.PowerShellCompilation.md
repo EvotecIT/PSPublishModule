@@ -113,6 +113,23 @@ Build-PowerShellArtifact `
 
 The dependency tree is extracted with its relative layout before the embedded script runs, so `$PSScriptRoot`, `$PSCommandPath`, and nested literal dot-sources retain file-backed behavior. Dynamic, escaping, missing, or linked dependencies fail closed. Multi-file Strict EXEs remain unsupported until local PowerShell function declarations and calls have a typed entrypoint contract.
 
+### Dependencies and runtime resources
+
+`analyze` and every successful build manifest include a detailed dependency/resource plan, while `census` aggregates the same evidence by dependency kind and disposition for each product. Detailed items record their stable kind, discovery source, relative path, byte size, existence, and disposition: `Compiled`, `PreservedScript`, `Embedded`, `EmbeddedAndExtracted`, `CopiedAdjacent`, `ExternalRequirement`, `NotIncluded`, or `Missing`. This prevents a successful-looking binary from silently losing files its source expected.
+
+| Input dependency | BinaryModule output | Package EXE | Strict EXE | CLR Library |
+| --- | --- | --- | --- | --- |
+| Root source and literal `.ps1` closure | Eligible functions compile; Hybrid script remains beside the DLL | Root is embedded; reachable dot-sources are embedded and extracted with their relative layout | Complete reachable graph must compile | Eligible functions compile; unsupported functions are omitted in Hybrid |
+| `FormatsToProcess`, `TypesToProcess`, `ScriptsToProcess`, local `RequiredAssemblies`, local `NestedModules`, and `FileList` | Contained manifest closure is copied with its relative layout; Strict rejects script runtime hooks | Not a module-to-EXE dependency mechanism | Not included | Not included |
+| Top-level `Resources`/`Resource` tree | Copied beside the generated module | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
+| Top-level `Lib`/`Libraries` tree | Managed and native DLLs plus companion content are copied beside the generated module | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
+| Top-level `runtimes` tree | Copied with RID-specific subdirectories intact | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
+| `RequiredModules` and named external `RequiredAssemblies` | Preserved as external host requirements; not embedded | Not resolved or bundled automatically | Not resolved or bundled automatically | Remain consumer requirements |
+
+A generated binary module is therefore a module directory, not only its generated DLL. CSS, JavaScript, images, managed assemblies, native libraries, manifests, scripts, and type/format data keep file-backed paths. PowerForge signs only build-owned generated files; copied vendor assemblies retain their publisher identity. A module can use `FileList` for any runtime payload outside the conventional directories. Pointing at a built/staged module directory gives the most precise resource boundary; repository-only examples, tests, and build output are not copied merely because they are nearby.
+
+PowerForge does not currently turn a module into an EXE or infer an application entrypoint from exported functions. A standalone `.ps1` that imports PSWriteHTML, PSWriteWord, or another module does not cause that whole module and its resource tree to be bundled. Package EXEs currently embed the entry script and reachable literal script dependencies only. Strict EXEs and plain CLR libraries need an explicit future resource API before file payloads can be embedded with meaningful lookup semantics. The planner reports these files as `NotIncluded` instead of implying support.
+
 Analyze a file or a complete source tree before building:
 
 ```powershell
@@ -175,7 +192,7 @@ powerforge powershell build .\Calculations.psm1 `
     --out .\artifacts
 ```
 
-Add `--output json` to either `analyze` or `build` for a stable machine-readable envelope.
+Add `--output json` to either `analyze` or `build` for a stable machine-readable envelope. Analyzer diagnostics include a stable `featureId`, while `dependencies` explains what the selected artifact shape will compile, preserve, copy, embed, leave external, or reject.
 
 ## Use the PSPublishModule cmdlet
 
@@ -314,6 +331,7 @@ Each successful build writes `<name>.powerforge-compilation.json`. The manifest 
 - SHA-256 for the primary artifact, portable PDBs, and every distributed runtime or hybrid-module file;
 - exact source diagnostics and locations for unsupported units;
 - byte sizes for the primary artifact and every durable file;
+- the complete discovered dependency/resource plan and each item's delivery disposition;
 - executable optimization mode and Authenticode signing evidence when requested.
 
 A packaged EXE therefore reports `requiresPowerShellRuntime: true` and `usesPowerShellRuntimeFallback: true`. A strict CLR library reports both values as `false`. A strict binary module requires PowerShell as its cmdlet host but reports no script fallback.
@@ -388,7 +406,7 @@ The canonical census uses exact committed source from six PowerShell-first produ
 
 That archived six-product lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled; the parent candidate compiled nine. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
 
-The CLI now makes this a repeatable regression gate rather than a one-off research script. It records per-product discovery, typed/fallback coverage, parse errors, analyzer duration, and the most frequent blockers. `--write-baseline` creates a JSON baseline; `--baseline` returns a failing exit code when a product disappears, typed coverage decreases, fallback increases, or parse errors increase:
+The CLI now makes this a repeatable regression gate rather than a one-off research script. It records per-product discovery, typed/fallback coverage, parse errors, analyzer duration, dependency summaries, stable missing-feature impact, and frequent co-blocker pairs. `--write-baseline` creates a JSON baseline; `--baseline` returns a failing exit code when a product disappears, typed coverage decreases, fallback increases, or parse errors increase:
 
 ```powershell
 $root = if ($env:EVOTEC_GITHUB_ROOT) { $env:EVOTEC_GITHUB_ROOT } else { 'C:\Support\GitHub' }
@@ -407,6 +425,31 @@ powerforge powershell census `
 The current five-product frontier candidate reports 1,132 authored files, 1,222 units, 103 emitted typed methods, 1,119 fallback units, and zero parse errors. The per-product split is PowerInfoBlox 2/56, PSSharedGoods 16/269, PSWriteHTML 5/318, O365Essentials 76/210, and ADEssentials 4/266. This is the actual binary-module graph emitted after export shaping, dependency closure, collision handling, and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
+
+The machine-readable `frontier` separates four questions that raw occurrence counts mix together:
+
+- `occurrences`: visible diagnostics assigned to the stable feature ID;
+- `affectedUnits`: distinct fallback functions or script bodies reporting it;
+- `visibleSoleBlockerUnits`: units where it is the only feature blocker visible in this pass;
+- `candidateCompleteProductsUnlocked`: entire census roots with no other currently visible fallback feature.
+
+`candidateCoveragePercentage` adds only visible sole-blocker units to current typed coverage. It is a counterfactual planning signal, not a promise: accepting an outer AST construct can reveal a deeper blocker that was deliberately masked. `coBlockers` shows which features commonly need to land together. Features are ranked lexically by complete-product candidates, visible sole-blocker units, affected units, occurrences, and stable ID; PowerForge does not invent an effort score.
+
+The current five-product run produces this leading planning frontier:
+
+| Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `command.register-argumentcompleter` | 229 | 82 | 78 | 2 | 14.81% |
+| `parameter.type` | 1,027 | 443 | 45 | 5 | 12.11% |
+| `runtime.scope` | 1,633 | 410 | 35 | 5 | 11.29% |
+| `parameter.metadata` | 1,497 | 264 | 34 | 5 | 11.21% |
+| `parameter.default` | 562 | 271 | 30 | 5 | 10.88% |
+| `function.graph` | 29 | 29 | 29 | 3 | 10.80% |
+| `command.new-htmltab` | 22 | 22 | 22 | 1 | 10.23% |
+| `expression.conversion` | 699 | 236 | 10 | 5 | 9.25% |
+| `syntax.subexpression` | 737 | 191 | 8 | 5 | 9.08% |
+
+This changes feature planning materially. For example, parameter types have far more total impact than `Register-ArgumentCompleter`, but the latter is the only visible blocker for more units in the current Hybrid module graph. That does not mean it should be implemented as a runtime-free Strict intrinsic: the recommendation attached to each feature still distinguishes a safe intrinsic, a PowerShell-backed command region, an authoring change, or behavior that should remain Package/Hybrid-only.
 
 ### Real product rebuild matrix
 

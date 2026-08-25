@@ -30,25 +30,35 @@ public sealed class PowerShellCompilationCensusRunner
                 nameof(baseline));
         }
 
-        var products = new List<PowerShellCompilationCensusProduct>(normalized.Length);
+        var analyses = new List<AnalyzedProduct>(normalized.Length);
         foreach (var path in normalized)
-            products.Add(AnalyzeProduct(path, targetFramework, recurse));
+            analyses.Add(AnalyzeProduct(path, targetFramework, recurse));
+
+        var products = analyses.Select(static analysis => analysis.Product).ToArray();
 
         var regressions = baseline is null
             ? Array.Empty<PowerShellCompilationCensusRegression>()
             : Compare(products, baseline.Products);
-        return new PowerShellCompilationCensusResult(targetFramework, products.ToArray(), regressions);
+        var frontier = BuildFeatureImpacts(
+            analyses.SelectMany(static analysis => analysis.FeatureEvidence),
+            products.Sum(static product => product.CompilableUnits),
+            products.Sum(static product => product.TotalUnits),
+            products);
+        var coBlockers = BuildCoBlockers(analyses.SelectMany(static analysis => analysis.FeatureEvidence));
+        return new PowerShellCompilationCensusResult(targetFramework, products, regressions, frontier, coBlockers);
     }
 
-    private static PowerShellCompilationCensusProduct AnalyzeProduct(string path, string? targetFramework, bool recurse)
+    private static AnalyzedProduct AnalyzeProduct(string path, string? targetFramework, bool recurse)
     {
         var stopwatch = Stopwatch.StartNew();
         var analyzer = new PowerShellCompilationAnalyzer();
         PowerShellCompilationPlan plan;
+        PowerShellCompilationDependency[] dependencies = Array.Empty<PowerShellCompilationDependency>();
         var sourceFiles = 0;
         if (recurse)
         {
             var resolved = new PowerShellCompilationInputResolver().Resolve(path);
+            dependencies = resolved.Dependencies;
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
                 .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
@@ -117,7 +127,12 @@ public sealed class PowerShellCompilationCensusRunner
         var name = Directory.Exists(path)
             ? new DirectoryInfo(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).Name
             : Path.GetFileNameWithoutExtension(path);
-        return new PowerShellCompilationCensusProduct(
+        var featureEvidence = CollectFeatureEvidence(path, plan).ToArray();
+        var productMetrics = new[]
+        {
+            new ProductMetrics(path, plan.TotalUnits, plan.CompilableUnits, plan.RuntimeFallbackUnits, plan.ParseErrorFiles)
+        };
+        var product = new PowerShellCompilationCensusProduct(
             name,
             path,
             sourceFiles,
@@ -126,7 +141,122 @@ public sealed class PowerShellCompilationCensusRunner
             plan.RuntimeFallbackUnits,
             plan.ParseErrorFiles,
             stopwatch.Elapsed.TotalMilliseconds,
-            diagnostics);
+            diagnostics,
+            BuildFeatureImpacts(featureEvidence, plan.CompilableUnits, plan.TotalUnits, productMetrics),
+            PowerShellCompilationDependencyPlanner.Summarize(dependencies));
+        return new AnalyzedProduct(product, featureEvidence);
+    }
+
+    private static IEnumerable<FeatureUnitEvidence> CollectFeatureEvidence(string product, PowerShellCompilationPlan plan)
+    {
+        foreach (var file in plan.Files)
+        {
+            foreach (var unit in file.Units)
+            {
+                var diagnostics = unit.Diagnostics;
+                yield return new FeatureUnitEvidence(
+                    product,
+                    file.RelativePath + ":" + unit.StartLine + ":" + unit.Name,
+                    isCompilationUnit: true,
+                    diagnostics);
+            }
+            if (file.Diagnostics.Length > 0)
+            {
+                yield return new FeatureUnitEvidence(
+                    product,
+                    file.RelativePath,
+                    isCompilationUnit: false,
+                    file.Diagnostics);
+            }
+        }
+    }
+
+    private static PowerShellCompilationFeatureImpact[] BuildFeatureImpacts(
+        IEnumerable<FeatureUnitEvidence> evidence,
+        int currentCompilableUnits,
+        int totalUnits,
+        IEnumerable<PowerShellCompilationCensusProduct> products)
+        => BuildFeatureImpacts(
+            evidence,
+            currentCompilableUnits,
+            totalUnits,
+            products.Select(static product => new ProductMetrics(
+                product.Path,
+                product.TotalUnits,
+                product.CompilableUnits,
+                product.RuntimeFallbackUnits,
+                product.ParseErrorFiles)));
+
+    private static PowerShellCompilationFeatureImpact[] BuildFeatureImpacts(
+        IEnumerable<FeatureUnitEvidence> evidence,
+        int currentCompilableUnits,
+        int totalUnits,
+        IEnumerable<ProductMetrics> products)
+    {
+        var units = evidence.ToArray();
+        var metrics = products.ToDictionary(static product => product.Name, StringComparer.OrdinalIgnoreCase);
+        return units
+            .SelectMany(static unit => unit.FeatureIds)
+            .Distinct(StringComparer.Ordinal)
+            .Select(featureId =>
+            {
+                var affected = units.Where(unit => unit.FeatureIds.Contains(featureId, StringComparer.Ordinal)).ToArray();
+                var affectedUnits = affected.Where(static unit => unit.IsCompilationUnit).ToArray();
+                var soleBlockers = affectedUnits.Count(static unit => unit.FeatureIds.Length == 1);
+                var completeProducts = affectedUnits
+                    .Select(static unit => unit.Product)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(product =>
+                    {
+                        if (!metrics.TryGetValue(product, out var productMetrics) ||
+                            productMetrics.RuntimeFallbackUnits == 0 ||
+                            productMetrics.ParseErrorFiles > 0)
+                            return false;
+                        var fallback = units.Where(unit => unit.IsCompilationUnit && unit.Product.Equals(product, StringComparison.OrdinalIgnoreCase) && unit.FeatureIds.Length > 0).ToArray();
+                        return fallback.Length == productMetrics.RuntimeFallbackUnits &&
+                               fallback.All(unit => unit.FeatureIds.Length == 1 && unit.FeatureIds[0].Equals(featureId, StringComparison.Ordinal));
+                    });
+                var description = PowerShellCompilationFeatureCatalog.Describe(featureId);
+                return new PowerShellCompilationFeatureImpact(
+                    featureId,
+                    description.Title,
+                    description.Recommendation,
+                    affected.Sum(unit => unit.Diagnostics.Count(diagnostic => diagnostic.FeatureId.Equals(featureId, StringComparison.Ordinal))),
+                    affectedUnits.Length,
+                    soleBlockers,
+                    affected.Select(static unit => unit.Product).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    completeProducts,
+                    currentCompilableUnits,
+                    totalUnits);
+            })
+            .OrderByDescending(static impact => impact.CandidateCompleteProductsUnlocked)
+            .ThenByDescending(static impact => impact.VisibleSoleBlockerUnits)
+            .ThenByDescending(static impact => impact.AffectedUnits)
+            .ThenByDescending(static impact => impact.Occurrences)
+            .ThenBy(static impact => impact.FeatureId, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static PowerShellCompilationFeaturePair[] BuildCoBlockers(IEnumerable<FeatureUnitEvidence> evidence)
+        => evidence
+            .Where(static unit => unit.IsCompilationUnit && unit.FeatureIds.Length > 1)
+            .SelectMany(static unit => EnumeratePairs(unit.FeatureIds).Select(pair => new { unit.Product, unit.UnitId, pair.First, pair.Second }))
+            .GroupBy(static item => new { item.First, item.Second })
+            .Select(static group => new PowerShellCompilationFeaturePair(
+                group.Key.First,
+                group.Key.Second,
+                group.Select(static item => item.Product + "\0" + item.UnitId).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
+            .OrderByDescending(static pair => pair.AffectedUnits)
+            .ThenBy(static pair => pair.FirstFeatureId, StringComparer.Ordinal)
+            .ThenBy(static pair => pair.SecondFeatureId, StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+
+    private static IEnumerable<(string First, string Second)> EnumeratePairs(IReadOnlyList<string> featureIds)
+    {
+        for (var first = 0; first < featureIds.Count - 1; first++)
+        for (var second = first + 1; second < featureIds.Count; second++)
+            yield return (featureIds[first], featureIds[second]);
     }
 
     private static PowerShellCompilationCensusRegression[] Compare(
@@ -274,4 +404,61 @@ public sealed class PowerShellCompilationCensusRunner
 
     private static string? NormalizeTargetFramework(string? targetFramework)
         => string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework!.Trim();
+
+    private sealed class AnalyzedProduct
+    {
+        internal AnalyzedProduct(PowerShellCompilationCensusProduct product, FeatureUnitEvidence[] featureEvidence)
+        {
+            Product = product;
+            FeatureEvidence = featureEvidence;
+        }
+
+        internal PowerShellCompilationCensusProduct Product { get; }
+        internal FeatureUnitEvidence[] FeatureEvidence { get; }
+    }
+
+    private sealed class FeatureUnitEvidence
+    {
+        internal FeatureUnitEvidence(
+            string product,
+            string unitId,
+            bool isCompilationUnit,
+            PowerShellCompilationDiagnostic[] diagnostics)
+        {
+            Product = product;
+            UnitId = unitId;
+            IsCompilationUnit = isCompilationUnit;
+            Diagnostics = diagnostics;
+            FeatureIds = diagnostics
+                .Select(static diagnostic => diagnostic.FeatureId)
+                .Where(static featureId => !string.IsNullOrWhiteSpace(featureId))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static featureId => featureId, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        internal string Product { get; }
+        internal string UnitId { get; }
+        internal bool IsCompilationUnit { get; }
+        internal PowerShellCompilationDiagnostic[] Diagnostics { get; }
+        internal string[] FeatureIds { get; }
+    }
+
+    private sealed class ProductMetrics
+    {
+        internal ProductMetrics(string name, int totalUnits, int compilableUnits, int runtimeFallbackUnits, int parseErrorFiles)
+        {
+            Name = name;
+            TotalUnits = totalUnits;
+            CompilableUnits = compilableUnits;
+            RuntimeFallbackUnits = runtimeFallbackUnits;
+            ParseErrorFiles = parseErrorFiles;
+        }
+
+        internal string Name { get; }
+        internal int TotalUnits { get; }
+        internal int CompilableUnits { get; }
+        internal int RuntimeFallbackUnits { get; }
+        internal int ParseErrorFiles { get; }
+    }
 }

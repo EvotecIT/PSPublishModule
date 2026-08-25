@@ -27,6 +27,7 @@ public sealed class PowerShellCompilationResolvedInput
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
+        Dependencies = new PowerShellCompilationDependencyPlanner().Analyze(this);
     }
 
     /// <summary>Original absolute input path.</summary>
@@ -55,6 +56,9 @@ public sealed class PowerShellCompilationResolvedInput
 
     /// <summary>Root module plus contained literal dot-sourced files that share its compilation scope.</summary>
     public string[] CompilationSourceFiles { get; }
+
+    /// <summary>Deterministic source, module, assembly, and content dependency decisions for the inferred artifact shape.</summary>
+    public PowerShellCompilationDependency[] Dependencies { get; }
 
     internal string[] RecursiveSourceDirectories { get; }
 }

@@ -134,6 +134,9 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Compilation Tests", Guid.NewGuid().ToString("N"));
         var output = Path.Combine(root, "compiled output");
         Directory.CreateDirectory(output);
+        var resources = Path.Combine(root, "Resources");
+        Directory.CreateDirectory(resources);
+        File.WriteAllText(Path.Combine(resources, "runtime.js"), "console.log('runtime');");
         var source = Path.Combine(root, "Typed Functions.psm1");
         File.WriteAllText(
             source,
@@ -149,7 +152,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
         try
         {
-            var analyze = await RunCliAsync(repositoryRoot, $"powershell analyze \"{source}\" --mode Strict --output json");
+            var analyze = await RunCliAsync(repositoryRoot, $"powershell analyze \"{source}\" --kind library --mode Strict --output json");
             Assert.True(analyze.ExitCode == 0, FormatFailure("analyze", analyze));
             using (var document = JsonDocument.Parse(analyze.StdOut))
             {
@@ -158,6 +161,10 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 var result = document.RootElement.GetProperty("result");
                 Assert.Equal(1, result.GetProperty("totalUnits").GetInt32());
                 Assert.Equal(1, result.GetProperty("compilableUnits").GetInt32());
+                Assert.Contains(
+                    result.GetProperty("dependencies").EnumerateArray(),
+                    dependency => dependency.GetProperty("relativePath").GetString() == "Resources/runtime.js" &&
+                                  dependency.GetProperty("disposition").GetString() == "NotIncluded");
             }
 
             var build = await RunCliAsync(
@@ -174,6 +181,10 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.Equal(0, manifest.GetProperty("omittedUnits").GetInt32());
                 Assert.False(manifest.GetProperty("requiresPowerShellRuntime").GetBoolean());
                 Assert.True(File.Exists(manifest.GetProperty("artifactPath").GetString()));
+                Assert.Contains(
+                    manifest.GetProperty("dependencies").EnumerateArray(),
+                    dependency => dependency.GetProperty("relativePath").GetString() == "Resources/runtime.js" &&
+                                  dependency.GetProperty("disposition").GetString() == "NotIncluded");
             }
         }
         finally

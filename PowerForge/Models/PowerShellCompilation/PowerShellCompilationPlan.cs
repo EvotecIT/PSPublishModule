@@ -216,13 +216,18 @@ public sealed class PowerShellCompilationFilePlan
 public sealed class PowerShellCompilationPlan
 {
     /// <summary>Creates an aggregate compilation plan.</summary>
-    public PowerShellCompilationPlan(PowerShellCompilationMode mode, PowerShellCompilationFilePlan[] files, string? targetFramework = null)
+    public PowerShellCompilationPlan(
+        PowerShellCompilationMode mode,
+        PowerShellCompilationFilePlan[] files,
+        string? targetFramework = null,
+        PowerShellCompilationDependency[]? dependencies = null)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
         Mode = mode;
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
+        Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
         RuntimeFallbackUnits = TotalUnits - CompilableUnits;
@@ -237,6 +242,9 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Per-file plans.</summary>
     public PowerShellCompilationFilePlan[] Files { get; }
+
+    /// <summary>Deterministic runtime dependency and resource decisions for the selected artifact shape.</summary>
+    public PowerShellCompilationDependency[] Dependencies { get; }
 
     /// <summary>Total executable units discovered.</summary>
     public int TotalUnits { get; }

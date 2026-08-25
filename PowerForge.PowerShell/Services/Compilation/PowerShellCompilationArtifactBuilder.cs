@@ -47,6 +47,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     $"PowerShell compilation source '{sourcePath}' must not traverse a symbolic link or junction.");
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
+            ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
+            var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
+            var missingDependencies = dependencyPlan
+                .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
+                .ToArray();
+            if (missingDependencies.Length > 0)
+                throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)
@@ -213,6 +220,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedModulePayload(
+                    spec,
+                    artifactName,
+                    artifactStagingDirectory,
+                    dependencyPlan,
+                    stagedArtifact.Files));
                 string? stagedGeneratedSourcePath = null;
                 if (spec.EmitSource)
                 {
@@ -286,6 +299,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     SigningCertificateThumbprint = signing?.CertificateThumbprint,
                     AuthenticodeSignedFiles = signing?.SignedFiles ?? 0,
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
+                    Dependencies = dependencyPlan,
                     Diagnostics = diagnostics
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
@@ -299,6 +313,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                             spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
                             spec.ModuleManifestPath)
                         .Concat(compilationSourcePaths)
+                        .Concat(dependencyPlan
+                            .Where(static dependency => dependency.SourcePath is not null && dependency.Exists)
+                            .Select(static dependency => dependency.SourcePath!))
                         .Distinct(PowerShellCompilationPathSafety.PathComparer));
 
                 result.Succeeded = true;
@@ -447,6 +464,30 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
     }
 
+    private static void ValidateRuntimeSourcePaths(
+        PowerShellCompilationBuildSpec spec,
+        IEnumerable<string> compilationSourcePaths)
+    {
+        if (spec.RuntimeSourcePaths is not { Length: > 0 }) return;
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var compiled = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        foreach (var runtimeSource in spec.RuntimeSourcePaths
+                     .Where(static path => !string.IsNullOrWhiteSpace(path))
+                     .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        {
+            if (!File.Exists(runtimeSource))
+                throw new FileNotFoundException("PowerShell runtime source file was not found.", runtimeSource);
+            var extension = Path.GetExtension(runtimeSource);
+            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"PowerShell runtime source '{runtimeSource}' must be a .ps1 or .psm1 file.", nameof(spec));
+            if (!compiled.Contains(runtimeSource))
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, runtimeSource, $"Runtime source '{runtimeSource}' escapes the root module directory.");
+            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, runtimeSource, $"Runtime source '{runtimeSource}' traverses a symbolic link or junction.");
+        }
+    }
+
     internal static bool ShouldEnablePublishSingleFile(PowerShellCompilationBuildSpec spec)
         => spec.SingleFile && spec.Optimization != PowerShellCompilationExecutableOptimization.NativeAot;
 
@@ -545,102 +586,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return new CopiedArtifact(primaryPath, files);
     }
 
-    private static CopiedArtifact CopyHybridModule(
-        PowerShellCompilationBuildSpec spec,
-        string artifactName,
-        string compiledAssembly,
-        PowerShellTypedCompilationResult typed,
-        string outputDirectory)
-    {
-        var moduleDirectory = Path.Combine(outputDirectory, artifactName);
-        Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
-        var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
-        File.Copy(compiledAssembly, assemblyPath, overwrite: true);
-        var files = new List<PowerShellCompilationArtifactFile>();
-        File.WriteAllText(
-            modulePath,
-            PowerShellHybridModuleComposer.ComposeRoot(
-                spec.SourcePath,
-                Path.GetFileName(assemblyPath),
-                typed,
-                manifestControlsExports: !string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        files.Add(CreateArtifactFile(modulePath, "PrimaryModule"));
-        files.Add(CreateArtifactFile(assemblyPath, "TypedAssembly"));
-        CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
-        var manifestFiles = PowerShellCompiledModuleManifest.Create(
-            spec.SourcePath,
-            spec.ModuleManifestPath,
-            moduleDirectory,
-            artifactName,
-            Path.GetFileName(modulePath),
-            typed,
-            spec.TargetFramework);
-        if (manifestFiles is not null)
-        {
-            var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
-            foreach (var manifestFile in manifestFiles)
-                files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
-        }
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath);
-        foreach (var sourceDirectory in conventionalDiscovery.SourceDirectories)
-        {
-            var relativeDirectory = FrameworkCompatibility.GetRelativePath(sourceRoot, sourceDirectory);
-            var targetDirectory = Path.GetFullPath(Path.Combine(moduleDirectory, relativeDirectory));
-            PowerShellCompilationPathSafety.EnsureContained(
-                moduleDirectory,
-                targetDirectory,
-                $"Conventional module source directory '{sourceDirectory}' escapes the generated module root.");
-            Directory.CreateDirectory(targetDirectory);
-        }
-        var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
-            .Select(reference => Path.GetFullPath(Path.Combine(
-                sourceRoot,
-                PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(reference))))
-            .ToArray();
-        var wrappedCompiledMethods = PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(spec.SourcePath, typed);
-        foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(
-                     spec.SourcePath,
-                     moduleDirectory,
-                     runtimeHooks,
-                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
-                     typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
-                     conventionalLoaders: conventionalDiscovery.Loaders))
-            files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
-        var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
-        return new CopiedArtifact(primaryPath, files.ToArray());
-    }
-
-    private static CopiedArtifact CopyStrictModuleWithManifest(
-        PowerShellCompilationBuildSpec spec,
-        string artifactName,
-        string compiledAssembly,
-        PowerShellTypedCompilationResult typed,
-        string outputDirectory)
-    {
-        var moduleDirectory = Path.Combine(outputDirectory, artifactName);
-        Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
-        File.Copy(compiledAssembly, assemblyPath, overwrite: true);
-        var files = new List<PowerShellCompilationArtifactFile> { CreateArtifactFile(assemblyPath, "TypedAssembly") };
-        CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
-        var manifestFiles = PowerShellCompiledModuleManifest.Create(
-            spec.SourcePath,
-            spec.ModuleManifestPath,
-            moduleDirectory,
-            artifactName,
-            Path.GetFileName(assemblyPath),
-            typed,
-            spec.TargetFramework) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
-        var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
-        foreach (var manifestFile in manifestFiles)
-            files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
-        var manifestPath = primaryManifest;
-        return new CopiedArtifact(manifestPath, files.ToArray());
-    }
-
     private static string GeneratePackagedScript(string sourcePath, bool hasDependencies)
         => PowerShellPackagedScriptRewriter.Rewrite(
             sourcePath,
@@ -703,100 +648,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
     }
 
-    private static string GenerateHybridModuleScript(
-        string sourcePath,
-        string assemblyFileName,
-        PowerShellTypedCompilationResult typed)
-    {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException("Hybrid module source could not be parsed while composing fallback code.");
-
-        var compiled = new HashSet<string>(
-            typed.Methods.Select(static method => method.SourceName + "\0" + method.SourceLine),
-            StringComparer.OrdinalIgnoreCase);
-        var prologueEndOffset = ast.ParamBlock?.Extent.EndOffset ?? 0;
-        foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false).Cast<UsingStatementAst>())
-            prologueEndOffset = Math.Max(prologueEndOffset, usingStatement.Extent.EndOffset);
-        var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-            .Cast<FunctionDefinitionAst>()
-            .OrderByDescending(static function => function.Extent.StartOffset)
-            .ToArray();
-        var source = new StringBuilder(File.ReadAllText(sourcePath));
-        var exportContract = PowerShellModuleExportContract.TryRead(ast);
-        var wrappedFunctionNames = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var wrapped = wrappedFunctionNames is null
-            ? compiled
-            : new HashSet<string>(
-                typed.Methods
-                    .Where(method => wrappedFunctionNames.Contains(method.SourceName))
-                    .Select(static method => method.SourceName + "\0" + method.SourceLine),
-                StringComparer.OrdinalIgnoreCase);
-        var removals = new List<(int Start, int Length)>();
-        foreach (var function in functions)
-        {
-            if (!wrapped.Contains(function.Name + "\0" + function.Extent.StartLineNumber))
-                continue;
-            if (function.Extent.StartOffset < prologueEndOffset)
-                throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
-            removals.Add((function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset));
-        }
-        if (exportContract is not null)
-            removals.AddRange(exportContract.Commands.Select(static command =>
-                (command.Extent.StartOffset, command.Extent.EndOffset - command.Extent.StartOffset)));
-        foreach (var removal in removals.OrderByDescending(static removal => removal.Start))
-            source.Remove(removal.Start, removal.Length);
-
-        var fallbackFunctions = functions
-            .Where(function => !wrapped.Contains(function.Name + "\0" + function.Extent.StartLineNumber))
-            .OrderBy(static function => function.Extent.StartOffset)
-            .Select(static function => function.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var compiledCmdlets = typed.Methods
-            .Select(static method => method.SourceName)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var exportedFallbackFunctions = (exportContract?.SelectFunctions(fallbackFunctions) ?? fallbackFunctions)
-            .Concat(PowerShellCompiledModuleManifest.GetNestedModuleFunctionExportPatterns(sourcePath, functions.Select(static function => function.Name)))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var exportedCompiledCmdlets = exportContract?.SelectFunctions(compiledCmdlets) ?? compiledCmdlets;
-        var additionalCmdlets = exportContract?.Cmdlets ?? Array.Empty<string>();
-        var aliases = exportContract?.Aliases ?? new[] { "*" };
-        var variables = exportContract?.Variables ?? Array.Empty<string>();
-        var import = new StringBuilder();
-        if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') import.AppendLine();
-        import.AppendLine("# Generated by PowerForge hybrid PowerShell compilation.");
-        import.AppendLine("Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath '" + EscapePowerShellSingleQuotedString(assemblyFileName) + "') -Force -ErrorAction Stop");
-        import.AppendLine();
-        source.Insert(prologueEndOffset, import.ToString());
-        var builder = new StringBuilder(source.ToString());
-        if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        if (exportContract is not null && exportContract.Commands.Length == 0)
-            return builder.ToString();
-        builder.AppendLine();
-        builder.Append("Export-ModuleMember -Function @(").Append(JoinPowerShellNames(exportedFallbackFunctions))
-            .Append(") -Cmdlet @(").Append(JoinPowerShellNames(exportedCompiledCmdlets.Concat(additionalCmdlets).Distinct(StringComparer.OrdinalIgnoreCase)))
-            .Append(") -Alias @(").Append(JoinPowerShellNames(aliases)).Append(')');
-        if (variables.Length > 0)
-            builder.Append(" -Variable @(").Append(JoinPowerShellNames(variables)).Append(')');
-        builder.AppendLine();
-        return builder.ToString();
-    }
-
     private static bool HasSiblingModuleManifest(string sourcePath)
         => Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
            File.Exists(Path.ChangeExtension(sourcePath, ".psd1"));
-
-    private static string JoinPowerShellNames(IEnumerable<string> names)
-        => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
-
-    private static string EscapePowerShellSingleQuotedString(string value)
-        => value.Replace("'", "''");
 
     private static CopiedArtifact CreateCopiedArtifactWithSymbols(string sourcePath, string targetPath, string role)
     {

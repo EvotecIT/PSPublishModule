@@ -15,7 +15,9 @@ public sealed class PowerShellCompilationCensusProduct
         int runtimeFallbackUnits,
         int parseErrorFiles,
         double analysisMilliseconds,
-        PowerShellCompilationCensusBlocker[] blockers)
+        PowerShellCompilationCensusBlocker[] blockers,
+        PowerShellCompilationFeatureImpact[]? featureImpacts = null,
+        PowerShellCompilationDependencySummary[]? dependencySummary = null)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -26,6 +28,8 @@ public sealed class PowerShellCompilationCensusProduct
         ParseErrorFiles = parseErrorFiles;
         AnalysisMilliseconds = analysisMilliseconds;
         Blockers = blockers ?? Array.Empty<PowerShellCompilationCensusBlocker>();
+        FeatureImpacts = featureImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
+        DependencySummary = dependencySummary ?? Array.Empty<PowerShellCompilationDependencySummary>();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -57,6 +61,12 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Aggregated typed-compilation blockers ordered by frequency.</summary>
     public PowerShellCompilationCensusBlocker[] Blockers { get; }
+
+    /// <summary>Stable missing-feature impact measured inside this product.</summary>
+    public PowerShellCompilationFeatureImpact[] FeatureImpacts { get; }
+
+    /// <summary>Discovered runtime dependency and resource summary.</summary>
+    public PowerShellCompilationDependencySummary[] DependencySummary { get; }
 }
 
 /// <summary>One aggregated blocker category in a compilation census.</summary>
@@ -87,11 +97,15 @@ public sealed class PowerShellCompilationCensusResult
     public PowerShellCompilationCensusResult(
         string? targetFramework,
         PowerShellCompilationCensusProduct[] products,
-        PowerShellCompilationCensusRegression[] regressions)
+        PowerShellCompilationCensusRegression[] regressions,
+        PowerShellCompilationFeatureImpact[]? frontier = null,
+        PowerShellCompilationFeaturePair[]? coBlockers = null)
     {
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Products = products ?? Array.Empty<PowerShellCompilationCensusProduct>();
         Regressions = regressions ?? Array.Empty<PowerShellCompilationCensusRegression>();
+        Frontier = frontier ?? Array.Empty<PowerShellCompilationFeatureImpact>();
+        CoBlockers = coBlockers ?? Array.Empty<PowerShellCompilationFeaturePair>();
     }
 
     /// <summary>Target framework used for CLR surface analysis.</summary>
@@ -102,6 +116,12 @@ public sealed class PowerShellCompilationCensusResult
 
     /// <summary>Regressions relative to an optional baseline.</summary>
     public PowerShellCompilationCensusRegression[] Regressions { get; }
+
+    /// <summary>Cross-product feature priorities ordered by observed candidate impact.</summary>
+    public PowerShellCompilationFeatureImpact[] Frontier { get; }
+
+    /// <summary>Feature pairs most often observed together in the same fallback unit.</summary>
+    public PowerShellCompilationFeaturePair[] CoBlockers { get; }
 
     /// <summary>Total authored source files discovered.</summary>
     public int SourceFiles => Sum(static product => product.SourceFiles);

@@ -80,7 +80,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                                 ex.Message,
                                 file,
                                 ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber)
+                                ex.Node.Extent.StartColumnNumber,
+                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
                         });
                 }
             }
@@ -113,7 +114,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                             $"Filter '{function.Name}' requires per-pipeline-input PowerShell processing semantics and cannot be compiled as an ordinary CLR method.",
                             file,
-                            function.Extent)
+                            function.Extent,
+                            PowerShellCompilationFeatureIds.FilterFunction)
                     });
             }
             var functionStatements = GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false);
@@ -136,7 +138,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                                 ex.Message,
                                 file,
                                 ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber)
+                                ex.Node.Extent.StartColumnNumber,
+                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
                         });
                 }
             }
@@ -167,7 +170,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                             $"Function '{unit.Name}' collides with another function after CLR identifier normalization to '{generatedName}'.",
                             file,
-                            function.Extent)
+                            function.Extent,
+                            PowerShellCompilationFeatureIds.FunctionNameCollision)
                     });
             }
         }
@@ -179,7 +183,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 $"Source '{statement.Extent.Text}' has runtime-bearing using semantics that cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 file,
-                statement.Extent))
+                statement.Extent,
+                PowerShellCompilationFeatureIds.RuntimeUsing))
             .ToList();
         if (ast.ScriptRequirements is not null)
         {
@@ -187,7 +192,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 "Source #requires directives cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 file,
-                ast.Extent));
+                ast.Extent,
+                PowerShellCompilationFeatureIds.RequiresDirective));
         }
         if (fileWideDiagnostics.Count > 0)
         {
@@ -287,16 +293,26 @@ public sealed partial class PowerShellCompilationAnalyzer
                         PowerShellCompilationDiagnosticCode.ScriptBlock,
                         "Nested script blocks and script-block literals require PowerShell runtime semantics.",
                         file,
-                        candidate.Extent));
+                        candidate.Extent,
+                        PowerShellCompilationFeatureIds.ScriptBlock));
                     break;
                 case AttributeAst attribute when IsSupportedMetadataAttribute(attribute):
+                    break;
+                case AttributeAst attribute:
+                    diagnostics.Add(CreateDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        $"Syntax node 'AttributeAst' for attribute '{attribute.TypeName.FullName}' is not supported by the typed compiler metadata contract.",
+                        file,
+                        attribute.Extent,
+                        PowerShellCompilationFeatureIds.ParameterMetadata));
                     break;
                 case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !IsSupportedParameterType(conversion.StaticType):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         $"Typed local declaration '{conversion.StaticType.FullName}' is not supported by the typed compiler.",
                         file,
-                        conversion.Extent));
+                        conversion.Extent,
+                        PowerShellCompilationFeatureIds.Conversion));
                     break;
                 case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion):
                     break;
@@ -311,7 +327,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         $"Explicit conversion to '{conversion.StaticType.FullName}' requires PowerShell runtime conversion semantics.",
                         file,
-                        conversion.Extent));
+                        conversion.Extent,
+                        PowerShellCompilationFeatureIds.Conversion));
                     break;
                 case CommandAst command:
                     var commandName = command.GetCommandName();
@@ -331,7 +348,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             ? "Dynamic command resolution requires the PowerShell runtime."
                             : $"Command invocation '{commandName}' requires the PowerShell runtime.",
                         file,
-                        command.Extent));
+                        command.Extent,
+                        commandName is null ? PowerShellCompilationFeatureIds.DynamicCommand : PowerShellCompilationFeatureIds.ForCommand(commandName)));
                     break;
                 case VariableExpressionAst variable when
                     capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
@@ -343,28 +361,32 @@ public sealed partial class PowerShellCompilationAnalyzer
                         PowerShellCompilationDiagnosticCode.RuntimeScope,
                         $"Variable '${variable.VariablePath.UserPath}' depends on PowerShell runtime scope.",
                         file,
-                        variable.Extent));
+                        variable.Extent,
+                        PowerShellCompilationFeatureIds.RuntimeScope));
                     break;
                 case ExpandableStringExpressionAst expandable when expandable.Extent.Text.Contains("`$", StringComparison.Ordinal):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         "Expandable strings that mix escaped dollar signs with interpolation require PowerShell token-preserving semantics.",
                         file,
-                        expandable.Extent));
+                        expandable.Extent,
+                        PowerShellCompilationFeatureIds.ExpandableString));
                     break;
                 case BinaryExpressionAst binary when !SupportedBinaryOperators.Contains(binary.Operator.ToString()):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedOperator,
                         $"Binary operator '{binary.Operator}' is not supported by the typed compiler.",
                         file,
-                        binary.Extent));
+                        binary.Extent,
+                        PowerShellCompilationFeatureIds.ForOperator(binary.Operator.ToString())));
                     break;
                 case UnaryExpressionAst unary when !SupportedUnaryOperators.Contains(unary.TokenKind.ToString()):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedOperator,
                         $"Unary operator '{unary.TokenKind}' is not supported by the typed compiler.",
                         file,
-                        unary.Extent));
+                        unary.Extent,
+                        PowerShellCompilationFeatureIds.ForOperator(unary.TokenKind.ToString())));
                     break;
                 case AssignmentStatementAst discard when
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
@@ -382,7 +404,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                             "Only direct local-variable assignment and conservative typed index/member mutation are supported; other assignment targets require PowerShell runtime semantics.",
                             file,
-                            assignment.Left.Extent));
+                            assignment.Left.Extent,
+                            PowerShellCompilationFeatureIds.AssignmentTarget));
                     }
                     else if (PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(assignedVariable.VariablePath.UserPath))
                     {
@@ -390,7 +413,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                             $"Assignment to read-only automatic variable '${assignedVariable.VariablePath.UserPath}' requires PowerShell runtime semantics.",
                             file,
-                            assignment.Left.Extent));
+                            assignment.Left.Extent,
+                            PowerShellCompilationFeatureIds.AutomaticVariableAssignment));
                     }
                     else if (!SupportedAssignmentOperators.Contains(assignment.Operator.ToString()))
                     {
@@ -398,7 +422,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedOperator,
                             $"Assignment operator '{assignment.Operator}' is not supported by the typed compiler.",
                             file,
-                            assignment.Extent));
+                            assignment.Extent,
+                            PowerShellCompilationFeatureIds.ForOperator(assignment.Operator.ToString())));
                     }
                     break;
                 case SwitchStatementAst switchStatement when HasUnsupportedSwitchFlags(switchStatement.Flags):
@@ -406,7 +431,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         $"Switch flags '{switchStatement.Flags}' require PowerShell runtime matching semantics.",
                         file,
-                        switchStatement.Extent));
+                        switchStatement.Extent,
+                        PowerShellCompilationFeatureIds.SwitchFlags));
                     break;
                 case SwitchStatementAst:
                     break;
@@ -415,7 +441,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         "Typed catch filters require statically resolvable CLR exception types on the conservative typed path.",
                         file,
-                        catchClause.Extent));
+                        catchClause.Extent,
+                        PowerShellCompilationFeatureIds.CatchFilter));
                     break;
                 case CatchClauseAst:
                 case TryStatementAst:
@@ -428,7 +455,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                             $"Syntax node '{candidate.GetType().Name}' is not supported by the typed compiler.",
                             file,
-                            candidate.Extent));
+                            candidate.Extent,
+                            PowerShellCompilationFeatureIds.ForSyntax(candidate.GetType().Name)));
                     }
                     break;
             }
@@ -705,7 +733,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
             $"The '{blockName}' block requires PowerShell pipeline lifecycle semantics.",
             file,
-            block.Extent));
+            block.Extent,
+            PowerShellCompilationFeatureIds.PipelineLifecycle));
         foreach (var statement in block.Statements)
             AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
     }
@@ -731,12 +760,13 @@ public sealed partial class PowerShellCompilationAnalyzer
         PowerShellCompilationDiagnosticCode code,
         string message,
         string file,
-        IScriptExtent extent)
-        => new(code, message, file, extent.StartLineNumber, extent.StartColumnNumber);
+        IScriptExtent extent,
+        string? featureId = null)
+        => new(code, message, file, extent.StartLineNumber, extent.StartColumnNumber, featureId);
 
     private static PowerShellCompilationDiagnostic[] Deduplicate(IEnumerable<PowerShellCompilationDiagnostic> diagnostics)
         => diagnostics
-            .GroupBy(static diagnostic => new { diagnostic.Code, diagnostic.Line, diagnostic.Column, diagnostic.Message })
+            .GroupBy(static diagnostic => new { diagnostic.Code, diagnostic.FeatureId, diagnostic.Line, diagnostic.Column, diagnostic.Message })
             .Select(static group => group.First())
             .OrderBy(static diagnostic => diagnostic.Line)
             .ThenBy(static diagnostic => diagnostic.Column)
