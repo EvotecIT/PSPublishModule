@@ -32,7 +32,8 @@ public sealed class PowerShellCompiledMethod
         string[]? aliases = null,
         bool requiresPowerShellBoundParameters = false,
         bool isAdvancedFunction = false,
-        PowerShellCompilationCommandBinding? commandBinding = null)
+        PowerShellCompilationCommandBinding? commandBinding = null,
+        bool requiresPowerShellRuntimeState = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -46,6 +47,7 @@ public sealed class PowerShellCompiledMethod
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         IsAdvancedFunction = isAdvancedFunction;
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
+        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -71,6 +73,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
+
+    /// <summary>Whether the generated method expects bounded PowerShell runtime-state delegates and values.</summary>
+    public bool RequiresPowerShellRuntimeState { get; }
 
     /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
     public bool RequiresPowerShellBoundParameters { get; }

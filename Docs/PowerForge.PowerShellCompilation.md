@@ -253,6 +253,7 @@ The current subset supports:
 - capability-classified CLR, PowerShell-host, process-bindable, `SwitchParameter`, nullable, enum, and one-dimensional typed-array parameters;
 - preserved function and parameter aliases plus parameter-set, position, pipeline, remaining-argument, literal-help, empty-value, wildcard, and validation metadata on hosts that implement those contracts;
 - bounded `$PSBoundParameters.ContainsKey('CanonicalParameterName')` queries, including metadata propagation across typed local calls and runtime-free Strict executable argument binding;
+- target-backed `$PSEdition` plus PowerShell Core `$IsCoreCLR`, `$IsWindows`, `$IsLinux`, and `$IsMacOS` facts in runtime-free artifacts; generated binary cmdlets can additionally inject the live `$PSVersionTable.PSVersion`, `$WhatIfPreference`, and one- or two-argument `$PSCmdlet.ShouldProcess(...)` contracts through typed local call graphs;
 - typed or safely inferred local variables;
 - explicit `return` values and one terminal implicit-output expression;
 - `if`/`elseif`/`else`, conservative scalar `switch`, `for`, `while`, `foreach` over typed arrays or an explicitly typed scalar string, ordered CLR exception catches with bounded `finally` blocks, typed CLR exception throws, and bare rethrow inside a supported catch;
@@ -281,6 +282,7 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 - commands and pipelines outside the bounded binary-module region contract, including nested closures over unresolved runtime variables;
 - dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
+- automatic or preference variables outside the explicit read-only intrinsic set, arbitrary `$PSVersionTable` keys, and `$PSCmdlet` interactions other than the bounded `ShouldProcess` overloads;
 - dynamic or host-incompatible parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
 - dynamic `$PSBoundParameters` access, noncanonical or computed keys, dynamic/string throw operands, and `[pscustomobject]` construction outside generated binary modules;
 - nonterminal or nested implicit pipeline output;
@@ -451,7 +453,7 @@ powerforge powershell census `
     --output json
 ```
 
-The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 284 functions pass structural analysis, 140 survive graph and artifact shaping as typed CLR methods, and 144 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 11.34%. The per-root emitted/total function split is PowerInfoBlox 3/57, PSSharedGoods 20/281, PSWriteHTML 18/238, O365Essentials 82/282, ADEssentials 10/247, and PSWriteWord 7/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
+The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 286 functions pass structural analysis, 140 survive graph and artifact shaping as typed CLR methods, and 146 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 11.34%. The per-root emitted/total function split is PowerInfoBlox 3/57, PSSharedGoods 20/281, PSWriteHTML 18/238, O365Essentials 82/282, ADEssentials 10/247, and PSWriteWord 7/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and exact file content, so a changed corpus cannot silently pass merely because its aggregate counts stayed equal.
 

@@ -27,6 +27,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly IReadOnlyDictionary<string, PowerShellCompilationParameter> _parameterMetadata;
     private bool _requiresPowerShellStreams;
     private bool _requiresPowerShellCommandRegions;
+    private bool _requiresPowerShellRuntimeState;
     private bool _requiresBoundParameters;
     private int _indent = 1;
     private int _switchIndex;
@@ -134,6 +135,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             (runtimeTailStart >= 0 ||
              typedStatements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables)) ||
              calledLocalFunctions.Any(static signature => signature.RequiresPowerShellCommandRegions));
+        _requiresPowerShellRuntimeState = _capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics) &&
+            (PowerShellRuntimeStateIntrinsicPolicy.RequiresHostBinding(typedStatements, _body, _targetFramework, _capabilities) ||
+             calledLocalFunctions.Any(static signature => signature.RequiresPowerShellRuntimeState));
         ValidateVariableReferences(typedStatements);
         var returnType = runtimeTailStart >= 0 ? typeof(void) : InferReturnType(typedStatements);
         if (returnType != typeof(void) && !HasTerminalValue(statements))
@@ -148,6 +152,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         if (_requiresPowerShellCommandRegions)
             parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+        if (_requiresPowerShellRuntimeState)
+        {
+            parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
+            parameterParts.Add("global::System.Func<string, string, bool> __shouldProcessAction");
+            parameterParts.Add("object __psVersion");
+            parameterParts.Add("bool __whatIfPreference");
+        }
         if (_requiresBoundParameters)
             parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
         var parameterSource = string.Join(", ", parameterParts);
@@ -202,7 +213,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _builder.ToString().TrimEnd(),
             _requiresPowerShellStreams,
             _requiresPowerShellCommandRegions,
-            _requiresBoundParameters);
+            _requiresBoundParameters,
+            _requiresPowerShellRuntimeState);
     }
 
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
@@ -516,6 +528,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             StringConstantExpressionAst text => EmitString(text.Value),
             ExpandableStringExpressionAst expandable => EmitExpandableString(expandable),
             ConstantExpressionAst constant => EmitConstant(constant),
+            VariableExpressionAst variable when TryGetRuntimeStateIntrinsic(variable, out _) => EmitRuntimeStateIntrinsic(variable),
             VariableExpressionAst variable => EmitVariable(variable),
             ParenExpressionAst parenthesized => $"({EmitExpression(parenthesized.Pipeline)})",
             ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => EmitOrderedStringDictionary(conversion),
@@ -533,8 +546,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             AssignmentStatementAst assignment => EmitAssignmentExpression(assignment),
             InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName) =>
                 EmitBoundParameterContainsKey(invocation, parameterName),
+            InvokeMemberExpressionAst invocation when TryGetRuntimeStateIntrinsic(invocation, out _) => EmitRuntimeStateIntrinsic(invocation),
             InvokeMemberExpressionAst invocation => EmitMemberInvocation(invocation),
+            MemberExpressionAst member when TryGetRuntimeStateIntrinsic(member, out _) => EmitRuntimeStateIntrinsic(member),
             MemberExpressionAst member => EmitMemberAccess(member),
+            IndexExpressionAst index when TryGetRuntimeStateIntrinsic(index, out _) => EmitRuntimeStateIntrinsic(index),
             IndexExpressionAst index => _memberEmitter.EmitIndex(index),
             PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => EmitLocalFunctionCall(pipeline),
             CommandAst command when IsLocalFunctionCommand(command) => EmitLocalFunctionCall(command),
@@ -551,7 +567,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var cursor = 0;
         foreach (var nested in expandable.NestedExpressions)
         {
-            if (nested is not VariableExpressionAst variable || InferVariableType(variable) != typeof(string))
+            if (nested is not VariableExpressionAst variable || InferExpressionType(variable) != typeof(string))
                 throw Error(nested, "Typed expandable strings currently accept only statically typed string variables; subexpressions and runtime string conversion remain on the PowerShell path.");
             var token = nested.Extent.Text;
             var tokenIndex = expandable.Value.IndexOf(token, cursor, StringComparison.Ordinal);
@@ -559,7 +575,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 throw Error(nested, "Expandable string source could not be mapped losslessly to its parsed interpolation token.");
             if (tokenIndex > cursor)
                 parts.Add(EmitString(expandable.Value.Substring(cursor, tokenIndex - cursor)));
-            parts.Add($"({EmitVariable(variable)} ?? string.Empty)");
+            parts.Add($"({EmitExpression(variable)} ?? string.Empty)");
             cursor = tokenIndex + token.Length;
         }
         if (cursor < expandable.Value.Length)
@@ -641,6 +657,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             StringConstantExpressionAst => typeof(string),
             ExpandableStringExpressionAst => typeof(string),
             ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
+            VariableExpressionAst variable when TryGetRuntimeStateIntrinsic(variable, out var intrinsic) =>
+                PowerShellRuntimeStateIntrinsicPolicy.GetType(intrinsic),
             VariableExpressionAst variable => InferVariableType(variable),
             ParenExpressionAst parenthesized => InferExpressionType(parenthesized.Pipeline),
             ConvertExpressionAst conversion when IsOrderedHashtableConversion(conversion) => InferOrderedStringDictionaryType(conversion),
@@ -660,8 +678,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             AssignmentStatementAst assignment => InferExpressionType(assignment.Right),
             InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _) =>
                 EnsureBoundParametersAvailable(invocation),
+            InvokeMemberExpressionAst invocation when TryGetRuntimeStateIntrinsic(invocation, out var intrinsic) =>
+                PowerShellRuntimeStateIntrinsicPolicy.GetType(intrinsic),
             InvokeMemberExpressionAst invocation => InferMemberInvocationType(invocation),
+            MemberExpressionAst member when TryGetRuntimeStateIntrinsic(member, out var intrinsic) =>
+                PowerShellRuntimeStateIntrinsicPolicy.GetType(intrinsic),
             MemberExpressionAst member => InferMemberAccessType(member),
+            IndexExpressionAst index when TryGetRuntimeStateIntrinsic(index, out var intrinsic) =>
+                PowerShellRuntimeStateIntrinsicPolicy.GetType(intrinsic),
             IndexExpressionAst index => _memberEmitter.InferIndexType(index),
             PipelineAst pipeline when IsLocalFunctionPipeline(pipeline) => InferLocalFunctionType(pipeline),
             CommandAst command when IsLocalFunctionCommand(command) => InferLocalFunctionType(command),

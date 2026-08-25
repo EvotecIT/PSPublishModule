@@ -47,7 +47,10 @@ public enum PowerShellCompilationCapability
     PowerShellLanguageConversions = 128,
 
     /// <summary>Generated methods may use public PowerShell comparison, wildcard, and membership primitives.</summary>
-    PowerShellLanguageOperators = 256
+    PowerShellLanguageOperators = 256,
+
+    /// <summary>Generated methods may lower a bounded set of read-only automatic state and host interactions.</summary>
+    RuntimeStateIntrinsics = 512
 }
 
 /// <summary>
@@ -343,7 +346,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PipelineParameterBinding |
                               PowerShellCompilationCapability.PowerShellHostTypes |
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
-                              PowerShellCompilationCapability.PowerShellLanguageOperators)) != 0)
+                              PowerShellCompilationCapability.PowerShellLanguageOperators |
+                              PowerShellCompilationCapability.RuntimeStateIntrinsics)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

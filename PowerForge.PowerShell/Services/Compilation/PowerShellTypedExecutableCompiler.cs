@@ -88,7 +88,8 @@ internal static class PowerShellTypedExecutableCompiler
             statements,
             targetFramework,
             PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters,
+            PowerShellCompilationCapability.BoundParameters |
+            PowerShellCompilationCapability.RuntimeStateIntrinsics,
             signatures,
             entryUnit.Parameters).Emit();
         methodDescriptions.Add(CreateMethodDescription(entryUnit, entryMethod, entryPoint));
@@ -115,7 +116,8 @@ internal static class PowerShellTypedExecutableCompiler
         }
         const PowerShellCompilationCapability capabilities =
             PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters;
+            PowerShellCompilationCapability.BoundParameters |
+            PowerShellCompilationCapability.RuntimeStateIntrinsics;
         if (PowerShellRecursiveFunctionPolicy.TryGetDeclaredReturnType(
                 definition.Function,
                 definition.Unit,
@@ -303,7 +305,8 @@ internal sealed class PowerShellLocalFunctionSignature
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false,
-        PowerShellCompilationCommandBinding? commandBinding = null)
+        PowerShellCompilationCommandBinding? commandBinding = null,
+        bool requiresPowerShellRuntimeState = false)
     {
         SourceName = sourceName;
         GeneratedName = generatedName;
@@ -313,6 +316,7 @@ internal sealed class PowerShellLocalFunctionSignature
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
     }
     internal string SourceName { get; }
@@ -323,6 +327,7 @@ internal sealed class PowerShellLocalFunctionSignature
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
+    internal bool RequiresPowerShellRuntimeState { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
 }
 

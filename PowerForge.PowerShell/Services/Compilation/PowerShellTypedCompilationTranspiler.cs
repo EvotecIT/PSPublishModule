@@ -389,7 +389,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             GetFunctionAliases(source.Function),
             emitted.RequiresPowerShellBoundParameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
+            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
+            emitted.RequiresPowerShellRuntimeState);
 
     private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
         => CreateSignature(
@@ -398,7 +399,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.ReturnType,
             emitted.RequiresPowerShellBoundParameters,
             emitted.RequiresPowerShellStreams,
-            emitted.RequiresPowerShellCommandRegions);
+            emitted.RequiresPowerShellCommandRegions,
+            emitted.RequiresPowerShellRuntimeState);
 
     private static PowerShellLocalFunctionSignature CreateProvisionalSignature(FunctionSource source, Type returnType)
         => CreateSignature(
@@ -407,7 +409,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             returnType,
             requiresPowerShellBoundParameters: false,
             requiresPowerShellStreams: false,
-            requiresPowerShellCommandRegions: false);
+            requiresPowerShellCommandRegions: false,
+            requiresPowerShellRuntimeState: false);
 
     private static PowerShellLocalFunctionSignature CreateSignature(
         FunctionSource source,
@@ -415,7 +418,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         Type returnType,
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
-        bool requiresPowerShellCommandRegions)
+        bool requiresPowerShellCommandRegions,
+        bool requiresPowerShellRuntimeState)
         => new(
             source.Function.Name,
             generatedName,
@@ -440,7 +444,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             requiresPowerShellBoundParameters,
             requiresPowerShellStreams,
             requiresPowerShellCommandRegions,
-            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
+            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
+            requiresPowerShellRuntimeState);
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
         => new(
@@ -569,7 +574,8 @@ internal sealed class PowerShellCSharpMethodEmission
         string source,
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false,
-        bool requiresPowerShellBoundParameters = false)
+        bool requiresPowerShellBoundParameters = false,
+        bool requiresPowerShellRuntimeState = false)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -577,6 +583,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
+        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
     }
 
     internal string GeneratedName { get; }
@@ -585,4 +592,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
+    internal bool RequiresPowerShellRuntimeState { get; }
 }
