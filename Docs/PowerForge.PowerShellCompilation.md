@@ -430,7 +430,7 @@ See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for th
 
 The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PSWriteWord `1fdee837c3fcbc1fdb5c67a9843526bd532c2728`.
 
-That archived six-product lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled; the parent candidate compiled nine. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
+The current six-product lane contains 1,263 authored files and 1,353 whole script/function units with no parse-error files. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
 
 The CLI now makes this a repeatable regression gate rather than a one-off research script. It records per-product discovery, typed/fallback coverage, parse errors, analyzer duration, dependency summaries, stable missing-feature impact, and frequent co-blocker pairs. `--write-baseline` creates a JSON baseline; `--baseline` returns a failing exit code when a product disappears, typed coverage decreases, fallback increases, or parse errors increase:
 
@@ -462,7 +462,7 @@ The machine-readable `frontier` separates four questions that raw occurrence cou
 
 `candidateCoveragePercentage` adds only visible sole-blocker units to current typed coverage. It is a counterfactual planning signal, not a promise: accepting an outer AST construct can reveal a deeper blocker that was deliberately masked. `coBlockers` shows which features commonly need to land together. Features are ranked lexically by complete-product candidates, visible sole-blocker units, affected units, occurrences, and stable ID; PowerForge does not invent an effort score.
 
-The current five-product run produces this leading planning frontier:
+The current six-product run produces this leading planning frontier:
 
 | Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
