@@ -10,6 +10,8 @@ This benchmark matrix separates three different claims:
 
 The real-source workloads are a production threshold calculation and PowerInfoBlox's `Convert-IpAddressToPtrString`. The triangular-number and indexed-array loops are intentionally synthetic and expose hot-loop and typed-indexing behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
 
+The adjacent `Corpus` directory is the compiler's product-neutral correctness and coverage gate, not a performance workload. It contains a portable Hybrid module, a multi-file Strict program, and a committed post-emission census baseline. External module workloads remain optional and replaceable scale evidence.
+
 See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the clean-candidate tables, environment, run IDs, interpretation, and eligibility limits. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
 
 Build or import the current PSPublishModule binary, then run:
