@@ -51,6 +51,11 @@ public sealed partial class DotNetPublishPipelineRunner
         values["NUGET_PACKAGES"] = packageRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
+            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key))
+            {
+                controlledEnvironment = values;
+                return false;
+            }
             if (variable.Value is null)
             {
                 values[variable.Key] = null;
@@ -95,6 +100,24 @@ public sealed partial class DotNetPublishPipelineRunner
            name.Equals("ProgramFiles", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("ProgramFiles(x86)", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("ProgramW6432", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUncontrolledRuntimeInjectionEnvironmentVariable(string name)
+    {
+        string[] exactNames =
+        {
+            "DOTNET_STARTUP_HOOKS",
+            "DOTNET_ADDITIONAL_DEPS",
+            "DOTNET_SHARED_STORE",
+            "DOTNET_DiagnosticPorts",
+            "NUGET_PLUGIN_PATHS",
+            "NUGET_CREDENTIALPROVIDERS_PATH"
+        };
+        return exactNames.Any(value => name.Equals(value, StringComparison.OrdinalIgnoreCase)) ||
+               name.StartsWith("CORECLR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("CORECLR_ENABLE_PROFILING", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("COR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("COR_ENABLE_PROFILING", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool TryRemapControlledBuildValue(
         string value,
@@ -283,6 +306,30 @@ public sealed partial class DotNetPublishPipelineRunner
             value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
+    private static bool ContainsValueProducingPropertyFunction(string value)
+    {
+        value = DecodeMsBuildEscapes(value);
+        return value.IndexOf("$([", StringComparison.Ordinal) >= 0;
+    }
+
+    private static bool ContainsExecutableResponseFileSwitch(string value)
+    {
+        string candidate = DecodeMsBuildEscapes(value).Trim().Trim('"', '\'').Trim();
+        if (candidate.StartsWith("@", StringComparison.Ordinal))
+            return true;
+        if (!candidate.StartsWith("-", StringComparison.Ordinal) &&
+            !candidate.StartsWith("/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        candidate = candidate.Substring(1);
+        return candidate.StartsWith("logger:", StringComparison.OrdinalIgnoreCase) ||
+               candidate.StartsWith("l:", StringComparison.OrdinalIgnoreCase) ||
+               candidate.StartsWith("distributedlogger:", StringComparison.OrdinalIgnoreCase) ||
+               candidate.StartsWith("dl:", StringComparison.OrdinalIgnoreCase);
+    }
+
     internal static string DecodeMsBuildEscapes(string value)
     {
         if (value.IndexOf('%') < 0)
@@ -404,6 +451,7 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             var pending = new Stack<string>();
+            var controlledDocuments = new List<XDocument>();
             pending.Push(checkoutRoot);
             while (pending.Count > 0)
             {
@@ -424,6 +472,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
                     {
                         if (File.ReadLines(path).Any(value =>
+                                ContainsExecutableResponseFileSwitch(value) ||
                                 ContainsRootedBuildValue(value, checkoutRoot) ||
                                 ContainsEscapingRelativeBuildValue(
                                     value,
@@ -457,8 +506,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
-                    if (ContainsUncontrolledControlledBuildTask(document) ||
-                        ContainsControlledBuildPropertyEscape(document) ||
+                    controlledDocuments.Add(document);
+                    if (ContainsControlledBuildPropertyEscape(document) ||
                         !HasOnlyControlledTaskLoadedFileInputs(
                             document,
                             path,
@@ -482,7 +531,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
-            return true;
+            return !controlledDocuments.Any(document =>
+                ContainsUncontrolledControlledBuildTask(document, controlledDocuments));
         }
         catch
         {
@@ -490,9 +540,12 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool ContainsUncontrolledControlledBuildTask(XDocument document)
+    private static bool ContainsUncontrolledControlledBuildTask(
+        XDocument document,
+        IReadOnlyCollection<XDocument> relatedDocuments)
     {
-        return document.Descendants().Any(element =>
+        return ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
+               document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&

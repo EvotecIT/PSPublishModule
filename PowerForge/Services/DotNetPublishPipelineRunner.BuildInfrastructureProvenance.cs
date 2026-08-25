@@ -302,6 +302,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string packageSource,
         string lockFilePath)
     {
+        arguments.Add("-noAutoResponse");
         arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(nuGetConfig));
         arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(packageSource));
         arguments.Add("-p:RestoreAdditionalProjectSources=");

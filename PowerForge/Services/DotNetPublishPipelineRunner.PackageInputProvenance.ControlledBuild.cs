@@ -95,6 +95,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             try
             {
+                var controlledDocuments = new List<XDocument>();
                 foreach (KeyValuePair<string, ZipArchiveEntry> pair in _entries)
                 {
                     string name = pair.Key.Replace('\\', '/').TrimStart('/');
@@ -108,7 +109,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         using var responseReader = new StreamReader(responseStream);
                         while (responseReader.ReadLine() is string value)
                         {
-                            if (ContainsRootedBuildValue(value, gitRoot: null) ||
+                            if (ContainsExecutableResponseFileSwitch(value) ||
+                                ContainsRootedBuildValue(value, gitRoot: null) ||
                                 ContainsEscapingRelativeBuildValue(value, packageDirectory, "package-root") ||
                                 ContainsUncontrolledEnvironmentReference(value) ||
                                 ContainsUncontrolledFileSystemPropertyFunction(value))
@@ -137,8 +139,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
-                    if (ContainsUncontrolledControlledBuildTask(document) ||
-                        ContainsControlledBuildPropertyEscape(document) ||
+                    controlledDocuments.Add(document);
+                    if (ContainsControlledBuildPropertyEscape(document) ||
                         !HasOnlyControlledTaskLoadedFileInputs(
                             document,
                             Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
@@ -159,7 +161,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         return false;
                     }
                 }
-                return true;
+                return !controlledDocuments.Any(document =>
+                    ContainsUncontrolledControlledBuildTask(document, controlledDocuments));
             }
             catch
             {
