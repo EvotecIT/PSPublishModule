@@ -269,6 +269,42 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_SourceFingerprintPreservesMalformedMultibyteCodeUnits()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Malformed Multibyte Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var cases = new[]
+            {
+                ("Utf16Le", new byte[] { 0xFF, 0xFE, 0x00, 0x0D, 0x00 }, new byte[] { 0xFF, 0xFE, 0x00, 0x0A, 0x00 }),
+                ("Utf16Be", new byte[] { 0xFE, 0xFF, 0x0D, 0x00, 0x00 }, new byte[] { 0xFE, 0xFF, 0x0A, 0x00, 0x00 }),
+                ("Utf32Le", new byte[] { 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x0D }, new byte[] { 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x0A }),
+                ("Utf32Be", new byte[] { 0x00, 0x00, 0xFE, 0xFF, 0x0D, 0x00 }, new byte[] { 0x00, 0x00, 0xFE, 0xFF, 0x0A, 0x00 })
+            };
+            foreach (var testCase in cases)
+            {
+                var baselineSource = Path.Combine(root, testCase.Item1, "Baseline", "Product.psm1");
+                var currentSource = Path.Combine(root, testCase.Item1, "Current", "Product.psm1");
+                Directory.CreateDirectory(Path.GetDirectoryName(baselineSource)!);
+                Directory.CreateDirectory(Path.GetDirectoryName(currentSource)!);
+                File.WriteAllBytes(baselineSource, testCase.Item2);
+                File.WriteAllBytes(currentSource, testCase.Item3);
+                var runner = new PowerShellCompilationCensusRunner();
+                var baseline = runner.Run(new[] { baselineSource }, "net10.0");
+                var current = runner.Run(new[] { currentSource }, "net10.0", baseline);
+
+                Assert.NotEqual(Assert.Single(baseline.Products).SourceFingerprint, Assert.Single(current.Products).SourceFingerprint);
+                Assert.Single(current.SourceDrifts);
+                Assert.False(current.Passed);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_DisambiguatesRepeatedPortableDirectoryNamesAcrossCheckoutRoots()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Repeated Directory Tests", Guid.NewGuid().ToString("N"));

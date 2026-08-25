@@ -454,6 +454,10 @@ public sealed class PowerShellCompilationCensusRunner
     {
         var bytes = File.ReadAllBytes(path);
         var encoding = GetStrictSourceEncoding(bytes, out var offset);
+        var byteWiseLineEndingsAreSafe = !HasPrefix(bytes, 0x00, 0x00, 0xFE, 0xFF) &&
+                                         !HasPrefix(bytes, 0xFF, 0xFE, 0x00, 0x00) &&
+                                         !HasPrefix(bytes, 0xFE, 0xFF) &&
+                                         !HasPrefix(bytes, 0xFF, 0xFE);
         if (encoding is not null)
         {
             try
@@ -465,7 +469,9 @@ public sealed class PowerShellCompilationCensusRunner
             }
             catch (DecoderFallbackException)
             {
-                // Preserve malformed or legacy-encoded byte identity below.
+                // A raw 0x0D/0x0A byte is an ASCII newline in UTF-8 and legacy
+                // single-byte input, but may be part of a UTF-16/32 code unit.
+                if (!byteWiseLineEndingsAreSafe) return bytes;
             }
         }
 

@@ -109,6 +109,32 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal((0, "Ada", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
 
+    [Fact]
+    public void Build_CommandCaptureUnwrapsOrdinaryValuesForTypedClrOperations()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Test-CapturedTypes { [CmdletBinding()] param() " +
+            "[object] $scalar = Write-Output 1; [object[]] $items = Write-Output 2, 3; " +
+            "foreach ($item in $items) { if (-not ($item -is [int])) { return $false } }; return ($scalar -is [int]) }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ScalarCapture",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; Test-CapturedTypes");
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Test-CapturedTypes");
+
+        Assert.Equal((0, "True", string.Empty), (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
     [Theory]
     [InlineData("Write-Output $later; [string] $later = 'value'; return $later")]
     [InlineData("[string] $captured = Write-Output $later; [string] $later = 'value'; return $captured")]
