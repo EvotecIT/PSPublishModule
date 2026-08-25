@@ -338,6 +338,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
                          (unitRoot is ScriptBlockAst commandBody &&
                           (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
+                           PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
                            PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _)))))
                         break;
                     diagnostics.Add(CreateDiagnostic(

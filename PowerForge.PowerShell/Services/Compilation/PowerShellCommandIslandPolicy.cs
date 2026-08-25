@@ -38,6 +38,8 @@ internal static class PowerShellCommandIslandPolicy
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var available = new HashSet<string>(parameters, StringComparer.OrdinalIgnoreCase);
             available.UnionWith(prefixAssignments);
+            if (TryGetCapturedRuntimeAssignment(statements[index], body, localFunctionNames, available, out _))
+                continue;
             var tail = statements.Skip(index).ToArray();
             var assigned = tail
                 .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true))
@@ -172,6 +174,75 @@ internal static class PowerShellCommandIslandPolicy
 
     internal static bool TryGetRuntimeRegion(CommandAst command, ScriptBlockAst body, out StatementAst region)
         => TryGetRuntimeRegion(command, body, localFunctionNames: null, allowedVariables: null, out region);
+
+    internal static bool TryGetCapturedRuntimeRegion(
+        CommandAst command,
+        ScriptBlockAst body,
+        ISet<string>? localFunctionNames,
+        ISet<string>? allowedVariables,
+        out AssignmentStatementAst assignment)
+    {
+        for (Ast? current = command; current is not null && !ReferenceEquals(current, body); current = current.Parent)
+        {
+            if (current is StatementAst statement &&
+                TryGetCapturedRuntimeAssignment(statement, body, localFunctionNames, allowedVariables, out assignment))
+                return true;
+        }
+        assignment = null!;
+        return false;
+    }
+
+    internal static bool TryGetCapturedRuntimeAssignment(
+        StatementAst statement,
+        ScriptBlockAst body,
+        ISet<string>? localFunctionNames,
+        ISet<string>? allowedVariables,
+        out AssignmentStatementAst assignment)
+    {
+        assignment = null!;
+        if (!ReferenceEquals(statement.Parent, body.EndBlock) ||
+            statement is not AssignmentStatementAst candidate ||
+            candidate.Operator.ToString() != "Equals" ||
+            candidate.Left is not ConvertExpressionAst
+            {
+                Child: VariableExpressionAst target
+            } ||
+            target.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase) ||
+            PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(target.VariablePath.UserPath))
+            return false;
+
+        var commands = candidate.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .OfType<CommandAst>()
+            .ToArray();
+        if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0))
+            return false;
+        if (localFunctionNames is not null && commands.Any(command =>
+                command.InvocationOperator == TokenKind.Unknown &&
+                command.GetCommandName() is { } name &&
+                localFunctionNames.Contains(name)))
+            return false;
+
+        var parameters = allowedVariables ?? body.ParamBlock?.Parameters
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var variablesSafe = candidate.Right.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+            .OfType<VariableExpressionAst>()
+            .All(variable =>
+            {
+                var name = variable.VariablePath.UserPath;
+                if (HasNestedScriptBlockAncestor(variable, candidate))
+                    return IsNestedPipelineVariable(variable, candidate, name) || parameters.Contains(name);
+                return parameters.Contains(name) ||
+                       name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                       name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                       name.Equals("null", StringComparison.OrdinalIgnoreCase);
+            });
+        if (!variablesSafe)
+            return false;
+
+        assignment = candidate;
+        return true;
+    }
 
     internal static bool IsDiscardAssignment(AssignmentStatementAst assignment)
         => assignment.Operator.ToString() == "Equals" &&
