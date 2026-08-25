@@ -7,6 +7,41 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private const int MaximumControlledTaskInputExpressions = 256;
 
+    private static readonly ISet<string> ControlledSdkTaskInputProperties =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AdditionalLibPaths",
+            "AlEnvironment",
+            "AlToolExe",
+            "AlToolPath",
+            "AppConfig",
+            "AppConfigForCompiler",
+            "ApplicationIcon",
+            "ApplicationManifest",
+            "AssemblyOriginatorKeyFile",
+            "CodeAnalysisRuleSet",
+            "CompilerResponseFile",
+            "CscEnvironment",
+            "CscToolExe",
+            "CscToolPath",
+            "FrameworkPathOverride",
+            "FscToolExe",
+            "FscToolPath",
+            "KeyOriginatorFile",
+            "ResolvedCodeAnalysisRuleSet",
+            "Satellite_EvidenceFile",
+            "Satellite_Win32Icon",
+            "Satellite_Win32Resource",
+            "SourceLink",
+            "VbcEnvironment",
+            "VbcToolExe",
+            "VbcToolPath",
+            "VBRuntimePath",
+            "Win32Icon",
+            "Win32Manifest",
+            "Win32Resource"
+        };
+
     private static bool ContainsUncontrolledTaskInputPropertyFunction(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments)
@@ -23,7 +58,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 "Condition",
                 StringComparison.OrdinalIgnoreCase))
             .Select(attribute => attribute.Value);
-        var pending = new Queue<string>(taskInputs.Concat(conditions));
+        IEnumerable<string> sdkTaskInputs = relatedDocuments
+            .SelectMany(related => related.Descendants())
+            .Where(element =>
+                element.Parent is not null &&
+                element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                ControlledSdkTaskInputProperties.Contains(element.Name.LocalName))
+            .Select(element => element.Value);
+        var pending = new Queue<string>(taskInputs.Concat(sdkTaskInputs).Concat(conditions));
         var inspected = new HashSet<string>(StringComparer.Ordinal);
         while (pending.Count > 0)
         {

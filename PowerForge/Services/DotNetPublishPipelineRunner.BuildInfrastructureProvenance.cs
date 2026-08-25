@@ -325,6 +325,8 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:PostBuildEvent=");
         arguments.Add("-p:RunPostBuildEvent=Never");
         arguments.Add("-p:UseSharedCompilation=false");
+        arguments.Add("-p:AlToolPath=");
+        arguments.Add("-p:AlToolExe=");
         arguments.Add("-p:CscToolPath=");
         arguments.Add("-p:CscToolExe=");
         arguments.Add("-p:VbcToolPath=");

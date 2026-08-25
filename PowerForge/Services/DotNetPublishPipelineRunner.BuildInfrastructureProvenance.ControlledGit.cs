@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
@@ -144,15 +142,34 @@ public sealed partial class DotNetPublishPipelineRunner
                      new[] { '\r', '\n' },
                      StringSplitOptions.RemoveEmptyEntries))
         {
-            Match match = Regex.Match(
-                line.Trim(),
-                @"^filter\.(?<name>[A-Za-z0-9_.-]+)\.(?:clean|smudge|process|required)$",
-                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-            if (!match.Success)
+            if (!TryParseConfiguredGitFilterName(line.Trim(), out string filterName))
                 return false;
-            filterNames.Add(match.Groups["name"].Value);
+            filterNames.Add(filterName);
         }
         return true;
+    }
+
+    private static bool TryParseConfiguredGitFilterName(string key, out string filterName)
+    {
+        const string prefix = "filter.";
+        filterName = string.Empty;
+        if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        foreach (string suffix in new[] { ".clean", ".smudge", ".process", ".required" })
+        {
+            if (!key.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            int nameLength = key.Length - prefix.Length - suffix.Length;
+            if (nameLength <= 0)
+                return false;
+
+            filterName = key.Substring(prefix.Length, nameLength);
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryReadGitDirectoryText(

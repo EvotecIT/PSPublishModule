@@ -244,6 +244,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "PostBuildEvent",
             "RunPostBuildEvent",
             "UseSharedCompilation",
+            "AlToolPath",
+            "AlToolExe",
             "CscToolPath",
             "CscToolExe",
             "VbcToolPath",

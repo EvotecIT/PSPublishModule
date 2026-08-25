@@ -17,7 +17,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ["GetFileHash"] = ["Files"],
             ["Hash"] = ["Items"],
             ["Vbc"] = ["ApplicationConfiguration", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
-            ["XslTransformation"] = ["XmlInputPaths", "XslInputPath"]
+            ["XslTransformation"] = ["XmlInputPaths", "XslInputPath"],
+            ["ZipDirectory"] = ["SourceDirectory"]
         };
 
     private static bool HasOnlyControlledTaskLoadedFileInputs(
