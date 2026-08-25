@@ -12,7 +12,7 @@ internal static class PowerShellCompilationArtifactSigner
 
     private static readonly HashSet<string> BuildOwnedRoles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Primary", "PrimaryModule", "TypedAssembly", "GeneratedAssembly", "PrimaryModuleManifest"
+        "Primary", "PrimaryModule", "TypedAssembly", "GeneratedAssembly", "PrimaryModuleManifest", "GeneratedModuleDependency"
     };
 
     internal static PowerShellCompilationSigningResult? Sign(

@@ -67,7 +67,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                      path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
                      typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
                      conventionalLoaders: conventionalDiscovery.Loaders))
-            files.Add(CreateArtifactFile(dependency, "ModuleDependency"));
+            files.Add(CreateArtifactFile(
+                dependency.Path,
+                dependency.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency"));
         var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());
     }

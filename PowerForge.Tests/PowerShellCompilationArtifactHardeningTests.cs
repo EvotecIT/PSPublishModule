@@ -404,6 +404,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new PowerShellCompilationArtifactFile { Path = "typed.dll", Role = "TypedAssembly" },
             new PowerShellCompilationArtifactFile { Path = "tool.dll", Role = "GeneratedAssembly" },
             new PowerShellCompilationArtifactFile { Path = "module.psd1", Role = "PrimaryModuleManifest" },
+            new PowerShellCompilationArtifactFile { Path = "Generated.Private.ps1", Role = "GeneratedModuleDependency" },
             new PowerShellCompilationArtifactFile { Path = "Microsoft.PowerShell.SDK.dll", Role = "RuntimeDependency" },
             new PowerShellCompilationArtifactFile { Path = "Vendor.Cmdlets.dll", Role = "ModuleDependency" },
             new PowerShellCompilationArtifactFile { Path = "Nested.psm1", Role = "ModuleDependency" }
@@ -411,7 +412,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         var selected = PowerShellCompilationArtifactSigner.GetBuildOwnedSignableFiles(files);
 
-        Assert.Equal(new[] { "tool.exe", "module.psm1", "typed.dll", "tool.dll", "module.psd1" }, selected);
+        Assert.Equal(new[] { "tool.exe", "module.psm1", "typed.dll", "tool.dll", "module.psd1", "Generated.Private.ps1" }, selected);
     }
 
     [Fact]

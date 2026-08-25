@@ -13,7 +13,7 @@ internal static class PowerShellHybridDependencyResolver
         @"^\$(?:\{)?PSScriptRoot(?:\})?(?<suffix>[\\/].+)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    internal static string[] CopyDependencies(
+    internal static PowerShellHybridDependencyCopy[] CopyDependencies(
         string sourcePath,
         string moduleDirectory,
         IEnumerable<string>? additionalEntryPaths = null,
@@ -28,7 +28,7 @@ internal static class PowerShellHybridDependencyResolver
             comparer);
         var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
-        var copied = new List<string>();
+        var copied = new List<PowerShellHybridDependencyCopy>();
         foreach (var dependency in DiscoverDependencies(sourcePath, discoveryEntries, conventionalLoaders))
         {
             if (entryPaths.Contains(dependency))
@@ -48,12 +48,12 @@ internal static class PowerShellHybridDependencyResolver
             else if (transformedContent is not null)
             {
                 File.WriteAllText(target, transformedContent, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                copied.Add(target);
+                copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: true));
             }
             else
             {
                 File.Copy(dependency, target, overwrite: false);
-                copied.Add(target);
+                copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: false));
             }
         }
         return copied.ToArray();
@@ -155,4 +155,18 @@ internal static class PowerShellHybridDependencyResolver
     private static string NormalizeRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
 
+}
+
+/// <summary>Describes a staged hybrid dependency and whether PowerForge generated its current contents.</summary>
+internal sealed class PowerShellHybridDependencyCopy
+{
+    internal PowerShellHybridDependencyCopy(string path, bool isGenerated)
+    {
+        Path = path;
+        IsGenerated = isGenerated;
+    }
+
+    internal string Path { get; }
+
+    internal bool IsGenerated { get; }
 }

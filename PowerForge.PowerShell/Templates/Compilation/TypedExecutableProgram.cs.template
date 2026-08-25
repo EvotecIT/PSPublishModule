@@ -8,6 +8,8 @@ namespace PowerForge.Compiled;
 
 internal static class Program
 {
+    private const bool AcceptsSurplusPositionalArguments = {{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}};
+
     private static readonly ParameterSpec[] Parameters =
     {
 {{PARAMETER_SPECS}}
@@ -71,7 +73,11 @@ internal static class Program
             while (positionalIndex < Parameters.Length && raw[Parameters[positionalIndex].Name].Count > 0)
                 positionalIndex++;
             if (positionalIndex >= Parameters.Length)
+            {
+                if (AcceptsSurplusPositionalArguments)
+                    continue;
                 throw new ArgumentException($"Unexpected positional argument '{token}'.");
+            }
             var positional = Parameters[positionalIndex];
             AddRawValue(raw, positional, token);
             positionalIndex++;

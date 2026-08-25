@@ -29,7 +29,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
                      searchNestedScriptBlocks: true)
                      .Cast<CommandAst>()
-                     .Where(static command => command.GetCommandName()?.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) == true))
+                     .Where(static command => GetUnqualifiedCommandName(command)?.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) == true))
         {
             var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath).ToArray();
             if (acceptedLoaders.Length == 0 ||
@@ -327,6 +327,12 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         => path.StartsWith("\\\\", StringComparison.Ordinal) ||
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
+
+    private static string? GetUnqualifiedCommandName(CommandAst command)
+    {
+        var name = command.GetCommandName();
+        return name is null ? null : name.Substring(name.LastIndexOf('\\') + 1);
+    }
 
 }
 

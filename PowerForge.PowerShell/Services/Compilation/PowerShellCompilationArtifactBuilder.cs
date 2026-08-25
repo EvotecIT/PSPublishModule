@@ -184,6 +184,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ReadTemplate(PackagedProgramTemplate)
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
+                        .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
                         .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases)
                         .Replace("{{ENTRY_RELATIVE_PATH}}", PowerShellCSharpLiteral.QuoteString(packagedSources.EntryRelativePath))
                         .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs)

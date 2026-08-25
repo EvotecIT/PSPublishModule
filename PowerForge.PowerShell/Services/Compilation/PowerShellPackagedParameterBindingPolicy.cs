@@ -15,6 +15,7 @@ internal static class PowerShellPackagedParameterBindingPolicy
 
         var parameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var booleanParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parameterAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>())
         {
@@ -25,6 +26,8 @@ internal static class PowerShellPackagedParameterBindingPolicy
                 parameterAliases[value.Value] = name;
             if (parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
                 switchParameters.Add(name);
+            else if (parameter.StaticType == typeof(bool))
+                booleanParameters.Add(name);
         }
         foreach (var commonParameter in PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework))
         {
@@ -36,6 +39,7 @@ internal static class PowerShellPackagedParameterBindingPolicy
         return new PowerShellPackagedParameterInitializers(
             GenerateInitializer(parameters),
             GenerateInitializer(switchParameters),
+            GenerateInitializer(booleanParameters),
             GenerateAliasInitializer(parameterAliases));
     }
 
@@ -60,16 +64,19 @@ internal static class PowerShellPackagedParameterBindingPolicy
 
 internal sealed class PowerShellPackagedParameterInitializers
 {
-    internal PowerShellPackagedParameterInitializers(string parameters, string switchParameters, string parameterAliases)
+    internal PowerShellPackagedParameterInitializers(string parameters, string switchParameters, string booleanParameters, string parameterAliases)
     {
         Parameters = parameters;
         SwitchParameters = switchParameters;
+        BooleanParameters = booleanParameters;
         ParameterAliases = parameterAliases;
     }
 
     internal string Parameters { get; }
 
     internal string SwitchParameters { get; }
+
+    internal string BooleanParameters { get; }
 
     internal string ParameterAliases { get; }
 }

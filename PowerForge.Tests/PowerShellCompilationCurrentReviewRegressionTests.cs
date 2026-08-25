@@ -106,6 +106,106 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
         Assert.DoesNotContain("unexpected", run.StandardOutput, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Build_PackagedExecutableConvertsExplicitBooleanParameterValues()
+    {
+        using var fixture = ArtifactFixture.Create("param([bool] $Flag); return $Flag");
+        var result = BuildExecutable(fixture, "PowerForge.PackageBooleanParameter", PowerShellCompilationMode.Package);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var falseWord = Run(result.ArtifactPath!, "--Flag=false");
+        var falseVariable = Run(result.ArtifactPath!, "--Flag=$false");
+        var trueWord = Run(result.ArtifactPath!, "--Flag=true");
+
+        Assert.Equal((0, "False"), (falseWord.ExitCode, falseWord.StandardOutput.Trim()));
+        Assert.Equal((0, "False"), (falseVariable.ExitCode, falseVariable.StandardOutput.Trim()));
+        Assert.Equal((0, "True"), (trueWord.ExitCode, trueWord.StandardOutput.Trim()));
+        Assert.True(string.IsNullOrWhiteSpace(falseWord.StandardError), falseWord.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(falseVariable.StandardError), falseVariable.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(trueWord.StandardError), trueWord.StandardError);
+    }
+
+    [Fact]
+    public void Build_StrictExecutableAcceptsSurplusPositionalsOnlyForSimpleEntryPoint()
+    {
+        using var simpleFixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var simple = BuildExecutable(simpleFixture, "PowerForge.StrictSimpleSurplus", PowerShellCompilationMode.Strict);
+        Assert.True(simple.Succeeded, simple.Error + Environment.NewLine + simple.BuildOutput);
+
+        var simpleRun = Run(simple.ArtifactPath!, "7", "ignored");
+        Assert.Equal((0, "7", string.Empty), (simpleRun.ExitCode, simpleRun.StandardOutput.Trim(), simpleRun.StandardError.Trim()));
+
+        using var advancedFixture = ArtifactFixture.Create("[CmdletBinding()] param([int] $Value); return $Value");
+        var advanced = BuildExecutable(advancedFixture, "PowerForge.StrictAdvancedSurplus", PowerShellCompilationMode.Strict);
+        Assert.True(advanced.Succeeded, advanced.Error + Environment.NewLine + advanced.BuildOutput);
+
+        var advancedRun = Run(advanced.ArtifactPath!, "7", "ignored");
+        Assert.NotEqual(0, advancedRun.ExitCode);
+        Assert.Contains("Unexpected positional argument", advancedRun.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HybridModuleMarksRewrittenDependenciesAsGeneratedSignableArtifacts()
+    {
+        using var fixture = ArtifactFixture.Create(
+            ". \"$PSScriptRoot/Private.ps1\"; Export-ModuleMember -Function Get-RewrittenValue",
+            ".psm1");
+        File.WriteAllText(
+            Path.Combine(fixture.RootPath, "Private.ps1"),
+            "function Get-RewrittenValue { return 42 }");
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            resolved.SourcePath,
+            fixture.OutputPath,
+            "PowerForge.GeneratedHybridDependency",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
+            ModuleManifestPath = resolved.ModuleManifestPath
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var dependency = Assert.Single(result.Manifest!.Files, file =>
+            file.Path.EndsWith("Private.ps1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("GeneratedModuleDependency", dependency.Role);
+        Assert.Contains(dependency.Path, PowerShellCompilationArtifactSigner.GetBuildOwnedSignableFiles(result.Manifest.Files));
+
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-RewrittenValue");
+        Assert.Equal((0, "42", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_QualifiedConventionalLoaderDiscoversAndStagesFunctions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$Public = @(Microsoft.PowerShell.Management\\Get-ChildItem -Path \"$PSScriptRoot/Public/*.ps1\"); " +
+            "foreach ($Import in $Public) { . $Import.FullName }; Export-ModuleMember -Function Get-QualifiedValue",
+            ".psm1");
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
+        var source = Path.Combine(fixture.RootPath, "Public", "Get-QualifiedValue.ps1");
+        File.WriteAllText(source, "function Get-QualifiedValue { return 17 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath);
+        Assert.Contains(source, resolved.CompilationSourceFiles, PowerShellCompilationPathSafety.PathComparer);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            resolved.SourcePath,
+            fixture.OutputPath,
+            "PowerForge.QualifiedConventionalLoader",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
+            ModuleManifestPath = resolved.ModuleManifestPath
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-QualifiedValue");
+        Assert.Equal((0, "17", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
     private static PowerShellCompilationBuildResult BuildExecutable(
         ArtifactFixture fixture,
         string name,

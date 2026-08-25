@@ -66,6 +66,7 @@ internal static class PowerShellTypedExecutableEmitter
         var programSource = ReadTemplate(ProgramTemplate)
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)
             .Replace("{{COMMON_PARAMETER_NAMES}}", commonParameterNames)
+            .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", PowerShellAdvancedFunctionPolicy.IsAdvanced(ast.ParamBlock) ? "false" : "true")
             .Replace("{{INVOCATION}}", invocationSource);
         return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods);
     }
