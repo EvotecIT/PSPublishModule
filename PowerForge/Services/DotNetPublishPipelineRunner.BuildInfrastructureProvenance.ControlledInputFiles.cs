@@ -77,7 +77,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 string extension = Path.GetExtension(path);
                 if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (File.ReadLines(path).Any(value =>
+                    if (IsAutomaticMsBuildResponseFile(path) &&
+                        File.ReadLines(path).Any(value =>
                             ContainsExecutableResponseFileSwitch(value) ||
                             ContainsRootedBuildValue(value, checkoutRoot) ||
                             ContainsEscapingRelativeBuildValue(
@@ -85,7 +86,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 Path.GetDirectoryName(path)!,
                                 checkoutRoot) ||
                             ContainsUncontrolledEnvironmentReference(value) ||
-                            ContainsUncontrolledFileSystemPropertyFunction(value)))
+                            ContainsUncontrolledFileSystemPropertyFunction(value) ||
+                            ContainsUnresolvedBuildExpression(value)))
                     {
                         return false;
                     }
@@ -152,11 +154,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         path,
                         normalizedTaskInputBaseDirectory,
                         checkoutRoot,
+                        checkoutRoot,
                         ReadControlledCheckoutTextInput) ||
                     !HasOnlyControlledLiteralTaskFileInputs(
                         document,
                         path,
                         normalizedTaskInputBaseDirectory,
+                        checkoutRoot,
                         checkoutRoot,
                         controlledDocumentSources,
                         evaluatedGlobalProperties,
@@ -173,6 +177,13 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static bool IsAutomaticMsBuildResponseFile(string path)
+    {
+        string fileName = Path.GetFileName(path);
+        return fileName.Equals("Directory.Build.rsp", StringComparison.OrdinalIgnoreCase) ||
+               fileName.Equals("MSBuild.rsp", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ContainsUncontrolledControlledBuildTask(

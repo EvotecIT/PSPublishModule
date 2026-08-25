@@ -108,11 +108,16 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        internal bool TrySeedControlledPackageSource(string destination)
+        internal bool TrySeedControlledPackageSource(
+            string destination,
+            string controlledSourceRoot,
+            string controlledProjectPath)
             => _archives.TrySeedControlledPackageSource(
                 destination,
                 _archivePaths,
-                _controlledBuildInputsByArchive);
+                _controlledBuildInputsByArchive,
+                controlledSourceRoot,
+                controlledProjectPath);
     }
 
     private sealed partial class VerifiedPackageArchiveCache
@@ -120,7 +125,9 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool TrySeedControlledPackageSource(
             string destination,
             IReadOnlyCollection<string> archivePaths,
-            IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive)
+            IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive,
+            string controlledSourceRoot,
+            string controlledProjectPath)
         {
             try
             {
@@ -135,7 +142,10 @@ public sealed partial class DotNetPublishPipelineRunner
                             out HashSet<string>? inputs)
                             ? inputs
                             : Array.Empty<string>();
-                    if (!cached.Archive.HasOnlyControlledBuildInputs(controlledBuildInputs))
+                    if (!cached.Archive.HasOnlyControlledBuildInputs(
+                            controlledBuildInputs,
+                            controlledSourceRoot,
+                            controlledProjectPath))
                         return false;
                     string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
@@ -153,10 +163,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed partial class VerifiedPackageArchive
     {
-        internal bool HasOnlyControlledBuildInputs(IReadOnlyCollection<string> executableBuildInputs)
+        internal bool HasOnlyControlledBuildInputs(
+            IReadOnlyCollection<string> executableBuildInputs,
+            string controlledSourceRoot,
+            string controlledProjectPath)
         {
             try
             {
+                string controlledProjectDirectory = Path.GetDirectoryName(
+                    Path.GetFullPath(controlledProjectPath))!;
+                if (!IsSameOrBelowBuildInputPath(controlledProjectDirectory, controlledSourceRoot))
+                    return false;
                 var executableSeedNames = new HashSet<string>(
                     executableBuildInputs.Select(input => input.Replace('\\', '/').TrimStart('/')),
                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -174,22 +191,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         "package-root",
                         Path.GetDirectoryName(name) ?? string.Empty);
                     if (extension.Equals(".rsp", StringComparison.OrdinalIgnoreCase))
-                    {
-                        using Stream responseStream = pair.Value.Open();
-                        using var responseReader = new StreamReader(responseStream);
-                        while (responseReader.ReadLine() is string value)
-                        {
-                            if (ContainsExecutableResponseFileSwitch(value) ||
-                                ContainsRootedBuildValue(value, gitRoot: null) ||
-                                ContainsEscapingRelativeBuildValue(value, packageDirectory, "package-root") ||
-                                ContainsUncontrolledEnvironmentReference(value) ||
-                                ContainsUncontrolledFileSystemPropertyFunction(value))
-                            {
-                                return false;
-                            }
-                        }
                         continue;
-                    }
                     bool executableSeed = executableSeedNames.Contains(name);
                     XDocument document;
                     try
@@ -240,44 +242,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 var executableNames = new HashSet<string>(
                     documents.Where(candidate => candidate.ExecutableSeed).Select(candidate => candidate.Name),
                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-                bool changed;
-                do
-                {
-                    changed = false;
-                    foreach ((string name, string declaringPath, _, _, XDocument document) in documents.Where(
-                                 candidate => executableNames.Contains(candidate.Name)).ToArray())
-                    {
-                        foreach (XElement import in document.Descendants().Where(element =>
-                                     element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            string? projectValue = import.Attributes()
-                                .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
-                                    "Project",
-                                    StringComparison.OrdinalIgnoreCase))?
-                                .Value;
-                            if (string.IsNullOrWhiteSpace(projectValue) ||
-                                projectValue!.IndexOf('*') >= 0 ||
-                                projectValue.IndexOf('?') >= 0 ||
-                                !TryResolveControlledTaskInputPath(
-                                    projectValue,
-                                    declaringPath,
-                                    "package-root",
-                                    out string importedPath))
-                            {
-                                return false;
-                            }
-                            if (!TryGetControlledPackageEntryName(importedPath, out string importedName) ||
-                                !documents.Any(candidate => candidate.Name.Equals(
-                                    importedName,
-                                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
-                            {
-                                return false;
-                            }
-                            if (executableNames.Add(importedName))
-                                changed = true;
-                        }
-                    }
-                } while (changed);
 
                 var controlledDocuments = new List<XDocument>();
                 var controlledDocumentSources = new List<(XDocument Document, string DeclaringPath)>();
@@ -312,18 +276,24 @@ public sealed partial class DotNetPublishPipelineRunner
                         !HasOnlyControlledTaskLoadedFileInputs(
                             document,
                             declaringPath,
-                            Path.GetDirectoryName(declaringPath)!,
+                            controlledProjectDirectory,
                             "package-root",
-                            ReadControlledPackageTextInput) ||
+                            controlledSourceRoot,
+                            path => ReadControlledPackageOrProjectTextInput(path, controlledSourceRoot)) ||
                         !HasOnlyControlledLiteralTaskFileInputs(
                             document,
                             declaringPath,
-                            Path.GetDirectoryName(declaringPath)!,
+                            controlledProjectDirectory,
                             "package-root",
+                            controlledSourceRoot,
                             controlledDocumentSources,
                             evaluatedGlobalProperties: null,
-                            isControlledInput: IsControlledPackageInput,
-                            readLines: ReadControlledPackageTextInput))
+                            isControlledInput: path => IsControlledPackageOrProjectInput(
+                                path,
+                                controlledSourceRoot),
+                            readLines: path => ReadControlledPackageOrProjectTextInput(
+                                path,
+                                controlledSourceRoot)))
                     {
                         return false;
                     }
@@ -339,6 +309,23 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private bool IsControlledPackageInput(string path)
             => TryGetControlledPackageEntryName(path, out string name) && _entries.ContainsKey(name);
+
+        private bool IsControlledPackageOrProjectInput(string path, string controlledSourceRoot)
+        {
+            if (IsControlledPackageInput(path))
+                return true;
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+                return IsSameOrBelowBuildInputPath(fullPath, controlledSourceRoot) &&
+                       (File.Exists(fullPath) || Directory.Exists(fullPath)) &&
+                       !HasReparsePointBelowRoot(fullPath, controlledSourceRoot);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private static bool TryGetControlledPackageEntryName(string path, out string name)
         {
@@ -378,6 +365,30 @@ public sealed partial class DotNetPublishPipelineRunner
                 while (reader.ReadLine() is string line)
                     lines.Add(line);
                 return lines.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string[]? ReadControlledPackageOrProjectTextInput(
+            string path,
+            string controlledSourceRoot)
+        {
+            string[]? packageLines = ReadControlledPackageTextInput(path);
+            if (packageLines is not null)
+                return packageLines;
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+                var file = new FileInfo(fullPath);
+                return IsSameOrBelowBuildInputPath(fullPath, controlledSourceRoot) &&
+                       file.Exists &&
+                       file.Length <= MaximumControlledBuildTextInputBytes &&
+                       !HasReparsePointBelowRoot(fullPath, controlledSourceRoot)
+                    ? File.ReadAllLines(fullPath)
+                    : null;
             }
             catch
             {

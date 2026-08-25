@@ -108,10 +108,14 @@ public sealed partial class DotNetPublishPipelineRunner
             "DOTNET_SHARED_STORE",
             "DOTNET_DiagnosticPorts",
             "MSBUILDENABLEALLPROPERTYFUNCTIONS",
+            "MSBUILDADDITIONALSDKRESOLVERSFOLDER",
+            "MSBUILD_EXE_PATH",
+            "MSBUILDSDKSPATH",
             "NUGET_PLUGIN_PATHS",
             "NUGET_CREDENTIALPROVIDERS_PATH"
         };
         return exactNames.Any(value => name.Equals(value, StringComparison.OrdinalIgnoreCase)) ||
+               name.StartsWith("MSBUILDNODEHANDLER", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_ENABLE_PROFILING", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("COR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
@@ -275,6 +279,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             "SystemRoot",
             "WINDIR",
+            "ComSpec",
+            "PATHEXT",
+            "PROCESSOR_ARCHITECTURE",
+            "PROCESSOR_ARCHITEW6432",
             "ProgramFiles",
             "ProgramFiles(x86)",
             "ProgramW6432",

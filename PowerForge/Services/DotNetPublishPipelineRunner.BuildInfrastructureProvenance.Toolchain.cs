@@ -175,6 +175,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static IEnumerable<string> EnumerateGitCandidates()
     {
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_GIT_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath) && Path.IsPathRooted(configuredPath))
+            yield return configuredPath!;
+
         if (IsWindows())
         {
             string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);

@@ -137,7 +137,10 @@ public sealed partial class DotNetPublishPipelineRunner
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
             if (verifiedPackages is not null &&
-                !verifiedPackages.TrySeedControlledPackageSource(offlinePackageSource))
+                !verifiedPackages.TrySeedControlledPackageSource(
+                    offlinePackageSource,
+                    controlledSourceRoot,
+                    controlledProjectPath!))
                 return Cache(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(

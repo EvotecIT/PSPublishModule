@@ -12,7 +12,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["CreateCSharpManifestResourceName"] = ["ResourceFiles"],
             ["CreateVisualBasicManifestResourceName"] = ["ResourceFiles"],
             ["Csc"] = ["AdditionalFiles", "Analyzers", "ApplicationConfiguration", "CodeAnalysisRuleSet", "KeyFile", "LinkResources", "References", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Manifest", "Win32Resource"],
-            ["Fsc"] = ["KeyFile", "References", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
+            ["Fsc"] = ["Analyzers", "KeyFile", "References", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
             ["GenerateApplicationManifest"] = ["ConfigFile", "Dependencies", "EntryPoint", "Files", "IconFile", "InputManifest", "IsolatedComReferences", "TrustInfoFile"],
             ["GenerateBindingRedirects"] = ["AppConfigFile", "SuggestedRedirects"],
             ["GenerateDeploymentManifest"] = ["EntryPoint", "InputManifest"],

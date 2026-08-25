@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         string declaringPath,
         string taskInputBaseDirectory,
-        string allowedRoot,
+        string declaringAllowedRoot,
+        string taskInputAllowedRoot,
         Func<string, string[]?> readLines)
     {
         foreach (XElement task in document.Descendants().Where(element =>
@@ -30,22 +31,26 @@ public sealed partial class DotNetPublishPipelineRunner
                     fileValue!,
                     declaringPath,
                     taskInputBaseDirectory,
-                    allowedRoot,
+                    declaringAllowedRoot,
+                    taskInputAllowedRoot,
                     out string inputPath))
             {
                 return false;
             }
 
             if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
-                HasReparsePointBelowRoot(inputPath, allowedRoot))
+                HasReparsePointBelowRoot(inputPath, taskInputAllowedRoot))
             {
                 return false;
             }
 
             string[]? lines = readLines(inputPath);
             if (lines is null || lines.Any(value =>
-                    ContainsRootedBuildValue(value, allowedRoot) ||
-                    ContainsEscapingRelativeBuildValue(value, allowedRoot, allowedRoot) ||
+                    ContainsRootedBuildValue(value, taskInputAllowedRoot) ||
+                    ContainsEscapingRelativeBuildValue(
+                        value,
+                        taskInputBaseDirectory,
+                        taskInputAllowedRoot) ||
                     ContainsUncontrolledEnvironmentReference(value) ||
                     ContainsUncontrolledFileSystemPropertyFunction(value) ||
                     ContainsUnresolvedBuildExpression(value)))
@@ -61,10 +66,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         candidate,
                         declaringPath,
                         taskInputBaseDirectory,
-                        allowedRoot,
+                        declaringAllowedRoot,
+                        taskInputAllowedRoot,
                         out string loadedInputPath) &&
                     (File.Exists(loadedInputPath) || Directory.Exists(loadedInputPath)) &&
-                    HasReparsePointBelowRoot(loadedInputPath, allowedRoot))
+                    HasReparsePointBelowRoot(loadedInputPath, taskInputAllowedRoot))
                 {
                     return false;
                 }
@@ -113,7 +119,8 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         string declaringPath,
         string taskInputBaseDirectory,
-        string allowedRoot,
+        string declaringAllowedRoot,
+        string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
         Func<string, bool>? isControlledInput = null,
@@ -131,6 +138,11 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (XAttribute attribute in task.Attributes().Where(attribute =>
                          inputAttributes.Contains(attribute.Name.LocalName, StringComparer.OrdinalIgnoreCase)))
             {
+                if (IsCompilerPluginTaskInput(task.Name.LocalName, attribute.Name.LocalName) &&
+                    !string.IsNullOrWhiteSpace(attribute.Value))
+                {
+                    return false;
+                }
                 if (IsControlledReadLinesTaskInput(attribute.Value, relatedDocuments))
                     continue;
                 if (!TryExpandControlledTaskInputValues(
@@ -161,7 +173,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             candidate,
                             declaringPath,
                             taskInputBaseDirectory,
-                            allowedRoot,
+                            declaringAllowedRoot,
+                            taskInputAllowedRoot,
                             out string inputPath))
                     {
                         return false;
@@ -172,23 +185,21 @@ public sealed partial class DotNetPublishPipelineRunner
                             return false;
                     }
                     else if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
-                             HasReparsePointBelowRoot(inputPath, allowedRoot))
+                             HasReparsePointBelowRoot(inputPath, taskInputAllowedRoot))
                     {
                         return false;
                     }
                     if (attribute.Name.LocalName.Equals("ResponseFiles", StringComparison.OrdinalIgnoreCase))
                     {
                         string[]? lines = readLines?.Invoke(inputPath);
-                        if (lines is null || lines.Any(line =>
-                                ContainsExecutableResponseFileSwitch(line) ||
-                                ContainsRootedBuildValue(line, allowedRoot) ||
-                                ContainsEscapingRelativeBuildValue(
-                                    line,
-                                    Path.GetDirectoryName(inputPath)!,
-                                    allowedRoot) ||
-                                ContainsUncontrolledEnvironmentReference(line) ||
-                                ContainsUncontrolledFileSystemPropertyFunction(line) ||
-                                ContainsUnresolvedBuildExpression(line)))
+                        if (lines is null ||
+                            !HasOnlyControlledCompilerResponseFileInputs(
+                                lines,
+                                inputPath,
+                                taskInputBaseDirectory,
+                                declaringAllowedRoot,
+                                taskInputAllowedRoot,
+                                isControlledInput))
                         {
                             return false;
                         }
@@ -199,6 +210,12 @@ public sealed partial class DotNetPublishPipelineRunner
 
         return true;
     }
+
+    private static bool IsCompilerPluginTaskInput(string taskName, string attributeName)
+        => (taskName.Equals("Csc", StringComparison.OrdinalIgnoreCase) ||
+            taskName.Equals("Vbc", StringComparison.OrdinalIgnoreCase) ||
+            taskName.Equals("Fsc", StringComparison.OrdinalIgnoreCase)) &&
+           attributeName.Equals("Analyzers", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsControlledReadLinesTaskInput(
         string expression,
@@ -394,15 +411,31 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputBaseDirectory,
         string allowedRoot,
         out string inputPath)
+        => TryResolveControlledTaskInputPath(
+            value,
+            declaringPath,
+            taskInputBaseDirectory,
+            allowedRoot,
+            allowedRoot,
+            out inputPath);
+
+    private static bool TryResolveControlledTaskInputPath(
+        string value,
+        string declaringPath,
+        string taskInputBaseDirectory,
+        string declaringAllowedRoot,
+        string taskInputAllowedRoot,
+        out string inputPath)
     {
         inputPath = string.Empty;
         try
         {
-            string root = Path.GetFullPath(allowedRoot);
+            string declaringRoot = Path.GetFullPath(declaringAllowedRoot);
+            string inputRoot = Path.GetFullPath(taskInputAllowedRoot);
             string declaringDirectory = Path.GetDirectoryName(Path.GetFullPath(declaringPath))!;
             string inputBaseDirectory = Path.GetFullPath(taskInputBaseDirectory);
-            if (!IsSameOrBelowBuildInputPath(declaringDirectory, root) ||
-                !IsSameOrBelowBuildInputPath(inputBaseDirectory, root))
+            if (!IsSameOrBelowBuildInputPath(declaringDirectory, declaringRoot) ||
+                !IsSameOrBelowBuildInputPath(inputBaseDirectory, inputRoot))
                 return false;
 
             string thisFileDirectory = declaringDirectory.TrimEnd(
@@ -429,7 +462,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Path.IsPathRooted(candidate)
                     ? candidate
                     : Path.Combine(inputBaseDirectory, candidate));
-            return IsSameOrBelowBuildInputPath(inputPath, root);
+            return IsSameOrBelowBuildInputPath(inputPath, declaringRoot) ||
+                   IsSameOrBelowBuildInputPath(inputPath, inputRoot);
         }
         catch
         {
