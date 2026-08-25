@@ -449,11 +449,11 @@ powerforge powershell census `
     --output json
 ```
 
-The current six-product frontier candidate reports 1,263 authored files, 1,353 units, 104 emitted typed methods, 1,249 fallback units, and zero parse errors, or 7.69% typed coverage. The per-product typed/fallback split is PowerInfoBlox 2/56, PSSharedGoods 16/269, PSWriteHTML 5/318, O365Essentials 76/210, ADEssentials 4/266, and PSWriteWord 1/130. This is the actual binary-module graph emitted after export shaping, dependency closure, collision handling, and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
+The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 133 functions pass structural analysis, 103 survive graph and artifact shaping as typed CLR methods, and 30 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 8.34%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 15/281, PSWriteHTML 5/238, O365Essentials 76/282, ADEssentials 4/247, and PSWriteWord 1/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
 
-Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
+Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and exact file content, so a changed corpus cannot silently pass merely because its aggregate counts stayed equal.
 
-The machine-readable `frontier` separates four questions that raw occurrence counts mix together:
+The machine-readable `functionFrontier` separates four questions that raw occurrence counts mix together and excludes module-initialization units that cannot become emitted CLR methods. The compatibility `frontier` remains available for callers that need the older whole-unit view:
 
 - `occurrences`: visible diagnostics assigned to the stable feature ID;
 - `affectedUnits`: distinct fallback functions or script bodies reporting it;
@@ -462,21 +462,20 @@ The machine-readable `frontier` separates four questions that raw occurrence cou
 
 `candidateCoveragePercentage` adds only visible sole-blocker units to current typed coverage. It is a counterfactual planning signal, not a promise: accepting an outer AST construct can reveal a deeper blocker that was deliberately masked. `coBlockers` shows which features commonly need to land together. Features are ranked lexically by complete-product candidates, visible sole-blocker units, affected units, occurrences, and stable ID; PowerForge does not invent an effort score.
 
-The current six-product run produces this leading planning frontier:
+The current six-root run produces this leading emitted-function planning frontier:
 
 | Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `command.register-argumentcompleter` | 229 | 82 | 78 | 2 | 13.45% |
-| `parameter.type` | 1,518 | 566 | 57 | 6 | 11.90% |
-| `runtime.scope` | 1,642 | 418 | 36 | 6 | 10.35% |
-| `parameter.metadata` | 1,617 | 357 | 34 | 6 | 10.20% |
-| `parameter.default` | 829 | 357 | 31 | 6 | 9.98% |
-| `function.graph` | 29 | 29 | 29 | 3 | 9.83% |
-| `command.new-htmltab` | 22 | 22 | 22 | 1 | 9.31% |
-| `expression.conversion` | 710 | 243 | 10 | 6 | 8.43% |
-| `syntax.subexpression` | 746 | 197 | 8 | 6 | 8.28% |
+| `parameter.type` | 1,518 | 566 | 57 | 6 | 12.96% |
+| `parameter.metadata` | 1,617 | 357 | 34 | 6 | 11.09% |
+| `parameter.default` | 829 | 357 | 31 | 6 | 10.85% |
+| `function.graph` | 30 | 30 | 30 | 3 | 10.77% |
+| `runtime.scope` | 1,594 | 385 | 29 | 6 | 10.69% |
+| `command.new-htmltab` | 22 | 22 | 22 | 1 | 10.12% |
+| `expression.conversion` | 702 | 237 | 10 | 6 | 9.15% |
+| `syntax.subexpression` | 734 | 191 | 8 | 6 | 8.99% |
 
-This changes feature planning materially. For example, parameter types have far more total impact than `Register-ArgumentCompleter`, but the latter is the only visible blocker for more units in the current Hybrid module graph. That does not mean it should be implemented as a runtime-free Strict intrinsic: the recommendation attached to each feature still distinguishes a safe intrinsic, a PowerShell-backed command region, an authoring change, or behavior that should remain Package/Hybrid-only.
+This changes feature planning materially. `Register-ArgumentCompleter` leads the compatibility whole-unit frontier because it appears in many module-initialization bodies, but it disappears from the emitted-function frontier and must not be treated as 78 potential CLR methods. Likewise, a sample-specific command identifier such as `command.new-htmltab` is evidence for a generic command-boundary shape, not authorization for a product-specific compiler intrinsic. Recommendations must distinguish generic typed IR, a contract-driven PowerShell-backed command region, an authoring change, and behavior that should remain Package/Hybrid-only.
 
 ### Real product rebuild matrix
 

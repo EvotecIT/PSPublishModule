@@ -18,7 +18,10 @@ public sealed class PowerShellCompilationCensusProduct
         PowerShellCompilationCensusBlocker[] blockers,
         PowerShellCompilationFeatureImpact[]? featureImpacts = null,
         PowerShellCompilationDependencySummary[]? dependencySummary = null,
-        PowerShellCompilationResourceSummary? resourceSummary = null)
+        PowerShellCompilationResourceSummary? resourceSummary = null,
+        PowerShellCompilationCoverageBreakdown? coverage = null,
+        string? sourceFingerprint = null,
+        PowerShellCompilationFeatureImpact[]? functionImpacts = null)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -32,6 +35,9 @@ public sealed class PowerShellCompilationCensusProduct
         FeatureImpacts = featureImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
         DependencySummary = dependencySummary ?? Array.Empty<PowerShellCompilationDependencySummary>();
         ResourceSummary = resourceSummary ?? new PowerShellCompilationResourceSummary();
+        Coverage = coverage ?? new PowerShellCompilationCoverageBreakdown();
+        SourceFingerprint = sourceFingerprint ?? string.Empty;
+        FunctionImpacts = functionImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -72,6 +78,15 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; }
+
+    /// <summary>Post-emission function coverage separated from script/module initialization.</summary>
+    public PowerShellCompilationCoverageBreakdown Coverage { get; }
+
+    /// <summary>SHA-256 identity of the discovered authored PowerShell source set.</summary>
+    public string SourceFingerprint { get; }
+
+    /// <summary>Missing-feature impact restricted to authored functions and post-emission coverage.</summary>
+    public PowerShellCompilationFeatureImpact[] FunctionImpacts { get; }
 }
 
 /// <summary>One aggregated blocker category in a compilation census.</summary>
@@ -104,13 +119,19 @@ public sealed class PowerShellCompilationCensusResult
         PowerShellCompilationCensusProduct[] products,
         PowerShellCompilationCensusRegression[] regressions,
         PowerShellCompilationFeatureImpact[]? frontier = null,
-        PowerShellCompilationFeaturePair[]? coBlockers = null)
+        PowerShellCompilationFeaturePair[]? coBlockers = null,
+        PowerShellCompilationCensusSourceDrift[]? sourceDrifts = null,
+        PowerShellCompilationFeatureImpact[]? functionFrontier = null,
+        PowerShellCompilationFeaturePair[]? functionCoBlockers = null)
     {
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Products = products ?? Array.Empty<PowerShellCompilationCensusProduct>();
         Regressions = regressions ?? Array.Empty<PowerShellCompilationCensusRegression>();
         Frontier = frontier ?? Array.Empty<PowerShellCompilationFeatureImpact>();
         CoBlockers = coBlockers ?? Array.Empty<PowerShellCompilationFeaturePair>();
+        SourceDrifts = sourceDrifts ?? Array.Empty<PowerShellCompilationCensusSourceDrift>();
+        FunctionFrontier = functionFrontier ?? Array.Empty<PowerShellCompilationFeatureImpact>();
+        FunctionCoBlockers = functionCoBlockers ?? Array.Empty<PowerShellCompilationFeaturePair>();
     }
 
     /// <summary>Target framework used for CLR surface analysis.</summary>
@@ -128,8 +149,20 @@ public sealed class PowerShellCompilationCensusResult
     /// <summary>Feature pairs most often observed together in the same fallback unit.</summary>
     public PowerShellCompilationFeaturePair[] CoBlockers { get; }
 
+    /// <summary>Corpus inputs whose content no longer matches the supplied baseline.</summary>
+    public PowerShellCompilationCensusSourceDrift[] SourceDrifts { get; }
+
+    /// <summary>Cross-product feature priorities restricted to functions that could become emitted CLR methods.</summary>
+    public PowerShellCompilationFeatureImpact[] FunctionFrontier { get; }
+
+    /// <summary>Function-only feature pairs most often observed together.</summary>
+    public PowerShellCompilationFeaturePair[] FunctionCoBlockers { get; }
+
     /// <summary>Total authored source files discovered.</summary>
     public int SourceFiles => Sum(static product => product.SourceFiles);
+
+    /// <summary>Whether every product was evaluated through final typed artifact shaping.</summary>
+    public bool PostEmissionEvaluated => Products.Length > 0 && Products.All(static product => product.Coverage.PostEmissionEvaluated);
 
     /// <summary>Total executable units discovered.</summary>
     public int TotalUnits => Sum(static product => product.TotalUnits);
@@ -143,8 +176,20 @@ public sealed class PowerShellCompilationCensusResult
     /// <summary>Total files containing parser errors.</summary>
     public int ParseErrorFiles => Sum(static product => product.ParseErrorFiles);
 
+    /// <summary>Total authored function units discovered.</summary>
+    public int TotalFunctions => Sum(static product => product.Coverage.TotalFunctions);
+
+    /// <summary>Total functions emitted as typed CLR methods after artifact shaping.</summary>
+    public int EmittedFunctions => Sum(static product => product.Coverage.EmittedFunctions);
+
+    /// <summary>Total analyzer-eligible functions lost during graph or artifact shaping.</summary>
+    public int DroppedEligibleFunctions => Sum(static product => product.Coverage.DroppedEligibleFunctions);
+
+    /// <summary>Post-emission typed-function coverage percentage.</summary>
+    public double EmittedFunctionCoveragePercentage => TotalFunctions == 0 ? 0 : EmittedFunctions * 100d / TotalFunctions;
+
     /// <summary>Whether the current result meets or improves the supplied baseline.</summary>
-    public bool Passed => Regressions.Length == 0;
+    public bool Passed => Regressions.Length == 0 && SourceDrifts.Length == 0;
 
     private int Sum(Func<PowerShellCompilationCensusProduct, int> selector)
     {

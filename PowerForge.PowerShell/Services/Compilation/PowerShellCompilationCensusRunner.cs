@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PowerForge;
 
@@ -39,13 +41,38 @@ public sealed class PowerShellCompilationCensusRunner
         var regressions = baseline is null
             ? Array.Empty<PowerShellCompilationCensusRegression>()
             : Compare(products, baseline.Products);
+        var sourceDrifts = baseline is null
+            ? Array.Empty<PowerShellCompilationCensusSourceDrift>()
+            : CompareSourceDrifts(products, baseline.Products);
         var frontier = BuildFeatureImpacts(
             analyses.SelectMany(static analysis => analysis.FeatureEvidence),
             products.Sum(static product => product.CompilableUnits),
             products.Sum(static product => product.TotalUnits),
             products);
         var coBlockers = BuildCoBlockers(analyses.SelectMany(static analysis => analysis.FeatureEvidence));
-        return new PowerShellCompilationCensusResult(targetFramework, products, regressions, frontier, coBlockers);
+        var functionFrontier = BuildFeatureImpacts(
+            analyses.SelectMany(static analysis => analysis.FeatureEvidence),
+            products.Sum(static product => product.Coverage.EmittedFunctions),
+            products.Sum(static product => product.Coverage.TotalFunctions),
+            products.Select(static product => new ProductMetrics(
+                product.Path,
+                product.Coverage.TotalFunctions,
+                product.Coverage.EmittedFunctions,
+                product.Coverage.FallbackFunctions,
+                product.ParseErrorFiles)),
+            PowerShellCompilationUnitKind.Function);
+        var functionCoBlockers = BuildCoBlockers(
+            analyses.SelectMany(static analysis => analysis.FeatureEvidence),
+            PowerShellCompilationUnitKind.Function);
+        return new PowerShellCompilationCensusResult(
+            targetFramework,
+            products,
+            regressions,
+            frontier,
+            coBlockers,
+            sourceDrifts,
+            functionFrontier,
+            functionCoBlockers);
     }
 
     private static AnalyzedProduct AnalyzeProduct(string path, string? targetFramework, bool recurse)
@@ -55,6 +82,8 @@ public sealed class PowerShellCompilationCensusRunner
         PowerShellCompilationPlan plan;
         PowerShellCompilationDependency[] dependencies = Array.Empty<PowerShellCompilationDependency>();
         var sourceFiles = 0;
+        var sourceFingerprint = string.Empty;
+        var coverage = new PowerShellCompilationCoverageBreakdown();
         if (recurse)
         {
             var resolved = new PowerShellCompilationInputResolver().Resolve(path);
@@ -96,6 +125,13 @@ public sealed class PowerShellCompilationCensusRunner
             var files = compiledFiles.Concat(runtimeOnlyFiles).ToArray();
             plan = new PowerShellCompilationPlan(PowerShellCompilationMode.Analyze, files, targetFramework);
             sourceFiles = resolved.SourceFiles.Length;
+            sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
+            coverage = BuildCoverageBreakdown(
+                analyzedCompilation.Files,
+                files,
+                runtimeOnlyFiles,
+                emitted.Methods.Length,
+                postEmissionEvaluated: true);
         }
         else
         {
@@ -106,9 +142,16 @@ public sealed class PowerShellCompilationCensusRunner
                 targetFramework: targetFramework,
                 capabilities: PowerShellCompilationCapability.PowerShellStreams |
                               PowerShellCompilationCapability.LocalFunctionCalls |
-                              PowerShellCompilationCapability.BoundParameters |
-                              PowerShellCompilationCapability.PowerShellObjects));
+                                  PowerShellCompilationCapability.BoundParameters |
+                                  PowerShellCompilationCapability.PowerShellObjects));
             sourceFiles = plan.Files.Length;
+            sourceFingerprint = ComputeSourceFingerprint(plan.Files.Select(static file => file.FullPath), path);
+            coverage = BuildCoverageBreakdown(
+                plan.Files,
+                plan.Files,
+                Array.Empty<PowerShellCompilationFilePlan>(),
+                emittedFunctions: 0,
+                postEmissionEvaluated: false);
         }
         stopwatch.Stop();
 
@@ -132,6 +175,15 @@ public sealed class PowerShellCompilationCensusRunner
         {
             new ProductMetrics(path, plan.TotalUnits, plan.CompilableUnits, plan.RuntimeFallbackUnits, plan.ParseErrorFiles)
         };
+        var functionMetrics = new[]
+        {
+            new ProductMetrics(
+                path,
+                coverage.TotalFunctions,
+                coverage.EmittedFunctions,
+                coverage.FallbackFunctions,
+                plan.ParseErrorFiles)
+        };
         var product = new PowerShellCompilationCensusProduct(
             name,
             path,
@@ -144,7 +196,15 @@ public sealed class PowerShellCompilationCensusRunner
             diagnostics,
             BuildFeatureImpacts(featureEvidence, plan.CompilableUnits, plan.TotalUnits, productMetrics),
             PowerShellCompilationDependencyPlanner.Summarize(dependencies),
-            PowerShellCompilationResourceSummary.Create(dependencies));
+            PowerShellCompilationResourceSummary.Create(dependencies),
+            coverage,
+            sourceFingerprint,
+            BuildFeatureImpacts(
+                featureEvidence,
+                coverage.EmittedFunctions,
+                coverage.TotalFunctions,
+                functionMetrics,
+                PowerShellCompilationUnitKind.Function));
         return new AnalyzedProduct(product, featureEvidence);
     }
 
@@ -159,6 +219,7 @@ public sealed class PowerShellCompilationCensusRunner
                     product,
                     file.RelativePath + ":" + unit.StartLine + ":" + unit.Name,
                     isCompilationUnit: true,
+                    unit.Kind,
                     diagnostics);
             }
             if (file.Diagnostics.Length > 0)
@@ -167,6 +228,7 @@ public sealed class PowerShellCompilationCensusRunner
                     product,
                     file.RelativePath,
                     isCompilationUnit: false,
+                    unitKind: null,
                     file.Diagnostics);
             }
         }
@@ -192,9 +254,12 @@ public sealed class PowerShellCompilationCensusRunner
         IEnumerable<FeatureUnitEvidence> evidence,
         int currentCompilableUnits,
         int totalUnits,
-        IEnumerable<ProductMetrics> products)
+        IEnumerable<ProductMetrics> products,
+        PowerShellCompilationUnitKind? unitKind = null)
     {
-        var units = evidence.ToArray();
+        var units = evidence
+            .Where(unit => !unitKind.HasValue || unit.UnitKind == unitKind.Value)
+            .ToArray();
         var metrics = products.ToDictionary(static product => product.Name, StringComparer.OrdinalIgnoreCase);
         return units
             .SelectMany(static unit => unit.FeatureIds)
@@ -238,9 +303,13 @@ public sealed class PowerShellCompilationCensusRunner
             .ToArray();
     }
 
-    private static PowerShellCompilationFeaturePair[] BuildCoBlockers(IEnumerable<FeatureUnitEvidence> evidence)
+    private static PowerShellCompilationFeaturePair[] BuildCoBlockers(
+        IEnumerable<FeatureUnitEvidence> evidence,
+        PowerShellCompilationUnitKind? unitKind = null)
         => evidence
-            .Where(static unit => unit.IsCompilationUnit && unit.FeatureIds.Length > 1)
+            .Where(unit => unit.IsCompilationUnit &&
+                           unit.FeatureIds.Length > 1 &&
+                           (!unitKind.HasValue || unit.UnitKind == unitKind.Value))
             .SelectMany(static unit => EnumeratePairs(unit.FeatureIds).Select(pair => new { unit.Product, unit.UnitId, pair.First, pair.Second }))
             .GroupBy(static item => new { item.First, item.Second })
             .Select(static group => new PowerShellCompilationFeaturePair(
@@ -282,10 +351,112 @@ public sealed class PowerShellCompilationCensusRunner
             AddLowerIsRegression(regressions, actual.Name, "TotalUnits", expected.TotalUnits, actual.TotalUnits);
             AddHigherIsRegression(regressions, actual.Name, "RuntimeFallbackUnits", expected.RuntimeFallbackUnits, actual.RuntimeFallbackUnits);
             AddHigherIsRegression(regressions, actual.Name, "ParseErrorFiles", expected.ParseErrorFiles, actual.ParseErrorFiles);
+            if (expected.Coverage.PostEmissionEvaluated)
+            {
+                AddLowerIsRegression(regressions, actual.Name, "EmittedFunctions", expected.Coverage.EmittedFunctions, actual.Coverage.EmittedFunctions);
+                AddHigherIsRegression(regressions, actual.Name, "FallbackFunctions", expected.Coverage.FallbackFunctions, actual.Coverage.FallbackFunctions);
+                AddHigherIsRegression(regressions, actual.Name, "DroppedEligibleFunctions", expected.Coverage.DroppedEligibleFunctions, actual.Coverage.DroppedEligibleFunctions);
+            }
         }
 
         return regressions.ToArray();
     }
+
+    private static PowerShellCompilationCensusSourceDrift[] CompareSourceDrifts(
+        IReadOnlyList<PowerShellCompilationCensusProduct> current,
+        IReadOnlyList<PowerShellCompilationCensusProduct> baseline)
+    {
+        var drifts = new List<PowerShellCompilationCensusSourceDrift>();
+        var unmatched = current.ToList();
+        foreach (var expected in baseline)
+        {
+            var actual = unmatched.FirstOrDefault(candidate => PathsEqual(candidate.Path, expected.Path))
+                         ?? FindUniquePortableMatch(expected, unmatched);
+            if (actual is null)
+                continue;
+            unmatched.Remove(actual);
+            if (string.IsNullOrWhiteSpace(expected.SourceFingerprint) ||
+                string.IsNullOrWhiteSpace(actual.SourceFingerprint) ||
+                expected.SourceFingerprint.Equals(actual.SourceFingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            drifts.Add(new PowerShellCompilationCensusSourceDrift(
+                actual.Name,
+                expected.SourceFingerprint,
+                actual.SourceFingerprint));
+        }
+        return drifts.ToArray();
+    }
+
+    private static PowerShellCompilationCoverageBreakdown BuildCoverageBreakdown(
+        IEnumerable<PowerShellCompilationFilePlan> analyzerFiles,
+        IEnumerable<PowerShellCompilationFilePlan> finalFiles,
+        IEnumerable<PowerShellCompilationFilePlan> runtimeOnlyFiles,
+        int emittedFunctions,
+        bool postEmissionEvaluated)
+    {
+        var analyzerUnits = analyzerFiles.SelectMany(static file => file.Units).ToArray();
+        var finalUnits = finalFiles.SelectMany(static file => file.Units).ToArray();
+        var runtimeUnits = runtimeOnlyFiles.SelectMany(static file => file.Units).ToArray();
+        var totalFunctions = finalUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+        var analyzerEligibleFunctions = analyzerUnits.Count(static unit =>
+            unit.Kind == PowerShellCompilationUnitKind.Function && unit.IsCompilable);
+        var totalScriptUnits = finalUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        var structurallyEligibleScriptUnits = finalUnits.Count(static unit =>
+            unit.Kind == PowerShellCompilationUnitKind.Script && unit.IsCompilable);
+        return new PowerShellCompilationCoverageBreakdown(
+            postEmissionEvaluated,
+            totalFunctions,
+            analyzerEligibleFunctions,
+            emittedFunctions,
+            postEmissionEvaluated ? Math.Max(0, analyzerEligibleFunctions - emittedFunctions) : 0,
+            postEmissionEvaluated ? Math.Max(0, totalFunctions - emittedFunctions) : totalFunctions,
+            totalScriptUnits,
+            structurallyEligibleScriptUnits,
+            totalScriptUnits,
+            runtimeUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Function),
+            runtimeUnits.Count(static unit => unit.Kind == PowerShellCompilationUnitKind.Script));
+    }
+
+    private static string ComputeSourceFingerprint(IEnumerable<string> files, string sourceRoot)
+    {
+        var fullRoot = Directory.Exists(sourceRoot)
+            ? Path.GetFullPath(sourceRoot)
+            : Path.GetDirectoryName(Path.GetFullPath(sourceRoot)) ?? Directory.GetCurrentDirectory();
+        var identities = files
+            .Where(File.Exists)
+            .Select(Path.GetFullPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .Select(file => new
+            {
+                Path = file,
+                RelativePath = FrameworkCompatibility.GetRelativePath(fullRoot, file).Replace('\\', '/')
+            })
+            .OrderBy(static item => item.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+        var canonical = new StringBuilder();
+        using (var fileHasher = SHA256.Create())
+        {
+            foreach (var identity in identities)
+            {
+                byte[] contentHash;
+                using (var stream = File.OpenRead(identity.Path))
+                    contentHash = fileHasher.ComputeHash(stream);
+                canonical.Append(identity.RelativePath)
+                    .Append('\0')
+                    .Append(ToLowerHex(contentHash))
+                    .Append('\n');
+            }
+        }
+
+        using (var aggregateHasher = SHA256.Create())
+            return ToLowerHex(aggregateHasher.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString())));
+    }
+
+    private static string ToLowerHex(byte[] bytes)
+        => BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
 
     private static bool PathsEqual(string left, string right)
     {
@@ -424,11 +595,13 @@ public sealed class PowerShellCompilationCensusRunner
             string product,
             string unitId,
             bool isCompilationUnit,
+            PowerShellCompilationUnitKind? unitKind,
             PowerShellCompilationDiagnostic[] diagnostics)
         {
             Product = product;
             UnitId = unitId;
             IsCompilationUnit = isCompilationUnit;
+            UnitKind = unitKind;
             Diagnostics = diagnostics;
             FeatureIds = diagnostics
                 .Select(static diagnostic => diagnostic.FeatureId)
@@ -441,6 +614,7 @@ public sealed class PowerShellCompilationCensusRunner
         internal string Product { get; }
         internal string UnitId { get; }
         internal bool IsCompilationUnit { get; }
+        internal PowerShellCompilationUnitKind? UnitKind { get; }
         internal PowerShellCompilationDiagnostic[] Diagnostics { get; }
         internal string[] FeatureIds { get; }
     }
