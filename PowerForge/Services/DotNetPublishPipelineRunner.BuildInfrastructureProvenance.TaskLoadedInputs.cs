@@ -9,14 +9,14 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskFileInputAttributes =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["AL"] = ["EmbedResources", "LinkResources", "Sources", "TemplateFile", "Win32Icon", "Win32Resource"],
+            ["AL"] = ["EmbedResources", "LinkResources", "ResponseFiles", "Sources", "TemplateFile", "Win32Icon", "Win32Resource"],
             ["Copy"] = ["SourceFiles"],
-            ["Csc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"],
-            ["Fsc"] = ["Sources", "Win32Icon", "Win32Resource"],
+            ["Csc"] = ["ApplicationConfiguration", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
+            ["Fsc"] = ["ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
             ["GenerateResource"] = ["References", "Sources", "StateFile"],
             ["GetFileHash"] = ["Files"],
             ["Hash"] = ["Items"],
-            ["Vbc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"],
+            ["Vbc"] = ["ApplicationConfiguration", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
             ["XslTransformation"] = ["XmlInputPaths", "XslInputPath"]
         };
 
@@ -122,7 +122,8 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         string declaringPath,
         string allowedRoot,
-        Func<string, bool>? isControlledInput = null)
+        Func<string, bool>? isControlledInput = null,
+        Func<string, string[]?>? readLines = null)
     {
         foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
         {
@@ -139,7 +140,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (string value in DecodeMsBuildEscapes(attribute.Value).Split(';'))
                 {
                     string candidate = value.Trim().Trim('\'', '"');
-                    if (candidate.Length == 0 || ContainsUnresolvedBuildExpression(candidate))
+                    if (candidate.Length == 0 || ContainsUnresolvedBuildExpression(
+                            ReplaceOrdinalIgnoreCase(
+                                candidate,
+                                "$(MSBuildThisFileDirectory)",
+                                string.Empty)))
                         continue;
                     if (candidate.IndexOf('*') >= 0 || candidate.IndexOf('?') >= 0)
                         return false;
@@ -160,6 +165,23 @@ public sealed partial class DotNetPublishPipelineRunner
                              HasReparsePointBelowRoot(inputPath, allowedRoot))
                     {
                         return false;
+                    }
+                    if (attribute.Name.LocalName.Equals("ResponseFiles", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string[]? lines = readLines?.Invoke(inputPath);
+                        if (lines is null || lines.Any(line =>
+                                ContainsExecutableResponseFileSwitch(line) ||
+                                ContainsRootedBuildValue(line, allowedRoot) ||
+                                ContainsEscapingRelativeBuildValue(
+                                    line,
+                                    Path.GetDirectoryName(inputPath)!,
+                                    allowedRoot) ||
+                                ContainsUncontrolledEnvironmentReference(line) ||
+                                ContainsUncontrolledFileSystemPropertyFunction(line) ||
+                                ContainsUnresolvedBuildExpression(line)))
+                        {
+                            return false;
+                        }
                     }
                 }
             }

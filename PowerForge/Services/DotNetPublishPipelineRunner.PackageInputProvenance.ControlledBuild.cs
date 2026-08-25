@@ -296,7 +296,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 document,
                                 declaringPath,
                                 "package-root",
-                                IsControlledPackageInput))
+                                IsControlledPackageInput,
+                                ReadControlledPackageTextInput))
                         {
                             return false;
                         }

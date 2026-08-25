@@ -119,7 +119,11 @@ public sealed partial class DotNetPublishPipelineRunner
                             path,
                             checkoutRoot,
                             ReadControlledCheckoutTextInput) ||
-                        !HasOnlyControlledLiteralTaskFileInputs(document, path, checkoutRoot))
+                        !HasOnlyControlledLiteralTaskFileInputs(
+                            document,
+                            path,
+                            checkoutRoot,
+                            readLines: ReadControlledCheckoutTextInput))
                     {
                         return false;
                     }
@@ -157,9 +161,10 @@ public sealed partial class DotNetPublishPipelineRunner
                document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
-             element.Attributes().Any(attribute =>
-                 attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
-                 attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase))) ||
+             (element.Attributes().Any(attribute =>
+                  attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
+                  attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase)) ||
+              ContainsUncontrolledTaskEnvironmentOverride(element))) ||
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
              (IsAmbientBuildDiscoveryTask(element.Name.LocalName) ||
@@ -167,7 +172,35 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
-              element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+             element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static bool ContainsUncontrolledTaskEnvironmentOverride(XElement task)
+    {
+        string? value = task.Attributes()
+            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                "EnvironmentVariables",
+                StringComparison.OrdinalIgnoreCase))?
+            .Value;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        foreach (string assignment in DecodeMsBuildEscapes(value!).Split(';'))
+        {
+            string candidate = assignment.Trim().Trim('\'', '"');
+            if (candidate.Length == 0)
+                continue;
+            int separator = candidate.IndexOf('=');
+            if (separator <= 0)
+                return true;
+            string name = candidate.Substring(0, separator).Trim();
+            if (ContainsUnresolvedBuildExpression(name) ||
+                IsUncontrolledRuntimeInjectionEnvironmentVariable(name))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static bool IsAmbientBuildDiscoveryTask(string taskName)
