@@ -92,6 +92,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryProveControlledGeneratedOutput(
         ProjectEvaluationRequest request,
         string candidatePath,
+        IReadOnlyCollection<string> evaluatedBuildInputs,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
@@ -115,6 +116,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
                     controlledSourceRoot,
+                    evaluatedBuildInputs,
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {

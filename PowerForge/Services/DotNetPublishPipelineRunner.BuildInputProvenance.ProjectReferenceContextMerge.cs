@@ -4,7 +4,9 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private static EvaluatedProjectReference[] MergeResolvedProjectReferenceContexts(
         IEnumerable<EvaluatedProjectReference> rawReferences,
-        IEnumerable<EvaluatedProjectReference> resolvedReferences)
+        IEnumerable<EvaluatedProjectReference> resolvedReferences,
+        IEnumerable<EvaluatedProjectReference> publishEvaluatedReferences,
+        ISet<string> mainEvaluationReferenceKeys)
     {
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
@@ -71,6 +73,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray());
             results[BuildEvaluatedProjectReferenceKey(merged)] = merged;
+        }
+
+        foreach (EvaluatedProjectReference publishEvaluated in publishEvaluatedReferences)
+        {
+            string key = BuildEvaluatedProjectReferenceKey(publishEvaluated);
+            if (!mainEvaluationReferenceKeys.Contains(key))
+                results[key] = publishEvaluated;
         }
 
         return results.Values.ToArray();

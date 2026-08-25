@@ -312,6 +312,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var buildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
         var verifiedPackagesByEvaluation = new Dictionary<string, VerifiedPackageInputCatalog?>(StringComparer.Ordinal);
@@ -358,6 +359,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     sourceInputs.Add(input);
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
+                buildInputsByEvaluation[visitKey] = evaluation.BuildInputs
+                    .Concat(new[] { request.ProjectPath })
+                    .Distinct(comparison)
+                    .ToArray();
                 pathMapsByEvaluation[visitKey] = evaluation.PathMap;
                 verifiedPackagesByEvaluation[visitKey] = evaluation.VerifiedPackages;
                 generatedProjectReferenceOutputs.AddRange(
@@ -399,6 +404,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 TryProveControlledGeneratedOutput(
                     referencedProject,
                     output.OutputPath,
+                    buildInputsByEvaluation.TryGetValue(
+                        referencedProject.BuildVisitKey(),
+                        out string[]? evaluatedBuildInputs)
+                        ? evaluatedBuildInputs
+                        : Array.Empty<string>(),
                     pathMapsByEvaluation.TryGetValue(
                         referencedProject.BuildVisitKey(),
                         out string? pathMap)
@@ -598,6 +608,8 @@ public sealed partial class DotNetPublishPipelineRunner
             var sourceInputs = new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var references = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
             var rawReferences = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
+            var publishEvaluatedReferences = new Dictionary<string, EvaluatedProjectReference>(StringComparer.Ordinal);
+            var mainEvaluationReferenceKeys = new HashSet<string>(StringComparer.Ordinal);
             var targetFrameworks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var generatedBuildRoots = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -720,7 +732,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         return false;
                     }
                     foreach (EvaluatedProjectReference rawReference in itemReferences)
-                        rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
+                    {
+                        string referenceKey = BuildEvaluatedProjectReferenceKey(rawReference);
+                        publishEvaluatedReferences[referenceKey] = rawReference;
+                        rawReferences[referenceKey] = rawReference;
+                    }
                 }
                 foreach (string importPath in importPaths)
                 {
@@ -798,7 +814,11 @@ public sealed partial class DotNetPublishPipelineRunner
                                     return false;
                                 }
                                 foreach (EvaluatedProjectReference rawReference in itemReferences)
-                                    rawReferences[BuildEvaluatedProjectReferenceKey(rawReference)] = rawReference;
+                                {
+                                    string referenceKey = BuildEvaluatedProjectReferenceKey(rawReference);
+                                    mainEvaluationReferenceKeys.Add(referenceKey);
+                                    rawReferences[referenceKey] = rawReference;
+                                }
                             }
                             else if (TryReadGeneratedProjectReferenceOutputs(
                                          itemName,
@@ -872,7 +892,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
                              rawReferences.Values,
-                             resolvedReferences))
+                             resolvedReferences,
+                             publishEvaluatedReferences.Values,
+                             mainEvaluationReferenceKeys))
                 {
                     references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
                     inputs.Add(reference.ProjectPath);

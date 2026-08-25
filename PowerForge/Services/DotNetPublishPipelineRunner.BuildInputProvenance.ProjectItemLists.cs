@@ -24,6 +24,11 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedProperties)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (document.Descendants().Any(element =>
+                element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
+        {
+            names.Add("ProjectReference");
+        }
         foreach (string itemSpec in document.Descendants().Where(element =>
                      element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase))
                  .SelectMany(element => element.Attributes())
@@ -69,6 +74,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ProjectEvaluationRequest request,
         IReadOnlyCollection<string> itemNames,
         IReadOnlyCollection<string> evaluationTargets,
+        bool preservePublishBuildProjectReferences,
         out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItems)
     {
         evaluatedItems = new Dictionary<string, EvaluatedProjectItem[]>(StringComparer.OrdinalIgnoreCase);
@@ -105,7 +111,7 @@ public sealed partial class DotNetPublishPipelineRunner
         AddProjectReferenceExecutionProperties(
             arguments,
             request,
-            preservePublishBuildProjectReferences: evaluationTargets.Count > 0);
+            preservePublishBuildProjectReferences);
 
         try
         {

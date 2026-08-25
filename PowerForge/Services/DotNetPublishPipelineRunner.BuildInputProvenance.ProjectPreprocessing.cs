@@ -45,7 +45,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
-        arguments.Add("-p:BuildProjectReferences=false");
+        AddProjectReferenceExecutionProperties(
+            arguments,
+            request,
+            preservePublishBuildProjectReferences: true);
 
         try
         {
@@ -136,13 +139,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     request,
                     ReadProjectReferenceItemListNames(document, taskOutputProperties),
                     projectReferenceEvaluationTargets,
+                    preservePublishBuildProjectReferences: hasDeclaredProjectReferences ||
+                        hasDynamicProjectReferenceTaskOutputs,
                     out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists);
-            if (!evaluatedItemListsSucceeded && hasDynamicProjectReferenceTaskOutputs)
+            if (!evaluatedItemListsSucceeded &&
+                (hasDeclaredProjectReferences || hasDynamicProjectReferenceTaskOutputs))
             {
                 return false;
             }
-            if (hasDynamicProjectReferenceTaskOutputs &&
-                evaluatedItemLists.TryGetValue(
+            if (evaluatedItemLists.TryGetValue(
                     "ProjectReference",
                     out EvaluatedProjectItem[]? evaluatedProjectReferences))
             {
