@@ -1,3 +1,4 @@
+using System.Text;
 using PowerForge;
 using Xunit;
 
@@ -151,6 +152,40 @@ public sealed class PowerShellCompilationCensusTests
             Assert.Equal(Assert.Single(baseline.Products).SourceFingerprint, Assert.Single(current.Products).SourceFingerprint);
             Assert.Empty(current.SourceDrifts);
             Assert.True(current.Passed);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Run_SourceFingerprintPreservesMalformedByteIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Encoding Tests", Guid.NewGuid().ToString("N"));
+        var baselineSource = Path.Combine(root, "Baseline", "Product.psm1");
+        var equivalentSource = Path.Combine(root, "Equivalent", "Product.psm1");
+        var currentSource = Path.Combine(root, "Current", "Product.psm1");
+        Directory.CreateDirectory(Path.GetDirectoryName(baselineSource)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(equivalentSource)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(currentSource)!);
+        var prefix = Encoding.ASCII.GetBytes("function Get-Value { return 1 }\r\n# legacy byte: ");
+        File.WriteAllBytes(baselineSource, prefix.Concat(new byte[] { 0x80, (byte)'\r', (byte)'\n' }).ToArray());
+        File.WriteAllBytes(equivalentSource, prefix.Concat(new byte[] { 0x80, (byte)'\n' }).ToArray());
+        File.WriteAllBytes(currentSource, prefix.Concat(new byte[] { 0x81, (byte)'\n' }).ToArray());
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { baselineSource }, "net10.0");
+            var equivalent = runner.Run(new[] { equivalentSource }, "net10.0", baseline);
+            var current = runner.Run(new[] { currentSource }, "net10.0", baseline);
+
+            Assert.Equal(Assert.Single(baseline.Products).SourceFingerprint, Assert.Single(equivalent.Products).SourceFingerprint);
+            Assert.Empty(equivalent.SourceDrifts);
+            Assert.True(equivalent.Passed);
+            Assert.NotEqual(Assert.Single(baseline.Products).SourceFingerprint, Assert.Single(current.Products).SourceFingerprint);
+            Assert.Single(current.SourceDrifts);
+            Assert.False(current.Passed);
         }
         finally
         {

@@ -339,7 +339,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "target => ShouldProcess(target)",
                 "(target, action) => ShouldProcess(target, action)",
                 "((global::System.Collections.IDictionary)SessionState.PSVariable.GetValue(\"PSVersionTable\"))[\"PSVersion\"]!",
-                "MyInvocation.BoundParameters.TryGetValue(\"WhatIf\", out var __boundWhatIf) ? global::System.Management.Automation.LanguagePrimitives.IsTrue(__boundWhatIf) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
+                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") ? global::System.Management.Automation.LanguagePrimitives.IsTrue(MyInvocation.BoundParameters[\"WhatIf\"]) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
             });
         }
         if (cmdlet.Method.RequiresPowerShellBoundParameters)

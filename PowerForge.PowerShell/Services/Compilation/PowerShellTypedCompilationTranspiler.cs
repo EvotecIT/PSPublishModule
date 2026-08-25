@@ -419,7 +419,12 @@ public sealed class PowerShellTypedCompilationTranspiler
             requiresPowerShellBoundParameters: false,
             requiresPowerShellStreams: false,
             requiresPowerShellCommandRegions: false,
-            requiresPowerShellRuntimeState: false,
+            requiresPowerShellRuntimeState: capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics) &&
+                PowerShellRuntimeStateIntrinsicPolicy.RequiresHostBinding(
+                    source.Function.Body.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>(),
+                    source.Function.Body,
+                    targetFramework,
+                    capabilities),
             requiresPowerShellShouldProcess: PowerShellRuntimeStateIntrinsicPolicy.RequiresShouldProcessHostBinding(
                 source.Function.Body,
                 targetFramework,

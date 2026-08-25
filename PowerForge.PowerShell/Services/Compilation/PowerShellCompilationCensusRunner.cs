@@ -432,10 +432,7 @@ public sealed class PowerShellCompilationCensusRunner
         {
             foreach (var identity in identities)
             {
-                var text = File.ReadAllText(identity.Path)
-                    .Replace("\r\n", "\n")
-                    .Replace('\r', '\n');
-                var contentHash = fileHasher.ComputeHash(Encoding.UTF8.GetBytes(text));
+                var contentHash = fileHasher.ComputeHash(ReadNormalizedSourceBytes(identity.Path));
                 canonical.Append(identity.RelativePath)
                     .Append('\0')
                     .Append(ToLowerHex(contentHash))
@@ -449,6 +446,81 @@ public sealed class PowerShellCompilationCensusRunner
 
     private static string ToLowerHex(byte[] bytes)
         => BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+
+    private static byte[] ReadNormalizedSourceBytes(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var encoding = GetStrictSourceEncoding(bytes, out var offset);
+        if (encoding is not null)
+        {
+            try
+            {
+                var text = encoding.GetString(bytes, offset, bytes.Length - offset)
+                    .Replace("\r\n", "\n")
+                    .Replace('\r', '\n');
+                return Encoding.UTF8.GetBytes(text);
+            }
+            catch (DecoderFallbackException)
+            {
+                // Preserve malformed or legacy-encoded byte identity below.
+            }
+        }
+
+        var normalized = new List<byte>(bytes.Length);
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] != (byte)'\r')
+            {
+                normalized.Add(bytes[index]);
+                continue;
+            }
+
+            normalized.Add((byte)'\n');
+            if (index + 1 < bytes.Length && bytes[index + 1] == (byte)'\n') index++;
+        }
+        return normalized.ToArray();
+    }
+
+    private static Encoding? GetStrictSourceEncoding(byte[] bytes, out int offset)
+    {
+        offset = 0;
+        if (HasPrefix(bytes, 0x00, 0x00, 0xFE, 0xFF))
+        {
+            offset = 4;
+            return new UTF32Encoding(bigEndian: true, byteOrderMark: false, throwOnInvalidCharacters: true);
+        }
+        if (HasPrefix(bytes, 0xFF, 0xFE, 0x00, 0x00))
+        {
+            offset = 4;
+            return new UTF32Encoding(bigEndian: false, byteOrderMark: false, throwOnInvalidCharacters: true);
+        }
+        if (HasPrefix(bytes, 0xEF, 0xBB, 0xBF))
+        {
+            offset = 3;
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        }
+        if (HasPrefix(bytes, 0xFE, 0xFF))
+        {
+            offset = 2;
+            return new UnicodeEncoding(bigEndian: true, byteOrderMark: false, throwOnInvalidBytes: true);
+        }
+        if (HasPrefix(bytes, 0xFF, 0xFE))
+        {
+            offset = 2;
+            return new UnicodeEncoding(bigEndian: false, byteOrderMark: false, throwOnInvalidBytes: true);
+        }
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    }
+
+    private static bool HasPrefix(byte[] bytes, params byte[] prefix)
+    {
+        if (bytes.Length < prefix.Length) return false;
+        for (var index = 0; index < prefix.Length; index++)
+        {
+            if (bytes[index] != prefix[index]) return false;
+        }
+        return true;
+    }
 
     private static bool PathsEqual(string left, string right)
     {

@@ -73,6 +73,54 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             diagnostic.Message.Contains("PowerShell command path", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("[object]", "return $PSVersionTable.PSVersion")]
+    [InlineData("[bool]", "return $WhatIfPreference")]
+    public void Build_RuntimeStateSelfRecursionPassesHostArguments(string outputType, string terminalExpression)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"function Get-RecursiveState {{ [CmdletBinding(SupportsShouldProcess = $true)] [OutputType({outputType})] " +
+            "param([long] $Number) if ($Number -le [long] 0) { " + terminalExpression + " }; " +
+            "$Number -= [long] 1; return Get-RecursiveState -Number $Number }",
+            ".psm1");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.RuntimeStateRecursion",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net8.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+    }
+
+    [Fact]
+    public void Build_RuntimeStateAllowsFormerWhatIfTemporaryAsParameter()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-RuntimeState { [CmdletBinding(SupportsShouldProcess = $true)] " +
+            "param([string] $__boundWhatIf) if ($WhatIfPreference) { return $__boundWhatIf }; return 'none' }",
+            ".psm1");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.WhatIfParameter",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net8.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+    }
+
     [Fact]
     public void Analyze_StrictExecutableRejectsSwitchTypeExpressionsWithoutSmaReference()
     {
