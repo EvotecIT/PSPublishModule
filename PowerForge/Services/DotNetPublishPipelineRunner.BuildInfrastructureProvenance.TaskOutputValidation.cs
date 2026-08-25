@@ -11,7 +11,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringAllowedRoot,
         string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
-        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties)
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        string? controlledProjectPath)
     {
         foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
         {
@@ -39,12 +40,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (string value in expandedValues.SelectMany(expanded =>
                              DecodeMsBuildEscapes(expanded).Split(';')))
                 {
-                    string candidate = NormalizeControlledTaskOutputProperties(
+                    if (!TryNormalizeControlledTaskOutputProperties(
                             value,
-                            taskInputBaseDirectory)
-                        .Trim()
-                        .Trim('\'', '"');
-                    if (candidate.Length == 0 ||
+                            taskInputBaseDirectory,
+                            controlledProjectPath,
+                            out string candidate) ||
+                        candidate.Length == 0 ||
                         candidate.IndexOf('*') >= 0 ||
                         candidate.IndexOf('?') >= 0 ||
                         ContainsUnresolvedBuildExpression(candidate) ||
@@ -59,10 +60,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         return false;
                     }
 
-                    string allowedRoot = IsSameOrBelowBuildInputPath(outputPath, declaringAllowedRoot)
-                        ? declaringAllowedRoot
-                        : taskInputAllowedRoot;
-                    if (HasReparsePointInExistingAncestors(outputPath, allowedRoot))
+                    if (!IsControlledTaskOutputPath(
+                            outputPath,
+                            declaringAllowedRoot,
+                            taskInputAllowedRoot))
                         return false;
                 }
             }
@@ -71,9 +72,11 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
-    private static string NormalizeControlledTaskOutputProperties(
+    private static bool TryNormalizeControlledTaskOutputProperties(
         string value,
-        string taskInputBaseDirectory)
+        string taskInputBaseDirectory,
+        string? controlledProjectPath,
+        out string normalizedValue)
     {
         string directory = Path.GetFullPath(taskInputBaseDirectory)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
@@ -90,14 +93,34 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             value = ReplaceOrdinalIgnoreCase(value, "$(" + propertyName + ")", directory);
         }
-        value = ReplaceOrdinalIgnoreCase(
-            value,
-            "$(MSBuildProjectFullPath)",
-            Path.Combine(taskInputBaseDirectory, "controlled.proj"));
+        if (value.IndexOf("$(MSBuildProjectFullPath)", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            if (string.IsNullOrWhiteSpace(controlledProjectPath))
+            {
+                normalizedValue = string.Empty;
+                return false;
+            }
+            value = ReplaceOrdinalIgnoreCase(
+                value,
+                "$(MSBuildProjectFullPath)",
+                Path.GetFullPath(controlledProjectPath!));
+        }
         value = ReplaceOrdinalIgnoreCase(
             value,
             "$(TargetPath)",
             Path.Combine(taskInputBaseDirectory, "controlled-output.bin"));
-        return value;
+        normalizedValue = value.Trim().Trim('\'', '"');
+        return true;
+    }
+
+    private static bool IsControlledTaskOutputPath(
+        string outputPath,
+        string declaringAllowedRoot,
+        string taskInputAllowedRoot)
+    {
+        string allowedRoot = IsSameOrBelowBuildInputPath(outputPath, declaringAllowedRoot)
+            ? declaringAllowedRoot
+            : taskInputAllowedRoot;
+        return !HasReparsePointInExistingAncestors(outputPath, allowedRoot);
     }
 }

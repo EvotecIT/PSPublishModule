@@ -51,7 +51,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> controlledInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
-        string? taskInputBaseDirectory = null)
+        string? taskInputBaseDirectory = null,
+        string? controlledProjectPath = null)
     {
         try
         {
@@ -62,6 +63,24 @@ public sealed partial class DotNetPublishPipelineRunner
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            if (!string.IsNullOrWhiteSpace(controlledProjectPath))
+            {
+                controlledProjectPath = Path.GetFullPath(controlledProjectPath!);
+                if (!IsSameOrBelowBuildInputPath(controlledProjectPath, checkoutRoot) ||
+                    !executableInputs.Contains(controlledProjectPath))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                string[] controlledProjectPaths = executableInputs
+                    .Where(IsControlledProjectPath)
+                    .ToArray();
+                controlledProjectPath = controlledProjectPaths.Length == 1
+                    ? controlledProjectPaths[0]
+                    : null;
+            }
             var controlledDocuments = new List<XDocument>();
             var controlledDocumentSources = new List<(XDocument Document, string DeclaringPath)>();
             var executableDocuments = new List<(XDocument Document, string Path)>();
@@ -157,6 +176,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         checkoutRoot,
                         controlledDocumentSources,
                         evaluatedGlobalProperties,
+                        controlledProjectPath,
                         readLines: ReadControlledCheckoutTextInput))
                 {
                     return false;
@@ -177,6 +197,15 @@ public sealed partial class DotNetPublishPipelineRunner
         string fileName = Path.GetFileName(path);
         return fileName.Equals("Directory.Build.rsp", StringComparison.OrdinalIgnoreCase) ||
                fileName.Equals("MSBuild.rsp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsControlledProjectPath(string path)
+    {
+        string extension = Path.GetExtension(path);
+        return extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".vbproj", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".proj", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ContainsUncontrolledControlledBuildTask(
@@ -209,6 +238,7 @@ public sealed partial class DotNetPublishPipelineRunner
         => ControlledTaskFileInputAttributes.ContainsKey(taskName) ||
            ControlledTaskFileOutputAttributes.ContainsKey(taskName) ||
            ControlledTasksWithoutFilePaths.Contains(taskName) ||
+           taskName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase) ||
            taskName.Equals("ReadLinesFromFile", StringComparison.OrdinalIgnoreCase);
 
     private static bool ContainsUncontrolledImportActivation(XDocument document)

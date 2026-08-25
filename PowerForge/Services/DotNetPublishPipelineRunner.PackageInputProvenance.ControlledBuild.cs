@@ -281,6 +281,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             controlledSourceRoot,
                             controlledDocumentSources,
                             evaluatedGlobalProperties: null,
+                            controlledProjectPath: controlledProjectPath,
                             isControlledInput: path => IsControlledPackageOrProjectInput(
                                 path,
                                 controlledSourceRoot),

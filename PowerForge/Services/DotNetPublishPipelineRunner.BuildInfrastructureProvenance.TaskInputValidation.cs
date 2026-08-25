@@ -12,6 +12,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
+        string? controlledProjectPath = null,
         Func<string, bool>? isControlledInput = null,
         Func<string, string[]?>? readLines = null)
         => HasOnlyControlledConditionFileInputs(
@@ -23,6 +24,12 @@ public sealed partial class DotNetPublishPipelineRunner
                relatedDocuments,
                evaluatedGlobalProperties,
                isControlledInput) &&
+           HasOnlyControlledCallTargetDestinations(
+               document,
+               declaringPath,
+               taskInputBaseDirectory,
+               relatedDocuments,
+               evaluatedGlobalProperties) &&
            HasOnlyControlledTaskLoadedFileInputs(
                document,
                declaringPath,
@@ -39,7 +46,8 @@ public sealed partial class DotNetPublishPipelineRunner
                declaringAllowedRoot,
                taskInputAllowedRoot,
                relatedDocuments,
-               evaluatedGlobalProperties) &&
+               evaluatedGlobalProperties,
+               controlledProjectPath) &&
            HasOnlyControlledLiteralTaskFileInputs(
                document,
                declaringPath,

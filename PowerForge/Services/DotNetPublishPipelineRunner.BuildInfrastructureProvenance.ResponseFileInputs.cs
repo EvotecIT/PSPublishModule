@@ -10,6 +10,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "additionalfile",
             "additionalfiles",
             "addmodule",
+            "analyzerconfig",
             "appconfig",
             "embed",
             "keyfile",
@@ -25,10 +26,27 @@ public sealed partial class DotNetPublishPipelineRunner
             "recurse",
             "ruleset",
             "sourcelink",
+            "testcoveragemodulepaths",
             "use",
+            "win32appconfig",
             "win32icon",
             "win32manifest",
             "win32res"
+        };
+
+    private static readonly ISet<string> CompilerResponseFileOutputSwitches =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "doc",
+            "errorlog",
+            "generatedfilesout",
+            "o",
+            "out",
+            "pdb",
+            "refout",
+            "sig",
+            "touchedfiles",
+            "xml"
         };
 
     private static bool HasOnlyControlledCompilerResponseFileInputs(
@@ -55,6 +73,25 @@ public sealed partial class DotNetPublishPipelineRunner
                     break;
                 if (token.StartsWith("@", StringComparison.Ordinal))
                     return false;
+
+                if (TryGetCompilerResponseFileOutputOperands(token, out string[] outputOperands))
+                {
+                    if (outputOperands.Length == 0)
+                        return false;
+                    foreach (string operand in outputOperands)
+                    {
+                        if (!IsControlledCompilerResponseFileOutputOperand(
+                                operand,
+                                responseFilePath,
+                                taskInputBaseDirectory,
+                                declaringAllowedRoot,
+                                taskInputAllowedRoot))
+                        {
+                            return false;
+                        }
+                    }
+                    continue;
+                }
 
                 if (TryGetCompilerResponseFileInputOperands(
                         token,
@@ -99,6 +136,41 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
         }
+        return true;
+    }
+
+    private static bool TryGetCompilerResponseFileOutputOperands(
+        string token,
+        out string[] operands)
+    {
+        operands = Array.Empty<string>();
+        string candidate = token.Trim();
+        if (!candidate.StartsWith("-", StringComparison.Ordinal) &&
+            !candidate.StartsWith("/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        int prefixLength = candidate.StartsWith("--", StringComparison.Ordinal) ? 2 : 1;
+        candidate = candidate.Substring(prefixLength);
+        int separator = candidate.IndexOfAny(new[] { ':', '=' });
+        string name = separator < 0 ? candidate : candidate.Substring(0, separator);
+        if (!CompilerResponseFileOutputSwitches.Contains(name))
+            return false;
+        if (separator < 0 || separator == candidate.Length - 1)
+            return true;
+
+        string value = candidate.Substring(separator + 1).Trim().Trim('"', '\'');
+        if (name.Equals("errorlog", StringComparison.OrdinalIgnoreCase))
+        {
+            int metadataSeparator = value.IndexOf(',');
+            if (metadataSeparator >= 0)
+                value = value.Substring(0, metadataSeparator);
+        }
+        operands = value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => path.Trim().Trim('"', '\''))
+            .Where(path => path.Length > 0)
+            .ToArray();
         return true;
     }
 
@@ -191,6 +263,30 @@ public sealed partial class DotNetPublishPipelineRunner
             return isControlledInput(inputPath);
         return (!File.Exists(inputPath) && !Directory.Exists(inputPath)) ||
                !HasReparsePointBelowRoot(inputPath, taskInputAllowedRoot);
+    }
+
+    private static bool IsControlledCompilerResponseFileOutputOperand(
+        string operand,
+        string responseFilePath,
+        string taskInputBaseDirectory,
+        string declaringAllowedRoot,
+        string taskInputAllowedRoot)
+    {
+        if (operand.IndexOf('*') >= 0 || operand.IndexOf('?') >= 0 ||
+            !TryResolveControlledTaskInputPath(
+                operand,
+                responseFilePath,
+                taskInputBaseDirectory,
+                declaringAllowedRoot,
+                taskInputAllowedRoot,
+                out string outputPath))
+        {
+            return false;
+        }
+        return IsControlledTaskOutputPath(
+            outputPath,
+            declaringAllowedRoot,
+            taskInputAllowedRoot);
     }
 
     private static IEnumerable<string> TokenizeCompilerResponseFileLine(string line)

@@ -500,7 +500,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledBuildInputs,
                     controlledMsBuildInputs,
                     controlledGlobalProperties,
-                    Path.GetDirectoryName(controlledProjectPath!)!))
+                    Path.GetDirectoryName(controlledProjectPath!)!,
+                    controlledProjectPath))
                 return false;
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
