@@ -97,6 +97,22 @@ public sealed partial class PowerShellCompilationAnalyzer
 
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var bindings = GetParameterBindings(parameter);
+            PowerShellCompilationLiteral? defaultValue = null;
+            if (parameter.DefaultValue is not null &&
+                (!capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) ||
+                 !PowerShellCompilationLiteralPolicy.TryResolve(
+                     parameter.DefaultValue,
+                     isSwitch ? typeof(bool) : type,
+                     out defaultValue)))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                    $"Parameter '${parameter.Name.VariablePath.UserPath}' declares a default value that cannot be preserved by this typed target.",
+                    file,
+                    parameter.DefaultValue.Extent,
+                    PowerShellCompilationFeatureIds.ParameterDefault));
+                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
+            }
             result.Add(new PowerShellCompilationParameter(
                 parameter.Name.VariablePath.UserPath,
                 (isSwitch ? typeof(bool) : type).FullName ?? type.Name,
@@ -110,20 +126,11 @@ public sealed partial class PowerShellCompilationAnalyzer
                 bindings,
                 HasMetadataAttribute(parameter, "AllowEmptyString"),
                 HasMetadataAttribute(parameter, "AllowEmptyCollection"),
-                HasMetadataAttribute(parameter, "SupportsWildcards")));
+                HasMetadataAttribute(parameter, "SupportsWildcards"),
+                defaultValue));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
-            if (parameter.DefaultValue is not null)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    $"Parameter '${parameter.Name.VariablePath.UserPath}' declares a PowerShell default value, which is not supported by the typed compiler.",
-                    file,
-                    parameter.DefaultValue.Extent,
-                    PowerShellCompilationFeatureIds.ParameterDefault));
-                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
-            }
         }
 
         ValidateParameterBindingNames(paramBlock, file, diagnostics);

@@ -119,7 +119,8 @@ public sealed class PowerShellCompilationParameter
         PowerShellCompilationParameterBinding[]? bindings = null,
         bool allowEmptyString = false,
         bool allowEmptyCollection = false,
-        bool supportsWildcards = false)
+        bool supportsWildcards = false,
+        PowerShellCompilationLiteral? defaultValue = null)
     {
         Name = name ?? string.Empty;
         TypeName = typeName ?? string.Empty;
@@ -134,6 +135,7 @@ public sealed class PowerShellCompilationParameter
         AllowEmptyString = allowEmptyString;
         AllowEmptyCollection = allowEmptyCollection;
         SupportsWildcards = supportsWildcards;
+        DefaultValue = defaultValue;
     }
 
     /// <summary>PowerShell parameter name without the dollar prefix.</summary>
@@ -174,6 +176,9 @@ public sealed class PowerShellCompilationParameter
 
     /// <summary>Whether tooling should interpret the value as supporting wildcard syntax.</summary>
     public bool SupportsWildcards { get; }
+
+    /// <summary>Safely resolved target-typed default, or null when no supported default was declared.</summary>
+    public PowerShellCompilationLiteral? DefaultValue { get; }
 
     /// <summary>Whether any parameter-set binding accepts pipeline input.</summary>
     public bool AcceptsPipelineInput => Bindings.Any(static binding =>
