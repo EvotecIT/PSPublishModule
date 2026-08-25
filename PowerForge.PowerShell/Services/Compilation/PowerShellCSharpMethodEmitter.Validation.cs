@@ -44,6 +44,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (metadata.Validations.Length == 0)
                 continue;
             var skipWhenOmitted = !metadata.IsMandatory &&
+                                  metadata.DefaultValue is null &&
                                   _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
             if (skipWhenOmitted)
             {

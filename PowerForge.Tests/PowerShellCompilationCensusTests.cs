@@ -81,6 +81,33 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_AttributesSameLineEmissionFailuresToTheirFunctionExtents()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Same Line", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            source,
+            "function Get-Map { [hashtable] $Map = @{ Name = 'value' }; return $Map }; " +
+            "function Get-Repeated { param([int] $Number) return Get-Repeated -Number $Number }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+
+            var variable = Assert.Single(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"));
+            var graph = Assert.Single(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
+            Assert.Equal(1, variable.AffectedUnits);
+            Assert.Equal(1, graph.AffectedUnits);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_MatchesRepeatedDisplayNamesByNormalizedProductPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Identity Tests", Guid.NewGuid().ToString("N"));

@@ -42,7 +42,9 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                 kind = PowerShellRuntimeStateIntrinsicKind.IsLinux;
             else if (IsCoreTarget(targetFramework) && name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsMacOS;
-            else if (name.Equals("WhatIfPreference", StringComparison.OrdinalIgnoreCase) && SupportsShouldProcess(body, capabilities))
+            else if (name.Equals("WhatIfPreference", StringComparison.OrdinalIgnoreCase) &&
+                     !HasLocalDefinition(body, name) &&
+                     SupportsShouldProcess(body, capabilities))
                 kind = PowerShellRuntimeStateIntrinsicKind.WhatIfPreference;
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
         }
@@ -141,6 +143,8 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     private static bool TryGetVersionTableMember(Ast ast, out string member)
     {
         member = string.Empty;
+        if (IsAssignmentTarget(ast))
+            return false;
         if (ast is MemberExpressionAst
             {
                 Expression: VariableExpressionAst variable,
@@ -161,6 +165,19 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         }
         return false;
     }
+
+    private static bool HasLocalDefinition(ScriptBlockAst body, string name)
+        => body.ParamBlock?.Parameters.Any(parameter =>
+               parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true ||
+           body.FindAll(
+                   node => node is AssignmentStatementAst assignment &&
+                           PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } variable &&
+                           variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
+                   searchNestedScriptBlocks: false)
+               .Any();
+
+    private static bool IsAssignmentTarget(Ast ast)
+        => ast.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, ast);
 
     private static bool SupportsShouldProcess(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
         => capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&

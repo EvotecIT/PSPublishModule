@@ -154,4 +154,64 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.False(function.IsCompilable);
         Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
     }
+
+    [Fact]
+    public void Transpile_TypedLibraryLowersStaticRuntimeFacts()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-StaticFact { if ($IsWindows) { return $PSEdition + ':Windows' }; return $PSEdition + ':Other' }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(
+            fixture.ScriptPath,
+            "PowerForge.StaticFacts",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.False(typed.Methods[0].RequiresPowerShellRuntimeState);
+        Assert.Contains("Core", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("RuntimeInformation.IsOSPlatform", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_LocalWhatIfPreferenceAssignmentIsNotReplacedByHostState()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LocalPreference { [CmdletBinding(SupportsShouldProcess = $true)] param() " +
+            "$WhatIfPreference = $false; return $WhatIfPreference }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.LocalWhatIf", "CompiledPowerShell", "net8.0");
+        var method = Assert.Single(typed.Methods);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LocalWhatIf",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LocalPreference -WhatIf");
+        Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Analyze_VersionTableMemberMutationRemainsOnFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Set-VersionState { $PSVersionTable.PSVersion = [Version] '1.0'; return $PSVersionTable.PSVersion }",
+            ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var function = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+    }
 }

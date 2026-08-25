@@ -11,6 +11,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, _targetFramework, _capabilities))
             throw Error(binary.Right, "The right operand of '-is' or '-isnot' must be a statically resolvable CLR type on the target surface.");
 
+        if (Nullable.GetUnderlyingType(targetType) is not null)
+        {
+            return $"new global::System.Func<bool>(() => {{ _ = (object?)({EmitExpression(binary.Left)}); return {(negate ? "true" : "false")}; }})()";
+        }
+
         var test = $"((object?)({EmitExpression(binary.Left)}) is {GetTypeName(targetType)})";
         return negate ? $"!{test}" : test;
     }
@@ -62,8 +67,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var options = operation.StartsWith("I", StringComparison.Ordinal)
             ? "global::System.Management.Automation.WildcardOptions.IgnoreCase"
             : "global::System.Management.Automation.WildcardOptions.None";
-        var match = $"new global::System.Management.Automation.WildcardPattern(({EmitExpression(binary.Right)} ?? string.Empty), {options}).IsMatch(({EmitExpression(binary.Left)} ?? string.Empty))";
-        return operation.Contains("not", StringComparison.OrdinalIgnoreCase) ? $"!({match})" : match;
+        var left = GetTemporaryIdentifier("wildcard_left");
+        var right = GetTemporaryIdentifier("wildcard_right");
+        var match = $"new global::System.Management.Automation.WildcardPattern(({right} ?? string.Empty), {options}).IsMatch(({left} ?? string.Empty))";
+        if (operation.Contains("not", StringComparison.OrdinalIgnoreCase)) match = $"!({match})";
+        return $"new global::System.Func<bool>(() => {{ var {left} = {EmitExpression(binary.Left)}; var {right} = {EmitExpression(binary.Right)}; return {match}; }})()";
     }
 
     private string EmitMembership(BinaryExpressionAst binary, string operation)
@@ -84,10 +92,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             throw Error(candidate, $"Operator '-{operation.ToLowerInvariant()}' requires a candidate assignable to array element type '{elementType.FullName}'.");
 
         var ignoreCase = operation.StartsWith("I", StringComparison.Ordinal) ? "true" : "false";
-        var array = EmitExpression(collection);
-        var value = EmitExpression(candidate);
+        var left = GetTemporaryIdentifier("membership_left");
+        var right = GetTemporaryIdentifier("membership_right");
+        var array = inOperator ? right : left;
+        var value = inOperator ? left : right;
         var any = $"global::System.Linq.Enumerable.Any(({array} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()), __item => global::System.Management.Automation.LanguagePrimitives.Equals((object?)__item, (object?)({value}), {ignoreCase}, global::System.Globalization.CultureInfo.CurrentCulture))";
-        return operation.Contains("not", StringComparison.OrdinalIgnoreCase) ? $"!({any})" : any;
+        if (operation.Contains("not", StringComparison.OrdinalIgnoreCase)) any = $"!({any})";
+        return $"new global::System.Func<bool>(() => {{ var {left} = {EmitExpression(binary.Left)}; var {right} = {EmitExpression(binary.Right)}; return {any}; }})()";
     }
 
     private void EnsureScalarStrings(BinaryExpressionAst binary, string operation)

@@ -36,7 +36,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         {
             if (leftType != typeof(string[]) || rightType != typeof(string))
                 throw Error(binary, "Operator '-join' currently requires a String array and scalar String separator.");
-            return $"global::System.String.Join(({right} ?? string.Empty), ({left} ?? global::System.Array.Empty<string>()))";
+            var leftTemporary = GetTemporaryIdentifier("join_left");
+            var rightTemporary = GetTemporaryIdentifier("join_right");
+            return $"new global::System.Func<string>(() => {{ var {leftTemporary} = {left}; var {rightTemporary} = {right}; return global::System.String.Join(({rightTemporary} ?? string.Empty), ({leftTemporary} ?? global::System.Array.Empty<string>())); }})()";
         }
         if (operation is "And" or "Or" && (leftType != typeof(bool) || rightType != typeof(bool)))
             throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");

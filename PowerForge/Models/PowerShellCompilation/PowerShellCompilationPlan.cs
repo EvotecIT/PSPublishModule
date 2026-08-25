@@ -114,6 +114,41 @@ public sealed class PowerShellCompilationParameter
     {
     }
 
+    /// <summary>Creates a parameter description using the original validation contract.</summary>
+    public PowerShellCompilationParameter(
+        string name,
+        string typeName,
+        bool hasDefaultValue,
+        bool isMandatory,
+        bool isSwitch,
+        string[]? aliases,
+        bool allowNull,
+        PowerShellCompilationValidation[]? validations)
+        : this(name, typeName, hasDefaultValue, isMandatory, isSwitch, aliases, allowNull, validations,
+            PowerShellCompilationParameterTypeCapability.ClrMethod, null, false, false, false, null)
+    {
+    }
+
+    /// <summary>Creates a parameter description using the pre-default-literal public contract.</summary>
+    public PowerShellCompilationParameter(
+        string name,
+        string typeName,
+        bool hasDefaultValue,
+        bool isMandatory,
+        bool isSwitch,
+        string[]? aliases,
+        bool allowNull,
+        PowerShellCompilationValidation[]? validations,
+        PowerShellCompilationParameterTypeCapability typeCapabilities,
+        PowerShellCompilationParameterBinding[]? bindings,
+        bool allowEmptyString,
+        bool allowEmptyCollection,
+        bool supportsWildcards)
+        : this(name, typeName, hasDefaultValue, isMandatory, isSwitch, aliases, allowNull, validations,
+            typeCapabilities, bindings, allowEmptyString, allowEmptyCollection, supportsWildcards, null)
+    {
+    }
+
     /// <summary>Creates a parameter description including PowerShell binding and validation metadata.</summary>
     public PowerShellCompilationParameter(
         string name,

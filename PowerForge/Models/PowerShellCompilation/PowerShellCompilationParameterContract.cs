@@ -5,6 +5,10 @@ namespace PowerForge;
 /// <summary>Canonical capability sets for generated PowerShell compilation hosts.</summary>
 public static class PowerShellCompilationCapabilities
 {
+    /// <summary>Target-backed runtime facts available without a PowerShell host.</summary>
+    public const PowerShellCompilationCapability StaticRuntimeFacts =
+        PowerShellCompilationCapability.RuntimeStateIntrinsics;
+
     /// <summary>Capabilities supplied by generated binary cmdlets.</summary>
     public const PowerShellCompilationCapability BinaryModule =
         PowerShellCompilationCapability.PowerShellStreams |

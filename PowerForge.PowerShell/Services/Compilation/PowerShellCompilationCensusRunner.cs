@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Management.Automation.Language;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -344,6 +345,8 @@ public sealed class PowerShellCompilationCensusRunner
             AddHigherIsRegression(regressions, actual.Name, "ParseErrorFiles", expected.ParseErrorFiles, actual.ParseErrorFiles);
             if (expected.Coverage.PostEmissionEvaluated)
             {
+                if (!actual.Coverage.PostEmissionEvaluated)
+                    regressions.Add(new PowerShellCompilationCensusRegression(actual.Name, "PostEmissionEvaluated", 1, 0));
                 AddLowerIsRegression(regressions, actual.Name, "EmittedFunctions", expected.Coverage.EmittedFunctions, actual.Coverage.EmittedFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "FallbackFunctions", expected.Coverage.FallbackFunctions, actual.Coverage.FallbackFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "DroppedEligibleFunctions", expected.Coverage.DroppedEligibleFunctions, actual.Coverage.DroppedEligibleFunctions);
@@ -614,22 +617,31 @@ public sealed class PowerShellCompilationCensusRunner
         return files.Select(file =>
         {
             var fullPath = Path.GetFullPath(file.FullPath);
+            var functionExtents = File.Exists(fullPath)
+                ? Parser.ParseFile(fullPath, out _, out _)
+                    .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+                    .OfType<FunctionDefinitionAst>()
+                    .Select(static function => (function.Name, function.Extent))
+                    .ToArray()
+                : Array.Empty<(string Name, IScriptExtent Extent)>();
             var units = file.Units.Select((unit, index) =>
             {
                 if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
                     return unit;
-                var nextLine = file.Units
-                    .Skip(index + 1)
-                    .Where(static candidate => candidate.Kind == PowerShellCompilationUnitKind.Function)
-                    .Select(static candidate => candidate.StartLine)
-                    .Where(line => line > unit.StartLine)
-                    .DefaultIfEmpty(int.MaxValue)
-                    .Min();
+                var occurrence = file.Units.Take(index).Count(candidate =>
+                    candidate.Kind == PowerShellCompilationUnitKind.Function &&
+                    candidate.StartLine == unit.StartLine &&
+                    candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase));
+                var extent = functionExtents
+                    .Where(candidate => candidate.Extent.StartLineNumber == unit.StartLine &&
+                                        candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase))
+                    .Skip(occurrence)
+                    .Select(static candidate => candidate.Extent)
+                    .FirstOrDefault();
                 var exact = emitted.Diagnostics
                     .Where(diagnostic =>
                         PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, fullPath) &&
-                        diagnostic.Line >= unit.StartLine &&
-                        diagnostic.Line < nextLine)
+                        extent is not null && IsWithinExtent(diagnostic.Line, diagnostic.Column, extent))
                     .ToArray();
                 if (exact.Length > 0)
                 {
@@ -654,11 +666,21 @@ public sealed class PowerShellCompilationCensusRunner
                             "This function did not survive conservative typed function-graph emission and remains on the PowerShell fallback path.",
                             file.FullPath,
                             unit.StartLine,
-                            1)
+                            1,
+                            PowerShellCompilationFeatureIds.FunctionGraph)
                     }).ToArray());
             }).ToArray();
             return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
         }).ToArray();
+    }
+
+    private static bool IsWithinExtent(int line, int column, IScriptExtent extent)
+    {
+        if (line < extent.StartLineNumber || line > extent.EndLineNumber)
+            return false;
+        if (line == extent.StartLineNumber && column < extent.StartColumnNumber)
+            return false;
+        return line != extent.EndLineNumber || column <= extent.EndColumnNumber;
     }
 
     private static string? NormalizeTargetFramework(string? targetFramework)

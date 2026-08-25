@@ -46,6 +46,7 @@ internal static class Program
             StringComparer.OrdinalIgnoreCase);
         var positionalIndex = 0;
         var positionalOnly = false;
+        var boundEmptyCollections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < args.Length; index++)
         {
             var token = args[index];
@@ -66,15 +67,25 @@ internal static class Program
                         AddRawValue(raw, parameter, "true");
                         continue;
                     }
+                    if (parameter.IsArray && parameter.AllowEmptyCollection &&
+                        (index + 1 >= args.Length || LooksLikeNamedToken(args[index + 1])))
+                    {
+                        if (raw[parameter.Name].Count > 0 || !boundEmptyCollections.Add(parameter.Name))
+                            throw new ArgumentException($"Parameter '--{parameter.Name}' was provided more than once.");
+                        continue;
+                    }
                     if (index + 1 >= args.Length || LooksLikeNamedToken(args[index + 1]))
                         throw new ArgumentException($"Parameter '--{parameter.Name}' requires a value. Use --{parameter.Name}=<value> for values beginning with '-'.");
                     value = args[++index];
                 }
+                if (boundEmptyCollections.Contains(parameter.Name))
+                    throw new ArgumentException($"Parameter '--{parameter.Name}' was provided more than once.");
                 AddRawValue(raw, parameter, value);
                 continue;
             }
 
-            while (positionalIndex < PositionalParameters.Length && raw[PositionalParameters[positionalIndex].Name].Count > 0)
+            while (positionalIndex < PositionalParameters.Length &&
+                   (raw[PositionalParameters[positionalIndex].Name].Count > 0 || boundEmptyCollections.Contains(PositionalParameters[positionalIndex].Name)))
                 positionalIndex++;
             if (positionalIndex >= PositionalParameters.Length)
             {
@@ -91,10 +102,17 @@ internal static class Program
             .Where(static pair => pair.Value.Count > 0)
             .Select(static pair => pair.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        boundParameters.UnionWith(boundEmptyCollections);
         var converted = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in Parameters)
         {
             var values = raw[parameter.Name];
+            if (boundEmptyCollections.Contains(parameter.Name))
+            {
+                converted[parameter.Name] = Array.CreateInstance(parameter.Type.GetElementType()!, 0);
+                ValidateValue(parameter, converted[parameter.Name]);
+                continue;
+            }
             if (values.Count == 0)
             {
                 if (parameter.IsRequired)

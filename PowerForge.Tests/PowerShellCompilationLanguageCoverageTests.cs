@@ -196,4 +196,57 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
         Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
     }
+
+    [Fact]
+    public void Build_LanguageOperatorsEvaluateOperandsOnceInSourceOrder()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LeftText { param([Text.StringBuilder] $Trace, [string] $Value) $null = $Trace.Append('L'); return $Value }; " +
+            "function Get-RightText { param([Text.StringBuilder] $Trace, [string] $Value) $null = $Trace.Append('R'); return $Value }; " +
+            "function Test-OperatorOrder { param([Text.StringBuilder] $Trace, [string[]] $Collection, [string[]] $Names) " +
+            "$like = (Get-LeftText -Trace $Trace -Value 'Alpha') -like (Get-RightText -Trace $Trace -Value 'A*'); " +
+            "$contains = $Collection -contains (Get-RightText -Trace $Trace -Value 'x'); " +
+            "$joined = $Names -join (Get-RightText -Trace $Trace -Value ','); " +
+            "$nullable = (Get-RightText -Trace $Trace -Value '1') -is [Nullable[int]]; " +
+            "return ([string] $like + '|' + [string] $contains + '|' + $joined + '|' + [string] $nullable + '|' + $Trace.ToString()) }; " +
+            "Export-ModuleMember -Function Test-OperatorOrder",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.OperatorOrder", "CompiledPowerShell", "net8.0");
+        Assert.True(typed.Diagnostics.Length == 0,
+            string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var prepared = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
+            typed, new[] { "Test-OperatorOrder" }, "net8.0");
+        Assert.True(prepared.Diagnostics.Length == 0,
+            string.Join(Environment.NewLine, prepared.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.OperatorOrder",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net8.0",
+            EmitSource = true
+        });
+
+        Assert.True(
+            result.Succeeded,
+            result.Error + Environment.NewLine + result.BuildOutput + Environment.NewLine +
+            string.Join(Environment.NewLine, result.Manifest?.Diagnostics.Select(static diagnostic => diagnostic.Message) ?? Array.Empty<string>()));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.True(generated.IndexOf("__pf_wildcard_left", StringComparison.Ordinal) < generated.IndexOf("__pf_wildcard_right", StringComparison.Ordinal));
+        Assert.True(generated.IndexOf("__pf_membership_left", StringComparison.Ordinal) < generated.IndexOf("__pf_membership_right", StringComparison.Ordinal));
+        Assert.True(generated.IndexOf("__pf_join_left", StringComparison.Ordinal) < generated.IndexOf("__pf_join_right", StringComparison.Ordinal));
+        const string calls = "$trace = [Text.StringBuilder]::new(); Test-OperatorOrder -Trace $trace -Collection @() -Names @('a','b')";
+        var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
+
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal((original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+        Assert.Equal("True|False|a,b|False|LRRRR", compiled.StandardOutput.Trim());
+    }
 }

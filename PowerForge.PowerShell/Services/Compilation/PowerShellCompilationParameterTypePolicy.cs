@@ -20,9 +20,11 @@ internal static class PowerShellCompilationParameterTypePolicy
             if (type.GetArrayRank() != 1)
                 return PowerShellCompilationParameterTypeCapability.None;
             var element = Classify(type.GetElementType()!, targetFramework);
-            return element.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod)
+            if (!element.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
+                return PowerShellCompilationParameterTypeCapability.None;
+            return PowerShellTypedExecutableParameterPolicy.IsSupported(type)
                 ? element
-                : PowerShellCompilationParameterTypeCapability.None;
+                : element & ~PowerShellCompilationParameterTypeCapability.ProcessArgument;
         }
 
         var result = PowerShellCompilationParameterTypeCapability.None;

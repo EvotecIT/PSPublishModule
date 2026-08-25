@@ -191,7 +191,11 @@ internal static class PowerShellTypedExecutableCompiler
             requiresPowerShellStreams: false,
             requiresPowerShellCommandRegions: false,
             aliases: null,
-            requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters);
+            requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
+            isAdvancedFunction: false,
+            commandBinding: null,
+            requiresPowerShellRuntimeState: method.RequiresPowerShellRuntimeState,
+            declaredOutputType: method.DeclaredOutputType?.FullName);
 
     private static PowerShellLocalFunctionParameter CreateParameter(ParameterAst parameter, PowerShellCompilationUnitPlan unit)
     {

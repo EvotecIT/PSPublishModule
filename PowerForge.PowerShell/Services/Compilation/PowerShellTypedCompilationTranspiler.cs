@@ -16,7 +16,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapability.None);
+        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts);
 
     /// <summary>Translates eligible functions from files sharing one PowerShell module scope.</summary>
     public PowerShellTypedCompilationResult Transpile(
@@ -24,7 +24,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapability.None);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts);
 
     internal PowerShellTypedCompilationResult TranspileForBinaryModule(
         IEnumerable<string> sourcePaths,
@@ -243,6 +243,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         var states = new Dictionary<string, FunctionVisitState>(StringComparer.OrdinalIgnoreCase);
         var provisionalSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var traversal = new List<string>();
+        var recursiveCycleFunctions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var source in candidates.Values.OrderBy(static source => source.Parsed.Path, PowerShellCompilationPathSafety.PathComparer).ThenBy(static source => source.Function.Extent.StartOffset))
         {
@@ -253,6 +255,8 @@ public sealed class PowerShellTypedCompilationTranspiler
                 signatures,
                 states,
                 provisionalSignatures,
+                traversal,
+                recursiveCycleFunctions,
                 targetFramework,
                 capabilities,
                 methods,
@@ -268,6 +272,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         Dictionary<string, PowerShellLocalFunctionSignature> signatures,
         Dictionary<string, FunctionVisitState> states,
         ISet<string> provisionalSignatures,
+        List<string> traversal,
+        ISet<string> recursiveCycleFunctions,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         List<PowerShellCompiledMethod> methods,
@@ -280,7 +286,12 @@ public sealed class PowerShellTypedCompilationTranspiler
             if (state == FunctionVisitState.Complete) return true;
             if (state == FunctionVisitState.Failed) return false;
             if (provisionalSignatures.Contains(name)) return true;
-            diagnostics.Add(CreateDiagnostic(source, source.Function, $"Function '{name}' participates in a recursive local-call cycle and remains in PowerShell fallback."));
+            var cycleStart = traversal.FindIndex(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (cycleStart >= 0)
+            {
+                foreach (var participant in traversal.Skip(cycleStart)) recursiveCycleFunctions.Add(participant);
+            }
+            AddRecursiveCycleDiagnostic(source, diagnostics);
             states[name] = FunctionVisitState.Failed;
             return false;
         }
@@ -297,15 +308,25 @@ public sealed class PowerShellTypedCompilationTranspiler
             provisionalSignatures.Add(name);
         }
         states[name] = FunctionVisitState.Active;
+        traversal.Add(name);
         foreach (var command in source.Function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
         {
             var dependencyName = command.GetCommandName();
             if (dependencyName is null || !knownNames.Contains(dependencyName))
                 continue;
-            if (command.InvocationOperator == TokenKind.Unknown &&
-                candidates.TryGetValue(dependencyName, out var dependency) &&
-                TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, provisionalSignatures, targetFramework, capabilities, methods, methodSources, diagnostics))
-                continue;
+            if (command.InvocationOperator == TokenKind.Unknown && candidates.TryGetValue(dependencyName, out var dependency))
+            {
+                if (TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, provisionalSignatures,
+                        traversal, recursiveCycleFunctions, targetFramework, capabilities, methods, methodSources, diagnostics))
+                    continue;
+                if (recursiveCycleFunctions.Contains(name))
+                {
+                    AddRecursiveCycleDiagnostic(source, diagnostics);
+                    states[name] = FunctionVisitState.Failed;
+                    traversal.RemoveAt(traversal.Count - 1);
+                    return false;
+                }
+            }
             if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
                 continue;
             else
@@ -315,12 +336,16 @@ public sealed class PowerShellTypedCompilationTranspiler
                     command,
                     $"Function '{name}' depends on local function '{dependencyName}', which is not eligible for the same typed function graph."));
                 states[name] = FunctionVisitState.Failed;
+                traversal.RemoveAt(traversal.Count - 1);
                 return false;
             }
         }
 
         if (states.TryGetValue(name, out state) && state == FunctionVisitState.Failed)
+        {
+            traversal.RemoveAt(traversal.Count - 1);
             return false;
+        }
 
         try
         {
@@ -340,6 +365,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
             states[name] = FunctionVisitState.Complete;
+            traversal.RemoveAt(traversal.Count - 1);
             return true;
         }
         catch (PowerShellCSharpEmissionException ex)
@@ -347,8 +373,28 @@ public sealed class PowerShellTypedCompilationTranspiler
             if (provisionalSignatures.Remove(name)) signatures.Remove(name);
             diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
             states[name] = FunctionVisitState.Failed;
+            traversal.RemoveAt(traversal.Count - 1);
             return false;
         }
+    }
+
+    private static void AddRecursiveCycleDiagnostic(
+        FunctionSource source,
+        ICollection<PowerShellCompilationDiagnostic> diagnostics)
+    {
+        if (diagnostics.Any(diagnostic =>
+                diagnostic.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph &&
+                PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, source.Parsed.Path) &&
+                diagnostic.Line == source.Function.Extent.StartLineNumber &&
+                diagnostic.Column == source.Function.Extent.StartColumnNumber))
+            return;
+        diagnostics.Add(new PowerShellCompilationDiagnostic(
+            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+            $"Function '{source.Function.Name}' participates in a recursive local-call cycle and remains in PowerShell fallback.",
+            source.Parsed.Path,
+            source.Function.Extent.StartLineNumber,
+            source.Function.Extent.StartColumnNumber,
+            PowerShellCompilationFeatureIds.FunctionGraph));
     }
 
     private static void TryEmitIndependent(
@@ -390,7 +436,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresPowerShellBoundParameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
-            emitted.RequiresPowerShellRuntimeState);
+            emitted.RequiresPowerShellRuntimeState,
+            emitted.DeclaredOutputType?.FullName ?? string.Empty);
 
     private static PowerShellLocalFunctionSignature CreateSignature(
         FunctionSource source,
@@ -595,7 +642,8 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
-        bool requiresPowerShellRuntimeState = false)
+        bool requiresPowerShellRuntimeState = false,
+        Type? declaredOutputType = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -604,6 +652,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        DeclaredOutputType = declaredOutputType;
     }
 
     internal string GeneratedName { get; }
@@ -613,4 +662,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal Type? DeclaredOutputType { get; }
 }

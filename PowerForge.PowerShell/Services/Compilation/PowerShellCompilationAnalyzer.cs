@@ -292,7 +292,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         candidate.Extent,
                         PowerShellCompilationFeatureIds.ScriptBlock));
                     break;
-                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities):
+                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities, targetFramework):
                     break;
                 case AttributeAst attribute:
                     diagnostics.Add(CreateDiagnostic(

@@ -19,7 +19,7 @@ public sealed class PowerShellCompiledMethod
     {
     }
 
-    /// <summary>Creates a compiled-method description with authored file identity and host capability requirements.</summary>
+    /// <summary>Creates a compiled-method description using the original host-capability contract.</summary>
     public PowerShellCompiledMethod(
         string sourceName,
         string generatedName,
@@ -31,9 +31,82 @@ public sealed class PowerShellCompiledMethod
         bool requiresPowerShellCommandRegions = false,
         string[]? aliases = null,
         bool requiresPowerShellBoundParameters = false,
-        bool isAdvancedFunction = false,
-        PowerShellCompilationCommandBinding? commandBinding = null,
-        bool requiresPowerShellRuntimeState = false)
+        bool isAdvancedFunction = false)
+        : this(
+            sourceName,
+            generatedName,
+            returnType,
+            parameters,
+            sourceLine,
+            sourcePath,
+            requiresPowerShellStreams,
+            requiresPowerShellCommandRegions,
+            aliases,
+            requiresPowerShellBoundParameters,
+            isAdvancedFunction,
+            null,
+            false,
+            string.Empty)
+    {
+    }
+
+    /// <summary>Creates a compiled-method description with command binding metadata.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction,
+        PowerShellCompilationCommandBinding? commandBinding)
+        : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath,
+            requiresPowerShellStreams, requiresPowerShellCommandRegions, aliases, requiresPowerShellBoundParameters,
+            isAdvancedFunction, commandBinding, false, string.Empty)
+    {
+    }
+
+    /// <summary>Creates a compiled-method description with runtime-state requirements.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction,
+        PowerShellCompilationCommandBinding? commandBinding,
+        bool requiresPowerShellRuntimeState)
+        : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath,
+            requiresPowerShellStreams, requiresPowerShellCommandRegions, aliases, requiresPowerShellBoundParameters,
+            isAdvancedFunction, commandBinding, requiresPowerShellRuntimeState, string.Empty)
+    {
+    }
+
+    /// <summary>Creates a complete compiled-method description.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction,
+        PowerShellCompilationCommandBinding? commandBinding,
+        bool requiresPowerShellRuntimeState,
+        string? declaredOutputType)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -48,6 +121,7 @@ public sealed class PowerShellCompiledMethod
         IsAdvancedFunction = isAdvancedFunction;
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        DeclaredOutputType = declaredOutputType ?? string.Empty;
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -58,6 +132,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Resolved CLR return type name.</summary>
     public string ReturnType { get; }
+
+    /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
+    public string DeclaredOutputType { get; }
 
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }

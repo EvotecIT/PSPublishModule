@@ -258,7 +258,10 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine(GenerateCmdletAttribute(cmdlet));
-        var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
+        var outputType = GetCmdletOutputTypeName(
+            string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType)
+                ? cmdlet.Method.ReturnType
+                : cmdlet.Method.DeclaredOutputType);
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
         builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet");
@@ -316,8 +319,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
             builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
             builder.AppendLine("        if (values.Count == 0) return null;");
-            builder.AppendLine("        if (values.Count == 1) return values[0]?.BaseObject;");
-            builder.AppendLine("        return global::System.Linq.Enumerable.Select(values, static value => value?.BaseObject).ToArray();");
+            builder.AppendLine("        if (values.Count == 1) return values[0];");
+            builder.AppendLine("        return values.ToArray();");
             builder.AppendLine("    }");
             builder.AppendLine();
         }

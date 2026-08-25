@@ -32,6 +32,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private int _indent = 1;
     private int _switchIndex;
     private int _objectIndex;
+    private int _temporaryIndex;
+
+    private string GetTemporaryIdentifier(string purpose)
+        => $"__pf_{purpose}_{_temporaryIndex++}";
 
     internal PowerShellCSharpMethodEmitter(
         string filePath,
@@ -142,6 +146,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
              calledLocalFunctions.Any(static signature => signature.RequiresPowerShellRuntimeState));
         ValidateVariableReferences(typedStatements);
         var returnType = runtimeTailStart >= 0 ? typeof(void) : InferReturnType(typedStatements);
+        var declaredOutputType = GetDeclaredOutputType();
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterParts = parameters.Select(parameter =>
@@ -226,7 +231,31 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _requiresPowerShellStreams,
             _requiresPowerShellCommandRegions,
             _requiresBoundParameters,
-            _requiresPowerShellRuntimeState);
+            _requiresPowerShellRuntimeState,
+            declaredOutputType);
+    }
+
+    private Type? GetDeclaredOutputType()
+    {
+        var attributes = _body.ParamBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute =>
+                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
+                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase))
+            .ToArray() ?? Array.Empty<AttributeAst>();
+        if (attributes.Length == 0)
+            return null;
+        if (attributes.Length != 1 ||
+            attributes[0].NamedArguments.Count != 0 ||
+            attributes[0].PositionalArguments.Count != 1 ||
+            attributes[0].PositionalArguments[0] is not TypeExpressionAst typeExpression ||
+            typeExpression.TypeName.GetReflectionType() is not { } declared ||
+            declared == typeof(void) ||
+            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, _targetFramework, _capabilities))
+        {
+            throw Error(attributes[0], "OutputType metadata must declare one statically resolvable target-compatible CLR type.");
+        }
+        return declared;
     }
 
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
