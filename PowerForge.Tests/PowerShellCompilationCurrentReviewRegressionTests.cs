@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerShellCompilationCurrentReviewRegressionTests
+public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 {
     [Theory]
     [InlineData("param([Alias('x')][string] $One, [Alias('x')][string] $Two); return $One + $Two")]

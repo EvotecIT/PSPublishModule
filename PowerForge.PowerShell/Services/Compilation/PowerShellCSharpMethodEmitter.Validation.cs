@@ -4,6 +4,20 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellCSharpMethodEmitter
 {
+    private void EmitParameterBindingNormalization(IReadOnlyList<ParameterAst> parameters)
+    {
+        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string)))
+        {
+            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
+            AppendLine($"{identifier} = {identifier} ?? string.Empty;");
+        }
+        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string[])))
+        {
+            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
+            AppendLine($"{identifier} = {identifier} is null ? null! : global::System.Linq.Enumerable.Select({identifier}, static value => value ?? string.Empty).ToArray();");
+        }
+    }
+
     private void EmitParameterValidations(IReadOnlyList<ParameterAst> parameters)
     {
         for (var index = 0; index < parameters.Count; index++)
@@ -96,12 +110,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         foreach (var validation in parameter.Validations)
         {
-            if (validateCollectionElement &&
-                validation.Kind == PowerShellCompilationValidationKind.NotNull &&
-                valueType == typeof(string))
-            {
-                continue;
-            }
             var condition = validation.Kind switch
             {
                 PowerShellCompilationValidationKind.NotNull when !valueType.IsValueType => $"{value} is null",

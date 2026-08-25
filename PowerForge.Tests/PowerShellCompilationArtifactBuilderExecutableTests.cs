@@ -186,10 +186,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(processResult.StandardError), processResult.StandardError);
     }
 
-    [Fact]
-    public void Build_StrictTypedExecutableRejectsStructuredOutputThatRequiresPowerShellFormatting()
+    [Theory]
+    [InlineData("return [System.TimeSpan]::new(0, 0, 1)")]
+    [InlineData("return [System.Version]::new(1, 2)")]
+    [InlineData("return ''.GetType()")]
+    public void Build_StrictTypedExecutableRejectsStructuredOutputThatRequiresPowerShellFormatting(string source)
     {
-        using var fixture = ArtifactFixture.Create("return [System.TimeSpan]::new(0, 0, 1)");
+        using var fixture = ArtifactFixture.Create(source);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,

@@ -89,6 +89,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             type => PowerShellCompilationParameterTypePolicy.CanUseInMethod(type, _targetFramework, _capabilities),
             member => string.IsNullOrWhiteSpace(_targetFramework) || PowerShellGeneratedMemberPolicy.IsSupported(member, _targetFramework!),
             CanNormalizeNullStringReceiver,
+            _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects),
             Error);
     }
 
@@ -176,11 +177,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine("{");
         _indent++;
         EmitParameterDefaults(parameters);
-        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string)))
-        {
-            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
-            AppendLine($"{identifier} = {identifier} ?? string.Empty;");
-        }
+        EmitParameterBindingNormalization(parameters);
         EmitParameterValidations(parameters);
         foreach (var name in _predeclaredLocals.OrderBy(name => _firstAssignmentOffsets[name]))
         {

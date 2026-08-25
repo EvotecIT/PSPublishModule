@@ -303,7 +303,7 @@ internal static class PowerShellPackagedScriptRewriter
             }
             : throw new InvalidOperationException("Packaged invocation metadata must use a literal member name.");
 
-    private static void ValidateHostInteraction(ScriptBlockAst ast)
+    internal static void ValidateHostInteraction(ScriptBlockAst ast)
     {
         var confirmationInvocation = FindConfirmationInvocation(ast);
         if (SupportsShouldProcess(ast) || confirmationInvocation is not null)

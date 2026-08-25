@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Reflection;
 
@@ -16,6 +17,7 @@ internal sealed class PowerShellCSharpMemberEmitter
     private readonly Func<Type, bool> _isSupportedType;
     private readonly Func<MemberInfo, bool> _isSupportedMember;
     private readonly Func<ExpressionAst, bool> _canNormalizeNullStringReceiver;
+    private readonly bool _canEmitPowerShellRuntimeErrors;
     private readonly Func<Ast, string, PowerShellCSharpEmissionException> _error;
     private int _temporaryIndex;
 
@@ -27,6 +29,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         Func<Type, bool> isSupportedType,
         Func<MemberInfo, bool> isSupportedMember,
         Func<ExpressionAst, bool> canNormalizeNullStringReceiver,
+        bool canEmitPowerShellRuntimeErrors,
         Func<Ast, string, PowerShellCSharpEmissionException> error)
     {
         _inferExpressionType = inferExpressionType;
@@ -36,6 +39,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         _isSupportedType = isSupportedType;
         _isSupportedMember = isSupportedMember;
         _canNormalizeNullStringReceiver = canNormalizeNullStringReceiver;
+        _canEmitPowerShellRuntimeErrors = canEmitPowerShellRuntimeErrors;
         _error = error;
     }
 
@@ -208,12 +212,27 @@ internal sealed class PowerShellCSharpMemberEmitter
     internal string EmitInvocation(InvokeMemberExpressionAst invocation)
     {
         var resolved = ResolveInvocation(invocation);
+        if (RequiresNullPropagation(resolved.Target))
+        {
+            if (!_canEmitPowerShellRuntimeErrors)
+            {
+                throw _error(
+                    invocation,
+                    $"CLR method invocation '{resolved.Target.Type.FullName}.{resolved.Method!.Name}' on a potentially null reference receiver cannot preserve PowerShell's runtime-error identity without a PowerShell host.");
+            }
+        }
         var sourceArguments = invocation.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
         var arguments = string.Join(", ", sourceArguments.Select((argument, index) =>
             EmitArgument(argument, resolved.Parameters[index].ParameterType)));
         if (resolved.Constructor is not null)
             return $"new {_getTypeName(resolved.Target.Type)}({arguments})";
-        return $"{EmitTarget(resolved.Target)}.{resolved.Method!.Name}({arguments})";
+        var target = EmitTarget(resolved.Target);
+        if (RequiresNullPropagation(resolved.Target))
+        {
+            target = $"({target} ?? throw new global::System.Management.Automation.RuntimeException(" +
+                     PowerShellCSharpLiteral.QuoteString("You cannot call a method on a null-valued expression.") + "))";
+        }
+        return $"{target}.{resolved.Method!.Name}({arguments})";
     }
 
     private ResolvedInvocation ResolveInvocation(InvokeMemberExpressionAst invocation)
@@ -383,6 +402,12 @@ internal sealed class PowerShellCSharpMemberEmitter
             return new Target(type, true, _getTypeName(type));
         }
         var instanceType = _inferExpressionType(expression);
+        if (instanceType == typeof(PSObject) || instanceType == typeof(PSCustomObject))
+        {
+            throw _error(
+                expression,
+                "Member observation on a [pscustomobject] value requires PowerShell's adapted-object identity and cannot be lowered as direct CLR member access.");
+        }
         return new Target(
             instanceType,
             false,

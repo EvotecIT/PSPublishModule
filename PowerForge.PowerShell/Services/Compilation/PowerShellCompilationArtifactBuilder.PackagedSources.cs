@@ -103,6 +103,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating exit semantics.");
+        PowerShellPackagedScriptRewriter.ValidateHostInteraction(ast);
         var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .FirstOrDefault();
