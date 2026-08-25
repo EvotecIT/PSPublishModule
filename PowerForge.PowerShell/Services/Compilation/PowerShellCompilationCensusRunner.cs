@@ -96,10 +96,7 @@ public sealed class PowerShellCompilationCensusRunner
                     resolved.CompilationSourceFiles,
                     Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
                     targetFramework,
-                    PowerShellCompilationCapability.PowerShellStreams |
-                    PowerShellCompilationCapability.LocalFunctionCalls |
-                    PowerShellCompilationCapability.BoundParameters |
-                    PowerShellCompilationCapability.PowerShellObjects);
+                    PowerShellCompilationCapabilities.BinaryModule);
             var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 resolved.CompilationSourceFiles,
                 "PowerForge.Census",
@@ -116,10 +113,7 @@ public sealed class PowerShellCompilationCensusRunner
                     source,
                     PowerShellCompilationMode.Analyze,
                     targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapability.PowerShellStreams |
-                                  PowerShellCompilationCapability.LocalFunctionCalls |
-                                  PowerShellCompilationCapability.BoundParameters |
-                                  PowerShellCompilationCapability.PowerShellObjects)).Files)
+                    capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files)
                 .Select(MarkRuntimeOnly)
                 .ToArray();
             var files = compiledFiles.Concat(runtimeOnlyFiles).ToArray();
@@ -140,10 +134,7 @@ public sealed class PowerShellCompilationCensusRunner
                 PowerShellCompilationMode.Analyze,
                 recurse: false,
                 targetFramework: targetFramework,
-                capabilities: PowerShellCompilationCapability.PowerShellStreams |
-                              PowerShellCompilationCapability.LocalFunctionCalls |
-                                  PowerShellCompilationCapability.BoundParameters |
-                                  PowerShellCompilationCapability.PowerShellObjects));
+                capabilities: PowerShellCompilationCapabilities.BinaryModule));
             sourceFiles = plan.Files.Length;
             sourceFingerprint = ComputeSourceFingerprint(plan.Files.Select(static file => file.FullPath), path);
             coverage = BuildCoverageBreakdown(

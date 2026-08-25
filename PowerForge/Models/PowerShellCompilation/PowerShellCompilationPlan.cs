@@ -35,7 +35,13 @@ public enum PowerShellCompilationCapability
     PowerShellObjects = 8,
 
     /// <summary>Strict executable entry-point parameters must be bindable from process arguments.</summary>
-    ExecutableParameterBinding = 16
+    ExecutableParameterBinding = 16,
+
+    /// <summary>Generated binary cmdlets can preserve PowerShell pipeline parameter binding.</summary>
+    PipelineParameterBinding = 32,
+
+    /// <summary>Generated methods may reference a conservative set of PowerShell host types.</summary>
+    PowerShellHostTypes = 64
 }
 
 /// <summary>
@@ -108,7 +114,12 @@ public sealed class PowerShellCompilationParameter
         bool isSwitch,
         string[]? aliases,
         bool allowNull,
-        PowerShellCompilationValidation[]? validations)
+        PowerShellCompilationValidation[]? validations,
+        PowerShellCompilationParameterTypeCapability typeCapabilities = PowerShellCompilationParameterTypeCapability.ClrMethod,
+        PowerShellCompilationParameterBinding[]? bindings = null,
+        bool allowEmptyString = false,
+        bool allowEmptyCollection = false,
+        bool supportsWildcards = false)
     {
         Name = name ?? string.Empty;
         TypeName = typeName ?? string.Empty;
@@ -118,6 +129,11 @@ public sealed class PowerShellCompilationParameter
         Aliases = aliases ?? Array.Empty<string>();
         AllowNull = allowNull;
         Validations = validations ?? Array.Empty<PowerShellCompilationValidation>();
+        TypeCapabilities = typeCapabilities;
+        Bindings = bindings ?? new[] { new PowerShellCompilationParameterBinding(mandatory: isMandatory) };
+        AllowEmptyString = allowEmptyString;
+        AllowEmptyCollection = allowEmptyCollection;
+        SupportsWildcards = supportsWildcards;
     }
 
     /// <summary>PowerShell parameter name without the dollar prefix.</summary>
@@ -143,6 +159,25 @@ public sealed class PowerShellCompilationParameter
 
     /// <summary>Validation metadata preserved for generated executable and cmdlet binders.</summary>
     public PowerShellCompilationValidation[] Validations { get; }
+
+    /// <summary>Typed surfaces that can represent this resolved parameter type.</summary>
+    public PowerShellCompilationParameterTypeCapability TypeCapabilities { get; }
+
+    /// <summary>Authored parameter-set bindings. An implicit all-sets binding is used when no attribute is present.</summary>
+    public PowerShellCompilationParameterBinding[] Bindings { get; }
+
+    /// <summary>Whether an explicitly bound empty string is allowed.</summary>
+    public bool AllowEmptyString { get; }
+
+    /// <summary>Whether an explicitly bound empty collection is allowed.</summary>
+    public bool AllowEmptyCollection { get; }
+
+    /// <summary>Whether tooling should interpret the value as supporting wildcard syntax.</summary>
+    public bool SupportsWildcards { get; }
+
+    /// <summary>Whether any parameter-set binding accepts pipeline input.</summary>
+    public bool AcceptsPipelineInput => Bindings.Any(static binding =>
+        binding.ValueFromPipeline || binding.ValueFromPipelineByPropertyName);
 }
 
 /// <summary>Supported PowerShell validation metadata preserved by typed compilation.</summary>
@@ -292,7 +327,10 @@ public sealed class PowerShellCompilationSpec
         if ((capabilities & ~(PowerShellCompilationCapability.PowerShellStreams |
                               PowerShellCompilationCapability.LocalFunctionCalls |
                               PowerShellCompilationCapability.BoundParameters |
-                              PowerShellCompilationCapability.PowerShellObjects)) != 0)
+                              PowerShellCompilationCapability.PowerShellObjects |
+                              PowerShellCompilationCapability.ExecutableParameterBinding |
+                              PowerShellCompilationCapability.PipelineParameterBinding |
+                              PowerShellCompilationCapability.PowerShellHostTypes)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

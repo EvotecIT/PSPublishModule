@@ -38,15 +38,25 @@ internal static class PowerShellTypedExecutableEmitter
         foreach (var parameter in parameters)
             PowerShellTypedExecutableParameterPolicy.EnsureSupported(parameter);
         var analyzedParameters = scriptUnit.Parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
-        var parameterSpecs = string.Join(Environment.NewLine, parameters.Select(parameter =>
+        var commandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(ast.ParamBlock);
+        var hasExplicitPositions = analyzedParameters.Values
+            .SelectMany(static parameter => parameter.Bindings)
+            .Any(static binding => binding.Position.HasValue);
+        var parameterSpecs = string.Join(Environment.NewLine, parameters.Select((parameter, index) =>
         {
             var metadata = analyzedParameters[parameter.Name.VariablePath.UserPath];
+            var position = metadata.Bindings.Select(static binding => binding.Position).FirstOrDefault(static value => value.HasValue);
+            if (!position.HasValue && commandBinding.PositionalBinding && !hasExplicitPositions)
+                position = index;
             return "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(metadata.Name) + ", typeof(" +
                    PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + "), " +
                    (metadata.IsMandatory ? "true" : "false") + ", " +
                    (metadata.IsSwitch ? "true" : "false") + ", " +
+                   (position.HasValue ? position.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null") + ", " +
                    GenerateStringArray(metadata.Aliases) + ", " +
                    (metadata.AllowNull ? "true" : "false") + ", " +
+                   (metadata.AllowEmptyString ? "true" : "false") + ", " +
+                   (metadata.AllowEmptyCollection ? "true" : "false") + ", " +
                    GenerateValidations(metadata.Validations) + "),";
         }));
         var arguments = parameters.Select(parameter =>

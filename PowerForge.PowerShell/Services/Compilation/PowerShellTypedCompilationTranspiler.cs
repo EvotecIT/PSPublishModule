@@ -37,10 +37,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             typeName,
             targetFramework,
             excludedMethods: null,
-            PowerShellCompilationCapability.PowerShellStreams |
-            PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters |
-            PowerShellCompilationCapability.PowerShellObjects);
+            PowerShellCompilationCapabilities.BinaryModule);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -370,7 +367,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresPowerShellCommandRegions,
             GetFunctionAliases(source.Function),
             emitted.RequiresPowerShellBoundParameters,
-            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function));
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
+            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
 
     private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
         => new(
@@ -389,13 +387,15 @@ public sealed class PowerShellTypedCompilationTranspiler
                         metadata.IsSwitch,
                         metadata.Aliases,
                         metadata.AllowNull,
-                        metadata.Validations);
+                        metadata.Validations,
+                        metadata.Bindings);
                 })
                 .ToArray(),
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function),
             emitted.RequiresPowerShellBoundParameters,
             emitted.RequiresPowerShellStreams,
-            emitted.RequiresPowerShellCommandRegions);
+            emitted.RequiresPowerShellCommandRegions,
+            PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock));
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
         => new(

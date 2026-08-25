@@ -59,6 +59,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             throw Error(command, $"Local function '{signature.SourceName}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed.");
         if (signature.ReturnType.IsArray && !IsDirectLocalFunctionOutput(command))
             throw Error(command, $"Local function '{signature.SourceName}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed directly.");
+        if (signature.Parameters.SelectMany(static parameter => parameter.Bindings)
+            .Any(static binding => !string.IsNullOrWhiteSpace(binding.ParameterSetName)))
+            throw Error(command, $"Local function '{signature.SourceName}' uses named parameter sets whose selection must remain on the PowerShell binding path.");
 
         var bound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var positionalIndex = 0;
@@ -93,6 +96,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
             if (elements[index] is not ExpressionAst positional)
                 throw Error(elements[index], "Typed local function calls accept only scalar named or positional arguments; splatting and dynamic command elements require PowerShell.");
+            if (!signature.CommandBinding.PositionalBinding ||
+                signature.Parameters.SelectMany(static parameter => parameter.Bindings).Any(static binding => binding.Position.HasValue))
+                throw Error(positional, $"Local function '{signature.SourceName}' uses an explicit positional-binding contract that is not represented by source-order typed calls.");
             while (positionalIndex < signature.Parameters.Length && bound.ContainsKey(signature.Parameters[positionalIndex].Name))
                 positionalIndex++;
             if (positionalIndex >= signature.Parameters.Length)

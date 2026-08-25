@@ -43,6 +43,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
         HashSet<string> localVariables,
+        string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ISet<string>? localFunctionNames,
         bool isScriptUnit)
@@ -57,18 +58,34 @@ public sealed partial class PowerShellCompilationAnalyzer
         foreach (var parameter in paramBlock.Parameters)
         {
             var type = parameter.StaticType;
-            if (!IsSupportedParameterType(type))
+            var hasExplicitType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            var typeCapabilities = hasExplicitType
+                ? PowerShellCompilationParameterTypePolicy.Classify(type, targetFramework)
+                : PowerShellCompilationParameterTypeCapability.None;
+            if (!typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             {
                 diagnostics.Add(CreateDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
-                    $"Parameter '${parameter.Name.VariablePath.UserPath}' must declare a supported scalar or one-dimensional array type; resolved type was '{type.FullName}'.",
+                    hasExplicitType
+                        ? $"Parameter '${parameter.Name.VariablePath.UserPath}' uses CLR type '{type.FullName}', which cannot be represented by the generated typed method surface."
+                        : $"Parameter '${parameter.Name.VariablePath.UserPath}' is untyped; add an explicit type before compiling it to a CLR method.",
+                    file,
+                    parameter.Extent,
+                    PowerShellCompilationFeatureIds.ParameterType));
+            }
+            else if (typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.PowerShellHost) &&
+                     !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
+                    $"Parameter '${parameter.Name.VariablePath.UserPath}' uses PowerShell host type '{type.FullName}', which requires a binary-module host capability.",
                     file,
                     parameter.Extent,
                     PowerShellCompilationFeatureIds.ParameterType));
             }
             else if (isScriptUnit &&
                      capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
-                     !PowerShellTypedExecutableParameterPolicy.IsSupported(type))
+                     !typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ProcessArgument))
             {
                 diagnostics.Add(CreateDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
@@ -79,15 +96,21 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
 
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
+            var bindings = GetParameterBindings(parameter);
             result.Add(new PowerShellCompilationParameter(
                 parameter.Name.VariablePath.UserPath,
                 (isSwitch ? typeof(bool) : type).FullName ?? type.Name,
                 parameter.DefaultValue is not null,
-                IsMandatoryParameter(parameter),
+                bindings.Length > 0 && bindings.All(static binding => binding.Mandatory),
                 isSwitch,
                 GetAliases(parameter),
                 HasMetadataAttribute(parameter, "AllowNull"),
-                GetValidations(parameter)));
+                GetValidations(parameter),
+                typeCapabilities,
+                bindings,
+                HasMetadataAttribute(parameter, "AllowEmptyString"),
+                HasMetadataAttribute(parameter, "AllowEmptyCollection"),
+                HasMetadataAttribute(parameter, "SupportsWildcards")));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
@@ -107,8 +130,50 @@ public sealed partial class PowerShellCompilationAnalyzer
         return result.ToArray();
     }
 
-    private static bool IsSupportedParameterType(Type type)
-        => type == typeof(System.Management.Automation.SwitchParameter) ||
-           SupportedParameterTypes.Contains(type) ||
-           type.IsArray && type.GetArrayRank() == 1 && SupportedParameterTypes.Contains(type.GetElementType()!);
+    private static PowerShellCompilationParameterBinding[] GetParameterBindings(ParameterAst parameter)
+    {
+        var attributes = parameter.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
+            .ToArray();
+        if (attributes.Length == 0)
+            return new[] { new PowerShellCompilationParameterBinding() };
+
+        return attributes.Select(attribute =>
+        {
+            var setName = GetNamedString(attribute, "ParameterSetName");
+            if (setName.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
+                setName = string.Empty;
+            return new PowerShellCompilationParameterBinding(
+                setName,
+                GetNamedBoolean(attribute, "Mandatory"),
+                GetNamedInteger(attribute, "Position"),
+                GetNamedBoolean(attribute, "ValueFromPipeline"),
+                GetNamedBoolean(attribute, "ValueFromPipelineByPropertyName"),
+                GetNamedBoolean(attribute, "ValueFromRemainingArguments"),
+                GetNamedBoolean(attribute, "DontShow"),
+                GetNamedString(attribute, "HelpMessage"));
+        }).ToArray();
+    }
+
+    private static bool GetNamedBoolean(AttributeAst attribute, string name)
+    {
+        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
+            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return argument is not null && TryGetBooleanAttributeValue(argument, out var value) && value;
+    }
+
+    private static int? GetNamedInteger(AttributeAst attribute, string name)
+    {
+        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
+            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return argument is not null && TryGetIntegerAttributeValue(argument, out var value) ? value : null;
+    }
+
+    private static string GetNamedString(AttributeAst attribute, string name)
+    {
+        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
+            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return argument is not null && TryGetStringAttributeValue(argument, out var value) ? value : string.Empty;
+    }
 }
