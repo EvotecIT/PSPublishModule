@@ -314,6 +314,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var generatedRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var projectDirectoriesByEvaluation = new Dictionary<string, string>(StringComparer.Ordinal);
+        var requestsByEvaluation = new Dictionary<string, ProjectEvaluationRequest>(StringComparer.Ordinal);
         var buildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var msBuildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -370,6 +371,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .ToArray();
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
                 projectDirectoriesByEvaluation[visitKey] = projectDirectory;
+                requestsByEvaluation[visitKey] = request;
                 buildInputsByEvaluation[visitKey] = evaluation.BuildInputs
                     .Concat(new[] { request.ProjectPath })
                     .Distinct(comparison)
@@ -402,6 +404,43 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        var provenNoBuildPublishInputs = new HashSet<string>(comparison);
+        if (buildPlan?.NoBuildInPublish == true)
+        {
+            foreach (IGrouping<string, (string EvaluationKey, EvaluatedPublishInput Input)> group in
+                     evaluatedPublishInputs.GroupBy(entry => entry.EvaluationKey, StringComparer.Ordinal))
+            {
+                string evaluationKey = group.Key;
+                string[] trustedInputs = group
+                    .Where(entry => entry.Input.IsSdkDefined &&
+                        IsTrustedSdkGeneratedPublishInput(
+                            entry.Input.FullPath,
+                            generatedRootsByEvaluation[evaluationKey],
+                            projectDirectoriesByEvaluation[evaluationKey],
+                            directories))
+                    .Select(entry => entry.Input.FullPath)
+                    .Distinct(comparison)
+                    .ToArray();
+                if (trustedInputs.Length == 0 ||
+                    !requestsByEvaluation.TryGetValue(
+                        evaluationKey,
+                        out ProjectEvaluationRequest? request) ||
+                    !TryProveControlledGeneratedOutputs(
+                        request,
+                        trustedInputs,
+                        buildInputsByEvaluation[evaluationKey],
+                        msBuildInputsByEvaluation[evaluationKey],
+                        pathMapsByEvaluation[evaluationKey],
+                        verifiedPackagesByEvaluation[evaluationKey],
+                        controlledGeneratedOutputProofs))
+                {
+                    continue;
+                }
+
+                provenNoBuildPublishInputs.UnionWith(trustedInputs);
+            }
+        }
+
         foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
         {
             bool trustedGeneratedOutput = publishInput.IsSdkDefined &&
@@ -409,7 +448,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     publishInput.FullPath,
                     generatedRootsByEvaluation[evaluationKey],
                     projectDirectoriesByEvaluation[evaluationKey],
-                    directories);
+                    directories) &&
+                (buildPlan?.NoBuildInPublish != true ||
+                 provenNoBuildPublishInputs.Contains(publishInput.FullPath));
             if (trustedGeneratedOutput)
                 continue;
 
@@ -434,9 +475,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     expectedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
                     directories) &&
-                TryProveControlledGeneratedOutput(
+                TryProveControlledGeneratedOutputs(
                     referencedProject,
-                    output.OutputPath,
+                    new[] { output.OutputPath },
                     buildInputsByEvaluation.TryGetValue(
                         referencedProject.BuildVisitKey(),
                         out string[]? evaluatedBuildInputs)

@@ -123,20 +123,39 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool TryProveControlledGeneratedOutput(
+    private static bool TryProveControlledGeneratedOutputs(
         ProjectEvaluationRequest request,
-        string candidatePath,
+        IReadOnlyCollection<string> candidatePaths,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> evaluatedMsBuildInputs,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
     {
-        string fullCandidatePath = Path.GetFullPath(candidatePath);
-        string cacheKey = request.BuildVisitKey() + "\0" +
-            (IsWindows() ? fullCandidatePath.ToUpperInvariant() : fullCandidatePath);
-        if (cache.TryGetValue(cacheKey, out bool cachedResult))
-            return cachedResult;
+        StringComparer comparer = IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        string[] fullCandidatePaths = candidatePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(comparer)
+            .ToArray();
+        if (fullCandidatePaths.Length == 0)
+            return true;
+
+        bool allCached = true;
+        foreach (string fullCandidatePath in fullCandidatePaths)
+        {
+            if (!cache.TryGetValue(BuildCacheKey(fullCandidatePath), out bool cachedResult))
+            {
+                allCached = false;
+                continue;
+            }
+            if (!cachedResult)
+                return false;
+        }
+        if (allCached)
+            return true;
 
         string controlledOutputRoot = Path.Combine(
             Path.GetTempPath(),
@@ -145,8 +164,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string? controlledGitRoot = null;
         try
         {
-            if (!File.Exists(fullCandidatePath))
-                return Cache(false);
+            if (fullCandidatePaths.Any(path => !File.Exists(path)))
+                return CacheAll(false);
             Directory.CreateDirectory(controlledOutputRoot);
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
@@ -157,7 +176,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
-                return Cache(false);
+                return CacheAll(false);
             }
             if (!TryCreateControlledBuildEnvironment(
                     request.EnvironmentVariables,
@@ -166,7 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
-                return Cache(false);
+                return CacheAll(false);
             }
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
@@ -175,7 +194,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     controlledSourceRoot,
                     controlledProjectPath!))
-                return Cache(false);
+                return CacheAll(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
                 new XElement("configuration",
@@ -194,7 +213,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-verbosity:quiet",
                 "-restore",
                 "-target:Build",
-                "-getProperty:TargetPath",
                 "-getItem:FileWrites"
             };
             if (request.Configuration is not null)
@@ -206,7 +224,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledConfiguration))
                 {
-                    return Cache(false);
+                    return CacheAll(false);
                 }
                 arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(controlledConfiguration));
             }
@@ -219,7 +237,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledTargetFramework))
                 {
-                    return Cache(false);
+                    return CacheAll(false);
                 }
                 arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(controlledTargetFramework));
             }
@@ -241,7 +259,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledValue))
                 {
-                    return Cache(false);
+                    return CacheAll(false);
                 }
                 arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(controlledValue));
             }
@@ -253,7 +271,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledPathMap,
                     out controlledPathMap))
             {
-                return Cache(false);
+                return CacheAll(false);
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
             AppendControlledProofSafeguards(
@@ -269,53 +287,54 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledEnvironment,
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
-                return Cache(false);
+                return CacheAll(false);
 
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
-                return Cache(false);
+                return CacheAll(false);
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
-            if (!document.RootElement.TryGetProperty("Properties", out JsonElement properties) ||
-                !properties.TryGetProperty("TargetPath", out JsonElement targetPathElement) ||
-                targetPathElement.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(targetPathElement.GetString()) ||
-                !document.RootElement.TryGetProperty("Items", out JsonElement items) ||
+            if (!document.RootElement.TryGetProperty("Items", out JsonElement items) ||
                 !items.TryGetProperty("FileWrites", out JsonElement fileWrites) ||
                 fileWrites.ValueKind != JsonValueKind.Array)
             {
-                return Cache(false);
+                return CacheAll(false);
             }
 
-            string targetPath = Path.GetFullPath(targetPathElement.GetString()!);
-            StringComparer comparer = IsWindows()
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
-            string[] writtenPaths = fileWrites.EnumerateArray()
-                .Select(item => ReadItemText(item, "FullPath") ?? ReadItemText(item, "Identity"))
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(value => Path.GetFullPath(Path.IsPathRooted(value!)
-                    ? value!
-                    : Path.Combine(Path.GetDirectoryName(controlledProjectPath!)!, value!)))
-                .Where(File.Exists)
-                .Distinct(comparer)
-                .ToArray();
-            if (!writtenPaths.Contains(targetPath, comparer) ||
-                !File.Exists(targetPath) ||
-                !IsSameOrBelowBuildInputPath(targetPath, controlledOutputRoot))
+            bool allEquivalent = true;
+            foreach (string fullCandidatePath in fullCandidatePaths)
             {
-                return Cache(false);
+                bool equivalent = false;
+                if (IsSameOrBelowBuildInputPath(fullCandidatePath, controlledGitRoot!))
+                {
+                    string relativePath = FrameworkCompatibility.GetRelativePath(
+                        controlledGitRoot!,
+                        fullCandidatePath);
+                    string controlledCandidatePath = Path.GetFullPath(
+                        Path.Combine(controlledSourceRoot, relativePath));
+                    equivalent = IsSameOrBelowBuildInputPath(
+                            controlledCandidatePath,
+                            controlledSourceRoot) &&
+                        IsSameOrBelowBuildInputPath(
+                            controlledCandidatePath,
+                            controlledOutputRoot) &&
+                        File.Exists(controlledCandidatePath) &&
+                        AreControlledGeneratedOutputsEquivalent(
+                            fullCandidatePath,
+                            controlledCandidatePath);
+                }
+
+                cache[BuildCacheKey(fullCandidatePath)] = equivalent;
+                allEquivalent &= equivalent;
             }
 
-            return Cache(AreControlledGeneratedOutputsEquivalent(
-                fullCandidatePath,
-                targetPath));
+            return allEquivalent;
         }
         catch
         {
             // A generated output is trusted only when the controlled rebuild proves it.
-            return Cache(false);
+            return CacheAll(false);
         }
         finally
         {
@@ -331,9 +350,14 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        bool Cache(bool result)
+        string BuildCacheKey(string path)
+            => request.BuildVisitKey() + "\0" +
+               (IsWindows() ? path.ToUpperInvariant() : path);
+
+        bool CacheAll(bool result)
         {
-            cache[cacheKey] = result;
+            foreach (string path in fullCandidatePaths)
+                cache[BuildCacheKey(path)] = result;
             return result;
         }
     }
