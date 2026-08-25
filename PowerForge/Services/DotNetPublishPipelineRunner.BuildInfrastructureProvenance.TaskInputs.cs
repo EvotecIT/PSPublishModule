@@ -42,6 +42,8 @@ public sealed partial class DotNetPublishPipelineRunner
                          RegexOptions.CultureInvariant))
             {
                 string propertyName = match.Groups[1].Value;
+                if (HasTaskOutputAssignment(relatedDocuments, "PropertyName", propertyName))
+                    return true;
                 foreach (XElement property in relatedDocuments
                              .SelectMany(related => related.Descendants())
                              .Where(element =>
@@ -61,6 +63,8 @@ public sealed partial class DotNetPublishPipelineRunner
                          RegexOptions.CultureInvariant))
             {
                 string itemName = match.Groups[1].Value;
+                if (HasTaskOutputAssignment(relatedDocuments, "ItemName", itemName))
+                    return true;
                 foreach (XElement item in relatedDocuments
                              .SelectMany(related => related.Descendants())
                              .Where(element =>
@@ -94,6 +98,39 @@ public sealed partial class DotNetPublishPipelineRunner
                     foreach (XAttribute attribute in metadata.Attributes())
                         pending.Enqueue(attribute.Value);
                 }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasTaskOutputAssignment(
+        IReadOnlyCollection<XDocument> relatedDocuments,
+        string assignmentAttributeName,
+        string referencedName)
+    {
+        foreach (XElement output in relatedDocuments
+                     .SelectMany(related => related.Descendants())
+                     .Where(element =>
+                         element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
+                         element.Parent is not null &&
+                         IsControlledBuildTaskElement(element.Parent)))
+        {
+            string? assignedName = output.Attributes()
+                .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                    assignmentAttributeName,
+                    StringComparison.OrdinalIgnoreCase))?
+                .Value;
+            if (string.IsNullOrWhiteSpace(assignedName))
+                continue;
+
+            string decodedName = DecodeMsBuildEscapes(assignedName!);
+            if (decodedName.Equals(referencedName, StringComparison.OrdinalIgnoreCase) ||
+                decodedName.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                decodedName.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                decodedName.IndexOf("%(", StringComparison.Ordinal) >= 0)
+            {
+                return true;
             }
         }
 
