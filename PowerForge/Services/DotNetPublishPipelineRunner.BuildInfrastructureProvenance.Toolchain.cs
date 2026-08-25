@@ -42,7 +42,8 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static Dictionary<string, string?> CreateTrustedGitEnvironment(
-        IReadOnlyDictionary<string, string?>? requestedEnvironment = null)
+        IReadOnlyDictionary<string, string?>? requestedEnvironment = null,
+        IReadOnlyList<KeyValuePair<string, string>>? controlledConfiguration = null)
     {
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (requestedEnvironment is not null)
@@ -67,11 +68,20 @@ public sealed partial class DotNetPublishPipelineRunner
         environment["GIT_NO_REPLACE_OBJECTS"] = "1";
         environment["GIT_CONFIG_NOSYSTEM"] = "1";
         environment["GIT_CONFIG_GLOBAL"] = nullDevice;
-        environment["GIT_CONFIG_COUNT"] = "2";
-        environment["GIT_CONFIG_KEY_0"] = "core.hooksPath";
-        environment["GIT_CONFIG_VALUE_0"] = nullDevice;
-        environment["GIT_CONFIG_KEY_1"] = "core.fsmonitor";
-        environment["GIT_CONFIG_VALUE_1"] = "false";
+        var configuration = new List<KeyValuePair<string, string>>
+        {
+            new("core.hooksPath", nullDevice),
+            new("core.fsmonitor", "false")
+        };
+        if (controlledConfiguration is not null)
+            configuration.AddRange(controlledConfiguration);
+        environment["GIT_CONFIG_COUNT"] = configuration.Count.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        for (int index = 0; index < configuration.Count; index++)
+        {
+            environment["GIT_CONFIG_KEY_" + index] = configuration[index].Key;
+            environment["GIT_CONFIG_VALUE_" + index] = configuration[index].Value;
+        }
         environment["GIT_TERMINAL_PROMPT"] = "0";
         environment["GCM_INTERACTIVE"] = "Never";
         environment["GIT_OPTIONAL_LOCKS"] = "0";

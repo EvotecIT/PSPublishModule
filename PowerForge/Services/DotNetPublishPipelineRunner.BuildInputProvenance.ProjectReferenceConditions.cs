@@ -92,7 +92,7 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-getProperty:" + propertyName);
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
-        if (request.TargetFramework is not null)
+        if (request.HasExplicitTargetFramework)
             arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,

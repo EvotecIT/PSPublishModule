@@ -376,7 +376,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         foreach (string targetFramework in evaluation.TargetFrameworks)
                             pending.Enqueue(request.ForProject(request.ProjectPath, targetFramework));
                     }
-                    else
+                    if (request.TargetFramework is not null || evaluation.TargetFrameworks.Length == 0)
                     {
                         foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
                             pending.Enqueue(request.ForProject(projectReference));
@@ -574,7 +574,7 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-target:ResolveReferences");
             arguments.Add("-getItem:_MSBuildProjectReferenceExistent");
         }
-        if (request.TargetFramework is not null)
+        if (request.HasExplicitTargetFramework)
         {
             arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         }
@@ -982,7 +982,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string workingDirectory,
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string?>? environmentVariables,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        IReadOnlyList<KeyValuePair<string, string>>? controlledGitConfiguration = null)
     {
         string effectiveFileName = fileName;
         IReadOnlyList<string> effectiveArguments = arguments;
@@ -997,7 +998,9 @@ public sealed partial class DotNetPublishPipelineRunner
             effectiveArguments = new[] { "--no-replace-objects" }
                 .Concat(arguments)
                 .ToArray();
-            environmentVariables = CreateTrustedGitEnvironment(environmentVariables);
+            environmentVariables = CreateTrustedGitEnvironment(
+                environmentVariables,
+                controlledGitConfiguration);
         }
         return RunProcessCore(
             effectiveFileName,

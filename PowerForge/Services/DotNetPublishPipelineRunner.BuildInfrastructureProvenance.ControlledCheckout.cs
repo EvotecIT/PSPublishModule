@@ -377,6 +377,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string checkoutRoot,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> evaluatedMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
         out string? gitRoot,
         out string? controlledProjectPath)
     {
@@ -406,15 +407,17 @@ public sealed partial class DotNetPublishPipelineRunner
             var checkout = RunBuildInputEvaluationProcess(
                 "git",
                 gitRoot!,
-                BuildControlledGitArguments(
-                    filterNames,
+                new[]
+                {
                     "worktree",
                     "add",
                     "--detach",
                     checkoutRoot,
-                    revision!),
+                    revision!
+                },
                 environmentVariables: null,
-                TimeSpan.FromMinutes(2));
+                TimeSpan.FromMinutes(2),
+                BuildControlledGitConfiguration(filterNames));
             if (checkout.ExitCode != 0 || checkout.TimedOut || !File.Exists(controlledProjectPath))
                 return false;
 
@@ -458,24 +461,42 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledMsBuildInputs.Add(controlledInput);
             }
 
+            var controlledGlobalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+            {
+                if (!TryRemapControlledBuildValue(
+                        property.Value,
+                        gitRoot!,
+                        checkoutRoot,
+                        projectDirectory,
+                        out string controlledValue))
+                {
+                    return false;
+                }
+                controlledGlobalProperties[property.Key] = controlledValue;
+            }
+
             if (!HasOnlyControlledBuildFileInputs(
                     checkoutRoot,
                     controlledBuildInputs,
-                    controlledMsBuildInputs))
+                    controlledMsBuildInputs,
+                    controlledGlobalProperties))
                 return false;
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
             var controlledStatus = RunBuildInputEvaluationProcess(
                 "git",
                 checkoutRoot,
-                BuildControlledGitArguments(
-                    filterNames,
+                new[]
+                {
                     "status",
                     "--porcelain=v1",
                     "-z",
-                    "--untracked-files=all"),
+                    "--untracked-files=all"
+                },
                 environmentVariables: null,
-                TimeSpan.FromMinutes(1));
+                TimeSpan.FromMinutes(1),
+                BuildControlledGitConfiguration(filterNames));
             return string.Equals(revision, controlledRevision, StringComparison.OrdinalIgnoreCase) &&
                    controlledStatus.ExitCode == 0 &&
                    !controlledStatus.TimedOut &&

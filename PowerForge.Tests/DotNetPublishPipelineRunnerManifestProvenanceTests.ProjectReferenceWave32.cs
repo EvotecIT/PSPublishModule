@@ -80,8 +80,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                   <Target Name="MutateTrackedSourceAfterControlledBuild"
-                          AfterTargets="Rebuild"
-                          Condition="$([System.String]::Copy('$(OutDir)').Contains('powerforge-provenance-build-'))">
+                          AfterTargets="Build"
+                          Condition="'$(RestoreNoCache)' == 'true'">
                     <WriteLinesToFile File="$(MSBuildProjectDirectory)/Library.cs"
                                       Lines="public static class Library { public const int Mutated = 1; }"
                                       Overwrite="true" />

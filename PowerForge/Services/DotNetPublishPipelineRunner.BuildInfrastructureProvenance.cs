@@ -119,6 +119,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     evaluatedBuildInputs,
                     evaluatedMsBuildInputs,
+                    request.GlobalProperties,
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -172,10 +173,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(controlledConfiguration));
             }
-            if (request.TargetFramework is not null)
+            if (request.HasExplicitTargetFramework)
             {
                 if (!TryRemapControlledBuildValue(
-                        request.TargetFramework,
+                        request.TargetFramework!,
                         controlledGitRoot!,
                         controlledSourceRoot,
                         Path.GetDirectoryName(request.ProjectPath)!,
@@ -590,6 +591,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal string ProjectPath { get; }
         internal string? TargetFramework { get; }
+        internal bool HasExplicitTargetFramework => !string.IsNullOrEmpty(TargetFramework);
         internal string? Configuration { get; }
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }

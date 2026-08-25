@@ -350,7 +350,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.True(provenance.Dirty);
             Assert.Contains(
                 provenance.DirtyReasons,
-                reason => reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase));
+                reason => reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase) ||
+                          reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -210,30 +210,18 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
-    private static string[] BuildControlledGitArguments(
-        IEnumerable<string> filterNames,
-        params string[] command)
+    private static IReadOnlyList<KeyValuePair<string, string>> BuildControlledGitConfiguration(
+        IEnumerable<string> filterNames)
     {
-        var arguments = new List<string>
-        {
-            "-c",
-            "core.hooksPath=" + (IsWindows() ? "NUL" : "/dev/null"),
-            "-c",
-            "core.fsmonitor=false"
-        };
+        var configuration = new List<KeyValuePair<string, string>>();
         foreach (string filterName in filterNames)
         {
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".clean=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".smudge=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".process=");
-            arguments.Add("-c");
-            arguments.Add("filter." + filterName + ".required=false");
+            configuration.Add(new KeyValuePair<string, string>("filter." + filterName + ".clean", string.Empty));
+            configuration.Add(new KeyValuePair<string, string>("filter." + filterName + ".smudge", string.Empty));
+            configuration.Add(new KeyValuePair<string, string>("filter." + filterName + ".process", string.Empty));
+            configuration.Add(new KeyValuePair<string, string>("filter." + filterName + ".required", "false"));
         }
-        arguments.AddRange(command);
-        return arguments.ToArray();
+        return configuration;
     }
 
     private static bool TryInitializeControlledSubmodules(
@@ -259,22 +247,20 @@ public sealed partial class DotNetPublishPipelineRunner
         var update = RunBuildInputEvaluationProcess(
             "git",
             checkoutRoot,
-            BuildControlledGitArguments(filterNames, updateCommand),
+            updateCommand,
             environmentVariables: null,
-            TimeSpan.FromMinutes(2));
+            TimeSpan.FromMinutes(2),
+            BuildControlledGitConfiguration(filterNames));
         if (update.ExitCode != 0 || update.TimedOut)
             return false;
 
         var status = RunBuildInputEvaluationProcess(
             "git",
             checkoutRoot,
-            BuildControlledGitArguments(
-                filterNames,
-                "submodule",
-                "status",
-                "--recursive"),
+            new[] { "submodule", "status", "--recursive" },
             environmentVariables: null,
-            TimeSpan.FromMinutes(1));
+            TimeSpan.FromMinutes(1),
+            BuildControlledGitConfiguration(filterNames));
         return status.ExitCode == 0 &&
                !status.TimedOut &&
                status.StdOut.Split(

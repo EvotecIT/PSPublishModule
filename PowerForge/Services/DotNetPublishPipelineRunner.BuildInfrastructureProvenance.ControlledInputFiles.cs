@@ -40,12 +40,17 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static bool HasOnlyControlledBuildFileInputs(
         string checkoutRoot,
         IReadOnlyCollection<string> controlledInputs)
-        => HasOnlyControlledBuildFileInputs(checkoutRoot, controlledInputs, controlledInputs);
+        => HasOnlyControlledBuildFileInputs(
+            checkoutRoot,
+            controlledInputs,
+            controlledInputs,
+            evaluatedGlobalProperties: null);
 
     internal static bool HasOnlyControlledBuildFileInputs(
         string checkoutRoot,
         IReadOnlyCollection<string> controlledInputs,
-        IReadOnlyCollection<string> executableMsBuildInputs)
+        IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null)
     {
         try
         {
@@ -53,6 +58,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var controlledDocuments = new List<XDocument>();
+            var controlledDocumentSources = new List<(XDocument Document, string DeclaringPath)>();
+            var executableDocuments = new List<(XDocument Document, string Path)>();
             foreach (string path in controlledInputs)
             {
                 if (!File.Exists(path) ||
@@ -113,20 +120,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (isExecutableMsBuildInput)
                 {
                     controlledDocuments.Add(document);
-                    if (ContainsControlledBuildPropertyEscape(document) ||
-                        !HasOnlyControlledTaskLoadedFileInputs(
-                            document,
-                            path,
-                            checkoutRoot,
-                            ReadControlledCheckoutTextInput) ||
-                        !HasOnlyControlledLiteralTaskFileInputs(
-                            document,
-                            path,
-                            checkoutRoot,
-                            readLines: ReadControlledCheckoutTextInput))
-                    {
-                        return false;
-                    }
+                    controlledDocumentSources.Add((document, path));
+                    executableDocuments.Add((document, path));
                 }
                 if (document.DescendantNodes()
                     .OfType<XText>()
@@ -139,6 +134,26 @@ public sealed partial class DotNetPublishPipelineRunner
                                       checkoutRoot) ||
                                   ContainsUncontrolledEnvironmentReference(value) ||
                                   ContainsUncontrolledFileSystemPropertyFunction(value)))
+                {
+                    return false;
+                }
+            }
+
+            foreach ((XDocument document, string path) in executableDocuments)
+            {
+                if (ContainsControlledBuildPropertyEscape(document) ||
+                    !HasOnlyControlledTaskLoadedFileInputs(
+                        document,
+                        path,
+                        checkoutRoot,
+                        ReadControlledCheckoutTextInput) ||
+                    !HasOnlyControlledLiteralTaskFileInputs(
+                        document,
+                        path,
+                        checkoutRoot,
+                        controlledDocumentSources,
+                        evaluatedGlobalProperties,
+                        readLines: ReadControlledCheckoutTextInput))
                 {
                     return false;
                 }

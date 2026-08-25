@@ -280,27 +280,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 } while (changed);
 
                 var controlledDocuments = new List<XDocument>();
+                var controlledDocumentSources = new List<(XDocument Document, string DeclaringPath)>();
+                var executableDocuments = new List<(XDocument Document, string DeclaringPath)>();
                 foreach ((string name, string declaringPath, string packageDirectory, _, XDocument document) in documents)
                 {
                     bool executable = executableNames.Contains(name);
                     if (executable)
                     {
                         controlledDocuments.Add(document);
-                        if (ContainsControlledBuildPropertyEscape(document) ||
-                            !HasOnlyControlledTaskLoadedFileInputs(
-                                document,
-                                declaringPath,
-                                "package-root",
-                                ReadControlledPackageTextInput) ||
-                            !HasOnlyControlledLiteralTaskFileInputs(
-                                document,
-                                declaringPath,
-                                "package-root",
-                                IsControlledPackageInput,
-                                ReadControlledPackageTextInput))
-                        {
-                            return false;
-                        }
+                        controlledDocumentSources.Add((document, declaringPath));
+                        executableDocuments.Add((document, declaringPath));
                     }
                     if (document.DescendantNodes()
                             .OfType<XText>()
@@ -313,6 +302,26 @@ public sealed partial class DotNetPublishPipelineRunner
                                               "package-root") ||
                                           ContainsUncontrolledEnvironmentReference(value) ||
                                           ContainsUncontrolledFileSystemPropertyFunction(value)))
+                    {
+                        return false;
+                    }
+                }
+                foreach ((XDocument document, string declaringPath) in executableDocuments)
+                {
+                    if (ContainsControlledBuildPropertyEscape(document) ||
+                        !HasOnlyControlledTaskLoadedFileInputs(
+                            document,
+                            declaringPath,
+                            "package-root",
+                            ReadControlledPackageTextInput) ||
+                        !HasOnlyControlledLiteralTaskFileInputs(
+                            document,
+                            declaringPath,
+                            "package-root",
+                            controlledDocumentSources,
+                            evaluatedGlobalProperties: null,
+                            isControlledInput: IsControlledPackageInput,
+                            readLines: ReadControlledPackageTextInput))
                     {
                         return false;
                     }

@@ -73,14 +73,16 @@ public sealed partial class DotNetPublishPipelineRunner
         var status = RunBuildInputEvaluationProcess(
             "git",
             repositoryRoot,
-            BuildControlledGitArguments(
-                filterNames,
+            new[]
+            {
                 "status",
                 "--porcelain=v1",
                 "-z",
-                "--untracked-files=all"),
+                "--untracked-files=all"
+            },
             environmentVariables: null,
-            TimeSpan.FromSeconds(30));
+            TimeSpan.FromSeconds(30),
+            BuildControlledGitConfiguration(filterNames));
         return status.ExitCode == 0 && !status.TimedOut && status.StdOut.Length == 0;
     }
 
