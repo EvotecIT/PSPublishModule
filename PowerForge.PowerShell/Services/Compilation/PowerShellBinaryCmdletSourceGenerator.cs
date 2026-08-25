@@ -35,7 +35,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             try
             {
                 var descriptor = CreateDescriptor(method);
-                ValidateDescriptor(descriptor);
+                ValidateDescriptor(descriptor, targetFramework);
                 descriptors.Add(descriptor);
             }
             catch (InvalidOperationException ex)
@@ -94,7 +94,10 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             filtered.SourcePaths);
     }
 
-    internal static string Generate(PowerShellTypedCompilationResult typed, string[]? exportedFunctions = null)
+    internal static string Generate(
+        PowerShellTypedCompilationResult typed,
+        string[]? exportedFunctions = null,
+        string? targetFramework = null)
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var cmdlets = typed.Methods
@@ -130,7 +133,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine();
         }
         foreach (var cmdlet in cmdlets)
-            AppendCmdlet(builder, typed, cmdlet);
+            AppendCmdlet(builder, typed, cmdlet, targetFramework);
         return builder.ToString();
     }
 
@@ -147,7 +150,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         return new CmdletDescriptor(method, verb, noun, PowerShellCSharpMethodEmitter.SanitizeIdentifier(verb + noun + "Command"));
     }
 
-    private static void ValidateDescriptor(CmdletDescriptor cmdlet)
+    private static void ValidateDescriptor(CmdletDescriptor cmdlet, string? targetFramework)
     {
         var renamedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
@@ -166,11 +169,49 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         });
         if (reservedParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
+        if (!cmdlet.Method.IsAdvancedFunction)
+        {
+            var generatedCommonNames = PowerShellCommonParameterPolicy
+                .GetStandard(isAdvanced: true, targetFramework)
+                .SelectMany(static parameter => new[] { parameter.Name, parameter.Alias })
+                .ToArray();
+            var abbreviation = FindNewCommonParameterAbbreviation(cmdlet.Method.Parameters, generatedCommonNames);
+            if (abbreviation is not null)
+                throw new InvalidOperationException(
+                    $"Function '{cmdlet.Method.SourceName}' parameter abbreviation '-{abbreviation}' becomes ambiguous with generated binary-cmdlet common parameters.");
+        }
     }
 
-    private static void AppendCmdlet(StringBuilder builder, PowerShellTypedCompilationResult typed, CmdletDescriptor cmdlet)
+    private static string? FindNewCommonParameterAbbreviation(
+        IReadOnlyList<PowerShellCompilationParameter> parameters,
+        IReadOnlyList<string> generatedCommonNames)
     {
-        ValidateDescriptor(cmdlet);
+        foreach (var parameter in parameters)
+        {
+            foreach (var bindingName in new[] { parameter.Name }.Concat(parameter.Aliases))
+            {
+                for (var length = 1; length < bindingName.Length; length++)
+                {
+                    var prefix = bindingName.Substring(0, length);
+                    var authoredOwners = parameters.Count(candidate =>
+                        new[] { candidate.Name }.Concat(candidate.Aliases)
+                            .Any(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+                    if (authoredOwners == 1 && generatedCommonNames.Any(name =>
+                            name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                        return prefix;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void AppendCmdlet(
+        StringBuilder builder,
+        PowerShellTypedCompilationResult typed,
+        CmdletDescriptor cmdlet,
+        string? targetFramework)
+    {
+        ValidateDescriptor(cmdlet, targetFramework);
 
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");

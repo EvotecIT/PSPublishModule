@@ -149,7 +149,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         : exportedFunctions.Count(name => typed.Methods.Any(method => method.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase)));
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
-                        PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions),
+                        PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),
                         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 }
                 else
@@ -362,6 +362,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var extension = Path.GetExtension(spec.SourcePath);
         if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("PowerShell artifacts accept .ps1 and .psm1 source files.", nameof(spec));
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable &&
+            !extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Executable compilation requires a standalone .ps1 entrypoint; a .psm1 module has no unambiguous application entrypoint.", nameof(spec));
         if (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
         {
             var moduleManifestPath = spec.ModuleManifestPath!;

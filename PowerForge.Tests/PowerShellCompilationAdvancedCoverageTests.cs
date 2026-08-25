@@ -145,7 +145,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleContinuesTypedCodeAfterDiscardedCommandRegion()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Invoke-FrontierRegion { param([int] $Value) [int] $result = $Value; " +
+            "function Invoke-FrontierRegion { [CmdletBinding()] param([int] $Value) [int] $result = $Value; " +
             "$null = Write-Output 'hidden'; Write-Output 'visible'; $result += 1; return $result }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -169,9 +169,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModulePropagatesCommandRegionHostAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierRegionHelper { param([int] $Value) Write-Verbose 'detail'; Write-Output 'region'; " +
+            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Write-Verbose 'detail'; Write-Output 'region'; " +
             "[int] $result = $Value; $result += 1; return $result }; " +
-            "function Get-FrontierRegionOuter { param([int] $Value) return Get-FrontierRegionHelper -Value $Value }",
+            "function Get-FrontierRegionOuter { [CmdletBinding()] param([int] $Value) return Get-FrontierRegionHelper -Value $Value }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

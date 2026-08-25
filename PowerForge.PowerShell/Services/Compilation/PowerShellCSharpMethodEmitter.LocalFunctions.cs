@@ -55,6 +55,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var name = command.GetCommandName();
         if (name is null || !_localFunctions.TryGetValue(name, out var signature))
             throw Error(command, $"Command '{name ?? command.Extent.Text}' is not a statically known local function.");
+        if (signature.RequiresPowerShellCommandRegions && !IsDirectLocalFunctionOutput(command))
+            throw Error(command, $"Local function '{signature.SourceName}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed.");
         if (signature.ReturnType.IsArray && !IsDirectLocalFunctionOutput(command))
             throw Error(command, $"Local function '{signature.SourceName}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed directly.");
 

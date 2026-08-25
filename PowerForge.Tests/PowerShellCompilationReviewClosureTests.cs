@@ -137,7 +137,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleUsesCurrentCultureForValidatePattern()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Test-FrontierTurkishPattern { param([ValidatePattern('^i$')][string] $Value) return $Value }",
+            "function Test-FrontierTurkishPattern { [CmdletBinding()] param([ValidatePattern('^i$')][string] $Value) return $Value }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

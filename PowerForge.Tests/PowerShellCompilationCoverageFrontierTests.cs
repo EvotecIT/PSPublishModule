@@ -9,12 +9,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleCompilesCrossFileValidatedFunctionGraph()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierValue { param([int] $Value) return Get-ValidatedValue -InputValue $Value }",
+            "function Get-FrontierValue { [CmdletBinding()] param([int] $Value) return Get-ValidatedValue -InputValue $Value }",
             ".psm1");
         var helper = Path.Combine(fixture.RootPath, "Private.Helper.ps1");
         File.WriteAllText(
             helper,
-            "function Get-ValidatedValue { param([ValidateRange(1, 5)] [int] $InputValue) return $InputValue }");
+            "function Get-ValidatedValue { [CmdletBinding()] param([ValidateRange(1, 5)] [int] $InputValue) return $InputValue }");
         var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(
             PowerShellCompilationMode.Strict,
             new[] { fixture.ScriptPath, helper },
@@ -60,12 +60,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleEnforcesArrayValidationAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Invoke-ValidatedValues { param([string[]] $Values) return Get-ValidatedLength -Values $Values }",
+            "function Invoke-ValidatedValues { [CmdletBinding()] param([string[]] $Values) return Get-ValidatedLength -Values $Values }",
             ".psm1");
         var helper = Path.Combine(fixture.RootPath, "Private.ArrayValidation.ps1");
         File.WriteAllText(
             helper,
-            "function Get-ValidatedLength { param([ValidateNotNullOrEmpty()] [string[]] $Values) return $Values.Length }");
+            "function Get-ValidatedLength { [CmdletBinding()] param([ValidateNotNullOrEmpty()] [string[]] $Values) return $Values.Length }");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -153,7 +153,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleReadsAndMutatesIDictionaryParameter()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Set-FrontierHeader { param([System.Collections.IDictionary] $Headers, [string] $Name, [string] $Value) " +
+            "function Set-FrontierHeader { [CmdletBinding()] param([System.Collections.IDictionary] $Headers, [string] $Name, [string] $Value) " +
             "$Headers[$Name] = $Value; return $Headers[$Name] }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -196,7 +196,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleCapturesTypedLocalsInCommandRegion()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Write-FrontierValue { param([int] $Value) [int] $captured = $Value; Write-Output $captured }",
+            "function Write-FrontierValue { [CmdletBinding()] param([int] $Value) [int] $captured = $Value; Write-Output $captured }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

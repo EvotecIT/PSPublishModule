@@ -33,10 +33,10 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         {
             var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath).ToArray();
             if (acceptedLoaders.Length == 0 ||
-                !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath) ||
+                !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
-            var recurse = ReadLoaderOptions(command, rootPath);
+            var recurse = ReadLoaderOptions(command, rootPath, pathElementIndex);
             foreach (var loader in acceptedLoaders)
                 loaders[loader.StartOffset] = loader;
 
@@ -131,10 +131,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     private static bool IsAccessFailure(Exception exception)
         => exception is UnauthorizedAccessException or IOException or System.Security.SecurityException;
 
-    private static bool TryReadPathPattern(CommandAst command, out string relativePattern, out bool isLiteralPath)
+    private static bool TryReadPathPattern(
+        CommandAst command,
+        out string relativePattern,
+        out bool isLiteralPath,
+        out int pathElementIndex)
     {
         relativePattern = string.Empty;
         isLiteralPath = false;
+        pathElementIndex = -1;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
             if (command.CommandElements[index] is not CommandParameterAst parameter ||
@@ -144,26 +149,45 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             var argument = parameter.Argument;
             if (argument is null && index + 1 < command.CommandElements.Count)
                 argument = command.CommandElements[index + 1] as ExpressionAst;
-            if (argument is not ExpandableStringExpressionAst expandable ||
-                expandable.NestedExpressions.Count != 1 ||
-                expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
-                !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
+            if (!TryReadScriptRootPattern(argument, out relativePattern))
                 return false;
-            var match = ScriptRootPath.Match(expandable.Value);
-            if (!match.Success)
-                return false;
-            relativePattern = match.Groups["suffix"].Value.TrimStart('\\', '/');
             isLiteralPath = parameter.ParameterName.Equals("LiteralPath", StringComparison.OrdinalIgnoreCase);
+            pathElementIndex = index;
+            return true;
+        }
+
+        if (command.CommandElements.Count > 1 &&
+            command.CommandElements[1] is ExpressionAst positional &&
+            TryReadScriptRootPattern(positional, out relativePattern))
+        {
+            pathElementIndex = 1;
             return true;
         }
         return false;
     }
 
-    private static bool ReadLoaderOptions(CommandAst command, string sourcePath)
+    private static bool TryReadScriptRootPattern(ExpressionAst? argument, out string relativePattern)
+    {
+        relativePattern = string.Empty;
+        if (argument is not ExpandableStringExpressionAst expandable ||
+            expandable.NestedExpressions.Count != 1 ||
+            expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
+            !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var match = ScriptRootPath.Match(expandable.Value);
+        if (!match.Success)
+            return false;
+        relativePattern = match.Groups["suffix"].Value.TrimStart('\\', '/');
+        return true;
+    }
+
+    private static bool ReadLoaderOptions(CommandAst command, string sourcePath, int pathElementIndex)
     {
         var recurse = false;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
+            if (index == pathElementIndex && command.CommandElements[index] is ExpressionAst)
+                continue;
             if (command.CommandElements[index] is not CommandParameterAst parameter)
                 throw new InvalidOperationException(
                     $"Conventional module source discovery does not support loader argument '{command.CommandElements[index].Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; every value must belong to an explicitly modeled option.");

@@ -130,14 +130,17 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
             "function Get-AllowedLength { [CmdletBinding()] param([Parameter(Mandatory)] [AllowNull()] [int[]] $Values) return $Values.Length } " +
             "function Invoke-RequiredLength { return Get-RequiredLength -Values $null } " +
             "function Invoke-AllowedLength { return Get-AllowedLength -Values $null } " +
-            "Export-ModuleMember -Function Invoke-RequiredLength, Invoke-AllowedLength",
+            "Export-ModuleMember -Function Get-RequiredLength, Get-AllowedLength, Invoke-RequiredLength, Invoke-AllowedLength",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.MandatoryCollection",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -146,11 +149,110 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            $"Import-Module -Name '{escapedPath}' -Force; try {{ Invoke-RequiredLength; 'unexpected' }} catch {{ 'required=' + $_.Exception.Message }}; 'allowed=' + (Invoke-AllowedLength)");
+            $"Import-Module -Name '{escapedPath}' -Force; try {{ Invoke-RequiredLength; 'unexpected-null' }} catch {{ 'required-null=' + $_.Exception.Message }}; 'allowed-null=' + (Invoke-AllowedLength); try {{ Get-RequiredLength -Values @(); 'unexpected-empty' }} catch {{ 'required-empty=' + $_.Exception.Message }}; try {{ Get-AllowedLength -Values @(); 'unexpected-allowed-empty' }} catch {{ 'allowed-empty=' + $_.Exception.Message }}");
         Assert.Equal(0, run.ExitCode);
-        Assert.Contains("required=Mandatory parameter '-Values' does not allow null values.", run.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("allowed=0", run.StandardOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("unexpected", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("required-null=Mandatory parameter '-Values' does not allow null values.", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("allowed-null=0", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("required-empty=", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("allowed-empty=", run.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("unexpected-", run.StandardOutput, StringComparison.Ordinal);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("Values is null", generated, StringComparison.Ordinal);
+        Assert.Contains("Values is not null && Values.Length == 0", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesConsumedCommandRegionOutputByRoutingCallerToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-RegionHelper { Write-Output 'region'; return 7 } " +
+            "function Get-RegionConsumer { $value = Get-RegionHelper; return $value.Count } " +
+            "Export-ModuleMember -Function Get-RegionHelper, Get-RegionConsumer",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ConsumedRegionOutput",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("command-region success output", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-RegionConsumer");
+        Assert.Equal((0, "2", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesSimpleFunctionParameterAbbreviations()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-AbbreviationValue { param([string] $Value) return $Value }; Export-ModuleMember -Function Get-AbbreviationValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SimpleAbbreviation",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Contains(result.Manifest.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("becomes ambiguous", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-AbbreviationValue -V preserved");
+        Assert.Equal((0, "preserved", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_PositionalConventionalLoaderDiscoversAndStagesFunctions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$Public = @(Get-ChildItem \"$PSScriptRoot/Public/*.ps1\"); " +
+            "foreach ($Import in $Public) { . $Import.FullName }; Export-ModuleMember -Function Get-PositionalValue",
+            ".psm1");
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
+        var source = Path.Combine(fixture.RootPath, "Public", "Get-PositionalValue.ps1");
+        File.WriteAllText(source, "function Get-PositionalValue { return 23 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath);
+        Assert.Contains(source, resolved.CompilationSourceFiles, PowerShellCompilationPathSafety.PathComparer);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            resolved.SourcePath,
+            fixture.OutputPath,
+            "PowerForge.PositionalConventionalLoader",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
+            ModuleManifestPath = resolved.ModuleManifestPath
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-PositionalValue");
+        Assert.Equal((0, "23", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationMode.Strict)]
+    public void Build_ExecutableRejectsModuleSourceAtPublicBuilderBoundary(PowerShellCompilationMode mode)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { return 1 }", ".psm1");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InvalidModuleExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            mode);
+
+        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+
+        Assert.Contains(".ps1 entrypoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(fixture.OutputPath));
     }
 
     [Fact]

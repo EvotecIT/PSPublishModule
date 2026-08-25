@@ -141,7 +141,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Build_StrictBinaryModuleSimpleFunctionAcceptsSurplusArguments()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-SimpleValue { param([int] $Value) return $Value } Export-ModuleMember -Function Get-SimpleValue",
+            "function Get-SimpleValue { param([int] $Number) return $Number } Export-ModuleMember -Function Get-SimpleValue",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

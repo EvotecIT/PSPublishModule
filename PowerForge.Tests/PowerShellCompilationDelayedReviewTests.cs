@@ -144,7 +144,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModulePreservesNullArrayIndexFailure()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierArrayValue { param([int[]] $Values); return $Values[0] }; " +
+            "function Get-FrontierArrayValue { param([int[]] $Numbers); return $Numbers[0] }; " +
             "Export-ModuleMember -Function Get-FrontierArrayValue",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

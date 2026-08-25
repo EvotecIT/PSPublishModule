@@ -17,6 +17,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var fixture = ArtifactFixture.Create(
             """
             function Get-AllowedAverageMs {
+                [CmdletBinding()]
                 param([double] $BaselineMs, [double] $RelativeTolerance, [double] $AbsoluteToleranceMs)
                 $relativeCap = $BaselineMs * (1.0 + $RelativeTolerance)
                 $absoluteCap = $BaselineMs + $AbsoluteToleranceMs
@@ -167,6 +168,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 return $absoluteCap
             }
             function Get-Values {
+                [CmdletBinding()]
                 param([int[]] $Values)
                 return $Values
             }

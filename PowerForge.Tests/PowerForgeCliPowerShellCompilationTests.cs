@@ -271,7 +271,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         var baseline = Path.Combine(root, "census.json");
         Directory.CreateDirectory(product);
         var source = Path.Combine(product, "Functions.psm1");
-        File.WriteAllText(source, "function Add-TypedValue { param([int] $Value) [int] $result = $Value; $result += 1; return $result }");
+        File.WriteAllText(source, "function Add-TypedValue { param([int] $Number) [int] $result = $Number; $result += 1; return $result }");
 
         try
         {
