@@ -133,7 +133,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
              calledLocalFunctions.Any(static signature => signature.RequiresPowerShellStreams));
         _requiresPowerShellCommandRegions = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
             (runtimeTailStart >= 0 ||
-             typedStatements.Any(statement => PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables)) ||
+             typedStatements.Any(statement =>
+                 PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, _body, _localFunctionNames, availableVariables) ||
+                 PowerShellCommandIslandPolicy.TryGetCapturedRuntimeAssignment(statement, _body, _localFunctionNames, availableVariables, out _)) ||
              calledLocalFunctions.Any(static signature => signature.RequiresPowerShellCommandRegions));
         _requiresPowerShellRuntimeState = _capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics) &&
             (PowerShellRuntimeStateIntrinsicPolicy.RequiresHostBinding(typedStatements, _body, _targetFramework, _capabilities) ||
@@ -151,7 +153,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             parameterParts.Add("global::System.Action<string> __writeWarning");
         }
         if (_requiresPowerShellCommandRegions)
+        {
             parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+            parameterParts.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
+        }
         if (_requiresPowerShellRuntimeState)
         {
             parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
@@ -187,6 +192,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             {
                 EmitRuntimeRegion(statements.Skip(index).ToArray());
                 break;
+            }
+            if (_requiresPowerShellCommandRegions &&
+                PowerShellCommandIslandPolicy.TryGetCapturedRuntimeAssignment(
+                    statements[index], _body, _localFunctionNames, availableVariables, out var capturedAssignment))
+            {
+                EmitCapturedRuntimeAssignment(capturedAssignment);
+                continue;
             }
             if (_requiresPowerShellCommandRegions && PowerShellCommandIslandPolicy.IsRuntimeRegion(statements[index], _body, _localFunctionNames, availableVariables))
             {
@@ -282,6 +294,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             throw Error(assignment.Left, $"Assignment to read-only automatic variable '${variable.VariablePath.UserPath}' cannot be translated to typed CLR code.");
 
         var name = variable.VariablePath.UserPath;
+        if (PowerShellCommandIslandPolicy.TryGetCapturedRuntimeAssignment(
+                assignment,
+                _body,
+                _localFunctionNames,
+                _variables.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                out _))
+        {
+            InferCapturedRuntimeAssignmentType(assignment, variable);
+            return;
+        }
         var rightType = InferExpressionType(assignment.Right);
         if (rightType == typeof(void))
             throw Error(assignment.Right, $"Assignment to '${name}' uses a void CLR invocation whose PowerShell null result cannot be represented by an inferred CLR local.");

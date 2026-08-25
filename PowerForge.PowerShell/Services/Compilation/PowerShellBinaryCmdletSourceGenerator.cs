@@ -301,6 +301,18 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("            WriteObject(value, enumerateCollection: false);");
             builder.AppendLine("    }");
             builder.AppendLine();
+            builder.AppendLine("    private object? CapturePowerShellRegion(string script, object?[] arguments)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
+            builder.AppendLine($"        var dispatcher = {GetRuntimeRegionHostTypeName(typed)}.GetDispatcher(runspaceId);");
+            builder.AppendLine("        var values = dispatcher is null");
+            builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
+            builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
+            builder.AppendLine("        if (values.Count == 0) return null;");
+            builder.AppendLine("        if (values.Count == 1) return values[0]?.BaseObject;");
+            builder.AppendLine("        return global::System.Linq.Enumerable.Select(values, static value => value?.BaseObject).ToArray();");
+            builder.AppendLine("    }");
+            builder.AppendLine();
         }
         var lifecycleMethod = cmdlet.Method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)
             ? "EndProcessing"
@@ -312,7 +324,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[] { "WriteVerbose", "WriteDebug", "WriteWarning" });
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
-            arguments = arguments.Append("InvokePowerShellRegion");
+            arguments = arguments.Concat(new[] { "InvokePowerShellRegion", "CapturePowerShellRegion" });
         if (cmdlet.Method.RequiresPowerShellRuntimeState)
         {
             arguments = arguments.Concat(new[]
