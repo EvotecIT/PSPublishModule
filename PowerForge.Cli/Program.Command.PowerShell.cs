@@ -312,11 +312,17 @@ internal static partial class Program
                 return exitCode;
             }
 
-            logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.TotalUnits} units, {result.CompilableUnits} typed, {result.RuntimeFallbackUnits} fallback, {result.ParseErrorFiles} parse-error files.");
+            if (result.PostEmissionEvaluated)
+                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.EmittedFunctions}/{result.TotalFunctions} functions emitted ({result.EmittedFunctionCoveragePercentage:0.0}%), {result.DroppedEligibleFunctions} analyzer-eligible function(s) dropped after shaping, {result.ParseErrorFiles} parse-error files.");
+            else
+                logger.Info($"PowerShell compilation census: {result.SourceFiles} files, {result.CompilableUnits}/{result.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {result.ParseErrorFiles} parse-error files.");
             foreach (var product in result.Products)
             {
-                logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} typed ({product.CompilationCoveragePercentage:0.0}%), {product.AnalysisMilliseconds:0.0} ms.");
-                foreach (var feature in product.FeatureImpacts.Take(5))
+                if (product.Coverage.PostEmissionEvaluated)
+                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.Coverage.EmittedFunctions}/{product.Coverage.TotalFunctions} functions emitted ({product.Coverage.EmittedFunctionCoveragePercentage:0.0}%), {product.Coverage.TotalScriptUnits} script/init unit(s), {product.AnalysisMilliseconds:0.0} ms.");
+                else
+                    logger.Info($"{product.Name}: {product.SourceFiles} files, {product.CompilableUnits}/{product.TotalUnits} units structurally eligible; post-emission shaping was not evaluated, {product.AnalysisMilliseconds:0.0} ms.");
+                foreach (var feature in product.FunctionImpacts.Take(5))
                     logger.Warn($"  [{feature.FeatureId}] {feature.AffectedUnits} affected, {feature.VisibleSoleBlockerUnits} visible sole-blocker candidate(s), candidate coverage {feature.CandidateCoveragePercentage:0.0}%.");
                 var payload = product.DependencySummary.Where(static summary =>
                     summary.Kind is not PowerShellCompilationDependencyKind.PowerShellSource and not PowerShellCompilationDependencyKind.ModuleManifest).ToArray();
@@ -326,22 +332,24 @@ internal static partial class Program
                 if (resources.IncludedFiles + resources.ExcludedFiles + resources.UnclassifiedFiles > 0)
                     logger.Info($"  Resources: {resources.IncludedFiles} included, {resources.RequiredFiles} required, {resources.InferredFiles} inferred, {resources.ExcludedFiles} excluded, {resources.UnclassifiedFiles} unclassified ({resources.IncludedBytes + resources.ExcludedBytes + resources.UnclassifiedBytes} inventoried byte(s)).");
             }
-            if (result.Frontier.Length > 0)
+            if (result.FunctionFrontier.Length > 0)
             {
-                logger.Info("Observed compiler frontier (current visible blockers; not a guarantee that masked blockers will not appear):");
+                logger.Info("Observed emitted-function frontier (current visible blockers; not a guarantee that masked blockers will not appear):");
                 var rank = 0;
-                foreach (var feature in result.Frontier.Take(10))
+                foreach (var feature in result.FunctionFrontier.Take(10))
                 {
                     logger.Info($"  {++rank}. [{feature.FeatureId}] {feature.Title}: {feature.AffectedUnits} affected, {feature.VisibleSoleBlockerUnits} visible sole-blocker candidate(s), {feature.AffectedProducts} product(s), candidate coverage {feature.CandidateCoveragePercentage:0.0}%.");
                     logger.Info($"     {feature.Recommendation}");
                 }
             }
-            if (result.CoBlockers.Length > 0)
+            if (result.FunctionCoBlockers.Length > 0)
             {
-                logger.Info("Frequent co-blockers:");
-                foreach (var pair in result.CoBlockers.Take(5))
+                logger.Info("Frequent function co-blockers:");
+                foreach (var pair in result.FunctionCoBlockers.Take(5))
                     logger.Info($"  [{pair.FirstFeatureId}] + [{pair.SecondFeatureId}]: {pair.AffectedUnits} unit(s).");
             }
+            foreach (var drift in result.SourceDrifts)
+                logger.Error($"{drift.Product}: census source content differs from the baseline fingerprint.");
             foreach (var regression in result.Regressions)
                 logger.Error($"Census regression in {regression.Product}: {regression.Metric} was {regression.Baseline:0.###}, now {regression.Current:0.###}.");
             return exitCode;
