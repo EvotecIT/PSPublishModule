@@ -4,6 +4,53 @@ namespace PowerForge.Tests;
 
 public sealed class PowerShellCompilationCurrentReviewRegressionTests
 {
+    [Theory]
+    [InlineData("param([Alias('x')][string] $One, [Alias('x')][string] $Two); return $One + $Two")]
+    [InlineData("param([Alias('Two')][string] $One, [string] $Two); return $One + $Two")]
+    [InlineData("param([Alias('One')][string] $One); return $One")]
+    [InlineData("[CmdletBinding()] param([Alias('Verbose')][string] $Value); return $Value")]
+    [InlineData("[CmdletBinding()] param([string] $Verbose); return $Verbose")]
+    public void Build_PackagedExecutableRejectsAmbiguousParameterAliasOwnership(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.PackageAliasOwnership", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("ambiguous", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModuleRejectsRuntimeControlledExportContract()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 1 }; if ($true) { Export-ModuleMember -Function Get-PublicValue }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StrictConditionalExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("runtime-controlled", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Analyze_RoutesMixedExplicitAndTerminalNumericReturnTypesToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Value { param([bool] $Early) if ($Early) { return 1 }; 2L }");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("branch-specific runtime types", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void Build_StrictExecutableIncludesAdvancedCommonParametersInAbbreviationResolution()
     {

@@ -17,25 +17,33 @@ internal static class PowerShellPackagedParameterBindingPolicy
         var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var booleanParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parameterAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>())
+        var authoredParameters = (ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>()).ToArray();
+        var commonParameters = PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework);
+        foreach (var parameter in authoredParameters)
         {
             var name = parameter.Name.VariablePath.UserPath;
             parameters.Add(name);
-            foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
-            foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
-                parameterAliases[value.Value] = name;
             if (parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
                 switchParameters.Add(name);
             else if (parameter.StaticType == typeof(bool))
                 booleanParameters.Add(name);
         }
-        foreach (var commonParameter in PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework))
+        foreach (var commonParameter in commonParameters)
         {
-            parameters.Add(commonParameter.Name);
-            parameterAliases[commonParameter.Alias] = commonParameter.Name;
+            if (!parameters.Add(commonParameter.Name))
+                throw AmbiguousBindingName(commonParameter.Name, commonParameter.Name, commonParameter.Name);
             if (commonParameter.IsSwitch)
                 switchParameters.Add(commonParameter.Name);
         }
+        foreach (var parameter in authoredParameters)
+        {
+            var name = parameter.Name.VariablePath.UserPath;
+            foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
+            foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
+                AddAlias(parameterAliases, parameters, value.Value, name);
+        }
+        foreach (var commonParameter in commonParameters)
+            AddAlias(parameterAliases, parameters, commonParameter.Alias, commonParameter.Name);
         return new PowerShellPackagedParameterInitializers(
             GenerateInitializer(parameters),
             GenerateInitializer(switchParameters),
@@ -52,6 +60,23 @@ internal static class PowerShellPackagedParameterBindingPolicy
         => string.Join(", ", aliases
             .OrderBy(static alias => alias.Key, StringComparer.OrdinalIgnoreCase)
             .Select(static alias => $"[{PowerShellCSharpLiteral.QuoteString(alias.Key)}] = {PowerShellCSharpLiteral.QuoteString(alias.Value)}"));
+
+    private static void AddAlias(
+        IDictionary<string, string> aliases,
+        ISet<string> parameterNames,
+        string alias,
+        string owner)
+    {
+        if (parameterNames.Contains(alias))
+            throw AmbiguousBindingName(alias, owner, alias);
+        if (aliases.TryGetValue(alias, out var existingOwner))
+            throw AmbiguousBindingName(alias, owner, existingOwner);
+        aliases.Add(alias, owner);
+    }
+
+    private static InvalidOperationException AmbiguousBindingName(string name, string owner, string existingOwner)
+        => new(
+            $"Packaged parameter binding is ambiguous because binding name '{name}' for parameter '{owner}' conflicts with parameter '{existingOwner}' or one of its aliases.");
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
     {

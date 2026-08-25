@@ -13,13 +13,15 @@ internal sealed class PowerShellModuleExportContract
         string[] functions,
         string[] cmdlets,
         string[] aliases,
-        string[] variables)
+        string[] variables,
+        bool hasRuntimeControlledExports = false)
     {
         Commands = commands;
         Functions = functions;
         Cmdlets = cmdlets;
         Aliases = aliases;
         Variables = variables;
+        HasRuntimeControlledExports = hasRuntimeControlledExports;
     }
 
     internal CommandAst[] Commands { get; }
@@ -27,6 +29,7 @@ internal sealed class PowerShellModuleExportContract
     internal string[] Cmdlets { get; }
     internal string[] Aliases { get; }
     internal string[] Variables { get; }
+    internal bool HasRuntimeControlledExports { get; }
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
@@ -53,7 +56,8 @@ internal sealed class PowerShellModuleExportContract
                 Array.Empty<string>(),
                 Array.Empty<string>(),
                 Array.Empty<string>(),
-                Array.Empty<string>());
+                Array.Empty<string>(),
+                hasRuntimeControlledExports: true);
         }
         var values = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
         {

@@ -380,7 +380,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         {
             var current = InferExpressionType(terminal);
             if (current != typeof(void))
-                result = result is null ? current : UnifyTypes(result, current, terminal);
+            {
+                if (result is not null && result != current)
+                    throw Error(terminal, $"Terminal output type '{current.FullName}' differs from explicit return type '{result.FullName}'; preserving PowerShell's branch-specific runtime types requires fallback.");
+                result ??= current;
+            }
         }
 
         return result ?? typeof(void);

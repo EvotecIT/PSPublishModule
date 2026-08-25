@@ -118,6 +118,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
                     var exportContract = PowerShellModuleExportContract.TryRead(spec.SourcePath);
+                    if (spec.Mode == PowerShellCompilationMode.Strict && exportContract?.HasRuntimeControlledExports == true)
+                    {
+                        throw new InvalidOperationException(
+                            "Strict binary-module compilation rejects runtime-controlled Export-ModuleMember declarations because their export surface requires PowerShell execution; use Hybrid mode or unconditional literal exports.");
+                    }
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
                         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework);
