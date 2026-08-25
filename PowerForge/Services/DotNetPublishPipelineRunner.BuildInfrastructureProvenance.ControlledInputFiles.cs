@@ -50,10 +50,15 @@ public sealed partial class DotNetPublishPipelineRunner
         string checkoutRoot,
         IReadOnlyCollection<string> controlledInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
-        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null)
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
+        string? taskInputBaseDirectory = null)
     {
         try
         {
+            string normalizedTaskInputBaseDirectory = Path.GetFullPath(
+                taskInputBaseDirectory ?? checkoutRoot);
+            if (!IsSameOrBelowBuildInputPath(normalizedTaskInputBaseDirectory, checkoutRoot))
+                return false;
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -145,11 +150,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     !HasOnlyControlledTaskLoadedFileInputs(
                         document,
                         path,
+                        normalizedTaskInputBaseDirectory,
                         checkoutRoot,
                         ReadControlledCheckoutTextInput) ||
                     !HasOnlyControlledLiteralTaskFileInputs(
                         document,
                         path,
+                        normalizedTaskInputBaseDirectory,
                         checkoutRoot,
                         controlledDocumentSources,
                         evaluatedGlobalProperties,

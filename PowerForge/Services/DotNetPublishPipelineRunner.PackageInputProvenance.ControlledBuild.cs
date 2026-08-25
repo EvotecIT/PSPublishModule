@@ -312,11 +312,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         !HasOnlyControlledTaskLoadedFileInputs(
                             document,
                             declaringPath,
+                            Path.GetDirectoryName(declaringPath)!,
                             "package-root",
                             ReadControlledPackageTextInput) ||
                         !HasOnlyControlledLiteralTaskFileInputs(
                             document,
                             declaringPath,
+                            Path.GetDirectoryName(declaringPath)!,
                             "package-root",
                             controlledDocumentSources,
                             evaluatedGlobalProperties: null,

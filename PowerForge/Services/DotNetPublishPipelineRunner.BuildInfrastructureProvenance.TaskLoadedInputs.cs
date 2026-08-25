@@ -8,24 +8,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private const long MaximumControlledBuildTextInputBytes = 4L * 1024L * 1024L;
     private const int MaximumControlledTaskFileInputExpressions = 4096;
 
-    private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskFileInputAttributes =
-        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["AL"] = ["EmbedResources", "LinkResources", "ResponseFiles", "Sources", "TemplateFile", "Win32Icon", "Win32Resource"],
-            ["Copy"] = ["SourceFiles"],
-            ["Csc"] = ["ApplicationConfiguration", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
-            ["Fsc"] = ["ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
-            ["GenerateResource"] = ["References", "Sources", "StateFile"],
-            ["GetFileHash"] = ["Files"],
-            ["Hash"] = ["Items"],
-            ["Vbc"] = ["ApplicationConfiguration", "Resources", "ResponseFiles", "Sources", "Win32Icon", "Win32Resource"],
-            ["XslTransformation"] = ["XmlInputPaths", "XslInputPath"],
-            ["ZipDirectory"] = ["SourceDirectory"]
-        };
-
     private static bool HasOnlyControlledTaskLoadedFileInputs(
         XDocument document,
         string declaringPath,
+        string taskInputBaseDirectory,
         string allowedRoot,
         Func<string, string[]?> readLines)
     {
@@ -43,6 +29,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 !TryResolveControlledTaskInputPath(
                     fileValue!,
                     declaringPath,
+                    taskInputBaseDirectory,
                     allowedRoot,
                     out string inputPath))
             {
@@ -73,6 +60,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (TryResolveControlledTaskInputPath(
                         candidate,
                         declaringPath,
+                        taskInputBaseDirectory,
                         allowedRoot,
                         out string loadedInputPath) &&
                     (File.Exists(loadedInputPath) || Directory.Exists(loadedInputPath)) &&
@@ -124,6 +112,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasOnlyControlledLiteralTaskFileInputs(
         XDocument document,
         string declaringPath,
+        string taskInputBaseDirectory,
         string allowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties = null,
@@ -171,6 +160,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (!TryResolveControlledTaskInputPath(
                             candidate,
                             declaringPath,
+                            taskInputBaseDirectory,
                             allowedRoot,
                             out string inputPath))
                     {
@@ -391,13 +381,28 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringPath,
         string allowedRoot,
         out string inputPath)
+        => TryResolveControlledTaskInputPath(
+            value,
+            declaringPath,
+            Path.GetDirectoryName(Path.GetFullPath(declaringPath))!,
+            allowedRoot,
+            out inputPath);
+
+    private static bool TryResolveControlledTaskInputPath(
+        string value,
+        string declaringPath,
+        string taskInputBaseDirectory,
+        string allowedRoot,
+        out string inputPath)
     {
         inputPath = string.Empty;
         try
         {
             string root = Path.GetFullPath(allowedRoot);
             string declaringDirectory = Path.GetDirectoryName(Path.GetFullPath(declaringPath))!;
-            if (!IsSameOrBelowBuildInputPath(declaringDirectory, root))
+            string inputBaseDirectory = Path.GetFullPath(taskInputBaseDirectory);
+            if (!IsSameOrBelowBuildInputPath(declaringDirectory, root) ||
+                !IsSameOrBelowBuildInputPath(inputBaseDirectory, root))
                 return false;
 
             string thisFileDirectory = declaringDirectory.TrimEnd(
@@ -423,7 +428,7 @@ public sealed partial class DotNetPublishPipelineRunner
             inputPath = Path.GetFullPath(
                 Path.IsPathRooted(candidate)
                     ? candidate
-                    : Path.Combine(declaringDirectory, candidate));
+                    : Path.Combine(inputBaseDirectory, candidate));
             return IsSameOrBelowBuildInputPath(inputPath, root);
         }
         catch
