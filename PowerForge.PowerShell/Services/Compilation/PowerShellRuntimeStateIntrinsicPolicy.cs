@@ -170,9 +170,11 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         => body.ParamBlock?.Parameters.Any(parameter =>
                parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true ||
            body.FindAll(
-                   node => node is AssignmentStatementAst assignment &&
-                           PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } variable &&
-                           variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
+                   node => (node is AssignmentStatementAst assignment &&
+                               PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } variable &&
+                               variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) ||
+                           (node is ForEachStatementAst loop &&
+                               loop.Variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)),
                    searchNestedScriptBlocks: false)
                .Any();
 

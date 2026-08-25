@@ -133,6 +133,29 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_AttributesMultilineDeclarationBinaryShapeFailureToExactFunction()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Multiline Shape", Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "Module.psm1");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "function InvalidName" + Environment.NewLine + "{" + Environment.NewLine + "    return 2" + Environment.NewLine + "}");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+
+            var shape = Assert.Single(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.BinaryCmdletShape);
+            Assert.Equal(1, shape.AffectedUnits);
+            Assert.DoesNotContain(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_MatchesRepeatedDisplayNamesByNormalizedProductPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Identity Tests", Guid.NewGuid().ToString("N"));

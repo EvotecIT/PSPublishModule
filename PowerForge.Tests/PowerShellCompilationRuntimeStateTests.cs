@@ -199,6 +199,30 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_ForeachWhatIfPreferenceIsNotReplacedByHostState()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LoopPreference { [CmdletBinding(SupportsShouldProcess = $true)] param([bool[]] $Flags) " +
+            "foreach ($WhatIfPreference in $Flags) { if ($WhatIfPreference) { return $true } }; return $false }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.LoopWhatIf", "CompiledPowerShell", "net8.0");
+        var method = Assert.Single(typed.Methods);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LoopWhatIf",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LoopPreference -Flags $false -WhatIf");
+        Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Analyze_VersionTableMemberMutationRemainsOnFallback()
     {
         using var fixture = ArtifactFixture.Create(

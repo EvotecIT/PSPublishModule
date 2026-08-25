@@ -621,9 +621,9 @@ public sealed class PowerShellCompilationCensusRunner
                 ? Parser.ParseFile(fullPath, out _, out _)
                     .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
                     .OfType<FunctionDefinitionAst>()
-                    .Select(static function => (function.Name, function.Extent))
+                    .Select(static function => (function.Name, BodyStartLine: function.Body.Extent.StartLineNumber, function.Extent))
                     .ToArray()
-                : Array.Empty<(string Name, IScriptExtent Extent)>();
+                : Array.Empty<(string Name, int BodyStartLine, IScriptExtent Extent)>();
             var units = file.Units.Select((unit, index) =>
             {
                 if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
@@ -633,7 +633,7 @@ public sealed class PowerShellCompilationCensusRunner
                     candidate.StartLine == unit.StartLine &&
                     candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase));
                 var extent = functionExtents
-                    .Where(candidate => candidate.Extent.StartLineNumber == unit.StartLine &&
+                    .Where(candidate => candidate.BodyStartLine == unit.StartLine &&
                                         candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase))
                     .Skip(occurrence)
                     .Select(static candidate => candidate.Extent)

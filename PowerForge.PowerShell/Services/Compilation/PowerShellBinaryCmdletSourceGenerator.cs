@@ -537,8 +537,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                        .OfType<FunctionDefinitionAst>()
                        .FirstOrDefault(function =>
                            function.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase) &&
-                           function.Extent.StartLineNumber == method.SourceLine)
-                       ?.Extent.StartColumnNumber ?? 1;
+                           function.Body.Extent.StartLineNumber == method.SourceLine)
+                       ?.Body.Extent.StartColumnNumber ?? 1;
         }
         catch (IOException)
         {
