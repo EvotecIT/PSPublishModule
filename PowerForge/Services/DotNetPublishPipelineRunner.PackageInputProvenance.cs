@@ -620,7 +620,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipArchive? archive = null;
             try
             {
-                using (var packageReader = new PackageArchiveReader(path))
+                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using (var packageReader = new PackageArchiveReader(stream, leaveStreamOpen: true))
                 {
                     PrimarySignature? signature = packageReader
                         .GetPrimarySignatureAsync(CancellationToken.None)
@@ -635,10 +636,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     }
                     string actualHash = packageReader.GetContentHash(CancellationToken.None);
                     if (!string.Equals(actualHash, expectedContentHash, StringComparison.Ordinal))
+                    {
+                        stream.Dispose();
+                        stream = null;
                         return null;
+                    }
                 }
 
-                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                stream.Position = 0;
                 archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
                 var entries = new Dictionary<string, ZipArchiveEntry>(
                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);

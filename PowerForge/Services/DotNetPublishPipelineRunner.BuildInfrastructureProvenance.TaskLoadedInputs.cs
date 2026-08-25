@@ -90,6 +90,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     string candidate = value.Trim().Trim('\'', '"');
                     if (candidate.Length == 0)
                         continue;
+                    if (!TryNormalizeControlledCompilerTaskFileOperand(
+                            task.Name.LocalName,
+                            attribute.Name.LocalName,
+                            candidate,
+                            out candidate))
+                    {
+                        return false;
+                    }
                     if (ContainsUnresolvedBuildExpression(
                             ReplaceOrdinalIgnoreCase(
                                 candidate,

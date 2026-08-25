@@ -428,6 +428,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 BuildControlledGitConfiguration(filterNames));
             if (checkout.ExitCode != 0 || checkout.TimedOut || !File.Exists(controlledProjectPath))
                 return false;
+            if (!TryVerifyControlledGitConfiguration(
+                    gitRoot!,
+                    revision!,
+                    filterNames) ||
+                !TryVerifyControlledGitConfiguration(
+                    checkoutRoot,
+                    revision!,
+                    filterNames))
+            {
+                return false;
+            }
 
             if (!TryInitializeControlledSubmodules(checkoutRoot, filterNames))
                 return false;
@@ -493,6 +504,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
+            if (!TryVerifyControlledGitConfiguration(
+                    gitRoot!,
+                    revision!,
+                    filterNames) ||
+                !TryVerifyControlledGitConfiguration(
+                    checkoutRoot,
+                    revision!,
+                    filterNames))
+            {
+                return false;
+            }
             var controlledStatus = RunBuildInputEvaluationProcess(
                 "git",
                 checkoutRoot,
@@ -516,6 +538,16 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
     }
+
+    private static bool TryVerifyControlledGitConfiguration(
+        string workingDirectory,
+        string revision,
+        IReadOnlyCollection<string> expectedFilterNames)
+        => TryCollectControlledGitFilterNames(
+               workingDirectory,
+               revision,
+               out string[] currentFilterNames) &&
+           currentFilterNames.SequenceEqual(expectedFilterNames, StringComparer.Ordinal);
 
     private static void RemoveControlledSourceCheckout(
         string? gitRoot,

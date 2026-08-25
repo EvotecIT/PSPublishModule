@@ -66,12 +66,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         string nullDevice = IsWindows() ? "NUL" : "/dev/null";
         environment["GIT_NO_REPLACE_OBJECTS"] = "1";
+        environment["GIT_ATTR_NOSYSTEM"] = "1";
         environment["GIT_CONFIG_NOSYSTEM"] = "1";
         environment["GIT_CONFIG_GLOBAL"] = nullDevice;
         var configuration = new List<KeyValuePair<string, string>>
         {
+            new("core.attributesFile", nullDevice),
+            new("core.autocrlf", "false"),
+            new("core.eol", "lf"),
             new("core.hooksPath", nullDevice),
-            new("core.fsmonitor", "false")
+            new("core.fsmonitor", "false"),
+            new("core.safecrlf", "false")
         };
         if (controlledConfiguration is not null)
             configuration.AddRange(controlledConfiguration);

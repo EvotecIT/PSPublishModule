@@ -183,11 +183,14 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments)
     {
-        return ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
+        return ContainsUncontrolledImportActivation(document) ||
+               ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
                document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
-             (element.Attributes().Any(attribute =>
+             (!IsModeledControlledBuildTask(element.Name.LocalName) ||
+              element.Name.LocalName.Equals("SignFile", StringComparison.OrdinalIgnoreCase) ||
+              element.Attributes().Any(attribute =>
                   attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
                   attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase)) ||
               ContainsUncontrolledTaskEnvironmentOverride(element))) ||
@@ -199,7 +202,120 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
-             element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+              element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static bool IsModeledControlledBuildTask(string taskName)
+        => ControlledTaskFileInputAttributes.ContainsKey(taskName) ||
+           ControlledTaskFileOutputAttributes.ContainsKey(taskName) ||
+           ControlledTasksWithoutFilePaths.Contains(taskName) ||
+           taskName.Equals("ReadLinesFromFile", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsUncontrolledImportActivation(XDocument document)
+    {
+        foreach (XElement import in document.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
+        {
+            string project = import.Attributes()
+                .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                    "Project",
+                    StringComparison.OrdinalIgnoreCase))?
+                .Value ?? string.Empty;
+            string unresolved = ReplaceOrdinalIgnoreCase(
+                DecodeMsBuildEscapes(project),
+                "$(MSBuildThisFileDirectory)",
+                string.Empty);
+            unresolved = ReplaceOrdinalIgnoreCase(
+                unresolved,
+                "$(MSBuildProjectDirectory)",
+                string.Empty);
+            if (ContainsUnresolvedBuildExpression(unresolved))
+                return true;
+
+            string[] conditions = import.AncestorsAndSelf()
+                .SelectMany(element => element.Attributes())
+                .Where(attribute => attribute.Name.LocalName.Equals(
+                    "Condition",
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(attribute => attribute.Value)
+                .ToArray();
+            if (conditions.Any(condition =>
+                    ConditionDependsOnControlledEnvironmentRewrite(condition, document)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ConditionDependsOnControlledEnvironmentRewrite(
+        string condition,
+        XDocument document)
+    {
+        var pending = new Queue<string>();
+        var inspected = new HashSet<string>(StringComparer.Ordinal);
+        pending.Enqueue(condition);
+        while (pending.Count > 0)
+        {
+            if (inspected.Count >= MaximumControlledTaskInputExpressions)
+                return true;
+            string value = pending.Dequeue();
+            if (!inspected.Add(value))
+                continue;
+            if (ContainsControlledEnvironmentRewriteReference(value))
+                return true;
+
+            foreach (System.Text.RegularExpressions.Match match in
+                     System.Text.RegularExpressions.Regex.Matches(
+                         value,
+                         @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+                         System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+            {
+                string propertyName = match.Groups[1].Value;
+                foreach (XElement property in document.Descendants().Where(element =>
+                             element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
+                             element.Parent is not null &&
+                             element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
+                {
+                    pending.Enqueue(property.Value);
+                    foreach (XAttribute attribute in property.AncestorsAndSelf()
+                                 .SelectMany(element => element.Attributes())
+                                 .Where(attribute => attribute.Name.LocalName.Equals(
+                                     "Condition",
+                                     StringComparison.OrdinalIgnoreCase)))
+                    {
+                        pending.Enqueue(attribute.Value);
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsControlledEnvironmentRewriteReference(string value)
+    {
+        value = DecodeMsBuildEscapes(value);
+        string[] names =
+        {
+            "ALL_PROXY",
+            "DOTNET_ROOT",
+            "HOME",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "LOCALAPPDATA",
+            "NO_PROXY",
+            "NUGET_PACKAGES",
+            "PATH",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "USERPROFILE",
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME"
+        };
+        return names.Any(name =>
+            value.IndexOf("$(" + name + ")", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            value.IndexOf("%" + name + "%", StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private static bool ContainsUncontrolledTaskEnvironmentOverride(XElement task)

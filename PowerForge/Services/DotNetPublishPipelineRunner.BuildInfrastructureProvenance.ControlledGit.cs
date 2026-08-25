@@ -33,6 +33,12 @@ public sealed partial class DotNetPublishPipelineRunner
         string rootGitDirectory = Path.GetFullPath(Path.IsPathRooted(commonDirectory!)
             ? commonDirectory!
             : Path.Combine(gitRoot, commonDirectory!));
+        if (!HasOnlyControlledGitAttributeSources(exactGitDirectory) ||
+            !HasOnlyControlledGitAttributeSources(rootGitDirectory))
+        {
+            filterNames = Array.Empty<string>();
+            return false;
+        }
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (!TryReadConfiguredGitFilterNames(gitRoot, exactGitDirectory, names))
         {
@@ -49,7 +55,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string visitKey = repository.GitDirectory + "\0" + repository.Revision;
             if (!visited.Add(IsWindows() ? visitKey.ToUpperInvariant() : visitKey))
                 continue;
-            if (!TryReadConfiguredGitFilterNames(gitRoot, repository.GitDirectory, names) ||
+            if (!HasOnlyControlledGitAttributeSources(repository.GitDirectory) ||
+                !TryReadConfiguredGitFilterNames(gitRoot, repository.GitDirectory, names) ||
                 !TryReadGitDirectoryText(
                     gitRoot,
                     repository.GitDirectory,
@@ -115,6 +122,18 @@ public sealed partial class DotNetPublishPipelineRunner
 
         filterNames = names.OrderBy(name => name, StringComparer.Ordinal).ToArray();
         return true;
+    }
+
+    internal static bool HasOnlyControlledGitAttributeSources(string gitDirectory)
+    {
+        try
+        {
+            return !File.Exists(Path.Combine(Path.GetFullPath(gitDirectory), "info", "attributes"));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool TryReadConfiguredGitFilterNames(

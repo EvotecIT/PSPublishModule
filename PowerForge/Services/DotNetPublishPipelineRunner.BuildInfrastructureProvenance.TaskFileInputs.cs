@@ -40,4 +40,38 @@ public sealed partial class DotNetPublishPipelineRunner
             ["XslTransformation"] = ["XmlInputPaths", "XslCompiledDllPath", "XslInputPath"],
             ["ZipDirectory"] = ["SourceDirectory"]
         };
+
+    private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskFileOutputAttributes =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AL"] = ["OutputAssembly"],
+            ["Copy"] = ["DestinationFiles", "DestinationFolder"],
+            ["Csc"] = ["OutputAssembly", "OutputRefAssembly", "PdbFile"],
+            ["Delete"] = ["Files"],
+            ["Fsc"] = ["OutputAssembly", "PdbFile"],
+            ["GenerateResource"] = ["OutputResources"],
+            ["MakeDir"] = ["Directories"],
+            ["Move"] = ["DestinationFiles"],
+            ["RemoveDir"] = ["Directories"],
+            ["Touch"] = ["Files"],
+            ["Unzip"] = ["DestinationFolder"],
+            ["Vbc"] = ["OutputAssembly", "OutputRefAssembly", "PdbFile"],
+            ["WriteLinesToFile"] = ["File"],
+            ["XmlPoke"] = ["XmlInputPath"],
+            ["ZipDirectory"] = ["DestinationFile"]
+        };
+
+    private static readonly ISet<string> ControlledTasksWithoutFilePaths =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AssignCulture",
+            "AssignTargetPath",
+            "CallTarget",
+            "CreateItem",
+            "CreateProperty",
+            "Error",
+            "Message",
+            "RemoveDuplicates",
+            "Warning"
+        };
 }
