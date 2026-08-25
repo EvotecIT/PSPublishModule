@@ -430,9 +430,24 @@ Invoke-BenchmarkSuite `
 
 See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for the quick smoke command and lane definitions.
 
+## Portable generic acceptance corpus
+
+PowerForge carries a self-contained, product-neutral compiler corpus under `Benchmarks/PowerShellCompilation/Corpus`. The Hybrid module exercises parameter metadata and defaults, operators, typed recursion, runtime-state injection, command-result capture, and an intentional environment-scope fallback. Its committed net10 census baseline records a portable source fingerprint and 5/6 post-emission functions (83.33%) with no eligible function lost during graph or binary-cmdlet shaping. The multi-file Strict program is separately required to analyze 3/3 units, build as a runtime-free net8 executable, and match direct PowerShell execution.
+
+This is the stable acceptance surface for generic compiler contracts. It runs from any checkout without neighboring repositories:
+
+```powershell
+powerforge powershell census `
+    .\Benchmarks\PowerShellCompilation\Corpus\HybridModule\Generic.Compiler.Corpus.psd1 `
+    --framework net10.0 `
+    --baseline .\Benchmarks\PowerShellCompilation\Corpus\census-baseline.net10.json
+```
+
+See [the corpus README](../Benchmarks/PowerShellCompilation/Corpus/README.md) for the contract split. External repositories can be added, replaced, or removed as scale workloads without changing the compiler design.
+
 ## Real-source eligibility
 
-The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PSWriteWord `1fdee837c3fcbc1fdb5c67a9843526bd532c2728`.
+The wider example census uses exact committed source from six replaceable PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PSWriteWord `1fdee837c3fcbc1fdb5c67a9843526bd532c2728`.
 
 The current six-product lane contains 1,263 authored files and 1,353 whole script/function units with no parse-error files. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
 
