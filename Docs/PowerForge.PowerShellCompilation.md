@@ -449,7 +449,7 @@ powerforge powershell census `
     --output json
 ```
 
-The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 220 functions pass structural analysis, 126 survive graph and artifact shaping as typed CLR methods, and 94 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 10.20%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 18/281, PSWriteHTML 17/238, O365Essentials 77/282, ADEssentials 6/247, and PSWriteWord 6/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
+The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 254 functions pass structural analysis, 130 survive graph and artifact shaping as typed CLR methods, and 124 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 10.53%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 18/281, PSWriteHTML 18/238, O365Essentials 78/282, ADEssentials 7/247, and PSWriteWord 7/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and exact file content, so a changed corpus cannot silently pass merely because its aggregate counts stayed equal.
 
@@ -466,14 +466,16 @@ The current six-root run produces this leading emitted-function planning frontie
 
 | Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `parameter.default` | 829 | 357 | 98 | 6 | 18.14% |
-| `function.graph` | 94 | 94 | 94 | 4 | 17.81% |
-| `runtime.scope` | 1,594 | 385 | 40 | 6 | 13.44% |
-| `command.new-htmltab` | 22 | 22 | 22 | 1 | 11.98% |
-| `syntax.memberexpression` | 18 | 18 | 18 | 5 | 11.66% |
-| `expression.conversion` | 500 | 153 | 16 | 5 | 11.50% |
-| `syntax.variableexpression` | 16 | 16 | 16 | 5 | 11.50% |
-| `syntax.subexpression` | 734 | 191 | 15 | 6 | 11.42% |
+| `function.graph` | 124 | 124 | 124 | 4 | 20.57% |
+| `runtime.scope` | 1,594 | 385 | 46 | 6 | 14.25% |
+| `syntax.invokememberexpression` | 32 | 32 | 32 | 3 | 13.12% |
+| `syntax.memberexpression` | 24 | 24 | 24 | 5 | 12.47% |
+| `command.new-htmltab` | 22 | 22 | 22 | 1 | 12.31% |
+| `assignment.target` | 788 | 164 | 20 | 6 | 12.15% |
+| `syntax.subexpression` | 734 | 191 | 19 | 6 | 12.06% |
+| `syntax.variableexpression` | 19 | 19 | 19 | 5 | 12.06% |
+| `expression.conversion` | 500 | 153 | 16 | 5 | 11.82% |
+| `parameter.default` | 181 | 114 | 13 | 5 | 11.58% |
 
 This changes feature planning materially. `Register-ArgumentCompleter` leads the compatibility whole-unit frontier because it appears in many module-initialization bodies, but it disappears from the emitted-function frontier and must not be treated as 78 potential CLR methods. Likewise, a sample-specific command identifier such as `command.new-htmltab` is evidence for a generic command-boundary shape, not authorization for a product-specific compiler intrinsic. Recommendations must distinguish generic typed IR, a contract-driven PowerShell-backed command region, an authoring change, and behavior that should remain Package/Hybrid-only.
 

@@ -113,7 +113,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         _requiresBoundParameters = _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
-            (_parameterMetadata.Values.Any(static parameter => !parameter.IsMandatory && parameter.Validations.Length > 0) ||
+            (_parameterMetadata.Values.Any(static parameter => parameter.DefaultValue is not null) ||
+             _parameterMetadata.Values.Any(static parameter => !parameter.IsMandatory && parameter.Validations.Length > 0) ||
              statements.SelectMany(static statement => statement.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: false))
                  .OfType<InvokeMemberExpressionAst>()
                  .Any(static invocation => PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _)));
@@ -157,6 +158,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine("checked");
         AppendLine("{");
         _indent++;
+        EmitParameterDefaults(parameters);
         foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string)))
         {
             var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);

@@ -22,16 +22,10 @@ public sealed class PowerShellCompilationCensusTests
 
             var match = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.imatch");
             Assert.Equal(2, match.AffectedUnits);
-            Assert.Equal(1, match.VisibleSoleBlockerUnits);
-            Assert.Equal(2, match.CandidateCompilableUnits);
-            Assert.Equal(2d / 3d * 100d, match.CandidateCoveragePercentage, precision: 6);
-            var parameterDefault = Assert.Single(result.Frontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
-            Assert.Equal(1, parameterDefault.AffectedUnits);
-            Assert.Equal(0, parameterDefault.VisibleSoleBlockerUnits);
-            Assert.Contains(result.CoBlockers, pair =>
-                pair.AffectedUnits == 1 &&
-                new[] { pair.FirstFeatureId, pair.SecondFeatureId }.Contains("operator.imatch") &&
-                new[] { pair.FirstFeatureId, pair.SecondFeatureId }.Contains(PowerShellCompilationFeatureIds.ParameterDefault));
+            Assert.Equal(2, match.VisibleSoleBlockerUnits);
+            Assert.Equal(3, match.CandidateCompilableUnits);
+            Assert.Equal(100d, match.CandidateCoveragePercentage, precision: 6);
+            Assert.DoesNotContain(result.Frontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.ParameterDefault);
             Assert.Equal(result.Frontier.Select(static impact => impact.FeatureId).Distinct(StringComparer.Ordinal).Count(), result.Frontier.Length);
         }
         finally
