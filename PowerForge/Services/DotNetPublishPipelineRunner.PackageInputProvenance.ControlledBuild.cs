@@ -137,8 +137,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
-                    if (ContainsNetworkCapableControlledBuildTask(document) ||
+                    if (ContainsUncontrolledControlledBuildTask(document) ||
                         ContainsControlledBuildPropertyEscape(document) ||
+                        !HasOnlyControlledTaskLoadedFileInputs(
+                            document,
+                            Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
+                            "package-root",
+                            ReadControlledPackageTextInput) ||
                         document.DescendantNodes()
                             .OfType<XText>()
                             .Select(text => text.Value)
@@ -159,6 +164,36 @@ public sealed partial class DotNetPublishPipelineRunner
             catch
             {
                 return false;
+            }
+        }
+
+        private string[]? ReadControlledPackageTextInput(string path)
+        {
+            try
+            {
+                string packageRoot = Path.GetFullPath("package-root");
+                string relativePath = FrameworkCompatibility.GetRelativePath(
+                        packageRoot,
+                        Path.GetFullPath(path))
+                    .Replace('\\', '/')
+                    .TrimStart('/');
+                if (relativePath.Length == 0 ||
+                    !_entries.TryGetValue(relativePath, out ZipArchiveEntry? entry) ||
+                    entry.Length > MaximumControlledBuildTextInputBytes)
+                {
+                    return null;
+                }
+
+                using Stream stream = entry.Open();
+                using var reader = new StreamReader(stream);
+                var lines = new List<string>();
+                while (reader.ReadLine() is string line)
+                    lines.Add(line);
+                return lines.ToArray();
+            }
+            catch
+            {
+                return null;
             }
         }
 

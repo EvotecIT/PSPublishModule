@@ -16,8 +16,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             "artifacts/payload.dll"));
     }
 
-    [Fact]
-    public void ReadSourceProvenance_RejectsPackageResponseFileWithRootedInput()
+    [Theory]
+    [InlineData("rsp")]
+    [InlineData("txt")]
+    public void ReadSourceProvenance_RejectsPackageTaskLoadedFileWithRootedInput(string extension)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         string packageRoot = Directory.CreateTempSubdirectory().FullName;
@@ -26,6 +28,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string buildDirectory = Directory.CreateDirectory(Path.Combine(packageRoot, "build")).FullName;
             string feedDirectory = Directory.CreateDirectory(Path.Combine(packageRoot, "feed")).FullName;
             string packageProject = Path.Combine(packageRoot, "Unsafe.Response.csproj");
+            string payloadName = "payload." + extension;
             File.WriteAllText(packageProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
@@ -36,15 +39,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </PropertyGroup>
                   <ItemGroup>
                     <None Include="build/Unsafe.Response.targets" Pack="true" PackagePath="build/Unsafe.Response.targets" />
-                    <None Include="build/payload.rsp" Pack="true" PackagePath="build/payload.rsp" />
+                    <None Include="build/PAYLOAD_NAME" Pack="true" PackagePath="build/PAYLOAD_NAME" />
                   </ItemGroup>
                 </Project>
-                """);
+                """.Replace("PAYLOAD_NAME", payloadName, StringComparison.Ordinal));
             File.WriteAllText(
                 Path.Combine(buildDirectory, "Unsafe.Response.targets"),
-                "<Project><Target Name=\"ReadPayload\" BeforeTargets=\"Build\"><ReadLinesFromFile File=\"$(MSBuildThisFileDirectory)payload.rsp\"><Output TaskParameter=\"Lines\" ItemName=\"Payload\" /></ReadLinesFromFile></Target></Project>");
+                $"<Project><Target Name=\"ReadPayload\" BeforeTargets=\"Build\"><ReadLinesFromFile File=\"$(MSBuildThisFileDirectory){payloadName}\"><Output TaskParameter=\"Lines\" ItemName=\"Payload\" /></ReadLinesFromFile></Target></Project>");
             File.WriteAllText(
-                Path.Combine(buildDirectory, "payload.rsp"),
+                Path.Combine(buildDirectory, payloadName),
                 OperatingSystem.IsWindows() ? "C:\\outside\\payload.dll" : "/outside/payload.dll");
             RunDotNet(root, $"pack \"{packageProject}\" -c Release -o \"{feedDirectory}\" --nologo");
             File.WriteAllText(Path.Combine(root, "NuGet.Config"), $"""

@@ -9,6 +9,19 @@ public sealed partial class DotNetPublishPipelineRunner
         string gitRoot,
         string controlledSourceRoot,
         out IReadOnlyDictionary<string, string?> controlledEnvironment)
+        => TryCreateControlledBuildEnvironment(
+            environmentVariables,
+            gitRoot,
+            controlledSourceRoot,
+            gitRoot,
+            out controlledEnvironment);
+
+    private static bool TryCreateControlledBuildEnvironment(
+        IReadOnlyDictionary<string, string?> environmentVariables,
+        string gitRoot,
+        string controlledSourceRoot,
+        string buildInputBaseDirectory,
+        out IReadOnlyDictionary<string, string?> controlledEnvironment)
     {
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var inheritedVariables = Environment.GetEnvironmentVariables();
@@ -47,6 +60,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     variable.Value,
                     gitRoot,
                     controlledSourceRoot,
+                    buildInputBaseDirectory,
                     out string remappedValue))
             {
                 controlledEnvironment = values;
@@ -86,6 +100,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string value,
         string gitRoot,
         string controlledSourceRoot,
+        string buildInputBaseDirectory,
         out string remappedValue)
     {
         string[] segments = value.Split(';');
@@ -144,7 +159,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            if (ContainsRootedBuildValue(candidate, gitRoot))
+            if (ContainsRootedBuildValue(candidate, gitRoot) ||
+                ContainsEscapingRelativeBuildValue(
+                    candidate,
+                    buildInputBaseDirectory,
+                    gitRoot))
             {
                 remappedValue = string.Empty;
                 return false;
@@ -438,8 +457,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         continue;
                     }
-                    if (ContainsNetworkCapableControlledBuildTask(document) ||
-                        ContainsControlledBuildPropertyEscape(document))
+                    if (ContainsUncontrolledControlledBuildTask(document) ||
+                        ContainsControlledBuildPropertyEscape(document) ||
+                        !HasOnlyControlledTaskLoadedFileInputs(
+                            document,
+                            path,
+                            checkoutRoot,
+                            ReadControlledCheckoutTextInput))
                         return false;
                     if (document.DescendantNodes()
                         .OfType<XText>()
@@ -466,7 +490,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool ContainsNetworkCapableControlledBuildTask(XDocument document)
+    private static bool ContainsUncontrolledControlledBuildTask(XDocument document)
     {
         return document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
@@ -474,7 +498,9 @@ public sealed partial class DotNetPublishPipelineRunner
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
              (element.Name.LocalName.Equals("DownloadFile", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
-              element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase))));
+              element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
+              element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
+              element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
     }
 
     private static bool ContainsControlledBuildPropertyEscape(XDocument document)

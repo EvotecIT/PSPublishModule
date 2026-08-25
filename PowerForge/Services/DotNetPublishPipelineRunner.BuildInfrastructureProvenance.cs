@@ -124,6 +124,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.EnvironmentVariables,
                     controlledGitRoot!,
                     controlledSourceRoot,
+                    Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
                 return Cache(false);
@@ -160,6 +161,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         request.Configuration,
                         controlledGitRoot!,
                         controlledSourceRoot,
+                        Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledConfiguration))
                 {
                     return Cache(false);
@@ -172,6 +174,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         request.TargetFramework,
                         controlledGitRoot!,
                         controlledSourceRoot,
+                        Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledTargetFramework))
                 {
                     return Cache(false);
@@ -193,6 +196,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         property.Value,
                         controlledGitRoot!,
                         controlledSourceRoot,
+                        Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledValue))
                 {
                     return Cache(false);
