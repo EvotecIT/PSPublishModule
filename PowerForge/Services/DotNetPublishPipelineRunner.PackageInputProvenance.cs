@@ -365,6 +365,8 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
         private readonly string[] _archivePaths;
+        private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,

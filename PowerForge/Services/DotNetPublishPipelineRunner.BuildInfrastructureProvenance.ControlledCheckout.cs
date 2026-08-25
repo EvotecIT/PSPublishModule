@@ -107,6 +107,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "DOTNET_ADDITIONAL_DEPS",
             "DOTNET_SHARED_STORE",
             "DOTNET_DiagnosticPorts",
+            "MSBUILDENABLEALLPROPERTYFUNCTIONS",
             "NUGET_PLUGIN_PATHS",
             "NUGET_CREDENTIALPROVIDERS_PATH"
         };

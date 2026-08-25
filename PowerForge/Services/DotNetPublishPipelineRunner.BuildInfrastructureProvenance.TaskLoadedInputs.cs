@@ -46,6 +46,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
+            if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
+                HasReparsePointBelowRoot(inputPath, allowedRoot))
+            {
+                return false;
+            }
+
             string[]? lines = readLines(inputPath);
             if (lines is null || lines.Any(value =>
                     ContainsRootedBuildValue(value, allowedRoot) ||

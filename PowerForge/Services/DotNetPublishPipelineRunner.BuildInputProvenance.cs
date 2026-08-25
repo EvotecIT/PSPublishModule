@@ -708,6 +708,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
                     request.ProjectPath,
                     importPaths));
+                if (verifiedPackages is not null &&
+                    !verifiedPackages.TrySetControlledBuildInputs(importPaths))
+                {
+                    return false;
+                }
                 if (projectReferenceDeclarations.Length > 0 ||
                     hasDynamicProjectReferenceTaskOutputs ||
                     preResolvePropertyDefinitions.Any(definition =>

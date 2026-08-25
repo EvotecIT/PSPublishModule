@@ -56,15 +56,71 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        internal bool TrySetControlledBuildInputs(IEnumerable<string> evaluatedInputs)
+        {
+            _controlledBuildInputsByArchive.Clear();
+            try
+            {
+                foreach (string input in evaluatedInputs)
+                {
+                    string fullInput = Path.GetFullPath(input);
+                    foreach (string root in _packageRoots)
+                    {
+                        if (!IsSameOrBelowBuildInputPath(fullInput, root))
+                            continue;
+                        if (!TryVerifyBelowRoot(fullInput, root))
+                            return false;
+
+                        string relative = FrameworkCompatibility.GetRelativePath(root, fullInput)
+                            .Replace('\\', '/')
+                            .Trim('/');
+                        string[] segments = relative.Split(
+                            new[] { '/' },
+                            StringSplitOptions.RemoveEmptyEntries);
+                        if (segments.Length < 3 || segments.Any(segment => segment == ".."))
+                            return false;
+
+                        string expectedName = segments[0] + "." + segments[1] + ".nupkg";
+                        string? archivePath = _archivePaths.FirstOrDefault(path =>
+                            Path.GetFileName(path).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrWhiteSpace(archivePath))
+                            return false;
+
+                        string fullArchivePath = Path.GetFullPath(archivePath!);
+                        if (!_controlledBuildInputsByArchive.TryGetValue(
+                                fullArchivePath,
+                                out HashSet<string>? packageInputs))
+                        {
+                            packageInputs = new HashSet<string>(
+                                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                            _controlledBuildInputsByArchive.Add(fullArchivePath, packageInputs);
+                        }
+                        packageInputs.Add(string.Join("/", segments.Skip(2)));
+                        break;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                _controlledBuildInputsByArchive.Clear();
+                return false;
+            }
+        }
+
         internal bool TrySeedControlledPackageSource(string destination)
-            => _archives.TrySeedControlledPackageSource(destination, _archivePaths);
+            => _archives.TrySeedControlledPackageSource(
+                destination,
+                _archivePaths,
+                _controlledBuildInputsByArchive);
     }
 
     private sealed partial class VerifiedPackageArchiveCache
     {
         internal bool TrySeedControlledPackageSource(
             string destination,
-            IReadOnlyCollection<string> archivePaths)
+            IReadOnlyCollection<string> archivePaths,
+            IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive)
         {
             try
             {
@@ -73,7 +129,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
                         return false;
-                    if (!cached.Archive.HasOnlyControlledBuildInputs())
+                    IReadOnlyCollection<string> controlledBuildInputs =
+                        controlledBuildInputsByArchive.TryGetValue(
+                            Path.GetFullPath(archivePath),
+                            out HashSet<string>? inputs)
+                            ? inputs
+                            : Array.Empty<string>();
+                    if (!cached.Archive.HasOnlyControlledBuildInputs(controlledBuildInputs))
                         return false;
                     string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
@@ -91,15 +153,18 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed partial class VerifiedPackageArchive
     {
-        internal bool HasOnlyControlledBuildInputs()
+        internal bool HasOnlyControlledBuildInputs(IReadOnlyCollection<string> executableBuildInputs)
         {
             try
             {
+                var executableSeedNames = new HashSet<string>(
+                    executableBuildInputs.Select(input => input.Replace('\\', '/').TrimStart('/')),
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 var documents = new List<(
                     string Name,
                     string DeclaringPath,
                     string PackageDirectory,
-                    bool KnownProjectExtension,
+                    bool ExecutableSeed,
                     XDocument Document)>();
                 foreach (KeyValuePair<string, ZipArchiveEntry> pair in _entries)
                 {
@@ -125,20 +190,18 @@ public sealed partial class DotNetPublishPipelineRunner
                         }
                         continue;
                     }
-                    bool knownProjectExtension =
-                        extension.Equals(".props", StringComparison.OrdinalIgnoreCase) ||
-                        extension.Equals(".targets", StringComparison.OrdinalIgnoreCase);
+                    bool executableSeed = executableSeedNames.Contains(name);
                     XDocument document;
                     try
                     {
                         using Stream stream = pair.Value.Open();
                         document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
                     }
-                    catch when (!knownProjectExtension)
+                    catch when (!executableSeed)
                     {
                         continue;
                     }
-                    if (!knownProjectExtension &&
+                    if (!executableSeed &&
                         extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!HasOnlyControlledResourceFileInputs(
@@ -151,23 +214,32 @@ public sealed partial class DotNetPublishPipelineRunner
                         }
                         continue;
                     }
-                    if (!knownProjectExtension &&
-                        (document.Root is null ||
-                         !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase)))
+                    if (document.Root is null ||
+                        !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (executableSeed)
+                            return false;
                         continue;
                     }
                     documents.Add((
                         name,
                         Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
                         packageDirectory,
-                        knownProjectExtension,
+                        executableSeed,
                         document));
                 }
 
+                if (executableSeedNames.Any(seed => !documents.Any(document =>
+                        document.Name.Equals(
+                            seed,
+                            IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))))
+                {
+                    return false;
+                }
+
                 var executableNames = new HashSet<string>(
-                    documents.Where(candidate => candidate.KnownProjectExtension).Select(candidate => candidate.Name),
-                    StringComparer.OrdinalIgnoreCase);
+                    documents.Where(candidate => candidate.ExecutableSeed).Select(candidate => candidate.Name),
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
                 bool changed;
                 do
                 {
@@ -194,14 +266,15 @@ public sealed partial class DotNetPublishPipelineRunner
                             {
                                 return false;
                             }
-                            if (TryGetControlledPackageEntryName(importedPath, out string importedName) &&
-                                documents.Any(candidate => candidate.Name.Equals(
+                            if (!TryGetControlledPackageEntryName(importedPath, out string importedName) ||
+                                !documents.Any(candidate => candidate.Name.Equals(
                                     importedName,
-                                    StringComparison.OrdinalIgnoreCase)) &&
-                                executableNames.Add(importedName))
+                                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
                             {
-                                changed = true;
+                                return false;
                             }
+                            if (executableNames.Add(importedName))
+                                changed = true;
                         }
                     }
                 } while (changed);
