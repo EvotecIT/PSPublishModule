@@ -16,7 +16,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ["GenerateResource"] = ["References", "Sources", "StateFile"],
             ["GetFileHash"] = ["Files"],
             ["Hash"] = ["Items"],
-            ["Vbc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"]
+            ["Vbc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"],
+            ["XslTransformation"] = ["XmlInputPaths", "XslInputPath"]
         };
 
     private static bool HasOnlyControlledTaskLoadedFileInputs(
@@ -79,7 +80,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasOnlyControlledResourceFileInputs(
         XDocument document,
         string declaringPath,
-        string allowedRoot)
+        string allowedRoot,
+        Func<string, bool>? isControlledInput = null)
     {
         foreach (XElement data in document.Descendants().Where(element =>
                      element.Name.LocalName.Equals("data", StringComparison.OrdinalIgnoreCase) &&
@@ -99,8 +101,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     declaringPath,
                     allowedRoot,
                     out string inputPath) ||
-                !File.Exists(inputPath) ||
-                HasReparsePointBelowRoot(inputPath, allowedRoot))
+                (isControlledInput is null
+                    ? !File.Exists(inputPath) || HasReparsePointBelowRoot(inputPath, allowedRoot)
+                    : !isControlledInput(inputPath)))
             {
                 return false;
             }
@@ -112,7 +115,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasOnlyControlledLiteralTaskFileInputs(
         XDocument document,
         string declaringPath,
-        string allowedRoot)
+        string allowedRoot,
+        Func<string, bool>? isControlledInput = null)
     {
         foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
         {
@@ -141,8 +145,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
-                        HasReparsePointBelowRoot(inputPath, allowedRoot))
+                    if (isControlledInput is not null)
+                    {
+                        if (!isControlledInput(inputPath))
+                            return false;
+                    }
+                    else if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
+                             HasReparsePointBelowRoot(inputPath, allowedRoot))
                     {
                         return false;
                     }

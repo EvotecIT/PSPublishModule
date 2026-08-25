@@ -95,7 +95,12 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             try
             {
-                var controlledDocuments = new List<XDocument>();
+                var documents = new List<(
+                    string Name,
+                    string DeclaringPath,
+                    string PackageDirectory,
+                    bool KnownProjectExtension,
+                    XDocument Document)>();
                 foreach (KeyValuePair<string, ZipArchiveEntry> pair in _entries)
                 {
                     string name = pair.Key.Replace('\\', '/').TrimStart('/');
@@ -134,19 +139,96 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     }
                     if (!knownProjectExtension &&
+                        extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!HasOnlyControlledResourceFileInputs(
+                                document,
+                                Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
+                                "package-root",
+                                IsControlledPackageInput))
+                        {
+                            return false;
+                        }
+                        continue;
+                    }
+                    if (!knownProjectExtension &&
                         (document.Root is null ||
                          !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase)))
                     {
                         continue;
                     }
-                    controlledDocuments.Add(document);
-                    if (ContainsControlledBuildPropertyEscape(document) ||
-                        !HasOnlyControlledTaskLoadedFileInputs(
-                            document,
-                            Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
-                            "package-root",
-                            ReadControlledPackageTextInput) ||
-                        document.DescendantNodes()
+                    documents.Add((
+                        name,
+                        Path.Combine("package-root", name.Replace('/', Path.DirectorySeparatorChar)),
+                        packageDirectory,
+                        knownProjectExtension,
+                        document));
+                }
+
+                var executableNames = new HashSet<string>(
+                    documents.Where(candidate => candidate.KnownProjectExtension).Select(candidate => candidate.Name),
+                    StringComparer.OrdinalIgnoreCase);
+                bool changed;
+                do
+                {
+                    changed = false;
+                    foreach ((string name, string declaringPath, _, _, XDocument document) in documents.Where(
+                                 candidate => executableNames.Contains(candidate.Name)).ToArray())
+                    {
+                        foreach (XElement import in document.Descendants().Where(element =>
+                                     element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            string? projectValue = import.Attributes()
+                                .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                                    "Project",
+                                    StringComparison.OrdinalIgnoreCase))?
+                                .Value;
+                            if (string.IsNullOrWhiteSpace(projectValue) ||
+                                projectValue!.IndexOf('*') >= 0 ||
+                                projectValue.IndexOf('?') >= 0 ||
+                                !TryResolveControlledTaskInputPath(
+                                    projectValue,
+                                    declaringPath,
+                                    "package-root",
+                                    out string importedPath))
+                            {
+                                return false;
+                            }
+                            if (TryGetControlledPackageEntryName(importedPath, out string importedName) &&
+                                documents.Any(candidate => candidate.Name.Equals(
+                                    importedName,
+                                    StringComparison.OrdinalIgnoreCase)) &&
+                                executableNames.Add(importedName))
+                            {
+                                changed = true;
+                            }
+                        }
+                    }
+                } while (changed);
+
+                var controlledDocuments = new List<XDocument>();
+                foreach ((string name, string declaringPath, string packageDirectory, _, XDocument document) in documents)
+                {
+                    bool executable = executableNames.Contains(name);
+                    if (executable)
+                    {
+                        controlledDocuments.Add(document);
+                        if (ContainsControlledBuildPropertyEscape(document) ||
+                            !HasOnlyControlledTaskLoadedFileInputs(
+                                document,
+                                declaringPath,
+                                "package-root",
+                                ReadControlledPackageTextInput) ||
+                            !HasOnlyControlledLiteralTaskFileInputs(
+                                document,
+                                declaringPath,
+                                "package-root",
+                                IsControlledPackageInput))
+                        {
+                            return false;
+                        }
+                    }
+                    if (document.DescendantNodes()
                             .OfType<XText>()
                             .Select(text => text.Value)
                             .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value))
@@ -170,17 +252,35 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        private bool IsControlledPackageInput(string path)
+            => TryGetControlledPackageEntryName(path, out string name) && _entries.ContainsKey(name);
+
+        private static bool TryGetControlledPackageEntryName(string path, out string name)
+        {
+            name = string.Empty;
+            try
+            {
+                string packageRoot = Path.GetFullPath("package-root");
+                string fullPath = Path.GetFullPath(path);
+                if (!IsSameOrBelowBuildInputPath(fullPath, packageRoot))
+                    return false;
+                name = FrameworkCompatibility.GetRelativePath(packageRoot, fullPath)
+                    .Replace('\\', '/')
+                    .TrimStart('/');
+                return name.Length > 0;
+            }
+            catch
+            {
+                name = string.Empty;
+                return false;
+            }
+        }
+
         private string[]? ReadControlledPackageTextInput(string path)
         {
             try
             {
-                string packageRoot = Path.GetFullPath("package-root");
-                string relativePath = FrameworkCompatibility.GetRelativePath(
-                        packageRoot,
-                        Path.GetFullPath(path))
-                    .Replace('\\', '/')
-                    .TrimStart('/');
-                if (relativePath.Length == 0 ||
+                if (!TryGetControlledPackageEntryName(path, out string relativePath) ||
                     !_entries.TryGetValue(relativePath, out ZipArchiveEntry? entry) ||
                     entry.Length > MaximumControlledBuildTextInputBytes)
                 {

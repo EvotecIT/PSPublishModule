@@ -313,6 +313,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var buildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var msBuildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
         var verifiedPackagesByEvaluation = new Dictionary<string, VerifiedPackageInputCatalog?>(StringComparer.Ordinal);
@@ -363,6 +364,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Concat(new[] { request.ProjectPath })
                     .Distinct(comparison)
                     .ToArray();
+                msBuildInputsByEvaluation[visitKey] = evaluation.MsBuildInputs;
                 pathMapsByEvaluation[visitKey] = evaluation.PathMap;
                 verifiedPackagesByEvaluation[visitKey] = evaluation.VerifiedPackages;
                 generatedProjectReferenceOutputs.AddRange(
@@ -408,6 +410,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         referencedProject.BuildVisitKey(),
                         out string[]? evaluatedBuildInputs)
                         ? evaluatedBuildInputs
+                        : Array.Empty<string>(),
+                    msBuildInputsByEvaluation.TryGetValue(
+                        referencedProject.BuildVisitKey(),
+                        out string[]? evaluatedMsBuildInputs)
+                        ? evaluatedMsBuildInputs
                         : Array.Empty<string>(),
                     pathMapsByEvaluation.TryGetValue(
                         referencedProject.BuildVisitKey(),
@@ -903,6 +910,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
+                importPaths.Concat(new[] { request.ProjectPath }).Distinct(
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray(),
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),
                 targetFrameworks.Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),

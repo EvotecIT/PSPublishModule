@@ -93,6 +93,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ProjectEvaluationRequest request,
         string candidatePath,
         IReadOnlyCollection<string> evaluatedBuildInputs,
+        IReadOnlyCollection<string> evaluatedMsBuildInputs,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
@@ -117,6 +118,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.ProjectPath,
                     controlledSourceRoot,
                     evaluatedBuildInputs,
+                    evaluatedMsBuildInputs,
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -667,6 +669,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal EvaluatedProjectInputs(
             string[] buildInputs,
+            string[] msBuildInputs,
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
@@ -679,6 +682,7 @@ public sealed partial class DotNetPublishPipelineRunner
             VerifiedPackageInputCatalog? verifiedPackages)
         {
             BuildInputs = buildInputs;
+            MsBuildInputs = msBuildInputs;
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
@@ -692,6 +696,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         internal string[] BuildInputs { get; }
+        internal string[] MsBuildInputs { get; }
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }

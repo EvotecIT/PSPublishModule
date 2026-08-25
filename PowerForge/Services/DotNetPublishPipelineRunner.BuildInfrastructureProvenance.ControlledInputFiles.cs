@@ -40,9 +40,18 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static bool HasOnlyControlledBuildFileInputs(
         string checkoutRoot,
         IReadOnlyCollection<string> controlledInputs)
+        => HasOnlyControlledBuildFileInputs(checkoutRoot, controlledInputs, controlledInputs);
+
+    internal static bool HasOnlyControlledBuildFileInputs(
+        string checkoutRoot,
+        IReadOnlyCollection<string> controlledInputs,
+        IReadOnlyCollection<string> executableMsBuildInputs)
     {
         try
         {
+            var executableInputs = new HashSet<string>(
+                executableMsBuildInputs.Select(Path.GetFullPath),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var controlledDocuments = new List<XDocument>();
             foreach (string path in controlledInputs)
             {
@@ -100,16 +109,20 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
                 }
 
-                controlledDocuments.Add(document);
-                if (ContainsControlledBuildPropertyEscape(document) ||
-                    !HasOnlyControlledTaskLoadedFileInputs(
-                        document,
-                        path,
-                        checkoutRoot,
-                        ReadControlledCheckoutTextInput) ||
-                    !HasOnlyControlledLiteralTaskFileInputs(document, path, checkoutRoot))
+                bool isExecutableMsBuildInput = executableInputs.Contains(Path.GetFullPath(path));
+                if (isExecutableMsBuildInput)
                 {
-                    return false;
+                    controlledDocuments.Add(document);
+                    if (ContainsControlledBuildPropertyEscape(document) ||
+                        !HasOnlyControlledTaskLoadedFileInputs(
+                            document,
+                            path,
+                            checkoutRoot,
+                            ReadControlledCheckoutTextInput) ||
+                        !HasOnlyControlledLiteralTaskFileInputs(document, path, checkoutRoot))
+                    {
+                        return false;
+                    }
                 }
                 if (document.DescendantNodes()
                     .OfType<XText>()

@@ -375,6 +375,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string projectPath,
         string checkoutRoot,
         IReadOnlyCollection<string> evaluatedBuildInputs,
+        IReadOnlyCollection<string> evaluatedMsBuildInputs,
         out string? gitRoot,
         out string? controlledProjectPath)
     {
@@ -438,7 +439,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledBuildInputs.Add(controlledInput);
             }
 
-            if (!HasOnlyControlledBuildFileInputs(checkoutRoot, controlledBuildInputs))
+            var controlledMsBuildInputs = new HashSet<string>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            {
+                controlledProjectPath
+            };
+            foreach (string input in evaluatedMsBuildInputs)
+            {
+                string fullInput = Path.GetFullPath(input);
+                if (!IsSameOrBelowBuildInputPath(fullInput, gitRoot!))
+                    continue;
+                string relativeInput = FrameworkCompatibility.GetRelativePath(gitRoot!, fullInput);
+                string controlledInput = Path.GetFullPath(Path.Combine(checkoutRoot, relativeInput));
+                if (!IsSameOrBelowBuildInputPath(controlledInput, checkoutRoot))
+                    return false;
+                if (File.Exists(controlledInput))
+                    controlledMsBuildInputs.Add(controlledInput);
+            }
+
+            if (!HasOnlyControlledBuildFileInputs(
+                    checkoutRoot,
+                    controlledBuildInputs,
+                    controlledMsBuildInputs))
                 return false;
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
