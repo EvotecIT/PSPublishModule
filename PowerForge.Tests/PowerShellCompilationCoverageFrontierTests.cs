@@ -87,6 +87,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModuleEnforcesObjectArrayElementValidationAcrossTypedLocalCalls()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-NotNullLength { [CmdletBinding()] param([ValidateNotNull()] [object[]] $Values) return $Values.Length }; " +
+            "function Get-NotEmptyLength { [CmdletBinding()] param([ValidateNotNullOrEmpty()] [object[]] $Values) return $Values.Length }; " +
+            "function Invoke-NullElement { [CmdletBinding()] param([AllowNull()] [object[]] $Values) return Get-NotNullLength -Values $Values }; " +
+            "function Invoke-EmptyElement { [CmdletBinding()] param([AllowEmptyString()] [object[]] $Values) return Get-NotEmptyLength -Values $Values }; " +
+            "Export-ModuleMember -Function Get-NotNullLength, Get-NotEmptyLength, Invoke-NullElement, Invoke-EmptyElement",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedObjectArrayValidation",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var nullElement = RunModuleFailureProof(result.ArtifactPath!, "Invoke-NullElement -Values @([object] 1, $null)");
+        Assert.NotEqual(0, nullElement.ExitCode);
+        Assert.Contains("does not allow null values", nullElement.StandardError, StringComparison.OrdinalIgnoreCase);
+        var emptyElement = RunModuleFailureProof(result.ArtifactPath!, "Invoke-EmptyElement -Values @([object] 'ok', '')");
+        Assert.NotEqual(0, emptyElement.ExitCode);
+        Assert.Contains("does not allow null or empty values", emptyElement.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_StrictBinaryModuleRejectsEmptyMandatoryStringAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(

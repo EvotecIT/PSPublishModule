@@ -96,13 +96,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         foreach (var validation in parameter.Validations)
         {
-            if (validateCollectionElement && validation.Kind == PowerShellCompilationValidationKind.NotNull)
-                continue;
             var condition = validation.Kind switch
             {
                 PowerShellCompilationValidationKind.NotNull when !valueType.IsValueType => $"{value} is null",
                 PowerShellCompilationValidationKind.NotNull => null,
                 PowerShellCompilationValidationKind.NotNullOrEmpty when valueType == typeof(string) => $"global::System.String.IsNullOrEmpty({value})",
+                PowerShellCompilationValidationKind.NotNullOrEmpty when valueType == typeof(object) => $"{value} is null || ({value} is string && ((string){value}).Length == 0)",
                 PowerShellCompilationValidationKind.NotNullOrEmpty when !valueType.IsValueType => $"{value} is null",
                 PowerShellCompilationValidationKind.NotNullOrEmpty => null,
                 PowerShellCompilationValidationKind.Set => EmitValidateSetFailure(value, validation.Arguments),
@@ -110,7 +109,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 PowerShellCompilationValidationKind.Pattern => EmitValidatePatternFailure(value, validation.Arguments.Single()),
                 _ => throw Error(_body, $"Validation metadata '{validation.Kind}' is not supported for typed method parameters.")
             };
-            if (validateCollectionElement && !valueType.IsValueType && validation.Kind != PowerShellCompilationValidationKind.NotNullOrEmpty)
+            if (validateCollectionElement &&
+                !valueType.IsValueType &&
+                validation.Kind is not PowerShellCompilationValidationKind.NotNull and not PowerShellCompilationValidationKind.NotNullOrEmpty)
                 condition = condition is null ? $"{value} is null" : $"{value} is null || {condition}";
             if (condition is null)
                 continue;

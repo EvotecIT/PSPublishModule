@@ -25,7 +25,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         .GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
         .Select(static member => member.Name)
         .Append("ProcessRecord")
-        .Append(RemainingArgumentsMemberName)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     internal static PowerShellTypedCompilationResult PrepareForBinaryModule(
@@ -170,6 +169,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         {
             var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
             return ReservedMemberNames.Contains(memberName) ||
+                   (!cmdlet.Method.IsAdvancedFunction && memberName.Equals(RemainingArgumentsMemberName, StringComparison.OrdinalIgnoreCase)) ||
                    memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
                    cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName);
         });
