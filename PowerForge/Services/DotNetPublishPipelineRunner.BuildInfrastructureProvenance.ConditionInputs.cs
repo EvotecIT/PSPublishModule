@@ -25,6 +25,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryExpandControlledTaskInputValues(
                     condition,
                     declaringPath,
+                    taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedConditions))
@@ -40,6 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (!TryExpandControlledTaskInputValues(
                             operand,
                             declaringPath,
+                            taskInputBaseDirectory,
                             relatedDocuments,
                             evaluatedGlobalProperties,
                             out string[] expandedValues) ||

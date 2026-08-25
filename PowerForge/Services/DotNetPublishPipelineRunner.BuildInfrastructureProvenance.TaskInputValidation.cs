@@ -29,6 +29,8 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputBaseDirectory,
                declaringAllowedRoot,
                taskInputAllowedRoot,
+               relatedDocuments,
+               evaluatedGlobalProperties,
                readLines ?? ReadControlledCheckoutTextInput) &&
            HasOnlyControlledLiteralTaskFileInputs(
                document,
