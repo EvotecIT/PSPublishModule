@@ -23,6 +23,22 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
     }
 
     [Fact]
+    public void Build_StrictExecutableRejectsExplicitEmptyCollectionWhenNotNullOrEmptyIsRequired()
+    {
+        using var fixture = Fixture.Create(
+            "param([Parameter(Mandatory)][AllowEmptyCollection()][ValidateNotNullOrEmpty()][string[]] $Values); return $Values.Length");
+        var result = BuildExecutable(fixture, "PowerForge.ValidatedEmptyCollection");
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var empty = Run(result.ArtifactPath!, "--Values");
+        var populated = Run(result.ArtifactPath!, "--Values", "one");
+
+        Assert.NotEqual(0, empty.ExitCode);
+        Assert.Contains("does not allow null or empty values", empty.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((0, "1", string.Empty), Normalize(populated));
+    }
+
+    [Fact]
     public void Analyze_StrictExecutableRejectsBinaryOnlyParameterMetadata()
     {
         using var fixture = Fixture.Create(

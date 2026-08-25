@@ -11,7 +11,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     private static readonly HashSet<string> CommandRegionMemberNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "InvokePowerShellRegion",
-        "CapturePowerShellRegion"
+        "CapturePowerShellRegion",
+        "NormalizeCapturedPowerShellValue"
     };
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {

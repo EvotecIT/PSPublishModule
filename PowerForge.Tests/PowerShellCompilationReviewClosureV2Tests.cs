@@ -141,6 +141,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Theory]
     [InlineData("InvokePowerShellRegion")]
     [InlineData("CapturePowerShellRegion")]
+    [InlineData("NormalizeCapturedPowerShellValue")]
     public void Prepare_BinaryModuleRejectsCommandRegionHelperParameterCollision(string parameterName)
     {
         using var fixture = ArtifactFixture.Create(

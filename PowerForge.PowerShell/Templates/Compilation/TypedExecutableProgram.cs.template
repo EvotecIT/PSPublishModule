@@ -222,6 +222,8 @@ internal static class Program
             : new[] { value };
         foreach (var validation in parameter.Validations)
         {
+            if (validation.Kind == ValidationKind.NotNullOrEmpty && values.Length == 0)
+                throw new ArgumentException($"Parameter '--{parameter.Name}' does not allow null or empty values.");
             foreach (var item in values)
             {
                 switch (validation.Kind)
