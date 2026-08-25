@@ -228,6 +228,7 @@ public sealed class PowerShellCompilationPlan
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
+        ResourceSummary = PowerShellCompilationResourceSummary.Create(Dependencies);
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
         RuntimeFallbackUnits = TotalUnits - CompilableUnits;
@@ -246,6 +247,9 @@ public sealed class PowerShellCompilationPlan
     /// <summary>Deterministic runtime dependency and resource decisions for the selected artifact shape.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; }
 
+    /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
+    public PowerShellCompilationResourceSummary ResourceSummary { get; }
+
     /// <summary>Total executable units discovered.</summary>
     public int TotalUnits { get; }
 
@@ -262,7 +266,9 @@ public sealed class PowerShellCompilationPlan
     public double CompilationCoveragePercentage => TotalUnits == 0 ? 0 : CompilableUnits * 100d / TotalUnits;
 
     /// <summary>Whether artifact generation is allowed under the requested mode.</summary>
-    public bool CanProceed => ParseErrorFiles == 0 && (Mode != PowerShellCompilationMode.Strict || RuntimeFallbackUnits == 0);
+    public bool CanProceed => ParseErrorFiles == 0 &&
+                              Dependencies.All(static dependency => dependency.Disposition != PowerShellCompilationDependencyDisposition.Missing) &&
+                              (Mode != PowerShellCompilationMode.Strict || RuntimeFallbackUnits == 0);
 }
 
 /// <summary>

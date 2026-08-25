@@ -143,7 +143,8 @@ public sealed class PowerShellCompilationCensusRunner
             stopwatch.Elapsed.TotalMilliseconds,
             diagnostics,
             BuildFeatureImpacts(featureEvidence, plan.CompilableUnits, plan.TotalUnits, productMetrics),
-            PowerShellCompilationDependencyPlanner.Summarize(dependencies));
+            PowerShellCompilationDependencyPlanner.Summarize(dependencies),
+            PowerShellCompilationResourceSummary.Create(dependencies));
         return new AnalyzedProduct(product, featureEvidence);
     }
 

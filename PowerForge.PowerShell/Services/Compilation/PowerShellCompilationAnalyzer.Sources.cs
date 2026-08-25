@@ -19,10 +19,18 @@ public sealed partial class PowerShellCompilationAnalyzer
     /// <param name="input">Resolved script or module input.</param>
     /// <param name="mode">Requested analysis and fallback policy.</param>
     /// <param name="targetFramework">Generated-project target framework used for CLR eligibility.</param>
+    /// <param name="resourceMode">Optional payload selection policy.</param>
+    /// <param name="includeResource">Contained resource paths or patterns to include.</param>
+    /// <param name="excludeResource">Contained optional resource paths or patterns to exclude.</param>
+    /// <param name="outputDirectory">Optional durable output root used to reject resource overlap.</param>
     public PowerShellCompilationPlan Analyze(
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
-        string? targetFramework = "net8.0")
+        string? targetFramework = "net8.0",
+        PowerShellCompilationResourceMode resourceMode = PowerShellCompilationResourceMode.Declared,
+        IEnumerable<string>? includeResource = null,
+        IEnumerable<string>? excludeResource = null,
+        string? outputDirectory = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -44,7 +52,13 @@ public sealed partial class PowerShellCompilationAnalyzer
             plan.Mode,
             plan.Files,
             plan.TargetFramework,
-            new PowerShellCompilationDependencyPlanner().Analyze(input, capabilityMode));
+            new PowerShellCompilationDependencyPlanner().Analyze(
+                input,
+                capabilityMode,
+                resourceMode,
+                includeResource,
+                excludeResource,
+                outputDirectory));
     }
 
     internal PowerShellCompilationPlan AnalyzeFiles(

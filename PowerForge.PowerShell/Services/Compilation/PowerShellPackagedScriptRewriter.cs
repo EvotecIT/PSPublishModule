@@ -17,7 +17,9 @@ internal static class PowerShellPackagedScriptRewriter
         string sourcePath,
         string? packagedCommandPathExpression = null,
         bool allowDotSource = false,
-        string? dependencyCommandPathExpression = null)
+        string? dependencyCommandPathExpression = null,
+        IReadOnlyCollection<string>? embeddedResourceRelativePaths = null,
+        string? packagedScriptRootExpression = null)
     {
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
@@ -65,6 +67,9 @@ internal static class PowerShellPackagedScriptRewriter
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
             : FindDependencyLoadPaths(ast).ToArray();
+        var embeddedResourcePaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
+            ? Array.Empty<VariableExpressionAst>()
+            : FindEmbeddedResourcePaths(ast, embeddedResourceRelativePaths ?? Array.Empty<string>()).ToArray();
         var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths, commandPathExpression))
             .Concat(invocationPaths
                 .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
@@ -84,6 +89,10 @@ internal static class PowerShellPackagedScriptRewriter
                 path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
                     ? "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))"
                     : dependencyCommandPathExpression!)))
+            .Concat(embeddedResourcePaths.Select(path => new SourceReplacement(
+                path.Extent.StartOffset,
+                path.Extent.EndOffset,
+                "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))")))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
@@ -103,7 +112,10 @@ internal static class PowerShellPackagedScriptRewriter
         var pathSemantics = new StringBuilder();
         if (prologueEndOffset > 0 && source[prologueEndOffset - 1] is not '\r' and not '\n') pathSemantics.AppendLine();
         pathSemantics.Append("$script:PSCommandPath = ").AppendLine(commandPathExpression);
-        pathSemantics.AppendLine("$script:PSScriptRoot = [System.IO.Path]::GetDirectoryName($script:PSCommandPath)");
+        pathSemantics.Append("$script:PSScriptRoot = ").AppendLine(
+            string.IsNullOrWhiteSpace(packagedScriptRootExpression)
+                ? "[System.IO.Path]::GetDirectoryName($script:PSCommandPath)"
+                : packagedScriptRootExpression);
         source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
     }
@@ -206,6 +218,31 @@ internal static class PowerShellPackagedScriptRewriter
                     variable.VariablePath.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase))
                     yield return variable;
             }
+        }
+    }
+
+    private static IEnumerable<VariableExpressionAst> FindEmbeddedResourcePaths(
+        ScriptBlockAst ast,
+        IReadOnlyCollection<string> embeddedResourceRelativePaths)
+    {
+        if (embeddedResourceRelativePaths.Count == 0) yield break;
+        var selected = embeddedResourceRelativePaths
+            .Select(static path => path.Replace('\\', '/'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var literal in ast.FindAll(static node => node is ExpandableStringExpressionAst, searchNestedScriptBlocks: true)
+                     .OfType<ExpandableStringExpressionAst>())
+        {
+            if (literal.NestedExpressions.Count != 1 ||
+                literal.NestedExpressions[0] is not VariableExpressionAst variable ||
+                !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var text = literal.Extent.Text.Trim().Trim('"', '\'');
+            var prefixes = new[] { "$PSScriptRoot/", "$PSScriptRoot\\", "${PSScriptRoot}/", "${PSScriptRoot}\\" };
+            var prefix = prefixes.FirstOrDefault(candidate => text.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+            if (prefix is null) continue;
+            var relative = text.Substring(prefix.Length).Replace('\\', '/');
+            if (selected.Contains(relative))
+                yield return variable;
         }
     }
 

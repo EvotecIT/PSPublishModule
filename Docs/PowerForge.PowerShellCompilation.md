@@ -115,20 +115,44 @@ The dependency tree is extracted with its relative layout before the embedded sc
 
 ### Dependencies and runtime resources
 
-`analyze` and every successful build manifest include a detailed dependency/resource plan, while `census` aggregates the same evidence by dependency kind and disposition for each product. Detailed items record their stable kind, discovery source, relative path, byte size, existence, and disposition: `Compiled`, `PreservedScript`, `Embedded`, `EmbeddedAndExtracted`, `CopiedAdjacent`, `ExternalRequirement`, `NotIncluded`, or `Missing`. This prevents a successful-looking binary from silently losing files its source expected.
+`analyze` and every successful build manifest include a detailed dependency/resource plan, while `census` aggregates the same evidence for each product. Detailed items record their stable kind, discovery source, selection reason, relative path, byte size, existence, and artifact disposition. The resource summary reports included, excluded, required, inferred, and unclassified file counts and sizes, so a successful-looking binary cannot silently lose files its source expected.
 
 | Input dependency | BinaryModule output | Package EXE | Strict EXE | CLR Library |
 | --- | --- | --- | --- | --- |
 | Root source and literal `.ps1` closure | Eligible functions compile; Hybrid script remains beside the DLL | Root is embedded; reachable dot-sources are embedded and extracted with their relative layout | Complete reachable graph must compile | Eligible functions compile; unsupported functions are omitted in Hybrid |
-| `FormatsToProcess`, `TypesToProcess`, `ScriptsToProcess`, local `RequiredAssemblies`, local `NestedModules`, and `FileList` | Contained manifest closure is copied with its relative layout; Strict rejects script runtime hooks | Not a module-to-EXE dependency mechanism | Not included | Not included |
-| Top-level `Resources`/`Resource` tree | Copied beside the generated module | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
-| Top-level `Lib`/`Libraries` tree | Managed and native DLLs plus companion content are copied beside the generated module | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
-| Top-level `runtimes` tree | Copied with RID-specific subdirectories intact | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` | Discovered and reported as `NotIncluded` |
+| `FormatsToProcess`, `TypesToProcess`, `ScriptsToProcess`, local `RequiredAssemblies`, local `NestedModules`, and `FileList` | Contained manifest closure is copied with its relative layout; Strict rejects script runtime hooks | Module inputs are not executable entrypoints | Module inputs are not executable entrypoints | Non-script required files are copied beside the DLL |
+| Explicit `IncludeResource` / `--include-resource` | Copied with its source-root-relative path | Embedded and extracted into a contained source-root-relative runtime layout | Copied beside the EXE | Copied beside the DLL |
+| High-confidence literal `$PSScriptRoot` file path | Inferred and copied in `Declared` mode | Inferred, embedded, and extracted in `Declared` mode | Inferred and copied in `Declared` mode | Inferred and copied in `Declared` mode |
+| Optional module-root payload | Included only in `CompleteModule` mode or by an explicit declaration | A single script never sweeps sibling content | A single script never sweeps sibling content | Included only in `CompleteModule` mode or by an explicit declaration |
 | `RequiredModules` and named external `RequiredAssemblies` | Preserved as external host requirements; not embedded | Not resolved or bundled automatically | Not resolved or bundled automatically | Remain consumer requirements |
 
-A generated binary module is therefore a module directory, not only its generated DLL. CSS, JavaScript, images, managed assemblies, native libraries, manifests, scripts, and type/format data keep file-backed paths. PowerForge signs only build-owned generated files; copied vendor assemblies retain their publisher identity. A module can use `FileList` for any runtime payload outside the conventional directories. Pointing at a built/staged module directory gives the most precise resource boundary; repository-only examples, tests, and build output are not copied merely because they are nearby.
+A generated artifact with selected payload is an artifact set, not necessarily one physical file. Binary modules, Strict EXEs, and CLR libraries copy selected CSS, JavaScript, images, managed assemblies, native libraries, templates, data, manifests, and type/format data beside the primary artifact with their relative paths intact. Package EXEs instead embed selected resources and extract them with the reachable dot-source closure into a private contained runtime layout. Exact inferred resource references are rewritten to that layout. An explicit include or `CompleteModule` selection also gives the packaged root script the extracted `$PSScriptRoot`, so declared dynamic paths such as `Join-Path $PSScriptRoot $name` resolve without leaving sidecars beside the durable EXE. `$PSCommandPath` remains the running artifact path, and parameter defaults retain EXE-backed path metadata. PowerForge signs only build-owned generated files; adjacent vendor assemblies retain their publisher identity. `SingleFile` includes Package-mode selected resources, while adjacent Strict/DLL payload remains a multi-file artifact set.
 
-PowerForge does not currently turn a module into an EXE or infer an application entrypoint from exported functions. A standalone `.ps1` that imports PSWriteHTML, PSWriteWord, or another module does not cause that whole module and its resource tree to be bundled. Package EXEs currently embed the entry script and reachable literal script dependencies only. Strict EXEs and plain CLR libraries need an explicit future resource API before file payloads can be embedded with meaningful lookup semantics. The planner reports these files as `NotIncluded` instead of implying support.
+Resource selection is policy-driven:
+
+- `Declared` is the default. It includes manifest-required files, explicit includes, and high-confidence contained file literals such as `Get-Content "$PSScriptRoot/Templates/report.html"`.
+- `CompleteModule` includes all contained module-root payload except explicit exclusions. Use it for a staged module directory, not an unchecked repository root.
+- `None` disables inference and broad optional selection; manifest-required files and explicit includes still apply.
+- `FileList` is authoritative. A missing entry or an exclusion that matches a manifest-required file fails closed.
+- `IncludeResource` and `ExcludeResource` accept contained paths, directories, and `*`, `?`, or `**` globs. An unmatched pattern, include/exclude collision, link, root escape, case collision, or selected output overlap fails with a diagnostic.
+- `Resources`, `Resource`, `Lib`, `Libraries`, and `runtimes` are classification hints only. `Vendor`, `Templates`, `Web`, `Data`, or any other folder works the same way.
+- Dynamic resource paths are left unclassified and require an explicit include. In a Package EXE, that declaration also selects extracted-root semantics for the script body; undeclared dynamic paths continue to refer to the durable artifact directory. A single `.ps1` build never sweeps neighboring folders automatically.
+
+For example:
+
+```powershell
+powerforge powershell analyze .\MyModule `
+    --include-resource 'Templates/**' `
+    --include-resource 'Vendor' `
+    --exclude-resource 'Vendor/**/*.pdb'
+
+Build-PowerShellArtifact -Path .\MyModule `
+    -ResourceMode Declared `
+    -IncludeResource 'Templates/**', 'Vendor' `
+    -ExcludeResource 'Vendor/**/*.pdb'
+```
+
+PowerForge does not turn a module into an EXE or infer an application entrypoint from exported functions. A standalone `.ps1` that imports another module does not cause that module and its complete resource tree to be bundled; module dependency acquisition remains an explicit deployment concern.
 
 Analyze a file or a complete source tree before building:
 
@@ -158,7 +182,7 @@ powerforge powershell build .\Measure-Threshold.ps1 `
 
 Strict typed executables accept explicitly typed scalar, switch, and one-dimensional array parameters. Their generated CLI preserves required parameters, aliases, `AllowNull`, and the supported `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata. It supports exact names, aliases, unambiguous abbreviations, positional values, repeated array options, `--Name value`, `--Name=value`, switches, and `--`. Missing, duplicate, ambiguous, unknown, or validation-failing parameters are rejected before invoking compiled code.
 
-The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Pipeline objects use PowerShell's normal formatting system before going to stdout; information records also go to stdout, while warnings and errors go to stderr. Nonterminating error records do not by themselves change a successful process exit code; a top-level explicit `exit <code>` becomes the process exit code, and a terminating exception fails the process. `$PSScriptRoot` resolves to the packaged artifact directory and `$PSCommandPath` to the running artifact path. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior. It also rejects `using module` and `using assembly` because those directives are resolved before an embedded script can receive file-backed path metadata.
+The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Pipeline objects use PowerShell's normal formatting system before going to stdout; information records also go to stdout, while warnings and errors go to stderr. Nonterminating error records do not by themselves change a successful process exit code; a top-level explicit `exit <code>` becomes the process exit code, and a terminating exception fails the process. `$PSCommandPath` resolves to the running artifact path. `$PSScriptRoot` normally resolves to the durable artifact directory, while a Package build with explicit or complete-module resources intentionally resolves the script body against the private extracted root; parameter-binding path metadata remains artifact-backed. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior. It also rejects `using module` and `using assembly` because those directives are resolved before an embedded script can receive file-backed path metadata.
 
 Compile a strict binary module:
 
@@ -336,7 +360,9 @@ Each successful build writes `<name>.powerforge-compilation.json`. The manifest 
 
 A packaged EXE therefore reports `requiresPowerShellRuntime: true` and `usesPowerShellRuntimeFallback: true`. A strict CLR library reports both values as `false`. A strict binary module requires PowerShell as its cmdlet host but reports no script fallback.
 
-PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, generated-source directory, and manifest state together; same-name publication is serialized across threads and processes, and a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
+PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, generated-source directory, manifest, and exactly the resource files recorded by the previous manifest. Removed resources are deleted, unrelated neighboring files are preserved, unowned collisions fail, same-name publication is serialized across threads and processes, and a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
+
+Disposable compiler projects live under a dedicated `PowerForge/powershell-compilation` temporary root, carry an ownership marker and active lock, and are deleted after normal builds. Stale cleanup removes only marked, unlocked, non-retained compiler workspaces older than the cleanup threshold. `KeepBuildWorkspace` adds an explicit retention marker; unrelated or legacy `ps-*` directories are never scavenged by name alone.
 
 Add `--emit-source` or `-EmitSource` to publish `<name>.generated` as part of the same atomic artifact set. It contains the exact generated `.cs` files, `.csproj`, and a `source-map.json` that maps each generated method to its authored file and line; packaged executables also include the rewritten embedded `Source.ps1`. Generated PowerShell-SDK projects pin the applicable serviced `System.Security.Cryptography.Xml` line (`8.0.4` for net8 and `10.0.11` for net10) so an independently restored inspection build does not fall back to the vulnerable transitive version currently carried by the SDK. The project can be inspected or rebuilt directly:
 
@@ -402,7 +428,7 @@ See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for th
 
 ## Real-source eligibility
 
-The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are Testimo `f7550cf661ebaf97ae38f96b664aee09efd9cbde`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`.
+The canonical census uses exact committed source from six PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PSWriteWord `1fdee837c3fcbc1fdb5c67a9843526bd532c2728`.
 
 That archived six-product lane contains 1,249 files and 1,340 whole script/function units with no parse-error files. Before the common-module language slice, one unit compiled; the parent candidate compiled nine. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
 
@@ -417,12 +443,13 @@ powerforge powershell census `
     --path (Join-Path $root 'PSWriteHTML\PSWriteHTML.psd1') `
     --path (Join-Path $root 'O365Essentials\O365Essentials.psd1') `
     --path (Join-Path $root 'ADEssentials\ADEssentials.psd1') `
+    --path (Join-Path $root 'PSWriteWord\PSWriteWord.psd1') `
     --framework net10.0 `
     --write-baseline .\artifacts\powershell-compilation-census.json `
     --output json
 ```
 
-The current five-product frontier candidate reports 1,132 authored files, 1,222 units, 103 emitted typed methods, 1,119 fallback units, and zero parse errors. The per-product split is PowerInfoBlox 2/56, PSSharedGoods 16/269, PSWriteHTML 5/318, O365Essentials 76/210, and ADEssentials 4/266. This is the actual binary-module graph emitted after export shaping, dependency closure, collision handling, and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
+The current six-product frontier candidate reports 1,263 authored files, 1,353 units, 104 emitted typed methods, 1,249 fallback units, and zero parse errors, or 7.69% typed coverage. The per-product typed/fallback split is PowerInfoBlox 2/56, PSSharedGoods 16/269, PSWriteHTML 5/318, O365Essentials 76/210, ADEssentials 4/266, and PSWriteWord 1/130. This is the actual binary-module graph emitted after export shaping, dependency closure, collision handling, and cmdlet-shape checks, not the larger analyzer-only eligibility count. It measures Hybrid compilation opportunity rather than runtime-free Strict coverage.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts.
 
@@ -439,15 +466,15 @@ The current five-product run produces this leading planning frontier:
 
 | Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `command.register-argumentcompleter` | 229 | 82 | 78 | 2 | 14.81% |
-| `parameter.type` | 1,027 | 443 | 45 | 5 | 12.11% |
-| `runtime.scope` | 1,633 | 410 | 35 | 5 | 11.29% |
-| `parameter.metadata` | 1,497 | 264 | 34 | 5 | 11.21% |
-| `parameter.default` | 562 | 271 | 30 | 5 | 10.88% |
-| `function.graph` | 29 | 29 | 29 | 3 | 10.80% |
-| `command.new-htmltab` | 22 | 22 | 22 | 1 | 10.23% |
-| `expression.conversion` | 699 | 236 | 10 | 5 | 9.25% |
-| `syntax.subexpression` | 737 | 191 | 8 | 5 | 9.08% |
+| `command.register-argumentcompleter` | 229 | 82 | 78 | 2 | 13.45% |
+| `parameter.type` | 1,518 | 566 | 57 | 6 | 11.90% |
+| `runtime.scope` | 1,642 | 418 | 36 | 6 | 10.35% |
+| `parameter.metadata` | 1,617 | 357 | 34 | 6 | 10.20% |
+| `parameter.default` | 829 | 357 | 31 | 6 | 9.98% |
+| `function.graph` | 29 | 29 | 29 | 3 | 9.83% |
+| `command.new-htmltab` | 22 | 22 | 22 | 1 | 9.31% |
+| `expression.conversion` | 710 | 243 | 10 | 6 | 8.43% |
+| `syntax.subexpression` | 746 | 197 | 8 | 6 | 8.28% |
 
 This changes feature planning materially. For example, parameter types have far more total impact than `Register-ArgumentCompleter`, but the latter is the only visible blocker for more units in the current Hybrid module graph. That does not mean it should be implemented as a runtime-free Strict intrinsic: the recommendation attached to each feature still distinguishes a safe intrinsic, a PowerShell-backed command region, an authoring change, or behavior that should remain Package/Hybrid-only.
 
@@ -464,6 +491,8 @@ The module rebuilder was then run from `git archive` snapshots at the exact comm
 | ADEssentials `b2b1f76` | 265 | 270 | 4 / 266 | 1.48% | 157 / 157 | 1,890,077 bytes | 2 files, 151 lines, 4 mapped methods |
 
 The function/cmdlet split is intentional: eligible functions become real cmdlets while Hybrid fallback functions keep their script definitions. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`. The newly eligible private PowerInfoBlox `ConvertTo-InfobloxMicrosoftDHCPServer` also changed from a script function to a generated cmdlet while preserving its `PSCustomObject` type and `_struct`/`ipv4addr` property values.
+
+The resource-policy acceptance build selected `Resources/**` for PSWriteHTML and preserved 239 files totaling 19,582,067 bytes: 59 CSS files, 174 JavaScript files, and six other resources. A net472 PSWriteWord build selected the arbitrary `Lib/**` path and preserved three files totaling 342,224 bytes, including two managed vendor DLLs. Both builds used explicit patterns rather than folder-name behavior, and all 625 temporary proof files (27,790,013 bytes including generated artifacts) were removed after measurement.
 
 A small seven-sample, 10,000-call dispatch probe measured rebuilt/original medians of 204.30/251.44 ms for PowerInfoBlox (1.23x), 143.90/160.04 ms for PSSharedGoods (1.11x), and 215.20/224.98 ms for PSWriteHTML (1.05x). These are intentionally modest: they measure repeated PowerShell command dispatch, not direct CLR execution. The clean direct-CLR PowerInfoBlox benchmark remains 16.2x faster than its PowerShell function. A 2026-08-24 quick smoke run completed all seven shared benchmark suites with zero validation failures. It measured a coarse generated command at 2.71 ms versus 10.81 ms for equivalent fine-grained binary-cmdlet dispatch (**3.99x**), and a multi-file typed local-call EXE at 39.23 ms versus 259.36 ms for `pwsh -File` (**6.61x**). Runs `20260824-134510-7959872a` and `20260824-134535-c549415e` used three samples on a changing worktree, so they are directional evidence rather than clean release baselines.
 

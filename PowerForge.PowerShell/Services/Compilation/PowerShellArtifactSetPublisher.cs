@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -61,8 +63,13 @@ internal static class PowerShellArtifactSetPublisher
             throw new InvalidOperationException("Artifact staging must be a direct child of the durable output directory.");
         using var publicationLock = AcquirePublicationLock(outputPath, artifactName);
 
-        var stagedEntries = Directory.EnumerateFileSystemEntries(stagingPath).ToArray();
-        if (stagedEntries.Length == 0)
+        var stagedFiles = Directory.EnumerateFiles(stagingPath, "*", SearchOption.AllDirectories)
+            .OrderBy(path => FrameworkCompatibility.GetRelativePath(stagingPath, path), PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
+        var stagedEmptyDirectories = Directory.EnumerateDirectories(stagingPath, "*", SearchOption.AllDirectories)
+            .Where(static directory => !Directory.EnumerateFileSystemEntries(directory).Any())
+            .ToArray();
+        if (stagedFiles.Length == 0 && stagedEmptyDirectories.Length == 0)
             throw new InvalidOperationException("The staged artifact set is empty.");
 
         var ownedNames = new[]
@@ -75,10 +82,20 @@ internal static class PowerShellArtifactSetPublisher
             artifactName + ".powerforge-compilation.json"
         }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         EnsureOwnedEntriesDoNotContainSource(outputPath, ownedNames, protectedPaths);
+        string[] previousOwnedFiles;
+        try
+        {
+            previousOwnedFiles = ReadPreviousOwnedFiles(outputPath, artifactName, protectedPaths);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Artifact publication failed; the previous durable artifact set was restored.", exception);
+        }
         var backupDirectory = Path.Combine(outputPath, "." + artifactName + ".artifact-backup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(backupDirectory);
         var backups = new List<(string Backup, string Target)>();
         var installed = new List<string>();
+        var createdDirectories = new List<string>();
         var preserveBackup = false;
 
         try
@@ -92,11 +109,49 @@ internal static class PowerShellArtifactSetPublisher
                 backups.Add((backup, target));
             }
 
-            foreach (var stagedEntry in stagedEntries)
+            foreach (var priorFile in previousOwnedFiles)
             {
-                var target = Path.Combine(outputPath, Path.GetFileName(stagedEntry));
-                MoveEntry(stagedEntry, target);
+                if (!File.Exists(priorFile) || IsCoveredByFixedOwnedEntry(priorFile, outputPath, ownedNames))
+                    continue;
+                PowerShellCompilationPathSafety.EnsureNoLinks(
+                    outputPath,
+                    priorFile,
+                    $"Previously published artifact file '{priorFile}' traverses a symbolic link or junction.");
+                var relative = FrameworkCompatibility.GetRelativePath(outputPath, priorFile);
+                var backup = Path.Combine(backupDirectory, "files", relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                File.Move(priorFile, backup);
+                backups.Add((backup, priorFile));
+            }
+
+            // Prune directories emptied by the previous owned set before installing the
+            // replacement. This permits an owned path to change from Directory/File to File.
+            RemoveEmptyPreviousDirectories(previousOwnedFiles, outputPath);
+
+            foreach (var stagedFile in stagedFiles)
+            {
+                var relative = FrameworkCompatibility.GetRelativePath(stagingPath, stagedFile);
+                var target = Path.GetFullPath(Path.Combine(outputPath, relative));
+                PowerShellCompilationPathSafety.EnsureContained(outputPath, target, "A staged artifact file escaped the durable output directory.");
+                EnsureExistingParentHasNoLinks(outputPath, target);
+                if (EntryExists(target))
+                    throw new InvalidOperationException($"Artifact publication target '{target}' already exists and is not owned by the previous artifact manifest.");
+                CreateDirectoriesTracked(outputPath, Path.GetDirectoryName(target)!, createdDirectories);
+                File.Move(stagedFile, target);
                 installed.Add(target);
+            }
+
+            foreach (var stagedDirectory in stagedEmptyDirectories)
+            {
+                var relative = FrameworkCompatibility.GetRelativePath(stagingPath, stagedDirectory);
+                var target = Path.GetFullPath(Path.Combine(outputPath, relative));
+                PowerShellCompilationPathSafety.EnsureContained(outputPath, target, "A staged artifact directory escaped the durable output directory.");
+                EnsureExistingParentHasNoLinks(outputPath, target);
+                if (File.Exists(target))
+                    throw new InvalidOperationException($"Artifact publication directory '{target}' collides with an existing file.");
+                if (Directory.Exists(target)) continue;
+                Directory.CreateDirectory(target);
+                createdDirectories.Add(target);
             }
         }
         catch (Exception publicationError)
@@ -106,9 +161,23 @@ internal static class PowerShellArtifactSetPublisher
             {
                 try { DeleteEntry(target); } catch (Exception ex) { rollbackError ??= ex; }
             }
+            foreach (var directory in createdDirectories.OrderByDescending(static directory => directory.Length))
+            {
+                try
+                {
+                    if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                        Directory.Delete(directory);
+                }
+                catch (Exception ex) { rollbackError ??= ex; }
+            }
             foreach (var backup in backups.AsEnumerable().Reverse())
             {
-                try { MoveEntry(backup.Backup, backup.Target); } catch (Exception ex) { rollbackError ??= ex; }
+                try
+                {
+                    CreateDirectoriesTracked(outputPath, Path.GetDirectoryName(backup.Target) ?? outputPath, createdDirectories: null);
+                    MoveEntry(backup.Backup, backup.Target);
+                }
+                catch (Exception ex) { rollbackError ??= ex; }
             }
             if (rollbackError is not null)
             {
@@ -172,6 +241,118 @@ internal static class PowerShellArtifactSetPublisher
     }
 
     private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static string[] ReadPreviousOwnedFiles(string outputDirectory, string artifactName, IReadOnlyCollection<string> protectedPaths)
+    {
+        var manifestPath = Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json");
+        if (!File.Exists(manifestPath)) return Array.Empty<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            if (!document.RootElement.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException("The prior compilation manifest does not contain a valid files array.");
+            var owned = new List<string>();
+            foreach (var item in files.EnumerateArray())
+            {
+                if (!item.TryGetProperty("path", out var pathElement) || pathElement.ValueKind != JsonValueKind.String)
+                    throw new InvalidOperationException("The prior compilation manifest contains an invalid file path entry.");
+                var value = pathElement.GetString();
+                if (string.IsNullOrWhiteSpace(value) || !Path.IsPathRooted(value))
+                    throw new InvalidOperationException("The prior compilation manifest contains a non-absolute file path.");
+                if (!item.TryGetProperty("sha256", out var hashElement) || hashElement.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(hashElement.GetString()))
+                    throw new InvalidOperationException("The prior compilation manifest contains a file without SHA-256 ownership evidence.");
+                var path = Path.GetFullPath(value);
+                PowerShellCompilationPathSafety.EnsureContained(outputDirectory, path, $"Prior artifact ownership path '{path}' escapes the durable output directory.");
+                if (protectedPaths.Any(protectedPath => PowerShellCompilationPathSafety.PathEquals(path, protectedPath)))
+                    throw new InvalidOperationException($"Prior artifact ownership path '{path}' overlaps a protected compilation source.");
+                if (Directory.Exists(path))
+                    throw new InvalidOperationException($"Prior artifact ownership path '{path}' identifies a directory instead of a file.");
+                if (File.Exists(path) && !ComputeSha256(path).Equals(hashElement.GetString(), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Prior artifact ownership path '{path}' no longer matches its recorded SHA-256 and will not be replaced.");
+                owned.Add(path);
+            }
+            return owned.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException($"Prior compilation manifest '{manifestPath}' is invalid and cannot be used for safe artifact replacement.", exception);
+        }
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var hash = SHA256.Create();
+        return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", string.Empty);
+    }
+
+    private static bool IsCoveredByFixedOwnedEntry(string path, string outputDirectory, IEnumerable<string> ownedNames)
+        => ownedNames.Any(name =>
+        {
+            var ownedPath = Path.GetFullPath(Path.Combine(outputDirectory, name));
+            return PowerShellCompilationPathSafety.PathEquals(path, ownedPath) || IsSameOrDescendant(path, ownedPath);
+        });
+
+    private static void EnsureExistingParentHasNoLinks(string outputDirectory, string target)
+    {
+        var current = Path.GetDirectoryName(target);
+        while (!string.IsNullOrWhiteSpace(current) && !Directory.Exists(current))
+            current = Path.GetDirectoryName(current);
+        if (string.IsNullOrWhiteSpace(current))
+            throw new InvalidOperationException($"Artifact publication target '{target}' has no existing parent directory.");
+        PowerShellCompilationPathSafety.EnsureNoLinks(
+            outputDirectory,
+            current,
+            $"Artifact publication target '{target}' traverses a symbolic link or junction.");
+    }
+
+    private static void CreateDirectoriesTracked(string outputDirectory, string directory, ICollection<string>? createdDirectories)
+    {
+        var targetDirectory = Path.GetFullPath(directory);
+        if (!PowerShellCompilationPathSafety.PathEquals(targetDirectory, outputDirectory))
+        {
+            PowerShellCompilationPathSafety.EnsureContained(
+                outputDirectory,
+                targetDirectory,
+                $"Artifact publication directory '{targetDirectory}' escapes the durable output directory.");
+        }
+        var missing = new Stack<string>();
+        var current = targetDirectory;
+        while (!Directory.Exists(current) && !PowerShellCompilationPathSafety.PathEquals(current, outputDirectory))
+        {
+            missing.Push(current);
+            current = Path.GetDirectoryName(current)
+                      ?? throw new InvalidOperationException($"Artifact publication directory '{targetDirectory}' has no durable parent.");
+        }
+        if (!Directory.Exists(current))
+            throw new DirectoryNotFoundException($"Artifact publication output directory '{outputDirectory}' does not exist.");
+        while (missing.Count > 0)
+        {
+            var created = missing.Pop();
+            Directory.CreateDirectory(created);
+            createdDirectories?.Add(created);
+        }
+    }
+
+    private static void RemoveEmptyPreviousDirectories(IEnumerable<string> previousFiles, string outputDirectory)
+    {
+        foreach (var directory in previousFiles
+                     .Select(Path.GetDirectoryName)
+                     .Where(static directory => !string.IsNullOrWhiteSpace(directory))
+                     .Select(static directory => Path.GetFullPath(directory!))
+                     .Where(directory => !PowerShellCompilationPathSafety.PathEquals(directory, outputDirectory))
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                     .OrderByDescending(static directory => directory.Length))
+        {
+            var current = directory;
+            while (!PowerShellCompilationPathSafety.PathEquals(current, outputDirectory) && Directory.Exists(current) && !Directory.EnumerateFileSystemEntries(current).Any())
+            {
+                Directory.Delete(current);
+                current = Path.GetDirectoryName(current) ?? outputDirectory;
+            }
+        }
+    }
 
     private static void EnsureOwnedEntriesDoNotContainSource(string outputDirectory, IEnumerable<string> ownedNames, IEnumerable<string> sourcePaths)
     {

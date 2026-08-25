@@ -106,6 +106,15 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>All contained authored runtime source files resolved for packaging or Hybrid preservation, including files outside the typed compilation scope.</summary>
     public string[] RuntimeSourcePaths { get; set; } = Array.Empty<string>();
 
+    /// <summary>Policy for optional resource payload. Folder names are classification hints only.</summary>
+    public PowerShellCompilationResourceMode ResourceMode { get; set; } = PowerShellCompilationResourceMode.Declared;
+
+    /// <summary>Contained module-root resource paths or glob patterns to include.</summary>
+    public string[] IncludeResource { get; set; } = Array.Empty<string>();
+
+    /// <summary>Contained module-root resource paths or glob patterns to exclude from optional payload.</summary>
+    public string[] ExcludeResource { get; set; } = Array.Empty<string>();
+
     /// <summary>Destination directory for durable artifacts and the manifest.</summary>
     public string OutputDirectory { get; }
 
@@ -240,6 +249,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Discovered source, module, assembly, and content dependency decisions.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationDependency>();
+
+    /// <summary>Resource selection totals for the produced artifact.</summary>
+    public PowerShellCompilationResourceSummary ResourceSummary { get; set; } = new();
 
     /// <summary>Source diagnostics retained as honest fallback evidence.</summary>
     public PowerShellCompilationDiagnostic[] Diagnostics { get; set; } = Array.Empty<PowerShellCompilationDiagnostic>();

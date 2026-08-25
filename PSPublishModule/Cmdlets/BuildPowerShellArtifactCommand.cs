@@ -49,6 +49,18 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public PowerShellCompilationMode? Mode { get; set; }
 
+    /// <summary>Optional payload policy. Declared includes manifest, explicit, and safely inferred resources.</summary>
+    [Parameter]
+    public PowerShellCompilationResourceMode ResourceMode { get; set; } = PowerShellCompilationResourceMode.Declared;
+
+    /// <summary>Contained resource paths or glob patterns to include beside the artifact.</summary>
+    [Parameter]
+    public string[] IncludeResource { get; set; } = Array.Empty<string>();
+
+    /// <summary>Contained resource paths or glob patterns to exclude from optional payload.</summary>
+    [Parameter]
+    public string[] ExcludeResource { get; set; } = Array.Empty<string>();
+
     /// <summary>Generated .NET target framework.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
@@ -142,6 +154,9 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             RuntimeSourcePaths = resolved.SourceFiles,
+            ResourceMode = ResourceMode,
+            IncludeResource = IncludeResource,
+            ExcludeResource = ExcludeResource,
             TargetFramework = TargetFramework,
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,

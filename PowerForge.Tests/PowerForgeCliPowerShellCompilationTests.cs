@@ -11,6 +11,8 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [InlineData("powershell analyze missing.ps1 --no-recurse --output json", "powershell.analyze", "--no-recurse")]
     [InlineData("powershell analyze one.ps1 --path two.ps1 --output json", "powershell.analyze", "either positionally")]
     [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
+    [InlineData("powershell build missing.ps1 --resource-mode 999 --output json", "powershell.build", "999")]
+    [InlineData("powershell analyze missing.ps1 --resource-mode 999 --output json", "powershell.analyze", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
         var result = await RunCliAsync(FindRepositoryRoot(), arguments);
@@ -164,12 +166,14 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.Contains(
                     result.GetProperty("dependencies").EnumerateArray(),
                     dependency => dependency.GetProperty("relativePath").GetString() == "Resources/runtime.js" &&
-                                  dependency.GetProperty("disposition").GetString() == "NotIncluded");
+                                  dependency.GetProperty("disposition").GetString() == "NotIncluded" &&
+                                  dependency.GetProperty("selection").GetString() == "Unclassified");
+                Assert.Equal(1, result.GetProperty("resourceSummary").GetProperty("unclassifiedFiles").GetInt32());
             }
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --name CliProof --output json");
+                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("build", build));
             using (var document = JsonDocument.Parse(build.StdOut))
             {
@@ -181,10 +185,13 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.Equal(0, manifest.GetProperty("omittedUnits").GetInt32());
                 Assert.False(manifest.GetProperty("requiresPowerShellRuntime").GetBoolean());
                 Assert.True(File.Exists(manifest.GetProperty("artifactPath").GetString()));
+                Assert.True(File.Exists(Path.Combine(output, "Resources", "runtime.js")));
                 Assert.Contains(
                     manifest.GetProperty("dependencies").EnumerateArray(),
                     dependency => dependency.GetProperty("relativePath").GetString() == "Resources/runtime.js" &&
-                                  dependency.GetProperty("disposition").GetString() == "NotIncluded");
+                                  dependency.GetProperty("disposition").GetString() == "CopiedAdjacent" &&
+                                  dependency.GetProperty("selection").GetString() == "ExplicitInclude");
+                Assert.Equal(1, manifest.GetProperty("resourceSummary").GetProperty("includedFiles").GetInt32());
             }
         }
         finally

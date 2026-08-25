@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -30,7 +31,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 {
                     File.WriteAllText(Path.Combine(staging, artifactName + ".dll"), marker);
                 }
-                File.WriteAllText(Path.Combine(staging, artifactName + ".powerforge-compilation.json"), marker);
+                File.WriteAllText(Path.Combine(staging, artifactName + ".powerforge-compilation.json"), $"{{\"files\":[],\"marker\":\"{marker}\"}}");
                 gate.Wait();
                 PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, new[] { Path.Combine(outputDirectory, "protected-source.ps1") });
             })).ToArray();
@@ -41,7 +42,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             var artifactMarker = directoryArtifact
                 ? File.ReadAllText(Path.Combine(outputDirectory, artifactName, "marker.txt"))
                 : File.ReadAllText(Path.Combine(outputDirectory, artifactName + ".dll"));
-            Assert.Equal(artifactMarker, File.ReadAllText(Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json")));
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json")));
+            Assert.Equal(artifactMarker, manifest.RootElement.GetProperty("marker").GetString());
             Assert.Empty(Directory.EnumerateDirectories(outputDirectory, ".*.artifact-*", SearchOption.TopDirectoryOnly));
             Assert.True(File.Exists(Path.Combine(outputDirectory, "." + artifactName + ".artifact-publish.lock")));
         }

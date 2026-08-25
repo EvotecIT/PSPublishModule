@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -92,6 +92,38 @@ Explicit root .ps1 application entrypoint when several script paths are supplied
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ExcludeResource
+Contained resource paths or glob patterns to exclude from optional payload.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeResource
+Contained resource paths or glob patterns to include beside the artifact.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -210,6 +242,22 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ResourceMode
+Optional payload policy. Declared includes manifest, explicit, and safely inferred resources.
+
+```yaml
+Type: PowerShellCompilationResourceMode
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Declared, CompleteModule, None
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationDependencyPlannerTests
 {
     [Fact]
-    public void Analyze_ClassifiesManifestAndConventionalModulePayloads()
+    public void Analyze_ClassifiesConventionalFoldersAsHintsWithoutIncludingThem()
     {
         using var fixture = new DependencyFixture();
         fixture.CreateModule();
@@ -21,7 +21,8 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             dependency.RelativePath == "Resources/site.css" &&
             dependency.Kind == PowerShellCompilationDependencyKind.StyleSheet &&
             dependency.Discovery == PowerShellCompilationDependencyDiscovery.ConventionalResourceDirectory &&
-            dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent);
+            dependency.Disposition == PowerShellCompilationDependencyDisposition.NotIncluded &&
+            dependency.Selection == PowerShellCompilationDependencySelection.Unclassified);
         Assert.Contains(dependencies, dependency =>
             dependency.RelativePath == "Resources/app.js" &&
             dependency.Kind == PowerShellCompilationDependencyKind.JavaScript);
@@ -33,7 +34,8 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             dependency.Kind == PowerShellCompilationDependencyKind.NativeLibrary);
         Assert.Contains(dependencies, dependency =>
             dependency.RelativePath == "Assets/data.txt" &&
-            dependency.Discovery == PowerShellCompilationDependencyDiscovery.FileList);
+            dependency.Discovery == PowerShellCompilationDependencyDiscovery.FileList &&
+            dependency.Selection == PowerShellCompilationDependencySelection.Required);
         Assert.Contains(dependencies, dependency =>
             dependency.Name == "PSSharedGoods" &&
             !dependency.Exists &&
@@ -41,7 +43,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
     }
 
     [Fact]
-    public void Analyze_MarksAbsentOptionalFileListContentAsNotIncluded()
+    public void Analyze_MarksAbsentFileListContentAsMissingRequiredPayload()
     {
         using var fixture = new DependencyFixture();
         fixture.Write("Demo.psm1", "function Get-Value { return 1 }");
@@ -57,13 +59,14 @@ public sealed class PowerShellCompilationDependencyPlannerTests
         Assert.All(missing, dependency =>
         {
             Assert.False(dependency.Exists);
-            Assert.Equal(PowerShellCompilationDependencyDisposition.NotIncluded, dependency.Disposition);
-            Assert.Contains("not present", dependency.Note, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(PowerShellCompilationDependencyDisposition.Missing, dependency.Disposition);
+            Assert.Equal(PowerShellCompilationDependencySelection.Required, dependency.Selection);
+            Assert.Contains("required", dependency.Note, StringComparison.OrdinalIgnoreCase);
         });
     }
 
     [Fact]
-    public void Analyze_MarksLooseExecutablePayloadAsNotIncluded()
+    public void Analyze_SingleScriptDoesNotSweepNeighboringConventionalFolders()
     {
         using var fixture = new DependencyFixture();
         var script = fixture.Write("Tool.ps1", "param([string] $Name) return $Name");
@@ -73,10 +76,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             script,
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Package);
-        var resource = Assert.Single(input.Dependencies, dependency => dependency.RelativePath == "Resources/app.js");
-
-        Assert.Equal(PowerShellCompilationDependencyDisposition.NotIncluded, resource.Disposition);
-        Assert.Contains("not automatically embedded", resource.Note, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(input.Dependencies, dependency => dependency.RelativePath == "Resources/app.js");
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
     }
 
     [Fact]
-    public void Build_HybridModulePreservesConventionalPayloadAndRecordsDisposition()
+    public void Build_CompleteModulePreservesOptionalPayloadAndRecordsDisposition()
     {
         using var fixture = new DependencyFixture();
         fixture.CreateModule();
@@ -123,6 +123,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
         {
             ModuleManifestPath = Path.Combine(fixture.RootPath, "Demo.psd1"),
             CompilationSourcePaths = new[] { Path.Combine(fixture.RootPath, "Demo.psm1") },
+            ResourceMode = PowerShellCompilationResourceMode.CompleteModule,
             TargetFramework = "net8.0"
         });
 

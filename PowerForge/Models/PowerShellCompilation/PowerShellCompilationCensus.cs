@@ -17,7 +17,8 @@ public sealed class PowerShellCompilationCensusProduct
         double analysisMilliseconds,
         PowerShellCompilationCensusBlocker[] blockers,
         PowerShellCompilationFeatureImpact[]? featureImpacts = null,
-        PowerShellCompilationDependencySummary[]? dependencySummary = null)
+        PowerShellCompilationDependencySummary[]? dependencySummary = null,
+        PowerShellCompilationResourceSummary? resourceSummary = null)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -30,6 +31,7 @@ public sealed class PowerShellCompilationCensusProduct
         Blockers = blockers ?? Array.Empty<PowerShellCompilationCensusBlocker>();
         FeatureImpacts = featureImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
         DependencySummary = dependencySummary ?? Array.Empty<PowerShellCompilationDependencySummary>();
+        ResourceSummary = resourceSummary ?? new PowerShellCompilationResourceSummary();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -67,6 +69,9 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Discovered runtime dependency and resource summary.</summary>
     public PowerShellCompilationDependencySummary[] DependencySummary { get; }
+
+    /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
+    public PowerShellCompilationResourceSummary ResourceSummary { get; }
 }
 
 /// <summary>One aggregated blocker category in a compilation census.</summary>

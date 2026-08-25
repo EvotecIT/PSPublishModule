@@ -1,4 +1,3 @@
-using System.Management.Automation.Language;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,8 +32,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows
         // even when the user's final artifact path is otherwise reasonable.
-        var workspace = Path.Combine(Path.GetTempPath(), "PowerForge", "ps-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(workspace);
+        using var workspaceLease = PowerShellCompilationWorkspace.Create(spec.KeepBuildWorkspace);
+        var workspace = workspaceLease.Path;
         var result = new PowerShellCompilationBuildResult { BuildWorkspace = spec.KeepBuildWorkspace ? workspace : null };
 
         try
@@ -173,11 +172,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             else
             {
-                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths);
+                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan);
                 var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
                 File.WriteAllText(
                     Path.Combine(workspace, "Source.ps1"),
-                    GeneratePackagedScript(spec.SourcePath, packagedSources.HasDependencies),
+                    GeneratePackagedScript(spec.SourcePath, packagedSources),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
@@ -221,10 +220,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
-                stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedModulePayload(
-                    spec,
+                stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
+                    stagedArtifact.PrimaryPath,
                     artifactName,
-                    artifactStagingDirectory,
                     dependencyPlan,
                     stagedArtifact.Files));
                 string? stagedGeneratedSourcePath = null;
@@ -301,6 +299,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     AuthenticodeSignedFiles = signing?.SignedFiles ?? 0,
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
+                    ResourceSummary = PowerShellCompilationResourceSummary.Create(dependencyPlan),
                     Diagnostics = diagnostics
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
@@ -337,13 +336,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             result.Error = ex.Message;
             return result;
         }
-        finally
-        {
-            if (!spec.KeepBuildWorkspace)
-            {
-                try { Directory.Delete(workspace, recursive: true); } catch { }
-            }
-        }
     }
 
     private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
@@ -354,6 +346,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentOutOfRangeException(nameof(spec), "Compilation mode is not defined.");
         if (!Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), spec.Optimization))
             throw new ArgumentOutOfRangeException(nameof(spec), "Executable optimization is not defined.");
+        if (!Enum.IsDefined(typeof(PowerShellCompilationResourceMode), spec.ResourceMode))
+            throw new ArgumentOutOfRangeException(nameof(spec), "Resource mode is not defined.");
         if (!Enum.IsDefined(typeof(CertificateStoreLocation), spec.CertificateStoreLocation))
             throw new ArgumentOutOfRangeException(nameof(spec), "Certificate store location is not defined.");
         if (spec.Mode == PowerShellCompilationMode.Analyze)
@@ -587,68 +581,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return new CopiedArtifact(primaryPath, files);
     }
 
-    private static string GeneratePackagedScript(string sourcePath, bool hasDependencies)
-        => PowerShellPackagedScriptRewriter.Rewrite(
-            sourcePath,
-            allowDotSource: hasDependencies,
-            dependencyCommandPathExpression: hasDependencies
-                ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path"
-                : null);
-
-    private static PackagedSourceSet PreparePackagedSources(
-        string workspace,
-        string sourcePath,
-        IEnumerable<string> compilationSourcePaths)
-    {
-        var fullSourcePath = Path.GetFullPath(sourcePath);
-        var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
-        var dependencies = compilationSourcePaths
-            .Select(Path.GetFullPath)
-            .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, fullSourcePath))
-            .Distinct(PowerShellCompilationPathSafety.PathComparer)
-            .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (dependencies.Length == 0)
-            return new PackagedSourceSet(Path.GetFileName(fullSourcePath), string.Empty, string.Empty, hasDependencies: false);
-
-        var dependencyDirectory = Path.Combine(workspace, "EmbeddedDependencies");
-        Directory.CreateDirectory(dependencyDirectory);
-        var projectResources = new List<string>();
-        var dependencySpecs = new List<string>();
-        for (var index = 0; index < dependencies.Length; index++)
-        {
-            var dependency = dependencies[index];
-            PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
-            RejectDependencyExits(dependency);
-            var fileName = $"Dependency{index:D4}.ps1";
-            File.Copy(dependency, Path.Combine(dependencyDirectory, fileName), overwrite: false);
-            var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
-            var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
-            projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}),");
-        }
-        return new PackagedSourceSet(
-            Path.GetFileName(fullSourcePath),
-            string.Join(Environment.NewLine, projectResources),
-            string.Join(Environment.NewLine, dependencySpecs),
-            hasDependencies: true);
-    }
-
-    private static void RejectDependencyExits(string dependencyPath)
-    {
-        var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating exit semantics.");
-        var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
-            .Cast<ExitStatementAst>()
-            .FirstOrDefault();
-        if (exit is not null)
-        {
-            throw new InvalidOperationException(
-                $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
-        }
-    }
-
     private static bool HasSiblingModuleManifest(string sourcePath)
         => Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
            File.Exists(Path.ChangeExtension(sourcePath, ".psd1"));
@@ -758,18 +690,28 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     private sealed class PackagedSourceSet
     {
-        internal PackagedSourceSet(string entryRelativePath, string projectResources, string dependencySpecs, bool hasDependencies)
+        internal PackagedSourceSet(
+            string entryRelativePath,
+            string projectResources,
+            string dependencySpecs,
+            bool hasDependencies,
+            string[] embeddedResourceRelativePaths,
+            bool usesExtractedRoot)
         {
             EntryRelativePath = entryRelativePath;
             ProjectResources = projectResources;
             DependencySpecs = dependencySpecs;
             HasDependencies = hasDependencies;
+            EmbeddedResourceRelativePaths = embeddedResourceRelativePaths;
+            UsesExtractedRoot = usesExtractedRoot;
         }
 
         internal string EntryRelativePath { get; }
         internal string ProjectResources { get; }
         internal string DependencySpecs { get; }
         internal bool HasDependencies { get; }
+        internal string[] EmbeddedResourceRelativePaths { get; }
+        internal bool UsesExtractedRoot { get; }
     }
 
 }

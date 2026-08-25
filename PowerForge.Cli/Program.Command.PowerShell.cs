@@ -5,9 +5,9 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellAnalyzeUsage =
-        "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--output json]";
+        "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
 
@@ -43,7 +43,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
                 new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -74,6 +74,10 @@ internal static partial class Program
                 return WritePowerShellError(outputJson, 2, $"Unknown artifact compilation mode '{modeValue}'.", logger, "powershell.build");
             modeOverride = parsedMode;
         }
+        var resourceModeValue = TryGetOptionValue(args, "--resource-mode") ?? nameof(PowerShellCompilationResourceMode.Declared);
+        if (!Enum.TryParse<PowerShellCompilationResourceMode>(resourceModeValue, ignoreCase: true, out var resourceMode) ||
+            !Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
+            return WritePowerShellError(outputJson, 2, $"Unknown resource mode '{resourceModeValue}'. Use Declared, CompleteModule, or None.", logger, "powershell.build");
 
         try
         {
@@ -96,6 +100,9 @@ internal static partial class Program
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
+                ResourceMode = resourceMode,
+                IncludeResource = GetOptionValues(args, "--include-resource").ToArray(),
+                ExcludeResource = GetOptionValues(args, "--exclude-resource").ToArray(),
                 TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
@@ -173,7 +180,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--kind", "--mode", "--framework", "--output" },
+                new[] { "--path", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -200,6 +207,10 @@ internal static partial class Program
         if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
             !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             return WritePowerShellError(outputJson, 2, $"Unknown compilation mode '{modeValue}'.", logger);
+        var resourceModeValue = TryGetOptionValue(args, "--resource-mode") ?? nameof(PowerShellCompilationResourceMode.Declared);
+        if (!Enum.TryParse<PowerShellCompilationResourceMode>(resourceModeValue, ignoreCase: true, out var resourceMode) ||
+            !Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
+            return WritePowerShellError(outputJson, 2, $"Unknown resource mode '{resourceModeValue}'. Use Declared, CompleteModule, or None.", logger);
 
         try
         {
@@ -210,7 +221,11 @@ internal static partial class Program
             var plan = new PowerShellCompilationAnalyzer().Analyze(
                 resolved,
                 mode,
-                TryGetOptionValue(args, "--framework") ?? "net8.0");
+                TryGetOptionValue(args, "--framework") ?? "net8.0",
+                resourceMode,
+                GetOptionValues(args, "--include-resource"),
+                GetOptionValues(args, "--exclude-resource"),
+                TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
             var exitCode = plan.CanProceed ? 0 : 1;
             if (outputJson)
             {
@@ -307,6 +322,9 @@ internal static partial class Program
                     summary.Kind is not PowerShellCompilationDependencyKind.PowerShellSource and not PowerShellCompilationDependencyKind.ModuleManifest).ToArray();
                 if (payload.Length > 0)
                     logger.Info($"  Dependencies: {payload.Sum(static summary => summary.Files)} item(s), {payload.Sum(static summary => summary.SizeBytes)} byte(s), {payload.Sum(static summary => summary.Missing)} missing.");
+                var resources = product.ResourceSummary;
+                if (resources.IncludedFiles + resources.ExcludedFiles + resources.UnclassifiedFiles > 0)
+                    logger.Info($"  Resources: {resources.IncludedFiles} included, {resources.RequiredFiles} required, {resources.InferredFiles} inferred, {resources.ExcludedFiles} excluded, {resources.UnclassifiedFiles} unclassified ({resources.IncludedBytes + resources.ExcludedBytes + resources.UnclassifiedBytes} inventoried byte(s)).");
             }
             if (result.Frontier.Length > 0)
             {
@@ -368,6 +386,8 @@ internal static partial class Program
             foreach (var dependency in plan.Dependencies.Where(static dependency =>
                          dependency.Disposition is PowerShellCompilationDependencyDisposition.NotIncluded or PowerShellCompilationDependencyDisposition.Missing).Take(20))
                 logger.Warn($"  {dependency.RelativePath}: {dependency.Disposition}. {dependency.Note}");
+            var resources = plan.ResourceSummary;
+            logger.Info($"Resource selection: included {resources.IncludedFiles} file(s) / {resources.IncludedBytes} byte(s); required {resources.RequiredFiles} / {resources.RequiredBytes}; inferred {resources.InferredFiles} / {resources.InferredBytes}; excluded {resources.ExcludedFiles} / {resources.ExcludedBytes}; unclassified {resources.UnclassifiedFiles} / {resources.UnclassifiedBytes}.");
         }
 
         if (!plan.CanProceed)
