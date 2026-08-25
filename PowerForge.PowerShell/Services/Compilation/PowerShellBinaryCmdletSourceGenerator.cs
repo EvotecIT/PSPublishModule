@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Management.Automation.Language;
 using System.Reflection;
 using System.Text;
 
@@ -7,6 +8,12 @@ namespace PowerForge;
 internal static class PowerShellBinaryCmdletSourceGenerator
 {
     private const string RemainingArgumentsMemberName = "__PowerForgeRemainingArguments";
+    private static readonly HashSet<string> CommandRegionMemberNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "InvokePowerShellRegion",
+        "CapturePowerShellRegion",
+        "NormalizeCapturedPowerShellValue"
+    };
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
@@ -18,7 +25,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         .GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
         .Select(static member => member.Name)
         .Append("ProcessRecord")
-        .Append(RemainingArgumentsMemberName)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     internal static PowerShellTypedCompilationResult PrepareForBinaryModule(
@@ -162,7 +168,10 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         var reservedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
             var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
-            return ReservedMemberNames.Contains(memberName) || memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase);
+            return ReservedMemberNames.Contains(memberName) ||
+                   (!cmdlet.Method.IsAdvancedFunction && memberName.Equals(RemainingArgumentsMemberName, StringComparison.OrdinalIgnoreCase)) ||
+                   memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
@@ -251,7 +260,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine(GenerateCmdletAttribute(cmdlet));
-        var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
+        var outputType = string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType)
+            ? GetCmdletOutputTypeName(cmdlet.Method.ReturnType)
+            : cmdlet.Method.DeclaredOutputType;
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
         builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet");
@@ -271,7 +282,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 builder.AppendLine("    [AllowEmptyCollection]");
             if (parameter.SupportsWildcards)
                 builder.AppendLine("    [SupportsWildcards]");
-            foreach (var validation in parameter.Validations)
+            foreach (var validation in parameter.Validations.Where(validation => ShouldGenerateValidationAttribute(parameter, validation)))
                 builder.AppendLine("    " + GenerateValidationAttribute(validation));
             var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
             var initializer = parameter.IsSwitch || IsGeneratedValueType(parameter.TypeName)
@@ -309,8 +320,31 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("            ? InvokeCommand.InvokeScript(SessionState, ScriptBlock.Create(script), arguments)");
             builder.AppendLine("            : dispatcher.Invoke(script, arguments);");
             builder.AppendLine("        if (values.Count == 0) return null;");
-            builder.AppendLine("        if (values.Count == 1) return values[0]?.BaseObject;");
-            builder.AppendLine("        return global::System.Linq.Enumerable.Select(values, static value => value?.BaseObject).ToArray();");
+            builder.AppendLine("        if (values.Count == 1) return NormalizeCapturedPowerShellValue(values[0]);");
+            builder.AppendLine("        var captured = new object?[values.Count];");
+            builder.AppendLine("        for (var index = 0; index < values.Count; index++)");
+            builder.AppendLine("            captured[index] = NormalizeCapturedPowerShellValue(values[index]);");
+            builder.AppendLine("        return captured;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+            builder.AppendLine("    private static object? NormalizeCapturedPowerShellValue(global::System.Management.Automation.PSObject? value)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        if (value is null) return null;");
+            builder.AppendLine("        var baseObject = value.BaseObject;");
+            builder.AppendLine("        if (baseObject is null) return value;");
+            builder.AppendLine("        if (baseObject is global::System.Management.Automation.PSCustomObject) return value;");
+            builder.AppendLine("        var baseTypeName = baseObject.GetType().FullName;");
+            builder.AppendLine("        if (value.TypeNames.Count > 0 && !global::System.String.Equals(value.TypeNames[0], baseTypeName, global::System.StringComparison.Ordinal)) return value;");
+            builder.AppendLine("        foreach (var member in value.Members)");
+            builder.AppendLine("        {");
+            builder.AppendLine("            if (!member.IsInstance) continue;");
+            builder.AppendLine("            if (member.MemberType != global::System.Management.Automation.PSMemberTypes.Property &&");
+            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.Method &&");
+            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.ParameterizedProperty &&");
+            builder.AppendLine("                member.MemberType != global::System.Management.Automation.PSMemberTypes.Event)");
+            builder.AppendLine("                return value;");
+            builder.AppendLine("        }");
+            builder.AppendLine("        return baseObject;");
             builder.AppendLine("    }");
             builder.AppendLine();
         }
@@ -332,7 +366,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "target => ShouldProcess(target)",
                 "(target, action) => ShouldProcess(target, action)",
                 "((global::System.Collections.IDictionary)SessionState.PSVariable.GetValue(\"PSVersionTable\"))[\"PSVersion\"]!",
-                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") || global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
+                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") ? global::System.Management.Automation.LanguagePrimitives.IsTrue(MyInvocation.BoundParameters[\"WhatIf\"]) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
             });
         }
         if (cmdlet.Method.RequiresPowerShellBoundParameters)
@@ -454,6 +488,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             _ => throw new InvalidOperationException($"Unsupported generated validation kind '{validation.Kind}'.")
         };
 
+    private static bool ShouldGenerateValidationAttribute(
+        PowerShellCompilationParameter parameter,
+        PowerShellCompilationValidation validation)
+        => validation.Kind != PowerShellCompilationValidationKind.NotNull ||
+           parameter.TypeName != typeof(string[]).FullName;
+
     private static string GetGeneratedTypeName(string fullName)
     {
         var resolved = Type.GetType(fullName, throwOnError: false);
@@ -505,12 +545,40 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         PowerShellTypedCompilationResult typed,
         PowerShellCompiledMethod method,
         string message)
-        => new(
+    {
+        var sourcePath = string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath;
+        return new PowerShellCompilationDiagnostic(
             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
             message,
-            string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+            sourcePath,
             method.SourceLine,
-            1);
+            GetFunctionSourceColumn(sourcePath, method),
+            PowerShellCompilationFeatureIds.BinaryCmdletShape);
+    }
+
+    private static int GetFunctionSourceColumn(string sourcePath, PowerShellCompiledMethod method)
+    {
+        if (!File.Exists(sourcePath))
+            return 1;
+        try
+        {
+            return Parser.ParseFile(sourcePath, out _, out _)
+                       .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                       .OfType<FunctionDefinitionAst>()
+                       .FirstOrDefault(function =>
+                           function.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase) &&
+                           function.Body.Extent.StartLineNumber == method.SourceLine)
+                       ?.Body.Extent.StartColumnNumber ?? 1;
+        }
+        catch (IOException)
+        {
+            return 1;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return 1;
+        }
+    }
 
     private static string GetMethodKey(PowerShellCompiledMethod method)
         => method.SourcePath + "\0" + method.SourceName + "\0" + method.SourceLine;

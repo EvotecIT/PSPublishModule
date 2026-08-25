@@ -18,6 +18,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly HashSet<string> _declaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _predeclaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _scalarForeachLoops = new();
+    private readonly HashSet<string> _temporaryIdentifiers = new(StringComparer.Ordinal);
     private readonly StringBuilder _builder = new();
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
@@ -30,8 +31,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private bool _requiresPowerShellRuntimeState;
     private bool _requiresBoundParameters;
     private int _indent = 1;
-    private int _switchIndex;
-    private int _objectIndex;
+    private int _temporaryIndex;
 
     internal PowerShellCSharpMethodEmitter(
         string filePath,
@@ -142,6 +142,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
              calledLocalFunctions.Any(static signature => signature.RequiresPowerShellRuntimeState));
         ValidateVariableReferences(typedStatements);
         var returnType = runtimeTailStart >= 0 ? typeof(void) : InferReturnType(typedStatements);
+        var declaredOutputType = GetDeclaredOutputType();
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
         var parameterParts = parameters.Select(parameter =>
@@ -226,7 +227,31 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             _requiresPowerShellStreams,
             _requiresPowerShellCommandRegions,
             _requiresBoundParameters,
-            _requiresPowerShellRuntimeState);
+            _requiresPowerShellRuntimeState,
+            declaredOutputType);
+    }
+
+    private Type? GetDeclaredOutputType()
+    {
+        var attributes = _body.ParamBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute =>
+                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
+                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase))
+            .ToArray() ?? Array.Empty<AttributeAst>();
+        if (attributes.Length == 0)
+            return null;
+        if (attributes.Length != 1 ||
+            attributes[0].NamedArguments.Count != 0 ||
+            attributes[0].PositionalArguments.Count != 1 ||
+            attributes[0].PositionalArguments[0] is not TypeExpressionAst typeExpression ||
+            typeExpression.TypeName.GetReflectionType() is not { } declared ||
+            declared == typeof(void) ||
+            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, _targetFramework, _capabilities))
+        {
+            throw Error(attributes[0], "OutputType metadata must declare one statically resolvable target-compatible CLR type.");
+        }
+        return declared;
     }
 
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
@@ -310,7 +335,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var declaredType = assignment.Left is ConvertExpressionAst conversion
             ? conversion.StaticType
             : rightType;
-        if (!PowerShellGeneratedTypePolicy.IsSupported(declaredType, _targetFramework))
+        if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredType, _targetFramework, _capabilities))
             throw Error(assignment.Left, $"Local '${name}' uses CLR type '{declaredType.FullName}' outside the generated project reference set.");
         if (!CanAssign(declaredType, rightType))
             throw Error(assignment, $"Assignment requires PowerShell conversion from '{rightType.FullName}' to '{declaredType.FullName}', which is not an implicit CLR conversion.");

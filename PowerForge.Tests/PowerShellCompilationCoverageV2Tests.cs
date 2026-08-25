@@ -145,6 +145,27 @@ public sealed class PowerShellCompilationCoverageV2Tests
         }
     }
 
+    [Fact]
+    public void Run_FailsBaselineWhenPostEmissionEvaluationIsSkipped()
+    {
+        var root = CreateRoot();
+        var source = Path.Combine(root, "Evaluation.ps1");
+        File.WriteAllText(source, "function Get-Value { return 1 }");
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { source }, "net10.0", recurse: true);
+            var current = runner.Run(new[] { source }, "net10.0", baseline, recurse: false);
+
+            Assert.Contains(current.Regressions, static regression => regression.Metric == "PostEmissionEvaluated");
+            Assert.False(current.Passed);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Coverage V2 Tests", Guid.NewGuid().ToString("N"));

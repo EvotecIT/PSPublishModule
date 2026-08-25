@@ -84,6 +84,8 @@ public sealed class PowerShellCompilationBuildSpec
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         return kind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompilationCapabilities.BinaryModule
+            : kind == PowerShellCompilationArtifactKind.Library
+                ? PowerShellCompilationCapabilities.StaticRuntimeFacts
             : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
                 ? PowerShellCompilationCapabilities.TypedExecutable
                 : PowerShellCompilationCapability.None;

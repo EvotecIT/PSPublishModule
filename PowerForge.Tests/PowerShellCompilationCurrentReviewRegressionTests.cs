@@ -20,6 +20,123 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Theory]
+    [InlineData("[CmdletBinding()] param([Alias('Verbose')][string] $Value); return $Value")]
+    [InlineData("[CmdletBinding()] param([string] $Verbose); return $Verbose")]
+    public void Build_StrictExecutableRejectsAuthoredCommonParameterCollisions(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.StrictCommonCollision", PowerShellCompilationMode.Strict);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("ambiguous", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
+    [InlineData("[CmdletBinding()] param([Parameter(Mandatory)][Parameter(Position=0)][string] $Value); return $Value", "duplicate metadata")]
+    [InlineData("[CmdletBinding()] param([Parameter(Position=0)][string] $One, [Parameter(Position=0)][string] $Two); return $One + $Two", "position 0")]
+    [InlineData("[CmdletBinding()] param([Parameter(ValueFromRemainingArguments)][string[]] $One, [Parameter(ValueFromRemainingArguments)][string[]] $Two); return $One.Length + $Two.Length", "ValueFromRemainingArguments")]
+    public void Build_StrictExecutableRejectsInvalidParameterBindingMetadata(string source, string expectedError)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.StrictBindingMetadata", PowerShellCompilationMode.Strict);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(expectedError, result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Analyze_RejectsDuplicateEffectiveParameterSetMetadata()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Value { [CmdletBinding(DefaultParameterSetName='ByName')] " +
+            "param([Parameter()][Parameter(ParameterSetName='ByName')][string] $Value) return $Value }");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("duplicate metadata", StringComparison.OrdinalIgnoreCase) &&
+            diagnostic.Message.Contains("ByName", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleReservesRemainingArgumentsMemberOnlyWhenGenerated()
+    {
+        const string parameterName = "__PowerForgeRemainingArguments";
+        using var advancedFixture = ArtifactFixture.Create(
+            $"function Get-AdvancedValue {{ [CmdletBinding()] param([string] ${parameterName}) return ${parameterName} }}; Export-ModuleMember -Function Get-AdvancedValue",
+            ".psm1");
+        var advanced = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            advancedFixture.ScriptPath,
+            advancedFixture.OutputPath,
+            "PowerForge.AdvancedRemainingArgumentsName",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(advanced.Succeeded, advanced.Error + Environment.NewLine + advanced.BuildOutput);
+        var escapedPath = advanced.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-AdvancedValue -{parameterName} preserved");
+        Assert.Equal((0, "preserved", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+
+        using var simpleFixture = ArtifactFixture.Create(
+            $"function Get-SimpleValue {{ param([string] ${parameterName}) return ${parameterName} }}; Export-ModuleMember -Function Get-SimpleValue",
+            ".psm1");
+        var simple = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            simpleFixture.ScriptPath,
+            simpleFixture.OutputPath,
+            "PowerForge.SimpleRemainingArgumentsName",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(simple.Succeeded);
+        Assert.Contains("generated or inherited", simple.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(simpleFixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-StringElementCount { [CmdletBinding()] param([ValidateNotNull()] [string[]] $Values) return $Values.Length }; " +
+            "function Get-ObjectElementCount { [CmdletBinding()] param([ValidateNotNull()] [object[]] $Values) return $Values.Length }; " +
+            "Export-ModuleMember -Function Get-StringElementCount, Get-ObjectElementCount",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ValidateNotNullElements",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; " +
+            "try { 'string=' + (Get-StringElementCount -Values @('ok', $null)) } catch { 'string-rejected=' + $_.Exception.Message }; " +
+            "try { Get-ObjectElementCount -Values @([object] 'ok', $null); 'unexpected-object' } catch { 'object-rejected=' + $_.Exception.Message }");
+
+        Assert.Equal(0, run.ExitCode);
+        Assert.Contains("string=2", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("object-rejected=", run.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("unexpected-object", run.StandardOutput, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Build_StrictBinaryModuleRejectsRuntimeControlledExportContract()
     {

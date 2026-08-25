@@ -20,7 +20,7 @@ internal static class PowerShellCompilationLiteralPolicy
             return false;
         }
 
-        var compiledType = PowerShellCompilationParameterTypePolicy.GetCompiledType(targetType);
+        var compiledType = targetType;
         object? converted;
         try
         {

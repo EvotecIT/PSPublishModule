@@ -7,7 +7,8 @@ public sealed partial class PowerShellCompilationAnalyzer
 {
     private static bool IsSupportedMetadataAttribute(
         AttributeAst attribute,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        string? targetFramework)
     {
         if (IsAttributeNamed(attribute, "CmdletBinding"))
             return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.All(argument =>
@@ -20,14 +21,19 @@ public sealed partial class PowerShellCompilationAnalyzer
                    attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst { Value.Length: > 0 });
         if (IsAttributeNamed(attribute, "OutputType"))
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
-                   attribute.PositionalArguments[0] is TypeExpressionAst;
+                   attribute.PositionalArguments[0] is TypeExpressionAst outputType &&
+                   outputType.TypeName.GetReflectionType() is { } declaredOutputType &&
+                   declaredOutputType != typeof(void) &&
+                   PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredOutputType, targetFramework, capabilities);
         if (IsAttributeNamed(attribute, "AllowNull") ||
             IsAttributeNamed(attribute, "AllowEmptyString") ||
             IsAttributeNamed(attribute, "AllowEmptyCollection") ||
-            IsAttributeNamed(attribute, "SupportsWildcards") ||
             IsAttributeNamed(attribute, "ValidateNotNull") ||
             IsAttributeNamed(attribute, "ValidateNotNullOrEmpty"))
             return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
+        if (IsAttributeNamed(attribute, "SupportsWildcards"))
+            return capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
+                   attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
         if (IsAttributeNamed(attribute, "ValidateSet"))
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
                    attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst);
@@ -77,7 +83,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             return capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
                    TryGetStringAttributeValue(argument, out var setName) && !string.IsNullOrWhiteSpace(setName);
         if (argument.ArgumentName.Equals("HelpMessage", StringComparison.OrdinalIgnoreCase))
-            return TryGetStringAttributeValue(argument, out _);
+            return capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
+                   TryGetStringAttributeValue(argument, out _);
         return argument.ArgumentName.Equals("Position", StringComparison.OrdinalIgnoreCase) &&
                TryGetIntegerAttributeValue(argument, out var position) && position >= 0;
     }

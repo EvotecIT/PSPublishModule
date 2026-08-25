@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Management.Automation.Language;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -344,6 +345,8 @@ public sealed class PowerShellCompilationCensusRunner
             AddHigherIsRegression(regressions, actual.Name, "ParseErrorFiles", expected.ParseErrorFiles, actual.ParseErrorFiles);
             if (expected.Coverage.PostEmissionEvaluated)
             {
+                if (!actual.Coverage.PostEmissionEvaluated)
+                    regressions.Add(new PowerShellCompilationCensusRegression(actual.Name, "PostEmissionEvaluated", 1, 0));
                 AddLowerIsRegression(regressions, actual.Name, "EmittedFunctions", expected.Coverage.EmittedFunctions, actual.Coverage.EmittedFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "FallbackFunctions", expected.Coverage.FallbackFunctions, actual.Coverage.FallbackFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "DroppedEligibleFunctions", expected.Coverage.DroppedEligibleFunctions, actual.Coverage.DroppedEligibleFunctions);
@@ -432,9 +435,7 @@ public sealed class PowerShellCompilationCensusRunner
         {
             foreach (var identity in identities)
             {
-                byte[] contentHash;
-                using (var stream = File.OpenRead(identity.Path))
-                    contentHash = fileHasher.ComputeHash(stream);
+                var contentHash = fileHasher.ComputeHash(ReadNormalizedSourceBytes(identity.Path));
                 canonical.Append(identity.RelativePath)
                     .Append('\0')
                     .Append(ToLowerHex(contentHash))
@@ -448,6 +449,87 @@ public sealed class PowerShellCompilationCensusRunner
 
     private static string ToLowerHex(byte[] bytes)
         => BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+
+    private static byte[] ReadNormalizedSourceBytes(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var encoding = GetStrictSourceEncoding(bytes, out var offset);
+        var byteWiseLineEndingsAreSafe = !HasPrefix(bytes, 0x00, 0x00, 0xFE, 0xFF) &&
+                                         !HasPrefix(bytes, 0xFF, 0xFE, 0x00, 0x00) &&
+                                         !HasPrefix(bytes, 0xFE, 0xFF) &&
+                                         !HasPrefix(bytes, 0xFF, 0xFE);
+        if (encoding is not null)
+        {
+            try
+            {
+                var text = encoding.GetString(bytes, offset, bytes.Length - offset)
+                    .Replace("\r\n", "\n")
+                    .Replace('\r', '\n');
+                return Encoding.UTF8.GetBytes(text);
+            }
+            catch (DecoderFallbackException)
+            {
+                // A raw 0x0D/0x0A byte is an ASCII newline in UTF-8 and legacy
+                // single-byte input, but may be part of a UTF-16/32 code unit.
+                if (!byteWiseLineEndingsAreSafe) return bytes;
+            }
+        }
+
+        var normalized = new List<byte>(bytes.Length);
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            if (bytes[index] != (byte)'\r')
+            {
+                normalized.Add(bytes[index]);
+                continue;
+            }
+
+            normalized.Add((byte)'\n');
+            if (index + 1 < bytes.Length && bytes[index + 1] == (byte)'\n') index++;
+        }
+        return normalized.ToArray();
+    }
+
+    private static Encoding? GetStrictSourceEncoding(byte[] bytes, out int offset)
+    {
+        offset = 0;
+        if (HasPrefix(bytes, 0x00, 0x00, 0xFE, 0xFF))
+        {
+            offset = 4;
+            return new UTF32Encoding(bigEndian: true, byteOrderMark: false, throwOnInvalidCharacters: true);
+        }
+        if (HasPrefix(bytes, 0xFF, 0xFE, 0x00, 0x00))
+        {
+            offset = 4;
+            return new UTF32Encoding(bigEndian: false, byteOrderMark: false, throwOnInvalidCharacters: true);
+        }
+        if (HasPrefix(bytes, 0xEF, 0xBB, 0xBF))
+        {
+            offset = 3;
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        }
+        if (HasPrefix(bytes, 0xFE, 0xFF))
+        {
+            offset = 2;
+            return new UnicodeEncoding(bigEndian: true, byteOrderMark: false, throwOnInvalidBytes: true);
+        }
+        if (HasPrefix(bytes, 0xFF, 0xFE))
+        {
+            offset = 2;
+            return new UnicodeEncoding(bigEndian: false, byteOrderMark: false, throwOnInvalidBytes: true);
+        }
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    }
+
+    private static bool HasPrefix(byte[] bytes, params byte[] prefix)
+    {
+        if (bytes.Length < prefix.Length) return false;
+        for (var index = 0; index < prefix.Length; index++)
+        {
+            if (bytes[index] != prefix[index]) return false;
+        }
+        return true;
+    }
 
     private static bool PathsEqual(string left, string right)
     {
@@ -541,22 +623,31 @@ public sealed class PowerShellCompilationCensusRunner
         return files.Select(file =>
         {
             var fullPath = Path.GetFullPath(file.FullPath);
+            var functionExtents = File.Exists(fullPath)
+                ? Parser.ParseFile(fullPath, out _, out _)
+                    .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+                    .OfType<FunctionDefinitionAst>()
+                    .Select(static function => (function.Name, BodyStartLine: function.Body.Extent.StartLineNumber, function.Extent))
+                    .ToArray()
+                : Array.Empty<(string Name, int BodyStartLine, IScriptExtent Extent)>();
             var units = file.Units.Select((unit, index) =>
             {
                 if (unit.Kind != PowerShellCompilationUnitKind.Function || !unit.IsCompilable || methods.Contains(fullPath + "\0" + unit.Name))
                     return unit;
-                var nextLine = file.Units
-                    .Skip(index + 1)
-                    .Where(static candidate => candidate.Kind == PowerShellCompilationUnitKind.Function)
-                    .Select(static candidate => candidate.StartLine)
-                    .Where(line => line > unit.StartLine)
-                    .DefaultIfEmpty(int.MaxValue)
-                    .Min();
+                var occurrence = file.Units.Take(index).Count(candidate =>
+                    candidate.Kind == PowerShellCompilationUnitKind.Function &&
+                    candidate.StartLine == unit.StartLine &&
+                    candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase));
+                var extent = functionExtents
+                    .Where(candidate => candidate.BodyStartLine == unit.StartLine &&
+                                        candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase))
+                    .Skip(occurrence)
+                    .Select(static candidate => candidate.Extent)
+                    .FirstOrDefault();
                 var exact = emitted.Diagnostics
                     .Where(diagnostic =>
                         PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, fullPath) &&
-                        diagnostic.Line >= unit.StartLine &&
-                        diagnostic.Line < nextLine)
+                        extent is not null && IsWithinExtent(diagnostic.Line, diagnostic.Column, extent))
                     .ToArray();
                 if (exact.Length > 0)
                 {
@@ -581,11 +672,21 @@ public sealed class PowerShellCompilationCensusRunner
                             "This function did not survive conservative typed function-graph emission and remains on the PowerShell fallback path.",
                             file.FullPath,
                             unit.StartLine,
-                            1)
+                            1,
+                            PowerShellCompilationFeatureIds.FunctionGraph)
                     }).ToArray());
             }).ToArray();
             return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
         }).ToArray();
+    }
+
+    private static bool IsWithinExtent(int line, int column, IScriptExtent extent)
+    {
+        if (line < extent.StartLineNumber || line > extent.EndLineNumber)
+            return false;
+        if (line == extent.StartLineNumber && column < extent.StartColumnNumber)
+            return false;
+        return line != extent.EndLineNumber || column <= extent.EndColumnNumber;
     }
 
     private static string? NormalizeTargetFramework(string? targetFramework)

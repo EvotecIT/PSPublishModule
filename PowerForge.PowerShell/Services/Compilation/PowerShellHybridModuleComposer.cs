@@ -33,7 +33,7 @@ internal static class PowerShellHybridModuleComposer
         var removals = new List<(int Start, int Length)>();
         foreach (var function in functions)
         {
-            if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Extent.StartLineNumber)))
+            if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                 continue;
             if (function.Extent.StartOffset < prologueEndOffset)
                 throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
@@ -128,7 +128,7 @@ internal static class PowerShellHybridModuleComposer
         var source = new StringBuilder(File.ReadAllText(sourcePath));
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
-                     .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Extent.StartLineNumber)))
+                     .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
             source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
@@ -160,7 +160,7 @@ internal static class PowerShellHybridModuleComposer
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Module source '{sourcePath}' could not be parsed while composing fallback exports.");
             foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false).Cast<FunctionDefinitionAst>())
-                yield return new ModuleScopeFunction(sourcePath, function.Name, function.Extent.StartLineNumber);
+                yield return new ModuleScopeFunction(sourcePath, function.Name, function.Body.Extent.StartLineNumber);
         }
     }
 

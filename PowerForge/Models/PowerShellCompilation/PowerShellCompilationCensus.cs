@@ -5,7 +5,41 @@ namespace PowerForge;
 /// <summary>One product or source tree included in a compilation census.</summary>
 public sealed class PowerShellCompilationCensusProduct
 {
+    /// <summary>Creates a product census result using the original public contract.</summary>
+    public PowerShellCompilationCensusProduct(
+        string name,
+        string path,
+        int sourceFiles,
+        int totalUnits,
+        int compilableUnits,
+        int runtimeFallbackUnits,
+        int parseErrorFiles,
+        double analysisMilliseconds,
+        PowerShellCompilationCensusBlocker[] blockers,
+        PowerShellCompilationFeatureImpact[]? featureImpacts = null,
+        PowerShellCompilationDependencySummary[]? dependencySummary = null,
+        PowerShellCompilationResourceSummary? resourceSummary = null)
+        : this(
+            name,
+            path,
+            sourceFiles,
+            totalUnits,
+            compilableUnits,
+            runtimeFallbackUnits,
+            parseErrorFiles,
+            analysisMilliseconds,
+            blockers,
+            featureImpacts,
+            dependencySummary,
+            resourceSummary,
+            new PowerShellCompilationCoverageBreakdown(),
+            string.Empty,
+            Array.Empty<PowerShellCompilationFeatureImpact>())
+    {
+    }
+
     /// <summary>Creates a product census result.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationCensusProduct(
         string name,
         string path,
@@ -113,7 +147,27 @@ public sealed class PowerShellCompilationCensusBlocker
 /// <summary>Repeatable compilation coverage and analyzer-performance census.</summary>
 public sealed class PowerShellCompilationCensusResult
 {
+    /// <summary>Creates an aggregate census result using the original public contract.</summary>
+    public PowerShellCompilationCensusResult(
+        string? targetFramework,
+        PowerShellCompilationCensusProduct[] products,
+        PowerShellCompilationCensusRegression[] regressions,
+        PowerShellCompilationFeatureImpact[]? frontier = null,
+        PowerShellCompilationFeaturePair[]? coBlockers = null)
+        : this(
+            targetFramework,
+            products,
+            regressions,
+            frontier,
+            coBlockers,
+            Array.Empty<PowerShellCompilationCensusSourceDrift>(),
+            Array.Empty<PowerShellCompilationFeatureImpact>(),
+            Array.Empty<PowerShellCompilationFeaturePair>())
+    {
+    }
+
     /// <summary>Creates an aggregate census result.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
     public PowerShellCompilationCensusResult(
         string? targetFramework,
         PowerShellCompilationCensusProduct[] products,

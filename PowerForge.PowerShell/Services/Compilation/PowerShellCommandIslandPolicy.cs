@@ -123,9 +123,7 @@ internal static class PowerShellCommandIslandPolicy
                 .Any(static assignment => !IsDiscardAssignment(assignment)))
             return false;
 
-        var parameters = allowedVariables ?? body.ParamBlock?.Parameters
-            .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameters = GetAvailableVariablesBefore(body, statement, allowedVariables);
         return statement.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
             .Cast<VariableExpressionAst>()
             .All(variable =>
@@ -222,9 +220,7 @@ internal static class PowerShellCommandIslandPolicy
                 localFunctionNames.Contains(name)))
             return false;
 
-        var parameters = allowedVariables ?? body.ParamBlock?.Parameters
-            .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parameters = GetAvailableVariablesBefore(body, candidate, allowedVariables);
         var variablesSafe = candidate.Right.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
             .OfType<VariableExpressionAst>()
             .All(variable =>
@@ -242,6 +238,33 @@ internal static class PowerShellCommandIslandPolicy
 
         assignment = candidate;
         return true;
+    }
+
+    private static HashSet<string> GetAvailableVariablesBefore(
+        ScriptBlockAst body,
+        StatementAst boundary,
+        ISet<string>? allowedVariables)
+    {
+        var available = body.ParamBlock?.Parameters
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var earlierAssignments = body.EndBlock?.Statements
+            .Where(statement => statement.Extent.StartOffset < boundary.Extent.StartOffset)
+            .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
+            .OfType<AssignmentStatementAst>()
+            .Select(static assignment => PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left)?.VariablePath.UserPath)
+            .Where(static name => name is not null)
+            .Cast<string>() ?? Enumerable.Empty<string>();
+        foreach (var name in earlierAssignments)
+        {
+            if (allowedVariables is null || allowedVariables.Contains(name))
+                available.Add(name);
+        }
+        if (allowedVariables is not null)
+            available.RemoveWhere(name => !allowedVariables.Contains(name) &&
+                                          body.ParamBlock?.Parameters.Any(parameter =>
+                                              parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) != true);
+        return available;
     }
 
     internal static bool IsDiscardAssignment(AssignmentStatementAst assignment)

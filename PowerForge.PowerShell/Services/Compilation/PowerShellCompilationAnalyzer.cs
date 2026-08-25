@@ -292,7 +292,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         candidate.Extent,
                         PowerShellCompilationFeatureIds.ScriptBlock));
                     break;
-                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities):
+                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities, targetFramework):
                     break;
                 case AttributeAst attribute:
                     diagnostics.Add(CreateDiagnostic(
@@ -302,7 +302,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         attribute.Extent,
                         PowerShellCompilationFeatureIds.ParameterMetadata));
                     break;
-                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !PowerShellCompilationParameterTypePolicy.CanUseInMethod(conversion.StaticType, targetFramework: null, capabilities):
+                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !PowerShellCompilationParameterTypePolicy.CanUseInMethod(conversion.StaticType, targetFramework, capabilities):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         $"Typed local declaration '{conversion.StaticType.FullName}' is not supported by the typed compiler.",
@@ -318,7 +318,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                     PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                     break;
-                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework: null, capabilities):
+                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework, capabilities):
                     break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(

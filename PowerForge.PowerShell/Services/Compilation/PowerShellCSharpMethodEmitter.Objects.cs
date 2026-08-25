@@ -10,7 +10,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             conversion.Child is not HashtableAst hashtable)
             throw Error(conversion, "[pscustomobject] literals require a generated binary-module host.");
 
-        var identifier = "__powerForgeObject" + _objectIndex++;
+        var identifier = GetTemporaryIdentifier("object");
         var statements = new List<string>
         {
             $"var {identifier} = new global::System.Management.Automation.PSObject();"

@@ -76,7 +76,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         using var fixture = ArtifactFixture.Create(
             "function Test-RuntimeApproval { [CmdletBinding(SupportsShouldProcess = $true)] param([string] $Target) return $PSCmdlet.ShouldProcess($Target, 'Change') }; " +
             "function Set-RuntimeState { [CmdletBinding(SupportsShouldProcess = $true)] param([string] $Target) " +
-            "if ($WhatIfPreference) { return 'whatif' }; if (Test-RuntimeApproval -Target $Target) { return 'changed' }; return 'skipped' }",
+            "if ($WhatIfPreference) { return 'whatif' }; if ($PSCmdlet.ShouldProcess($Target, 'Change')) { return 'changed' }; return 'skipped' }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath },
@@ -99,12 +99,17 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             result.Succeeded,
             result.Error + Environment.NewLine + result.BuildOutput + Environment.NewLine +
             string.Join(Environment.NewLine, result.Manifest?.Diagnostics.Select(static diagnostic => diagnostic.Message) ?? Array.Empty<string>()));
-        foreach (var arguments in new[] { "-Confirm:$false", "-WhatIf" })
+        foreach (var command in new[]
+                 {
+                     "Set-RuntimeState -Target 'item' -Confirm:$false",
+                     "Set-RuntimeState -Target 'item' -WhatIf",
+                     "$global:WhatIfPreference = $true; Set-RuntimeState -Target 'item' -WhatIf:$false"
+                 })
         {
             var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
-                $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; Set-RuntimeState -Target 'item' {arguments}");
+                $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
             var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
-                $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Set-RuntimeState -Target 'item' {arguments}");
+                $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
 
             Assert.Equal(0, original.ExitCode);
             Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);
@@ -145,6 +150,90 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var function = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+    }
+
+    [Fact]
+    public void Transpile_TypedLibraryLowersStaticRuntimeFacts()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-StaticFact { if ($IsWindows) { return $PSEdition + ':Windows' }; return $PSEdition + ':Other' }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(
+            fixture.ScriptPath,
+            "PowerForge.StaticFacts",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.False(typed.Methods[0].RequiresPowerShellRuntimeState);
+        Assert.Contains("Core", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("RuntimeInformation.IsOSPlatform", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_LocalWhatIfPreferenceAssignmentIsNotReplacedByHostState()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LocalPreference { [CmdletBinding(SupportsShouldProcess = $true)] param() " +
+            "$WhatIfPreference = $false; return $WhatIfPreference }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.LocalWhatIf", "CompiledPowerShell", "net8.0");
+        var method = Assert.Single(typed.Methods);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LocalWhatIf",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LocalPreference -WhatIf");
+        Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_ForeachWhatIfPreferenceIsNotReplacedByHostState()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LoopPreference { [CmdletBinding(SupportsShouldProcess = $true)] param([bool[]] $Flags) " +
+            "foreach ($WhatIfPreference in $Flags) { if ($WhatIfPreference) { return $true } }; return $false }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.LoopWhatIf", "CompiledPowerShell", "net8.0");
+        var method = Assert.Single(typed.Methods);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LoopWhatIf",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LoopPreference -Flags $false -WhatIf");
+        Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Analyze_VersionTableMemberMutationRemainsOnFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Set-VersionState { $PSVersionTable.PSVersion = [Version] '1.0'; return $PSVersionTable.PSVersion }",
+            ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var function = Assert.Single(Assert.Single(plan.Files).Units);
 
         Assert.False(function.IsCompilable);
         Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
