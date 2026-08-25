@@ -73,7 +73,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {GetExecutableUnixMode(dependency)}),");
         }
         for (var index = 0; index < resourceDependencies.Length; index++)
         {
@@ -83,7 +83,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             File.Copy(dependency.Path, Path.Combine(dependencyDirectory, fileName), overwrite: false);
             var logicalName = $"PowerForge.Compiled.Resource{index:D4}";
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {GetExecutableUnixMode(dependency.Path)}),");
         }
         var resourcePaths = resourceDependencies.Select(static dependency => dependency.RelativePath).ToArray();
         var usesExtractedRoot = resourceDependencies.Any(static dependency =>
@@ -96,6 +96,19 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             hasDependencies: true,
             resourcePaths,
             usesExtractedRoot);
+    }
+
+    private static int GetExecutableUnixMode(string path)
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            return 0;
+        var mode = File.GetUnixFileMode(path);
+        var executable = mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
+        return executable == 0 ? 0 : (int)mode;
+#else
+        return 0;
+#endif
     }
 
     private static void RejectDependencyExits(string dependencyPath)

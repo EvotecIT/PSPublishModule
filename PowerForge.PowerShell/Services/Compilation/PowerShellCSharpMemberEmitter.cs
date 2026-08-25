@@ -206,7 +206,19 @@ internal sealed class PowerShellCSharpMemberEmitter
         var valueType = _inferExpressionType(value);
         if (!_isSupportedType(memberType) || !_canAssign(memberType, valueType))
             throw _error(value, $"Member assignment value type '{valueType.FullName}' is not assignable to '{memberType.FullName}'.");
-        return $"{EmitTarget(target)}.{members[0].Name} = {_emitExpression(value)}";
+        var targetCode = EmitTarget(target);
+        if (RequiresNullPropagation(target))
+        {
+            if (!_canEmitPowerShellRuntimeErrors)
+            {
+                throw _error(
+                    member,
+                    $"CLR member assignment '{target.Type.FullName}.{members[0].Name}' on a potentially null reference receiver cannot preserve PowerShell's runtime-error identity without a PowerShell host.");
+            }
+            var message = $"The property '{members[0].Name}' cannot be found on this object. Verify that the property exists and can be set.";
+            targetCode = $"({targetCode} ?? throw new global::System.Management.Automation.RuntimeException({PowerShellCSharpLiteral.QuoteString(message)}))";
+        }
+        return $"{targetCode}.{members[0].Name} = {_emitExpression(value)}";
     }
 
     internal string EmitInvocation(InvokeMemberExpressionAst invocation)

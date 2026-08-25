@@ -343,16 +343,22 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, directory, $"Included resource directory '{directory}' traverses a symbolic link or junction.");
                 foreach (var file in EnumerateContainedFiles(directory))
                 {
-                    var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/');
-                    inventory.Add(new ResourceCandidate(Path.GetFullPath(file), relative, GetConventionDiscovery(relative)));
+                    var fullPath = Path.GetFullPath(file);
+                    if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath))
+                        continue;
+                    var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, fullPath).Replace('\\', '/');
+                    inventory.Add(new ResourceCandidate(fullPath, relative, GetConventionDiscovery(relative)));
                 }
             }
             foreach (var pattern in includePatterns.Where(HasWildcards))
             {
                 foreach (var file in EnumerateContainedFiles(moduleRoot).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
                 {
-                    var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/');
-                    inventory.Add(new ResourceCandidate(Path.GetFullPath(file), relative, GetConventionDiscovery(relative)));
+                    var fullPath = Path.GetFullPath(file);
+                    if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath))
+                        continue;
+                    var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, fullPath).Replace('\\', '/');
+                    inventory.Add(new ResourceCandidate(fullPath, relative, GetConventionDiscovery(relative)));
                 }
             }
         }

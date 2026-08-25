@@ -97,7 +97,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var item = GetTemporaryIdentifier("membership_item");
         var array = inOperator ? right : left;
         var value = inOperator ? left : right;
-        var any = $"global::System.Linq.Enumerable.Any(({array} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()), {item} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){item}, (object?)({value}), {ignoreCase}, global::System.Globalization.CultureInfo.CurrentCulture))";
+        var any = $"global::System.Linq.Enumerable.Any(({array} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()), {item} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){item}, (object?)({value}), {ignoreCase}, global::System.Globalization.CultureInfo.InvariantCulture))";
         if (operation.Contains("not", StringComparison.OrdinalIgnoreCase)) any = $"!({any})";
         return $"new global::System.Func<bool>(() => {{ var {left} = {EmitExpression(binary.Left)}; var {right} = {EmitExpression(binary.Right)}; return {any}; }})()";
     }

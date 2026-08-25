@@ -111,6 +111,21 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationFeatureIds.FilterFunction)
                     });
             }
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) && function.GetHelpContent() is not null)
+            {
+                functionUnit = ReplaceUnit(
+                    functionUnit,
+                    typeof(object),
+                    new[]
+                    {
+                        CreateDiagnostic(
+                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                            $"Function '{function.Name}' has comment-based help, so binary-module compilation keeps its authored help on the PowerShell function path.",
+                            file,
+                            function.Extent,
+                            PowerShellCompilationFeatureIds.CommentBasedHelp)
+                    });
+            }
             var functionStatements = GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false);
             if (functionUnit.IsCompilable && !RequiresArtifactGraphEmission(functionStatements, capabilities, localFunctionNames))
             {
@@ -169,7 +184,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
         }
 
-        var fileWideDiagnostics = ast.UsingStatements
+        var fileWideDiagnostics = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
             .OfType<UsingStatementAst>()
             .Where(static statement => statement.UsingStatementKind != UsingStatementKind.Namespace)
             .Select(statement => CreateDiagnostic(

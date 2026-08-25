@@ -27,7 +27,8 @@ internal static class PowerShellHybridModuleComposer
             .Cast<FunctionDefinitionAst>()
             .OrderByDescending(static function => function.Extent.StartOffset)
             .ToArray();
-        var source = new StringBuilder(File.ReadAllText(sourcePath));
+        var runtimeVariables = CreateRuntimeRegionVariableNames(ast);
+        var source = new StringBuilder(ast.Extent.Text);
         var exportContract = PowerShellModuleExportContract.TryRead(ast);
         var wrapped = GetWrappedCompiledMethodKeys(sourcePath, typed);
         var removals = new List<(int Start, int Length)>();
@@ -69,14 +70,15 @@ internal static class PowerShellHybridModuleComposer
         if (typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions))
         {
             var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
-            import.AppendLine("$__powerForgeRunspaceId = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
-            import.Append(hostType).AppendLine("::SetDispatcher($__powerForgeRunspaceId, { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments })");
+            import.Append('$').Append(runtimeVariables.RunspaceId).AppendLine(" = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId");
+            import.Append(hostType).Append("::SetDispatcher($").Append(runtimeVariables.RunspaceId)
+                .AppendLine(", { param($script, [object[]] $arguments) & ([scriptblock]::Create($script)) @arguments })");
         }
         import.AppendLine();
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        AppendRuntimeRegionCleanup(builder, typed);
+        AppendRuntimeRegionCleanup(builder, typed, runtimeVariables);
         if (manifestControlsExports)
             return builder.ToString();
         if (exportContract is not null && exportContract.Commands.Length == 0)
@@ -91,18 +93,22 @@ internal static class PowerShellHybridModuleComposer
         return builder.ToString();
     }
 
-    private static void AppendRuntimeRegionCleanup(StringBuilder builder, PowerShellTypedCompilationResult typed)
+    private static void AppendRuntimeRegionCleanup(
+        StringBuilder builder,
+        PowerShellTypedCompilationResult typed,
+        RuntimeRegionVariableNames variables)
     {
         if (!typed.Methods.Any(static method => method.RequiresPowerShellCommandRegions))
             return;
         var hostType = "[" + typed.NamespaceName + "." + PowerShellBinaryCmdletSourceGenerator.GetRuntimeRegionHostTypeName(typed) + "]";
-        builder.AppendLine("$__powerForgeModule = $ExecutionContext.SessionState.Module");
-        builder.AppendLine("$__powerForgePreviousOnRemove = $__powerForgeModule.OnRemove");
-        builder.AppendLine("$__powerForgeModule.OnRemove = {");
-        builder.Append("    ").Append(hostType).AppendLine("::ClearDispatcher($__powerForgeRunspaceId)");
-        builder.AppendLine("    if ($null -ne $__powerForgePreviousOnRemove) { & $__powerForgePreviousOnRemove }");
+        builder.Append('$').Append(variables.Module).AppendLine(" = $ExecutionContext.SessionState.Module");
+        builder.Append('$').Append(variables.PreviousOnRemove).Append(" = $").Append(variables.Module).AppendLine(".OnRemove");
+        builder.Append('$').Append(variables.Module).AppendLine(".OnRemove = {");
+        builder.Append("    ").Append(hostType).Append("::ClearDispatcher($").Append(variables.RunspaceId).AppendLine(")");
+        builder.Append("    if ($null -ne $").Append(variables.PreviousOnRemove).Append(") { & $").Append(variables.PreviousOnRemove).AppendLine(" }");
         builder.AppendLine("}.GetNewClosure()");
-        builder.AppendLine("Remove-Variable -Name __powerForgeRunspaceId, __powerForgeModule, __powerForgePreviousOnRemove -Scope Script -ErrorAction SilentlyContinue");
+        builder.Append("Remove-Variable -Name ").Append(variables.RunspaceId).Append(", ").Append(variables.Module)
+            .Append(", ").Append(variables.PreviousOnRemove).AppendLine(" -Scope Script -ErrorAction SilentlyContinue");
     }
 
     internal static string? ComposeDependency(
@@ -125,7 +131,7 @@ internal static class PowerShellHybridModuleComposer
         var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
         if (errors.Length > 0)
             throw new InvalidOperationException($"Hybrid module dependency '{sourcePath}' could not be parsed while composing fallback code.");
-        var source = new StringBuilder(File.ReadAllText(sourcePath));
+        var source = new StringBuilder(ast.Extent.Text);
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
                      .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
@@ -134,6 +140,32 @@ internal static class PowerShellHybridModuleComposer
             source.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
         }
         return source.ToString();
+    }
+
+    private static RuntimeRegionVariableNames CreateRuntimeRegionVariableNames(ScriptBlockAst ast)
+    {
+        var authoredNames = ast.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+            .OfType<VariableExpressionAst>()
+            .Select(static variable => GetUnqualifiedVariableName(variable.VariablePath.UserPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; ; index++)
+        {
+            var suffix = index == 0 ? string.Empty : "_" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var names = new RuntimeRegionVariableNames(
+                "__powerForgeRunspaceId" + suffix,
+                "__powerForgeModule" + suffix,
+                "__powerForgePreviousOnRemove" + suffix);
+            if (!authoredNames.Contains(names.RunspaceId) &&
+                !authoredNames.Contains(names.Module) &&
+                !authoredNames.Contains(names.PreviousOnRemove))
+                return names;
+        }
+    }
+
+    private static string GetUnqualifiedVariableName(string userPath)
+    {
+        var separator = userPath.IndexOf(':');
+        return separator < 0 ? userPath : userPath.Substring(separator + 1);
     }
 
     internal static HashSet<string> GetWrappedCompiledMethodKeys(string sourcePath, PowerShellTypedCompilationResult typed)
@@ -185,5 +217,19 @@ internal static class PowerShellHybridModuleComposer
         internal string Path { get; }
         internal string Name { get; }
         internal int Line { get; }
+    }
+
+    private sealed class RuntimeRegionVariableNames
+    {
+        internal RuntimeRegionVariableNames(string runspaceId, string module, string previousOnRemove)
+        {
+            RunspaceId = runspaceId;
+            Module = module;
+            PreviousOnRemove = previousOnRemove;
+        }
+
+        internal string RunspaceId { get; }
+        internal string Module { get; }
+        internal string PreviousOnRemove { get; }
     }
 }

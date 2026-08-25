@@ -115,7 +115,7 @@ internal static class PowerShellCommandIslandPolicy
             return false;
         if (statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
             pipeline.PipelineElements[0] is CommandAst stream &&
-            TryGetStreamCommand(stream, out _, out _))
+            IsStreamCommand(stream))
             return false;
         if (statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any() ||
             statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
@@ -317,7 +317,7 @@ internal static class PowerShellCommandIslandPolicy
         if (arguments.Length == 1 && arguments[0] is ExpressionAst positional)
         {
             message = positional;
-            return true;
+            return IsProvablyNonEmptyStreamMessage(message);
         }
         if (arguments.Length == 2 &&
             arguments[0] is CommandParameterAst parameter &&
@@ -325,8 +325,14 @@ internal static class PowerShellCommandIslandPolicy
             arguments[1] is ExpressionAst named)
         {
             message = named;
-            return true;
+            return IsProvablyNonEmptyStreamMessage(message);
         }
         return false;
     }
+
+    private static bool IsStreamCommand(CommandAst command)
+        => command.GetCommandName()?.ToUpperInvariant() is "WRITE-VERBOSE" or "WRITE-DEBUG" or "WRITE-WARNING";
+
+    private static bool IsProvablyNonEmptyStreamMessage(ExpressionAst message)
+        => message is StringConstantExpressionAst { Value.Length: > 0 };
 }

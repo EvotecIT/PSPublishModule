@@ -39,10 +39,12 @@ internal static class PowerShellHybridFunctionCollisionResolver
                             IsModuleScope(command, source.Root),
                     searchNestedScriptBlocks: true)
                 .OfType<CommandAst>()
-                .Any(command => command.GetCommandName()?.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase) == true)))
+                .Any(command => ReferencesFunction(command, definition.Function.Name))))
             .Select(static definition => definition.Function.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var fallbackNames = duplicateNames.Concat(earlyAvailabilityNames).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fallbackNames = duplicateNames
+            .Concat(earlyAvailabilityNames)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var excludedMethods = typed.Methods
             .Where(method => fallbackNames.Contains(method.SourceName))
             .Select(method => Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath) + "\0" + method.SourceName + "\0" + method.SourceLine)
@@ -88,6 +90,41 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             filtered.SourcePaths);
+    }
+
+    private static bool ReferencesFunction(CommandAst command, string functionName)
+    {
+        if (command.GetCommandName()?.Equals(functionName, StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        var commandName = command.GetCommandName();
+        if (commandName is null ||
+            !commandName.Equals("Get-Command", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.EndsWith("\\Get-Command", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var elements = command.CommandElements.Skip(1).ToArray();
+        for (var index = 0; index < elements.Length; index++)
+        {
+            if (elements[index] is CommandParameterAst parameter)
+            {
+                if (parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (parameter.Argument is StringConstantExpressionAst inline &&
+                        inline.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (parameter.Argument is null && index + 1 < elements.Length &&
+                        elements[index + 1] is StringConstantExpressionAst named &&
+                        named.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                if (parameter.Argument is null && index + 1 < elements.Length && elements[index + 1] is ExpressionAst)
+                    index++;
+                continue;
+            }
+            if (elements[index] is StringConstantExpressionAst positional)
+                return positional.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     private static bool IsModuleScope(Ast node, ScriptBlockAst root)

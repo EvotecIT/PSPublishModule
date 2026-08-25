@@ -50,6 +50,8 @@ public static class PowerShellCompilationFeatureIds
     public const string FunctionNameCollision = "function.name-collision";
     /// <summary>Conservative whole-function graph emission.</summary>
     public const string FunctionGraph = "function.graph";
+    /// <summary>Authored comment-based help on generated binary cmdlets.</summary>
+    public const string CommentBasedHelp = "function.comment-help";
     /// <summary>Generated binary-cmdlet shape requirements.</summary>
     public const string BinaryCmdletShape = "binary-module.cmdlet-shape";
     /// <summary>Typed dictionary values flowing beyond supported lookup and mutation contexts.</summary>
@@ -123,6 +125,7 @@ public static class PowerShellCompilationFeatureIds
             (message.IndexOf("Local function", StringComparison.OrdinalIgnoreCase) >= 0 &&
              message.IndexOf("pipeline cardinality", StringComparison.OrdinalIgnoreCase) >= 0) ||
             message.IndexOf("command-availability timing", StringComparison.OrdinalIgnoreCase) >= 0) return FunctionGraph;
+        if (message.IndexOf("comment-based help", StringComparison.OrdinalIgnoreCase) >= 0) return CommentBasedHelp;
         if (message.IndexOf("Typed dictionary local", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("Typed hashtable literal", StringComparison.OrdinalIgnoreCase) >= 0) return DictionaryFlow;
         if (message.IndexOf("PipelineAst", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("PipelineAst");

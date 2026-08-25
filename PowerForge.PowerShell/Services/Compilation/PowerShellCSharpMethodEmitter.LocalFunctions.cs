@@ -66,6 +66,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (signature.Parameters.SelectMany(static parameter => parameter.Bindings)
             .Any(static binding => !string.IsNullOrWhiteSpace(binding.ParameterSetName)))
             throw Error(command, $"Local function '{signature.SourceName}' uses named parameter sets whose selection must remain on the PowerShell binding path.");
+        if (!_capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+            signature.Parameters.Any(static parameter => parameter.Validations.Length > 0) &&
+            IsInsideTypeDiscriminatingTry(command))
+        {
+            throw Error(
+                command,
+                $"Local function '{signature.SourceName}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity cannot be preserved without a PowerShell host.");
+        }
 
         var bound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var positionalIndex = 0;
@@ -181,6 +189,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return current.Parent is ReturnStatementAst ||
                current is PipelineAst pipeline && pipeline.Parent is NamedBlockAst namedBlock &&
                ReferenceEquals(namedBlock.Statements.LastOrDefault(), pipeline);
+    }
+
+    private static bool IsInsideTypeDiscriminatingTry(CommandAst command)
+    {
+        for (Ast? current = command.Parent; current is not null; current = current.Parent)
+        {
+            if (current is not TryStatementAst tryStatement ||
+                tryStatement.CatchClauses.All(static clause => clause.CatchTypes.Count == 0))
+                continue;
+            if (command.Extent.StartOffset >= tryStatement.Body.Extent.StartOffset &&
+                command.Extent.EndOffset <= tryStatement.Body.Extent.EndOffset)
+                return true;
+        }
+        return false;
     }
 
     private sealed class BoundLocalFunctionCall

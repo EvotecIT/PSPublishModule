@@ -134,10 +134,12 @@ internal static class Program
         {
             var target = ResolveContainedExtractionPath(root, dependency.RelativePath);
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
-            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(dependency.ResourceName)
-                ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found.");
-            using var file = File.Create(target);
-            stream.CopyTo(file);
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(dependency.ResourceName)
+                       ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found."))
+            using (var file = File.Create(target))
+                stream.CopyTo(file);
+            if (dependency.UnixFileMode != 0 && !OperatingSystem.IsWindows())
+                File.SetUnixFileMode(target, (UnixFileMode)dependency.UnixFileMode);
         }
         return new ExtractedSourceSet(root, entryPath);
     }
@@ -278,14 +280,16 @@ internal static class Program
 
     private sealed class EmbeddedDependency
     {
-        internal EmbeddedDependency(string resourceName, string relativePath)
+        internal EmbeddedDependency(string resourceName, string relativePath, int unixFileMode)
         {
             ResourceName = resourceName;
             RelativePath = relativePath;
+            UnixFileMode = unixFileMode;
         }
 
         internal string ResourceName { get; }
         internal string RelativePath { get; }
+        internal int UnixFileMode { get; }
     }
 
     private sealed class ExtractedSourceSet : IDisposable

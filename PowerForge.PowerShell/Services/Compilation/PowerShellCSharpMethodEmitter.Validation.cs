@@ -35,25 +35,25 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                     ? $"{identifier} is not null && {identifier}.Length == 0"
                     : $"global::System.String.IsNullOrEmpty({identifier})";
                 AppendLine($"if ({condition})");
-                AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty string.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow an empty string.", metadata.Name)};");
             }
             else if (metadata.IsMandatory && parameterType.IsArray)
             {
                 if (!metadata.AllowNull)
                 {
                     AppendLine($"if ({identifier} is null)");
-                    AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow null values.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                    AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name)};");
                 }
                 if (!metadata.AllowEmptyCollection)
                 {
                     AppendLine($"if ({identifier} is not null && {identifier}.Length == 0)");
-                    AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                    AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.", metadata.Name)};");
                 }
             }
             else if (metadata.IsMandatory && !metadata.AllowNull && !parameterType.IsValueType)
             {
                 AppendLine($"if ({identifier} is null)");
-                AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow null values.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name)};");
             }
             if (metadata.Validations.Length == 0)
                 continue;
@@ -98,7 +98,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 ? $"{value} is null || {value}.Length == 0"
                 : $"{value} is null";
             AppendLine($"if ({condition})");
-            AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString(GetValidationMessage(parameter.Name, validation.Kind))}, {PowerShellCSharpLiteral.QuoteString(parameter.Name)});");
+            AppendLine($"    throw {EmitParameterBindingValidationException(GetValidationMessage(parameter.Name, validation.Kind), parameter.Name)};");
         }
     }
 
@@ -130,9 +130,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (condition is null)
                 continue;
             AppendLine($"if ({condition})");
-            AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString(GetValidationMessage(parameter.Name, validation.Kind))}, {PowerShellCSharpLiteral.QuoteString(parameter.Name)});");
+            AppendLine($"    throw {EmitParameterBindingValidationException(GetValidationMessage(parameter.Name, validation.Kind), parameter.Name)};");
         }
     }
+
+    private string EmitParameterBindingValidationException(string message, string parameterName)
+        => _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects)
+            ? $"new global::System.Management.Automation.RuntimeException({PowerShellCSharpLiteral.QuoteString(message)})"
+            : $"new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString(message)}, {PowerShellCSharpLiteral.QuoteString(parameterName)})";
 
     private static string EmitValidateSetFailure(string value, IEnumerable<string> allowed)
     {

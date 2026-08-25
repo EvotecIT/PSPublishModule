@@ -38,6 +38,7 @@ internal static class PowerShellCompilationFeatureCatalog
             PowerShellCompilationFeatureIds.FilterFunction => ("Filter functions", "Add per-input pipeline invocation semantics before treating filters as typed methods."),
             PowerShellCompilationFeatureIds.FunctionNameCollision => ("Function name collisions", "Disambiguate generated CLR identities without changing PowerShell command identity."),
             PowerShellCompilationFeatureIds.FunctionGraph => ("Typed function graph", "Broaden whole-call-graph validation and emission while preserving declaration timing and output cardinality."),
+            PowerShellCompilationFeatureIds.CommentBasedHelp => ("Comment-based help", "Keep the function on a PowerShell path or generate external help for compiled cmdlets."),
             PowerShellCompilationFeatureIds.BinaryCmdletShape => ("Binary cmdlet shape", "Expand safe PSCmdlet wrapper generation or retain the function in Hybrid fallback."),
             PowerShellCompilationFeatureIds.DictionaryFlow => ("Typed dictionary flow", "Preserve a target-typed dictionary contract through supported calls, returns, and object construction."),
             _ => (featureId, "Inspect representative units and add an explicit typed-IR capability only when the semantics can be proven.")
