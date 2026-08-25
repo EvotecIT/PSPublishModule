@@ -293,7 +293,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 capabilities,
                 out var declaredReturnType) && declaredReturnType is not null)
         {
-            signatures[name] = CreateProvisionalSignature(source, declaredReturnType);
+            signatures[name] = CreateProvisionalSignature(source, declaredReturnType, targetFramework, capabilities);
             provisionalSignatures.Add(name);
         }
         states[name] = FunctionVisitState.Active;
@@ -335,7 +335,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 throw new PowerShellCSharpEmissionException(
                     source.Function,
                     $"Declared OutputType '{signatures[name].ReturnType.FullName}' does not match inferred recursive return type '{emitted.ReturnType.FullName}'.");
-            signatures[name] = CreateSignature(source, emitted);
+            signatures[name] = CreateSignature(source, emitted, targetFramework, capabilities);
             provisionalSignatures.Remove(name);
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
@@ -392,7 +392,11 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
             emitted.RequiresPowerShellRuntimeState);
 
-    private static PowerShellLocalFunctionSignature CreateSignature(FunctionSource source, PowerShellCSharpMethodEmission emitted)
+    private static PowerShellLocalFunctionSignature CreateSignature(
+        FunctionSource source,
+        PowerShellCSharpMethodEmission emitted,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
         => CreateSignature(
             source,
             emitted.GeneratedName,
@@ -400,9 +404,14 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresPowerShellBoundParameters,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,
-            emitted.RequiresPowerShellRuntimeState);
+            emitted.RequiresPowerShellRuntimeState,
+            PowerShellRuntimeStateIntrinsicPolicy.RequiresShouldProcessHostBinding(source.Function.Body, targetFramework, capabilities));
 
-    private static PowerShellLocalFunctionSignature CreateProvisionalSignature(FunctionSource source, Type returnType)
+    private static PowerShellLocalFunctionSignature CreateProvisionalSignature(
+        FunctionSource source,
+        Type returnType,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
         => CreateSignature(
             source,
             PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name),
@@ -410,7 +419,11 @@ public sealed class PowerShellTypedCompilationTranspiler
             requiresPowerShellBoundParameters: false,
             requiresPowerShellStreams: false,
             requiresPowerShellCommandRegions: false,
-            requiresPowerShellRuntimeState: false);
+            requiresPowerShellRuntimeState: false,
+            requiresPowerShellShouldProcess: PowerShellRuntimeStateIntrinsicPolicy.RequiresShouldProcessHostBinding(
+                source.Function.Body,
+                targetFramework,
+                capabilities));
 
     private static PowerShellLocalFunctionSignature CreateSignature(
         FunctionSource source,
@@ -419,7 +432,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
         bool requiresPowerShellCommandRegions,
-        bool requiresPowerShellRuntimeState)
+        bool requiresPowerShellRuntimeState,
+        bool requiresPowerShellShouldProcess)
         => new(
             source.Function.Name,
             generatedName,
@@ -445,7 +459,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             requiresPowerShellStreams,
             requiresPowerShellCommandRegions,
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
-            requiresPowerShellRuntimeState);
+            requiresPowerShellRuntimeState,
+            requiresPowerShellShouldProcess);
 
     private static PowerShellCompilationDiagnostic CreateDiagnostic(FunctionSource source, Ast node, string message)
         => new(

@@ -306,7 +306,8 @@ internal sealed class PowerShellLocalFunctionSignature
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false,
         PowerShellCompilationCommandBinding? commandBinding = null,
-        bool requiresPowerShellRuntimeState = false)
+        bool requiresPowerShellRuntimeState = false,
+        bool requiresPowerShellShouldProcess = false)
     {
         SourceName = sourceName;
         GeneratedName = generatedName;
@@ -317,6 +318,7 @@ internal sealed class PowerShellLocalFunctionSignature
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        RequiresPowerShellShouldProcess = requiresPowerShellShouldProcess;
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
     }
     internal string SourceName { get; }
@@ -328,6 +330,7 @@ internal sealed class PowerShellLocalFunctionSignature
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal bool RequiresPowerShellShouldProcess { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
 }
 

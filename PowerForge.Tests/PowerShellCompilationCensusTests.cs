@@ -133,6 +133,32 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_SourceFingerprintNormalizesTextLineEndings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Line Ending Tests", Guid.NewGuid().ToString("N"));
+        var baselineSource = Path.Combine(root, "Baseline", "Product.psm1");
+        var currentSource = Path.Combine(root, "Current", "Product.psm1");
+        Directory.CreateDirectory(Path.GetDirectoryName(baselineSource)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(currentSource)!);
+        File.WriteAllText(baselineSource, "function Get-Value {\n    return 1\n}\n");
+        File.WriteAllText(currentSource, "function Get-Value {\r\n    return 1\r\n}\r\n");
+        try
+        {
+            var runner = new PowerShellCompilationCensusRunner();
+            var baseline = runner.Run(new[] { baselineSource }, "net10.0");
+            var current = runner.Run(new[] { currentSource }, "net10.0", baseline);
+
+            Assert.Equal(Assert.Single(baseline.Products).SourceFingerprint, Assert.Single(current.Products).SourceFingerprint);
+            Assert.Empty(current.SourceDrifts);
+            Assert.True(current.Passed);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_DisambiguatesRepeatedPortableDirectoryNamesAcrossCheckoutRoots()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Repeated Directory Tests", Guid.NewGuid().ToString("N"));

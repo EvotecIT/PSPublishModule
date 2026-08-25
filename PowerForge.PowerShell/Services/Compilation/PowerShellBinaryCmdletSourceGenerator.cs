@@ -7,6 +7,11 @@ namespace PowerForge;
 internal static class PowerShellBinaryCmdletSourceGenerator
 {
     private const string RemainingArgumentsMemberName = "__PowerForgeRemainingArguments";
+    private static readonly HashSet<string> CommandRegionMemberNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "InvokePowerShellRegion",
+        "CapturePowerShellRegion"
+    };
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
@@ -162,7 +167,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         var reservedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
             var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
-            return ReservedMemberNames.Contains(memberName) || memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase);
+            return ReservedMemberNames.Contains(memberName) ||
+                   memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
@@ -332,7 +339,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "target => ShouldProcess(target)",
                 "(target, action) => ShouldProcess(target, action)",
                 "((global::System.Collections.IDictionary)SessionState.PSVariable.GetValue(\"PSVersionTable\"))[\"PSVersion\"]!",
-                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") || global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
+                "MyInvocation.BoundParameters.TryGetValue(\"WhatIf\", out var __boundWhatIf) ? global::System.Management.Automation.LanguagePrimitives.IsTrue(__boundWhatIf) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
             });
         }
         if (cmdlet.Method.RequiresPowerShellBoundParameters)

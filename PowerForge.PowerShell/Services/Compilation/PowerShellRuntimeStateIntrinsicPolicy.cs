@@ -99,6 +99,17 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
 
+    internal static bool RequiresShouldProcessHostBinding(
+        ScriptBlockAst body,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
+        => body.FindAll(
+                static node => node is InvokeMemberExpressionAst,
+                searchNestedScriptBlocks: false)
+            .Any(node => TryClassify(node, body, targetFramework, capabilities, out var kind) &&
+                         kind is PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
+                             PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
+
     internal static Type GetType(PowerShellRuntimeStateIntrinsicKind kind)
         => kind switch
         {

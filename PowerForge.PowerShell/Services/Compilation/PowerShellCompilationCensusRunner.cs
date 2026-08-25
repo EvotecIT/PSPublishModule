@@ -432,9 +432,10 @@ public sealed class PowerShellCompilationCensusRunner
         {
             foreach (var identity in identities)
             {
-                byte[] contentHash;
-                using (var stream = File.OpenRead(identity.Path))
-                    contentHash = fileHasher.ComputeHash(stream);
+                var text = File.ReadAllText(identity.Path)
+                    .Replace("\r\n", "\n")
+                    .Replace('\r', '\n');
+                var contentHash = fileHasher.ComputeHash(Encoding.UTF8.GetBytes(text));
                 canonical.Append(identity.RelativePath)
                     .Append('\0')
                     .Append(ToLowerHex(contentHash))

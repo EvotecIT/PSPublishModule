@@ -59,8 +59,9 @@ public sealed partial class PowerShellCompilationAnalyzer
         {
             var type = parameter.StaticType;
             var hasExplicitType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var typeCapabilities = hasExplicitType
-                ? PowerShellCompilationParameterTypePolicy.Classify(type, targetFramework)
+                ? PowerShellCompilationParameterTypePolicy.Classify(isSwitch ? typeof(bool) : type, targetFramework)
                 : PowerShellCompilationParameterTypeCapability.None;
             if (!typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             {
@@ -95,7 +96,6 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterType));
             }
 
-            var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var bindings = GetParameterBindings(parameter);
             PowerShellCompilationLiteral? defaultValue = null;
             if (parameter.DefaultValue is not null &&

@@ -76,7 +76,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         using var fixture = ArtifactFixture.Create(
             "function Test-RuntimeApproval { [CmdletBinding(SupportsShouldProcess = $true)] param([string] $Target) return $PSCmdlet.ShouldProcess($Target, 'Change') }; " +
             "function Set-RuntimeState { [CmdletBinding(SupportsShouldProcess = $true)] param([string] $Target) " +
-            "if ($WhatIfPreference) { return 'whatif' }; if (Test-RuntimeApproval -Target $Target) { return 'changed' }; return 'skipped' }",
+            "if ($WhatIfPreference) { return 'whatif' }; if ($PSCmdlet.ShouldProcess($Target, 'Change')) { return 'changed' }; return 'skipped' }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath },
@@ -99,12 +99,17 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             result.Succeeded,
             result.Error + Environment.NewLine + result.BuildOutput + Environment.NewLine +
             string.Join(Environment.NewLine, result.Manifest?.Diagnostics.Select(static diagnostic => diagnostic.Message) ?? Array.Empty<string>()));
-        foreach (var arguments in new[] { "-Confirm:$false", "-WhatIf" })
+        foreach (var command in new[]
+                 {
+                     "Set-RuntimeState -Target 'item' -Confirm:$false",
+                     "Set-RuntimeState -Target 'item' -WhatIf",
+                     "$global:WhatIfPreference = $true; Set-RuntimeState -Target 'item' -WhatIf:$false"
+                 })
         {
             var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
-                $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; Set-RuntimeState -Target 'item' {arguments}");
+                $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
             var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
-                $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Set-RuntimeState -Target 'item' {arguments}");
+                $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
 
             Assert.Equal(0, original.ExitCode);
             Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);
