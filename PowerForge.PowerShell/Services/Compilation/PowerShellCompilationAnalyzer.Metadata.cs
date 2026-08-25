@@ -18,6 +18,9 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (IsAttributeNamed(attribute, "Alias"))
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
                    attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst { Value.Length: > 0 });
+        if (IsAttributeNamed(attribute, "OutputType"))
+            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
+                   attribute.PositionalArguments[0] is TypeExpressionAst;
         if (IsAttributeNamed(attribute, "AllowNull") ||
             IsAttributeNamed(attribute, "AllowEmptyString") ||
             IsAttributeNamed(attribute, "AllowEmptyCollection") ||

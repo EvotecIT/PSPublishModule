@@ -16,7 +16,7 @@ public sealed partial class PowerShellCompilationAnalyzer
 
     private static readonly HashSet<string> SupportedUnaryOperators = new(StringComparer.Ordinal)
     {
-        "Plus", "Minus", "Not", "Exclaim", "PlusPlus", "MinusMinus", "PostfixPlusPlus", "PostfixMinusMinus"
+        "Plus", "Minus", "Not", "Exclaim", "Bnot", "PlusPlus", "MinusMinus", "PostfixPlusPlus", "PostfixMinusMinus"
     };
 
     private static readonly HashSet<string> SupportedAssignmentOperators = new(StringComparer.Ordinal)
@@ -317,6 +317,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                     PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                     break;
+                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework: null, capabilities):
+                    break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
@@ -367,7 +369,9 @@ public sealed partial class PowerShellCompilationAnalyzer
                         expandable.Extent,
                         PowerShellCompilationFeatureIds.ExpandableString));
                     break;
-                case BinaryExpressionAst binary when !SupportedBinaryOperators.Contains(binary.Operator.ToString()):
+                case BinaryExpressionAst binary when
+                    !SupportedBinaryOperators.Contains(binary.Operator.ToString()) &&
+                    !PowerShellCompilationOperatorPolicy.CanLowerBinary(binary.Operator.ToString(), capabilities):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedOperator,
                         $"Binary operator '{binary.Operator}' is not supported by the typed compiler.",

@@ -6,11 +6,23 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 {
     private string EmitBinary(BinaryExpressionAst binary)
     {
+        var operation = binary.Operator.ToString();
+        if (operation is "Is" or "IsNot")
+            return EmitTypeTest(binary, operation == "IsNot");
+        if (operation is "Imatch" or "Cmatch" or "Inotmatch" or "Cnotmatch")
+            return EmitRegexMatch(binary, operation);
+        if (operation is "Ireplace" or "Creplace")
+            return EmitRegexReplace(binary, operation);
+        if (operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike")
+            return EmitWildcardMatch(binary, operation);
+        if (operation is "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
+            "Iin" or "Cin" or "Inotin" or "Cnotin")
+            return EmitMembership(binary, operation);
+
         var leftType = InferExpressionType(binary.Left);
         var rightType = InferExpressionType(binary.Right);
         var left = EmitExpression(binary.Left);
         var right = EmitExpression(binary.Right);
-        var operation = binary.Operator.ToString();
         if (operation is "Isplit" or "Csplit")
         {
             if (leftType != typeof(string) || rightType != typeof(string))
@@ -28,6 +40,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         if (operation is "And" or "Or" && (leftType != typeof(bool) || rightType != typeof(bool)))
             throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");
+        if (operation is "Band" or "Bor" or "Bxor")
+        {
+            if (!IsIntegral(leftType) || leftType != rightType)
+                throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' requires integral operands of the same static type.");
+            var bitwise = operation switch { "Band" => "&", "Bor" => "|", _ => "^" };
+            return $"({left} {bitwise} {right})";
+        }
+        if (operation is "Shl" or "Shr")
+        {
+            if (!IsIntegral(leftType) || !IsIntegral(rightType))
+                throw Error(binary, $"Operator '-{operation.ToLowerInvariant()}' requires integral operands.");
+            var shift = operation == "Shl" ? "<<" : ">>";
+            return $"({left} {shift} (int)({right}))";
+        }
         if (operation is "Plus" or "Minus" or "Multiply" or "Divide" or "Rem")
         {
             if (operation == "Plus" && leftType == typeof(string) && rightType == typeof(string))
@@ -104,6 +130,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var childType = InferExpressionType(unary.Child);
         if ((operation is "Not" or "Exclaim") && childType != typeof(bool))
             throw Error(unary, "Typed logical negation requires a Boolean operand.");
+        if (operation == "Bnot" && !IsIntegral(childType))
+            throw Error(unary, "Typed bitwise negation requires an integral operand.");
         if ((operation is "Plus" or "Minus") &&
             (!IsNumeric(childType) || IsIntegral(childType) && !IsSafeIntegralIndexLiteral(unary)))
             throw Error(unary, "Integral unary arithmetic can promote dynamically in PowerShell and is not supported.");
@@ -121,6 +149,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             "Plus" => $"(+{child})",
             "Minus" => $"(-{child})",
             "Not" or "Exclaim" => $"(!{child})",
+            "Bnot" => $"(~{child})",
             "PlusPlus" => $"++{child}",
             "MinusMinus" => $"--{child}",
             "PostfixPlusPlus" => $"{child}++",
@@ -144,8 +173,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             return typeof(string[]);
         if (operation == "Join")
             return typeof(string);
-        if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge" or "And" or "Or")
+        if (operation is "Ireplace" or "Creplace")
+            return typeof(string);
+        if (operation is "Is" or "IsNot" or "Imatch" or "Cmatch" or "Inotmatch" or "Cnotmatch" or
+            "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or
+            "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
+            "Iin" or "Cin" or "Inotin" or "Cnotin" or
+            "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge" or "And" or "Or")
             return typeof(bool);
+        if (operation is "Band" or "Bor" or "Bxor" or "Shl" or "Shr")
+            return PromoteIntegralOperatorType(InferExpressionType(binary.Left), binary);
         if (operation is "Divide" or "Rem")
         {
             var left = InferExpressionType(binary.Left);
@@ -164,4 +201,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private static bool IsIntegral(Type type)
         => type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
            type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong);
+
+    private Type InferBitwiseUnaryType(UnaryExpressionAst unary)
+        => PromoteIntegralOperatorType(InferExpressionType(unary.Child), unary);
+
+    private Type PromoteIntegralOperatorType(Type type, Ast node)
+    {
+        if (!IsIntegral(type))
+            throw Error(node, $"Bitwise operators require an integral operand, not '{type.FullName}'.");
+        return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort)
+            ? typeof(int)
+            : type;
+    }
 }

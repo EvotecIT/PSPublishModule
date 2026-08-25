@@ -63,13 +63,15 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateEntryPointDeclarationOrder(entrySource);
 
         var byName = definitions.ToDictionary(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase);
+        var knownNames = byName.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var signatures = new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         var methods = new List<PowerShellCSharpMethodEmission>();
         var methodDescriptions = new List<PowerShellCompiledMethod>();
         var states = new Dictionary<string, VisitState>(StringComparer.OrdinalIgnoreCase);
+        var provisionalSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var definition in definitions)
-            EmitFunction(definition, byName, signatures, methods, methodDescriptions, states, targetFramework);
+            EmitFunction(definition, byName, knownNames, signatures, methods, methodDescriptions, states, provisionalSignatures, targetFramework);
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
@@ -96,17 +98,34 @@ internal static class PowerShellTypedExecutableCompiler
     private static void EmitFunction(
         LocalDefinition definition,
         IReadOnlyDictionary<string, LocalDefinition> definitions,
+        ISet<string> knownNames,
         Dictionary<string, PowerShellLocalFunctionSignature> signatures,
         List<PowerShellCSharpMethodEmission> methods,
         List<PowerShellCompiledMethod> methodDescriptions,
         Dictionary<string, VisitState> states,
+        ISet<string> provisionalSignatures,
         string targetFramework)
     {
         var name = definition.Function.Name;
         if (states.TryGetValue(name, out var state))
         {
             if (state == VisitState.Complete) return;
-            throw new InvalidOperationException($"Typed executable local function cycle reaches '{name}'. Recursive and mutually recursive calls require PowerShell stack semantics and are not yet supported.");
+            if (provisionalSignatures.Contains(name)) return;
+            throw new InvalidOperationException($"Typed executable local function cycle reaches '{name}'. Mutual or uncontracted recursive calls require PowerShell runtime semantics.");
+        }
+        const PowerShellCompilationCapability capabilities =
+            PowerShellCompilationCapability.LocalFunctionCalls |
+            PowerShellCompilationCapability.BoundParameters;
+        if (PowerShellRecursiveFunctionPolicy.TryGetDeclaredReturnType(
+                definition.Function,
+                definition.Unit,
+                knownNames,
+                targetFramework,
+                capabilities,
+                out var declaredReturnType) && declaredReturnType is not null)
+        {
+            signatures[name] = CreateSignature(definition, PowerShellCSharpMethodEmitter.SanitizeIdentifier(name), declaredReturnType, false);
+            provisionalSignatures.Add(name);
         }
         states[name] = VisitState.Active;
         var commands = definition.Function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>().ToArray();
@@ -117,31 +136,43 @@ internal static class PowerShellTypedExecutableCompiler
             var commandName = command.GetCommandName();
             if (commandName is null || !definitions.TryGetValue(commandName, out var dependency))
                 throw new InvalidOperationException($"{definition.Path}:{command.Extent.StartLineNumber}: command '{commandName ?? command.Extent.Text}' is not a statically known local function in this Strict executable.");
-            EmitFunction(dependency, definitions, signatures, methods, methodDescriptions, states, targetFramework);
+            EmitFunction(dependency, definitions, knownNames, signatures, methods, methodDescriptions, states, provisionalSignatures, targetFramework);
         }
 
         var method = new PowerShellCSharpMethodEmitter(
             definition.Path,
             definition.Function,
             targetFramework,
-            PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters,
+            capabilities,
             signatures,
             definition.Unit.Parameters).Emit();
-        var parameters = definition.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
-        signatures[name] = new PowerShellLocalFunctionSignature(
-            name,
-            method.GeneratedName,
-            method.ReturnType,
-            parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray(),
-            PowerShellAdvancedFunctionPolicy.IsAdvanced(definition.Function),
-            method.RequiresPowerShellBoundParameters,
-            method.RequiresPowerShellStreams,
-            method.RequiresPowerShellCommandRegions,
-            PowerShellAdvancedFunctionPolicy.GetBinding(definition.Function.Body.ParamBlock));
+        if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != method.ReturnType)
+            throw new InvalidOperationException(
+                $"Declared OutputType '{signatures[name].ReturnType.FullName}' does not match inferred recursive return type '{method.ReturnType.FullName}' for '{name}'.");
+        signatures[name] = CreateSignature(definition, method.GeneratedName, method.ReturnType, method.RequiresPowerShellBoundParameters);
+        provisionalSignatures.Remove(name);
         methods.Add(method);
         methodDescriptions.Add(CreateMethodDescription(definition.Unit, method, definition.Path));
         states[name] = VisitState.Complete;
+    }
+
+    private static PowerShellLocalFunctionSignature CreateSignature(
+        LocalDefinition definition,
+        string generatedName,
+        Type returnType,
+        bool requiresPowerShellBoundParameters)
+    {
+        var parameters = definition.Function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        return new PowerShellLocalFunctionSignature(
+            definition.Function.Name,
+            generatedName,
+            returnType,
+            parameters.Select(parameter => CreateParameter(parameter, definition.Unit)).ToArray(),
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(definition.Function),
+            requiresPowerShellBoundParameters,
+            requiresPowerShellStreams: false,
+            requiresPowerShellCommandRegions: false,
+            commandBinding: PowerShellAdvancedFunctionPolicy.GetBinding(definition.Function.Body.ParamBlock));
     }
 
     private static PowerShellCompiledMethod CreateMethodDescription(

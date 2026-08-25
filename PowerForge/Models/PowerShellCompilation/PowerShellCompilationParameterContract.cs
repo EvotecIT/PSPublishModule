@@ -12,7 +12,9 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.BoundParameters |
         PowerShellCompilationCapability.PowerShellObjects |
         PowerShellCompilationCapability.PipelineParameterBinding |
-        PowerShellCompilationCapability.PowerShellHostTypes;
+        PowerShellCompilationCapability.PowerShellHostTypes |
+        PowerShellCompilationCapability.PowerShellLanguageConversions |
+        PowerShellCompilationCapability.PowerShellLanguageOperators;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =

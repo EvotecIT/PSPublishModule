@@ -52,6 +52,8 @@ public static class PowerShellCompilationFeatureIds
     public const string FunctionGraph = "function.graph";
     /// <summary>Generated binary-cmdlet shape requirements.</summary>
     public const string BinaryCmdletShape = "binary-module.cmdlet-shape";
+    /// <summary>Typed dictionary values flowing beyond supported lookup and mutation contexts.</summary>
+    public const string DictionaryFlow = "collection.dictionary-flow";
 
     /// <summary>Returns a stable feature id for one statically named PowerShell command.</summary>
     public static string ForCommand(string commandName) => "command." + NormalizeSegment(commandName);
@@ -114,8 +116,23 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("#requires", StringComparison.OrdinalIgnoreCase) >= 0) return RequiresDirective;
         if (message.IndexOf("Filter '", StringComparison.OrdinalIgnoreCase) >= 0) return FilterFunction;
         if (message.IndexOf("identifier normalization", StringComparison.OrdinalIgnoreCase) >= 0) return FunctionNameCollision;
-        if (message.IndexOf("function-graph emission", StringComparison.OrdinalIgnoreCase) >= 0) return FunctionGraph;
-        if (message.IndexOf("cmdlet", StringComparison.OrdinalIgnoreCase) >= 0) return BinaryCmdletShape;
+        if (message.IndexOf("multiple retained definitions", StringComparison.OrdinalIgnoreCase) >= 0) return FunctionNameCollision;
+        if (message.IndexOf("function-graph emission", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("local-call cycle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("depends on local function", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            (message.IndexOf("Local function", StringComparison.OrdinalIgnoreCase) >= 0 &&
+             message.IndexOf("pipeline cardinality", StringComparison.OrdinalIgnoreCase) >= 0) ||
+            message.IndexOf("command-availability timing", StringComparison.OrdinalIgnoreCase) >= 0) return FunctionGraph;
+        if (message.IndexOf("Typed dictionary local", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("Typed hashtable literal", StringComparison.OrdinalIgnoreCase) >= 0) return DictionaryFlow;
+        if (message.IndexOf("PipelineAst", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("PipelineAst");
+        if (message.IndexOf("CLR member", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("MemberExpressionAst");
+        if (message.IndexOf("CLR overload", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("InvokeMemberExpressionAst");
+        if (message.IndexOf("foreach currently requires", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("ForEachStatementAst");
+        if (message.IndexOf("must be declared at function scope", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("VariableExpressionAst");
+        if (message.IndexOf("Increment or decrement", StringComparison.OrdinalIgnoreCase) >= 0) return ForOperator("increment");
+        if (message.IndexOf("cmdlet", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("common parameters", StringComparison.OrdinalIgnoreCase) >= 0) return BinaryCmdletShape;
         if (TryExtractQuotedValue(message, "Syntax node '", out var syntax)) return ForSyntax(syntax);
         return "syntax.unsupported";
     }
