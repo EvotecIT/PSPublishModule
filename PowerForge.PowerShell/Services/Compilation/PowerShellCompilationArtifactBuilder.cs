@@ -23,6 +23,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         ValidateSpec(spec);
+        PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory);
 
         Directory.CreateDirectory(spec.OutputDirectory);
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
@@ -166,7 +167,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             else
             {
                 var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths);
-                var parameterInitializers = GeneratePackagedParameterInitializers(spec.SourcePath);
+                var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
                 File.WriteAllText(
                     Path.Combine(workspace, "Source.ps1"),
                     GeneratePackagedScript(spec.SourcePath, packagedSources.HasDependencies),
@@ -700,59 +701,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new InvalidOperationException(
                 $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
         }
-    }
-
-    private static (string Parameters, string SwitchParameters, string ParameterAliases) GeneratePackagedParameterInitializers(string sourcePath)
-    {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
-        var parameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var switchParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var parameterAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>())
-        {
-            var name = parameter.Name.VariablePath.UserPath;
-            parameters.Add(name);
-            foreach (var alias in parameter.Attributes.OfType<AttributeAst>().Where(static attribute => IsAttributeNamed(attribute, "Alias")))
-            foreach (var value in alias.PositionalArguments.OfType<StringConstantExpressionAst>())
-                parameterAliases[value.Value] = name;
-            if (parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
-                switchParameters.Add(name);
-        }
-        if (ast.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute => IsAttributeNamed(attribute, "CmdletBinding")) == true)
-        {
-            var commonSwitches = new[] { "Verbose", "Debug", "WhatIf", "Confirm" };
-            parameters.UnionWith(commonSwitches);
-            switchParameters.UnionWith(commonSwitches);
-            parameterAliases["vb"] = "Verbose";
-            parameterAliases["db"] = "Debug";
-            parameterAliases["wi"] = "WhatIf";
-            parameterAliases["cf"] = "Confirm";
-        }
-        return (GenerateInitializer(parameters), GenerateInitializer(switchParameters), GenerateAliasInitializer(parameterAliases));
-    }
-
-    private static string GenerateInitializer(IEnumerable<string> values)
-        => string.Join(", ", values
-            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-            .Select(PowerShellCSharpLiteral.QuoteString)
-            .ToArray());
-
-    private static string GenerateAliasInitializer(IEnumerable<KeyValuePair<string, string>> aliases)
-        => string.Join(", ", aliases
-            .OrderBy(static alias => alias.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(static alias => $"[{PowerShellCSharpLiteral.QuoteString(alias.Key)}] = {PowerShellCSharpLiteral.QuoteString(alias.Value)}")
-            .ToArray());
-
-    private static bool IsAttributeNamed(AttributeAst attribute, string name)
-    {
-        var fullName = attribute.TypeName.FullName;
-        return fullName.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-               fullName.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase) ||
-               fullName.EndsWith("." + name + "Attribute", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GenerateHybridModuleScript(

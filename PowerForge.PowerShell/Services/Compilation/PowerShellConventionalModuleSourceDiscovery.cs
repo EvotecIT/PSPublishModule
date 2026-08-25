@@ -23,6 +23,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
 
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var discoveredDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
+        var recursiveDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
@@ -56,6 +57,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");
             discoveredDirectories.Add(searchRoot);
+            if (recurse)
+                recursiveDirectories.Add(searchRoot);
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
             foreach (var file in EnumerateAccessibleFiles(searchRoot, recurse)
                          .Where(path => wildcard.IsMatch(Path.GetFileName(path))))
@@ -71,6 +74,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             discoveredDirectories
+                .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            recursiveDirectories
                 .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
             loaders.Values.OrderBy(static loader => loader.StartOffset).ToArray());
@@ -329,16 +335,20 @@ internal sealed class PowerShellConventionalModuleSourceDiscoveryResult
     internal PowerShellConventionalModuleSourceDiscoveryResult(
         string[] sourcePaths,
         string[] sourceDirectories,
+        string[] recursiveSourceDirectories,
         PowerShellConventionalLoaderIdentity[] loaders)
     {
         SourcePaths = sourcePaths;
         SourceDirectories = sourceDirectories;
+        RecursiveSourceDirectories = recursiveSourceDirectories;
         Loaders = loaders;
     }
 
     internal string[] SourcePaths { get; }
 
     internal string[] SourceDirectories { get; }
+
+    internal string[] RecursiveSourceDirectories { get; }
 
     internal PowerShellConventionalLoaderIdentity[] Loaders { get; }
 }

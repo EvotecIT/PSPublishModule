@@ -17,8 +17,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             var identifier = GetVariableIdentifier(name);
             if (metadata.IsMandatory && parameterType == typeof(string))
             {
-                AppendLine($"if (global::System.String.IsNullOrEmpty({identifier}))");
+                var condition = metadata.AllowNull
+                    ? $"{identifier} is not null && {identifier}.Length == 0"
+                    : $"global::System.String.IsNullOrEmpty({identifier})";
+                AppendLine($"if ({condition})");
                 AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty string.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+            }
+            else if (metadata.IsMandatory && !metadata.AllowNull && !parameterType.IsValueType)
+            {
+                AppendLine($"if ({identifier} is null)");
+                AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow null values.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
             }
             if (metadata.Validations.Length == 0)
                 continue;

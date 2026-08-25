@@ -13,6 +13,11 @@ internal static class Program
 {{PARAMETER_SPECS}}
     };
 
+    private static readonly string[][] UnsupportedCommonParameterNames =
+    {
+{{COMMON_PARAMETER_NAMES}}
+    };
+
     public static int Main(string[] args)
     {
         try
@@ -113,18 +118,23 @@ internal static class Program
         exact = Parameters.FirstOrDefault(candidate => candidate.Aliases.Any(alias => alias.Equals(name, StringComparison.OrdinalIgnoreCase)));
         if (exact is not null)
             return exact;
+        if (UnsupportedCommonParameterNames.Any(names => names.Any(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase))))
+            throw new ArgumentException($"Advanced-script common parameter '--{name}' is not supported by a PowerShell-free executable.");
         var matches = Parameters
             .Where(candidate => candidate.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
                                 candidate.Aliases.Any(alias => alias.StartsWith(name, StringComparison.OrdinalIgnoreCase)))
             .Distinct()
             .Take(2)
             .ToArray();
-        return matches.Length switch
-        {
-            0 => throw new ArgumentException($"Unknown parameter '--{name}'."),
-            1 => matches[0],
-            _ => throw new ArgumentException($"Parameter '--{name}' is ambiguous.")
-        };
+        var commonMatches = UnsupportedCommonParameterNames.Count(names =>
+            names.Any(candidate => candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase)));
+        if (matches.Length == 1 && commonMatches == 0)
+            return matches[0];
+        if (matches.Length == 0 && commonMatches == 0)
+            throw new ArgumentException($"Unknown parameter '--{name}'.");
+        if (matches.Length == 0 && commonMatches == 1)
+            throw new ArgumentException($"Advanced-script common parameter '--{name}' is not supported by a PowerShell-free executable.");
+        throw new ArgumentException($"Parameter '--{name}' is ambiguous.");
     }
 
     private static void AddRawValue(IDictionary<string, List<string>> raw, ParameterSpec parameter, string value)

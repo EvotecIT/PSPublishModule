@@ -81,7 +81,7 @@ internal static partial class Program
             var entryPoint = TryGetOptionValue(args, "--entry-point");
             var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
             var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride, fullEntryPoint);
-            var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? Path.Combine(resolved.ModuleRoot, "artifacts");
+            var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved);
             var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
             if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, ignoreCase: true, out var optimization) ||

@@ -131,7 +131,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             return;
         }
         var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)
-            ? System.IO.Path.Combine(resolved.ModuleRoot, "artifacts")
+            ? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved)
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
         var artifactName = string.IsNullOrWhiteSpace(Name) ? resolved.ArtifactName : Name!;
         if (!ShouldProcess(outputPath, $"Build {resolved.Kind} artifact '{artifactName}' from '{resolved.RequestedPath}'"))

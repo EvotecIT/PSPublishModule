@@ -14,7 +14,8 @@ public sealed class PowerShellCompilationResolvedInput
         PowerShellCompilationArtifactKind kind,
         PowerShellCompilationMode mode,
         string[] sourceFiles,
-        string[] compilationSourceFiles)
+        string[] compilationSourceFiles,
+        string[]? recursiveSourceDirectories = null)
     {
         RequestedPath = requestedPath;
         SourcePath = sourcePath;
@@ -25,6 +26,7 @@ public sealed class PowerShellCompilationResolvedInput
         Mode = mode;
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
+        RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
     }
 
     /// <summary>Original absolute input path.</summary>
@@ -53,6 +55,8 @@ public sealed class PowerShellCompilationResolvedInput
 
     /// <summary>Root module plus contained literal dot-sourced files that share its compilation scope.</summary>
     public string[] CompilationSourceFiles { get; }
+
+    internal string[] RecursiveSourceDirectories { get; }
 }
 
 /// <summary>
@@ -207,6 +211,7 @@ public sealed class PowerShellCompilationInputResolver
         var resolvedMode = mode ?? GetDefaultMode(resolvedKind);
         string[] compilationSourceFiles;
         string[] sourceFiles;
+        var recursiveSourceDirectories = Array.Empty<string>();
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath);
@@ -215,6 +220,7 @@ public sealed class PowerShellCompilationInputResolver
         else
         {
             var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
+            recursiveSourceDirectories = conventionalDiscovery.RecursiveSourceDirectories;
             var conventionalSources = conventionalDiscovery.SourcePaths;
             var runtimeHooks = manifestPath is null
                 ? Array.Empty<string>()
@@ -246,7 +252,8 @@ public sealed class PowerShellCompilationInputResolver
             resolvedKind,
             resolvedMode,
             sourceFiles,
-            compilationSourceFiles);
+            compilationSourceFiles,
+            recursiveSourceDirectories);
     }
 
     private static (string SourcePath, string? ManifestPath, string ArtifactName) ResolveFile(string path)

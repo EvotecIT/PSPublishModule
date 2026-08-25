@@ -59,8 +59,13 @@ internal static class PowerShellTypedExecutableEmitter
             ? "            " + invocation + ";" + Environment.NewLine + "            return 0;"
             : "            var result = " + invocation + ";" + Environment.NewLine +
               "            WriteResult(result);" + Environment.NewLine + "            return 0;";
+        var commonParameterNames = string.Join(Environment.NewLine,
+            PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework).Select(parameter =>
+                "        new string[] { " + PowerShellCSharpLiteral.QuoteString(parameter.Name) + ", " +
+                PowerShellCSharpLiteral.QuoteString(parameter.Alias) + " },"));
         var programSource = ReadTemplate(ProgramTemplate)
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)
+            .Replace("{{COMMON_PARAMETER_NAMES}}", commonParameterNames)
             .Replace("{{INVOCATION}}", invocationSource);
         return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods);
     }

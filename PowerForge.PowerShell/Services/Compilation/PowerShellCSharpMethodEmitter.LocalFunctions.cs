@@ -4,14 +4,6 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellCSharpMethodEmitter
 {
-    private static readonly string[][] AdvancedCommonParameterNames =
-    {
-        new[] { "Verbose", "vb" }, new[] { "Debug", "db" }, new[] { "ErrorAction", "ea" },
-        new[] { "WarningAction", "wa" }, new[] { "InformationAction", "infa" }, new[] { "ProgressAction", "proga" },
-        new[] { "ErrorVariable", "ev" }, new[] { "WarningVariable", "wv" }, new[] { "InformationVariable", "iv" },
-        new[] { "OutVariable", "ov" }, new[] { "OutBuffer", "ob" }, new[] { "PipelineVariable", "pv" }
-    };
-
     private bool IsLocalFunctionPipeline(PipelineAst pipeline)
         => pipeline.PipelineElements.Count == 1 &&
            pipeline.PipelineElements[0] is CommandAst command &&
@@ -135,7 +127,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (!CanAssign(parameter.Type, sourceType) && !(IsNullExpression(argument) && !parameter.Type.IsValueType))
             throw Error(argument, $"Argument for local function parameter '-{parameter.Name}' has CLR type '{sourceType.FullName}', which is not assignable to '{parameter.Type.FullName}' without PowerShell conversion.");
         var source = EmitExpression(argument);
-        return parameter.Type == typeof(string) ? $"({source} ?? string.Empty)" : source;
+        return parameter.Type == typeof(string) && !parameter.AllowNull ? $"({source} ?? string.Empty)" : source;
     }
 
     private PowerShellLocalFunctionParameter ResolveParameter(PowerShellLocalFunctionSignature signature, CommandParameterAst argument)
@@ -147,14 +139,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var abbreviated = signature.Parameters.Where(parameter =>
             parameter.Name.StartsWith(argument.ParameterName, StringComparison.OrdinalIgnoreCase) ||
             parameter.Aliases.Any(alias => alias.StartsWith(argument.ParameterName, StringComparison.OrdinalIgnoreCase))).Distinct().ToArray();
-        var commonExact = signature.IsAdvancedFunction
-            ? AdvancedCommonParameterNames.Count(names => names.Any(name => name.Equals(argument.ParameterName, StringComparison.OrdinalIgnoreCase)))
-            : 0;
+        var commonParameters = PowerShellCommonParameterPolicy.GetStandard(signature.IsAdvancedFunction, _targetFramework);
+        var commonExact = commonParameters.Count(parameter =>
+            parameter.Name.Equals(argument.ParameterName, StringComparison.OrdinalIgnoreCase) ||
+            parameter.Alias.Equals(argument.ParameterName, StringComparison.OrdinalIgnoreCase));
         if (commonExact > 0)
             throw Error(argument, $"Typed local function calls do not support advanced-function common parameter '-{argument.ParameterName}'.");
-        var commonAbbreviations = signature.IsAdvancedFunction
-            ? AdvancedCommonParameterNames.Count(names => names.Any(name => name.StartsWith(argument.ParameterName, StringComparison.OrdinalIgnoreCase)))
-            : 0;
+        var commonAbbreviations = commonParameters.Count(parameter =>
+            parameter.Name.StartsWith(argument.ParameterName, StringComparison.OrdinalIgnoreCase) ||
+            parameter.Alias.StartsWith(argument.ParameterName, StringComparison.OrdinalIgnoreCase));
         return (abbreviated.Length, commonAbbreviations) switch
         {
             (1, 0) => abbreviated[0],
