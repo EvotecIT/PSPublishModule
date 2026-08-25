@@ -32,9 +32,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (incompatibleClause is not null)
             throw Error(incompatibleClause.Clause.Item1, $"Scalar switch clause type '{incompatibleClause.Type.FullName}' must exactly match condition type '{conditionType.FullName}' to avoid PowerShell coercion semantics.");
 
-        var index = _switchIndex++;
-        var valueName = $"__switchValue{index}";
-        var matchedName = $"__switchMatched{index}";
+        var valueName = GetTemporaryIdentifier("switch_value");
+        var matchedName = GetTemporaryIdentifier("switch_matched");
         AppendLine($"{GetTypeName(conditionType)} {valueName} = {EmitExpression(statement.Condition)};");
         AppendLine($"bool {matchedName} = false;");
         AppendLine("do");

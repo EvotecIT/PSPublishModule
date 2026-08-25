@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using System.Management.Automation.Language;
 using System.Reflection;
 using System.Text;
 
@@ -258,10 +259,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine(GenerateCmdletAttribute(cmdlet));
-        var outputType = GetCmdletOutputTypeName(
-            string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType)
-                ? cmdlet.Method.ReturnType
-                : cmdlet.Method.DeclaredOutputType);
+        var outputType = string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType)
+            ? GetCmdletOutputTypeName(cmdlet.Method.ReturnType)
+            : cmdlet.Method.DeclaredOutputType;
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
         builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet");
@@ -515,12 +515,40 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         PowerShellTypedCompilationResult typed,
         PowerShellCompiledMethod method,
         string message)
-        => new(
+    {
+        var sourcePath = string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath;
+        return new PowerShellCompilationDiagnostic(
             PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
             message,
-            string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+            sourcePath,
             method.SourceLine,
-            1);
+            GetFunctionSourceColumn(sourcePath, method),
+            PowerShellCompilationFeatureIds.BinaryCmdletShape);
+    }
+
+    private static int GetFunctionSourceColumn(string sourcePath, PowerShellCompiledMethod method)
+    {
+        if (!File.Exists(sourcePath))
+            return 1;
+        try
+        {
+            return Parser.ParseFile(sourcePath, out _, out _)
+                       .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                       .OfType<FunctionDefinitionAst>()
+                       .FirstOrDefault(function =>
+                           function.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase) &&
+                           function.Extent.StartLineNumber == method.SourceLine)
+                       ?.Extent.StartColumnNumber ?? 1;
+        }
+        catch (IOException)
+        {
+            return 1;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return 1;
+        }
+    }
 
     private static string GetMethodKey(PowerShellCompiledMethod method)
         => method.SourcePath + "\0" + method.SourceName + "\0" + method.SourceLine;

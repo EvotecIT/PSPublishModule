@@ -73,13 +73,13 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
     public void Build_BinaryModulePreservesAuthoredOutputType()
     {
         using var fixture = Fixture.Create(
-            "function Get-DeclaredValue { [OutputType([object])] param() return 'Ada' }; Export-ModuleMember -Function Get-DeclaredValue",
+            "function Get-DeclaredValue { [OutputType([string[]])] param() return 'Ada' }; Export-ModuleMember -Function Get-DeclaredValue",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.DeclaredOutput", "CompiledPowerShell", "net8.0");
         Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var method = typed.Methods[0];
-        Assert.Equal(typeof(object).FullName, method.DeclaredOutputType);
+        Assert.Equal(typeof(string[]).FullName, method.DeclaredOutputType);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -91,7 +91,74 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{path}' -Force; (Get-Command Get-DeclaredValue).OutputType[0].Type.FullName");
-        Assert.Equal((0, typeof(object).FullName, string.Empty), Normalize(run));
+        Assert.Equal((0, typeof(string[]).FullName, string.Empty), Normalize(run));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleAvoidsAuthoredTemporaryIdentifierCollisions()
+    {
+        using var fixture = Fixture.Create(
+            "function Test-GeneratedName { param([string] $__pf_wildcard_left_0, [string] $Text) " +
+            "return $Text -like $__pf_wildcard_left_0 }; Export-ModuleMember -Function Test-GeneratedName",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TemporaryIdentifiers",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{path}' -Force; Test-GeneratedName -__pf_wildcard_left_0 'A*' -Text 'Ada'");
+        Assert.Equal((0, "True", string.Empty), Normalize(run));
+    }
+
+    [Fact]
+    public void Analyze_SwitchHostTypesStayBinaryModuleOnly()
+    {
+        using var fixture = Fixture.Create(
+            "function Test-SwitchTypes { param([switch[]] $Apples) return [switch] $true }",
+            ".psm1");
+        var binary = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var executable = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.TypedExecutable));
+        var artifact = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SwitchHostTypes",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        var binaryUnit = Assert.Single(Assert.Single(binary.Files).Units);
+        Assert.True(binaryUnit.IsCompilable, string.Join(Environment.NewLine, binaryUnit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.False(Assert.Single(Assert.Single(executable.Files).Units).IsCompilable);
+        Assert.True(artifact.Succeeded, artifact.Error + Environment.NewLine + artifact.BuildOutput);
+    }
+
+    [Fact]
+    public void PublicModelConstructorRetainsNamedOptionalArguments()
+    {
+        var method = new PowerShellCompiledMethod(
+            "Get-Compatible",
+            "Get_Compatible",
+            typeof(string).FullName!,
+            Array.Empty<PowerShellCompilationParameter>(),
+            1,
+            sourcePath: null,
+            requiresPowerShellStreams: false,
+            commandBinding: null,
+            requiresPowerShellRuntimeState: true);
+
+        Assert.True(method.RequiresPowerShellRuntimeState);
     }
 
     [Fact]

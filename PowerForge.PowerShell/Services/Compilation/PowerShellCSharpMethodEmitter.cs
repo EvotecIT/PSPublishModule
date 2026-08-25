@@ -18,6 +18,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly HashSet<string> _declaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _predeclaredLocals = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _scalarForeachLoops = new();
+    private readonly HashSet<string> _temporaryIdentifiers = new(StringComparer.Ordinal);
     private readonly StringBuilder _builder = new();
     private readonly PowerShellCSharpMemberEmitter _memberEmitter;
     private readonly string? _targetFramework;
@@ -30,12 +31,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private bool _requiresPowerShellRuntimeState;
     private bool _requiresBoundParameters;
     private int _indent = 1;
-    private int _switchIndex;
-    private int _objectIndex;
     private int _temporaryIndex;
-
-    private string GetTemporaryIdentifier(string purpose)
-        => $"__pf_{purpose}_{_temporaryIndex++}";
 
     internal PowerShellCSharpMethodEmitter(
         string filePath,
@@ -339,7 +335,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var declaredType = assignment.Left is ConvertExpressionAst conversion
             ? conversion.StaticType
             : rightType;
-        if (!PowerShellGeneratedTypePolicy.IsSupported(declaredType, _targetFramework))
+        if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredType, _targetFramework, _capabilities))
             throw Error(assignment.Left, $"Local '${name}' uses CLR type '{declaredType.FullName}' outside the generated project reference set.");
         if (!CanAssign(declaredType, rightType))
             throw Error(assignment, $"Assignment requires PowerShell conversion from '{rightType.FullName}' to '{declaredType.FullName}', which is not an implicit CLR conversion.");

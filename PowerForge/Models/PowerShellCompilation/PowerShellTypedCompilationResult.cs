@@ -28,10 +28,10 @@ public sealed class PowerShellCompiledMethod
         int sourceLine,
         string? sourcePath,
         bool requiresPowerShellStreams,
-        bool requiresPowerShellCommandRegions = false,
-        string[]? aliases = null,
-        bool requiresPowerShellBoundParameters = false,
-        bool isAdvancedFunction = false)
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction)
         : this(
             sourceName,
             generatedName,
@@ -79,12 +79,12 @@ public sealed class PowerShellCompiledMethod
         int sourceLine,
         string? sourcePath,
         bool requiresPowerShellStreams,
-        bool requiresPowerShellCommandRegions,
-        string[]? aliases,
-        bool requiresPowerShellBoundParameters,
-        bool isAdvancedFunction,
-        PowerShellCompilationCommandBinding? commandBinding,
-        bool requiresPowerShellRuntimeState)
+        bool requiresPowerShellCommandRegions = false,
+        string[]? aliases = null,
+        bool requiresPowerShellBoundParameters = false,
+        bool isAdvancedFunction = false,
+        PowerShellCompilationCommandBinding? commandBinding = null,
+        bool requiresPowerShellRuntimeState = false)
         : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath,
             requiresPowerShellStreams, requiresPowerShellCommandRegions, aliases, requiresPowerShellBoundParameters,
             isAdvancedFunction, commandBinding, requiresPowerShellRuntimeState, string.Empty)

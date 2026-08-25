@@ -94,9 +94,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var ignoreCase = operation.StartsWith("I", StringComparison.Ordinal) ? "true" : "false";
         var left = GetTemporaryIdentifier("membership_left");
         var right = GetTemporaryIdentifier("membership_right");
+        var item = GetTemporaryIdentifier("membership_item");
         var array = inOperator ? right : left;
         var value = inOperator ? left : right;
-        var any = $"global::System.Linq.Enumerable.Any(({array} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()), __item => global::System.Management.Automation.LanguagePrimitives.Equals((object?)__item, (object?)({value}), {ignoreCase}, global::System.Globalization.CultureInfo.CurrentCulture))";
+        var any = $"global::System.Linq.Enumerable.Any(({array} ?? global::System.Array.Empty<{GetTypeName(elementType)}>()), {item} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){item}, (object?)({value}), {ignoreCase}, global::System.Globalization.CultureInfo.CurrentCulture))";
         if (operation.Contains("not", StringComparison.OrdinalIgnoreCase)) any = $"!({any})";
         return $"new global::System.Func<bool>(() => {{ var {left} = {EmitExpression(binary.Left)}; var {right} = {EmitExpression(binary.Right)}; return {any}; }})()";
     }

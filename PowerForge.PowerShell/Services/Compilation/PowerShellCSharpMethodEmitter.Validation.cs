@@ -55,7 +55,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (parameterType.IsArray)
             {
                 var elementType = parameterType.GetElementType()!;
-                var item = $"__validationValue{index}";
+                var item = GetTemporaryIdentifier("validation_value");
                 EmitArrayValidationRules(metadata, identifier);
                 AppendLine($"foreach (var {item} in {identifier} ?? global::System.Array.Empty<{GetTypeName(elementType)}>())");
                 AppendLine("{");
