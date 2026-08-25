@@ -11,8 +11,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ["Copy"] = ["SourceFiles", "SourceFolders"],
             ["CreateCSharpManifestResourceName"] = ["ResourceFiles"],
             ["CreateVisualBasicManifestResourceName"] = ["ResourceFiles"],
-            ["Csc"] = ["AdditionalFiles", "AnalyzerConfigFiles", "Analyzers", "ApplicationConfiguration", "CodeAnalysisRuleSet", "KeyFile", "LinkResources", "References", "Resources", "ResponseFiles", "SourceLink", "Sources", "TestCoverageModulePaths", "Win32AppConfig", "Win32Icon", "Win32Manifest", "Win32Resource"],
-            ["Fsc"] = ["AnalyzerConfigFiles", "Analyzers", "KeyFile", "References", "Resources", "ResponseFiles", "SourceLink", "Sources", "TestCoverageModulePaths", "Win32Icon", "Win32Resource"],
+            ["Csc"] = ["AdditionalFiles", "AdditionalLibPaths", "AddModules", "AnalyzerConfigFiles", "Analyzers", "ApplicationConfiguration", "CodeAnalysisRuleSet", "EmbeddedFiles", "KeyFile", "LinkResources", "PotentialAnalyzerConfigFiles", "References", "Resources", "ResponseFiles", "SourceLink", "Sources", "TestCoverageModulePaths", "Win32AppConfig", "Win32Icon", "Win32Manifest", "Win32Resource"],
+            ["Fsc"] = ["AdditionalLibPaths", "AnalyzerConfigFiles", "Analyzers", "Embed", "KeyFile", "OtherFlags", "ReferencePath", "References", "Resources", "ResponseFiles", "SourceLink", "Sources", "TestCoverageModulePaths", "VersionFile", "Win32Icon", "Win32IconFile", "Win32ManifestFile", "Win32Resource", "Win32ResourceFile"],
             ["GenerateApplicationManifest"] = ["ConfigFile", "Dependencies", "EntryPoint", "Files", "IconFile", "InputManifest", "IsolatedComReferences", "TrustInfoFile"],
             ["GenerateBindingRedirects"] = ["AppConfigFile", "SuggestedRedirects"],
             ["GenerateDeploymentManifest"] = ["EntryPoint", "InputManifest"],
@@ -33,7 +33,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["UnregisterAssembly"] = ["Assemblies", "AssemblyListFile", "TypeLibFiles"],
             ["Unzip"] = ["SourceFiles"],
             ["UpdateManifest"] = ["ApplicationManifest", "InputManifest"],
-            ["Vbc"] = ["AdditionalFiles", "AnalyzerConfigFiles", "Analyzers", "ApplicationConfiguration", "CodeAnalysisRuleSet", "Imports", "KeyFile", "LinkResources", "References", "Resources", "ResponseFiles", "SourceLink", "Sources", "TestCoverageModulePaths", "Win32AppConfig", "Win32Icon", "Win32Manifest", "Win32Resource"],
+            ["Vbc"] = ["AdditionalFiles", "AdditionalLibPaths", "AddModules", "AnalyzerConfigFiles", "Analyzers", "ApplicationConfiguration", "CodeAnalysisRuleSet", "EmbeddedFiles", "Imports", "KeyFile", "LinkResources", "PotentialAnalyzerConfigFiles", "References", "Resources", "ResponseFiles", "SdkPath", "SourceLink", "Sources", "TestCoverageModulePaths", "VBRuntimePath", "Win32AppConfig", "Win32Icon", "Win32Manifest", "Win32Resource"],
             ["VerifyFileHash"] = ["File"],
             ["WinMDExp"] = ["InputDocumentationFile", "InputPDBFile", "References", "WinMDModule"],
             ["XmlPoke"] = ["XmlInputPath"],
@@ -41,21 +41,40 @@ public sealed partial class DotNetPublishPipelineRunner
             ["ZipDirectory"] = ["SourceDirectory"]
         };
 
+    private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskDirectoryInputAttributes =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AspNetCompiler"] = ["PhysicalPath"],
+            ["Copy"] = ["SourceFolders"],
+            ["Csc"] = ["AdditionalLibPaths"],
+            ["Fsc"] = ["AdditionalLibPaths"],
+            ["Vbc"] = ["AdditionalLibPaths", "SdkPath"],
+            ["ZipDirectory"] = ["SourceDirectory"]
+        };
+
     private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskFileOutputAttributes =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
+            ["AddToWin32Manifest"] = ["ManifestPath"],
             ["AL"] = ["OutputAssembly"],
             ["Copy"] = ["DestinationFiles", "DestinationFolder"],
             ["Csc"] = ["DocumentationFile", "ErrorLog", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
             ["Delete"] = ["Files"],
-            ["Fsc"] = ["DocumentationFile", "ErrorLog", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
-            ["GenerateResource"] = ["OutputResources"],
+            ["Fsc"] = ["DocumentationFile", "ErrorLog", "GenerateInterfaceFile", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
+            ["GenerateApplicationManifest"] = ["OutputManifest"],
+            ["GenerateBindingRedirects"] = ["OutputAppConfigFile"],
+            ["GenerateDeploymentManifest"] = ["OutputManifest"],
+            ["GenerateResource"] = ["OutputResources", "StateFile", "StronglyTypedFileName"],
+            ["GenerateTrustInfo"] = ["TrustInfoFile"],
+            ["LC"] = ["OutputLicense"],
             ["MakeDir"] = ["Directories"],
             ["Move"] = ["DestinationFiles"],
             ["RemoveDir"] = ["Directories"],
             ["Touch"] = ["Files"],
             ["Unzip"] = ["DestinationFolder"],
+            ["UpdateManifest"] = ["OutputManifest"],
             ["Vbc"] = ["DocumentationFile", "ErrorLog", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
+            ["WinMDExp"] = ["OutputWindowsMetadataFile"],
             ["WriteLinesToFile"] = ["File"],
             ["XmlPoke"] = ["XmlInputPath"],
             ["XslTransformation"] = ["OutputPaths"],

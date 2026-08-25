@@ -49,6 +49,13 @@ public sealed partial class DotNetPublishPipelineRunner
             "xml"
         };
 
+    private static readonly ISet<string> CompilerResponseFileDirectoryInputSwitches =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "lib",
+            "libpath"
+        };
+
     private static bool HasOnlyControlledCompilerResponseFileInputs(
         IReadOnlyCollection<string> lines,
         string responseFilePath,
@@ -96,7 +103,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (TryGetCompilerResponseFileInputOperands(
                         token,
                         out string[] operands,
-                        out bool rejectSwitch))
+                        out bool rejectSwitch,
+                        out bool directoryInput))
                 {
                     if (rejectSwitch || operands.Length == 0)
                         return false;
@@ -108,7 +116,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 taskInputBaseDirectory,
                                 declaringAllowedRoot,
                                 taskInputAllowedRoot,
-                                isControlledInput))
+                                isControlledInput,
+                                directoryInput))
                         {
                             return false;
                         }
@@ -187,10 +196,12 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryGetCompilerResponseFileInputOperands(
         string token,
         out string[] operands,
-        out bool rejectSwitch)
+        out bool rejectSwitch,
+        out bool directoryInput)
     {
         operands = Array.Empty<string>();
         rejectSwitch = false;
+        directoryInput = false;
         string candidate = token.Trim();
         if (!candidate.StartsWith("-", StringComparison.Ordinal) &&
             !candidate.StartsWith("/", StringComparison.Ordinal))
@@ -212,6 +223,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         if (!CompilerResponseFileInputSwitches.Contains(name))
             return false;
+        directoryInput = CompilerResponseFileDirectoryInputSwitches.Contains(name);
         if (separator < 0 || separator == candidate.Length - 1)
             return true;
 
@@ -245,7 +257,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputBaseDirectory,
         string declaringAllowedRoot,
         string taskInputAllowedRoot,
-        Func<string, bool>? isControlledInput)
+        Func<string, bool>? isControlledInput,
+        bool directoryInput = false)
     {
         if (operand.IndexOf('*') >= 0 || operand.IndexOf('?') >= 0)
             return false;
@@ -258,6 +271,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 out string inputPath))
         {
             return false;
+        }
+        if (directoryInput)
+        {
+            string allowedRoot = IsSameOrBelowBuildInputPath(inputPath, declaringAllowedRoot)
+                ? declaringAllowedRoot
+                : taskInputAllowedRoot;
+            return HasOnlyControlledDirectoryTaskInput(
+                inputPath,
+                allowedRoot,
+                isControlledInput);
         }
         if (isControlledInput is not null)
             return isControlledInput(inputPath);

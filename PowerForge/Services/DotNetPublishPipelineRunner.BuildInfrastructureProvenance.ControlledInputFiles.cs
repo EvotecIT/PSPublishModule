@@ -214,6 +214,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         return ContainsUncontrolledImportActivation(document) ||
                ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
+               ContainsUncontrolledCompilerOptionOverride(document) ||
                document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
@@ -221,7 +222,9 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("SignFile", StringComparison.OrdinalIgnoreCase) ||
               element.Attributes().Any(attribute =>
                   attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
-                  attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase)) ||
+                  attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase) ||
+                  attribute.Name.LocalName.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
+                  attribute.Name.LocalName.Equals("DotnetFscCompilerPath", StringComparison.OrdinalIgnoreCase)) ||
               ContainsUncontrolledTaskEnvironmentOverride(element))) ||
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
@@ -232,6 +235,30 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static bool ContainsUncontrolledCompilerOptionOverride(XDocument document)
+    {
+        string[] propertyNames =
+        {
+            "DotnetFscCompilerPath",
+            "FscOtherFlags",
+            "OtherFlags"
+        };
+        if (document.Descendants().Any(element =>
+                element.Parent is not null &&
+                element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                propertyNames.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(element.Value)))
+        {
+            return true;
+        }
+
+        return document.Descendants().Any(element =>
+            element.Parent is not null &&
+            element.Parent.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) &&
+            (element.Name.LocalName.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
+             element.Name.LocalName.Equals("FscCompilerTools", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool IsModeledControlledBuildTask(string taskName)

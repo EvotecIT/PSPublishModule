@@ -30,6 +30,16 @@ public sealed partial class DotNetPublishPipelineRunner
                taskInputBaseDirectory,
                relatedDocuments,
                evaluatedGlobalProperties) &&
+           HasOnlyControlledSdkTaskPropertyFileInputs(
+               document,
+               declaringPath,
+               taskInputBaseDirectory,
+               declaringAllowedRoot,
+               taskInputAllowedRoot,
+               relatedDocuments,
+               evaluatedGlobalProperties,
+               isControlledInput,
+               readLines ?? ReadControlledCheckoutTextInput) &&
            HasOnlyControlledTaskLoadedFileInputs(
                document,
                declaringPath,

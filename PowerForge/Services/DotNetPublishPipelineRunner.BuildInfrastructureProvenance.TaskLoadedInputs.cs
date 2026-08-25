@@ -71,6 +71,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     return false;
                 }
+                if (IsUncontrolledCompilerFreeFormTaskInput(
+                        task.Name.LocalName,
+                        attribute.Name.LocalName) &&
+                    !string.IsNullOrWhiteSpace(attribute.Value))
+                {
+                    return false;
+                }
                 if (IsControlledReadLinesTaskInput(attribute.Value, relatedDocuments))
                     continue;
                 if (!TryExpandControlledTaskInputValues(
@@ -116,7 +123,24 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    if (isControlledInput is not null)
+                    if (IsControlledTaskDirectoryInput(
+                            task.Name.LocalName,
+                            attribute.Name.LocalName))
+                    {
+                        string directoryAllowedRoot = IsSameOrBelowBuildInputPath(
+                            inputPath,
+                            declaringAllowedRoot)
+                            ? declaringAllowedRoot
+                            : taskInputAllowedRoot;
+                        if (!HasOnlyControlledDirectoryTaskInput(
+                                inputPath,
+                                directoryAllowedRoot,
+                                isControlledInput))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (isControlledInput is not null)
                     {
                         if (!isControlledInput(inputPath))
                             return false;
@@ -153,6 +177,12 @@ public sealed partial class DotNetPublishPipelineRunner
             taskName.Equals("Vbc", StringComparison.OrdinalIgnoreCase) ||
             taskName.Equals("Fsc", StringComparison.OrdinalIgnoreCase)) &&
            attributeName.Equals("Analyzers", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUncontrolledCompilerFreeFormTaskInput(
+        string taskName,
+        string attributeName)
+        => taskName.Equals("Fsc", StringComparison.OrdinalIgnoreCase) &&
+           attributeName.Equals("OtherFlags", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsControlledReadLinesTaskInput(
         string expression,
