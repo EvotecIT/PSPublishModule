@@ -31,7 +31,20 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 {
                     File.WriteAllText(Path.Combine(staging, artifactName + ".dll"), marker);
                 }
-                File.WriteAllText(Path.Combine(staging, artifactName + ".powerforge-compilation.json"), $"{{\"files\":[],\"marker\":\"{marker}\"}}");
+                var stagedArtifact = directoryArtifact
+                    ? Path.Combine(staging, artifactName, "marker.txt")
+                    : Path.Combine(staging, artifactName + ".dll");
+                var durableArtifact = directoryArtifact
+                    ? Path.Combine(outputDirectory, artifactName, "marker.txt")
+                    : Path.Combine(outputDirectory, artifactName + ".dll");
+                File.WriteAllText(
+                    Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+                    JsonSerializer.Serialize(new
+                    {
+                        artifactName,
+                        files = new[] { new { path = durableArtifact, sha256 = Hash(stagedArtifact) } },
+                        marker
+                    }));
                 gate.Wait();
                 PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, new[] { Path.Combine(outputDirectory, "protected-source.ps1") });
             })).ToArray();

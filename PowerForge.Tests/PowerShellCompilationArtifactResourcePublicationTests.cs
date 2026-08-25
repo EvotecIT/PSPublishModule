@@ -7,6 +7,173 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
+    public void ArtifactPublisherRejectsUnownedFixedFileBeforeFirstPublication()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+        const string artifactName = "PowerForge.UnownedFixedFile";
+        var durableArtifact = Path.Combine(outputDirectory, artifactName + ".dll");
+        File.WriteAllText(durableArtifact, "user-owned");
+        var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
+        var stagedArtifact = Path.Combine(staging, artifactName + ".dll");
+        File.WriteAllText(stagedArtifact, "generated");
+        File.WriteAllText(
+            Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName,
+                files = new[] { new { path = durableArtifact, sha256 = Hash(stagedArtifact) } }
+            }));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>()));
+
+            Assert.Contains("not owned by the previous artifact manifest", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("user-owned", File.ReadAllText(durableArtifact));
+        }
+        finally
+        {
+            try { Directory.Delete(outputDirectory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ArtifactPublisherRejectsUnownedFixedDirectoryBeforeFirstPublication()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        const string artifactName = "PowerForge.UnownedFixedDirectory";
+        var durableDirectory = Path.Combine(outputDirectory, artifactName);
+        Directory.CreateDirectory(durableDirectory);
+        var userFile = Path.Combine(durableDirectory, "user.txt");
+        File.WriteAllText(userFile, "user-owned");
+        var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
+        var stagedArtifact = Path.Combine(staging, artifactName, "module.dll");
+        Directory.CreateDirectory(Path.GetDirectoryName(stagedArtifact)!);
+        File.WriteAllText(stagedArtifact, "generated");
+        File.WriteAllText(
+            Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName,
+                files = new[] { new { path = Path.Combine(durableDirectory, "module.dll"), sha256 = Hash(stagedArtifact) } }
+            }));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>()));
+
+            Assert.Contains("not owned by the previous artifact manifest", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("user-owned", File.ReadAllText(userFile));
+            Assert.False(File.Exists(Path.Combine(durableDirectory, "module.dll")));
+        }
+        finally
+        {
+            try { Directory.Delete(outputDirectory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ArtifactPublisherRejectsPriorManifestForDifferentArtifact()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+        const string artifactName = "PowerForge.ManifestIdentity";
+        var durableArtifact = Path.Combine(outputDirectory, artifactName + ".dll");
+        File.WriteAllText(durableArtifact, "original");
+        File.WriteAllText(
+            Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName = "PowerForge.DifferentArtifact",
+                files = new[] { new { path = durableArtifact, sha256 = Hash(durableArtifact) } }
+            }));
+        var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
+        var stagedArtifact = Path.Combine(staging, artifactName + ".dll");
+        File.WriteAllText(stagedArtifact, "replacement");
+        File.WriteAllText(
+            Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName,
+                files = new[] { new { path = durableArtifact, sha256 = Hash(stagedArtifact) } }
+            }));
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>()));
+
+            Assert.Contains("does not identify artifact", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("original", File.ReadAllText(durableArtifact));
+        }
+        finally
+        {
+            try { Directory.Delete(outputDirectory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ArtifactPublisherPreservesUserFilesInsideOwnedFixedDirectoryAndRejectsShapeReplacement()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+        const string artifactName = "PowerForge.MixedFixedDirectory";
+        var durableDirectory = Path.Combine(outputDirectory, artifactName);
+        var durableModule = Path.Combine(durableDirectory, "module.dll");
+        var userFile = Path.Combine(durableDirectory, "user.txt");
+        try
+        {
+            PublishDirectory("first");
+            File.WriteAllText(userFile, "user-owned");
+            PublishDirectory("second");
+
+            Assert.Equal("second", File.ReadAllText(durableModule));
+            Assert.Equal("user-owned", File.ReadAllText(userFile));
+
+            var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
+            var stagedArtifact = Path.Combine(staging, artifactName);
+            File.WriteAllText(stagedArtifact, "flat");
+            File.WriteAllText(
+                Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+                JsonSerializer.Serialize(new
+                {
+                    artifactName,
+                    files = new[] { new { path = Path.Combine(outputDirectory, artifactName), sha256 = Hash(stagedArtifact) } }
+                }));
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>()));
+
+            Assert.Contains("previous durable artifact set was restored", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("second", File.ReadAllText(durableModule));
+            Assert.Equal("user-owned", File.ReadAllText(userFile));
+        }
+        finally
+        {
+            try { Directory.Delete(outputDirectory, recursive: true); } catch { }
+        }
+
+        void PublishDirectory(string content)
+        {
+            var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
+            var stagedArtifact = Path.Combine(staging, artifactName, "module.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(stagedArtifact)!);
+            File.WriteAllText(stagedArtifact, content);
+            File.WriteAllText(
+                Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+                JsonSerializer.Serialize(new
+                {
+                    artifactName,
+                    files = new[] { new { path = durableModule, sha256 = Hash(stagedArtifact) } }
+                }));
+            PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>());
+        }
+    }
+
+    [Fact]
     public void ArtifactPublisherReplacesAndRemovesOnlyManifestOwnedResourceFiles()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -47,7 +214,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             }
             File.WriteAllText(
                 Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
-                JsonSerializer.Serialize(new { files = durableFiles }));
+                JsonSerializer.Serialize(new { artifactName, files = durableFiles }));
             PowerShellArtifactSetPublisher.Commit(staging, outputDirectory, artifactName, Array.Empty<string>());
         }
     }
@@ -59,12 +226,24 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Directory.CreateDirectory(Path.Combine(outputDirectory, "Templates"));
         const string artifactName = "PowerForge.ResourceCollision";
         File.WriteAllText(Path.Combine(outputDirectory, artifactName + ".dll"), "old");
-        File.WriteAllText(Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json"), "{\"files\":[]}");
+        File.WriteAllText(
+            Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName,
+                files = new[] { new { path = Path.Combine(outputDirectory, artifactName + ".dll"), sha256 = Hash(Path.Combine(outputDirectory, artifactName + ".dll")) } }
+            }));
         File.WriteAllText(Path.Combine(outputDirectory, "Templates", "report.txt"), "unowned");
         var staging = PowerShellArtifactSetPublisher.CreateStagingDirectory(outputDirectory, artifactName);
         Directory.CreateDirectory(Path.Combine(staging, "Templates"));
         File.WriteAllText(Path.Combine(staging, artifactName + ".dll"), "new");
-        File.WriteAllText(Path.Combine(staging, artifactName + ".powerforge-compilation.json"), "{\"files\":[]}");
+        File.WriteAllText(
+            Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
+            JsonSerializer.Serialize(new
+            {
+                artifactName,
+                files = new[] { new { path = Path.Combine(outputDirectory, artifactName + ".dll"), sha256 = Hash(Path.Combine(staging, artifactName + ".dll")) } }
+            }));
         File.WriteAllText(Path.Combine(staging, "Templates", "report.txt"), "new-resource");
         try
         {
@@ -117,6 +296,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 Path.Combine(staging, artifactName + ".powerforge-compilation.json"),
                 JsonSerializer.Serialize(new
                 {
+                    artifactName,
                     files = new object[]
                     {
                         new { path = Path.Combine(outputDirectory, artifactName + ".dll"), sha256 = Hash(stagedArtifact) },
@@ -144,6 +324,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 Path.Combine(firstStaging, artifactName + ".powerforge-compilation.json"),
                 JsonSerializer.Serialize(new
                 {
+                    artifactName,
                     files = new object[]
                     {
                         new { path = Path.Combine(outputDirectory, artifactName + ".dll"), sha256 = Hash(firstArtifact) },
@@ -164,6 +345,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 Path.Combine(secondStaging, artifactName + ".powerforge-compilation.json"),
                 JsonSerializer.Serialize(new
                 {
+                    artifactName,
                     files = new object[]
                     {
                         new { path = Path.Combine(outputDirectory, artifactName + ".dll"), sha256 = Hash(secondArtifact) },

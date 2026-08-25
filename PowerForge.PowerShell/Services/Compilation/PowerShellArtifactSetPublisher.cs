@@ -86,6 +86,7 @@ internal static class PowerShellArtifactSetPublisher
         try
         {
             previousOwnedFiles = ReadPreviousOwnedFiles(outputPath, artifactName, protectedPaths);
+            EnsureFixedEntriesAreOwned(outputPath, artifactName, ownedNames, previousOwnedFiles);
         }
         catch (Exception exception)
         {
@@ -100,18 +101,17 @@ internal static class PowerShellArtifactSetPublisher
 
         try
         {
-            foreach (var name in ownedNames)
+            var previousManifestPath = Path.Combine(outputPath, artifactName + ".powerforge-compilation.json");
+            if (File.Exists(previousManifestPath))
             {
-                var target = Path.Combine(outputPath, name);
-                if (!EntryExists(target)) continue;
-                var backup = Path.Combine(backupDirectory, name);
-                MoveEntry(target, backup);
-                backups.Add((backup, target));
+                var backup = Path.Combine(backupDirectory, Path.GetFileName(previousManifestPath));
+                File.Move(previousManifestPath, backup);
+                backups.Add((backup, previousManifestPath));
             }
 
             foreach (var priorFile in previousOwnedFiles)
             {
-                if (!File.Exists(priorFile) || IsCoveredByFixedOwnedEntry(priorFile, outputPath, ownedNames))
+                if (!File.Exists(priorFile) || PowerShellCompilationPathSafety.PathEquals(priorFile, previousManifestPath))
                     continue;
                 PowerShellCompilationPathSafety.EnsureNoLinks(
                     outputPath,
@@ -249,6 +249,13 @@ internal static class PowerShellArtifactSetPublisher
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            if (!document.RootElement.TryGetProperty("artifactName", out var artifactNameElement) ||
+                artifactNameElement.ValueKind != JsonValueKind.String ||
+                !string.Equals(artifactNameElement.GetString(), artifactName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"The prior compilation manifest does not identify artifact '{artifactName}'.");
+            }
             if (!document.RootElement.TryGetProperty("files", out var files) || files.ValueKind != JsonValueKind.Array)
                 throw new InvalidOperationException("The prior compilation manifest does not contain a valid files array.");
             var owned = new List<string>();
@@ -287,12 +294,32 @@ internal static class PowerShellArtifactSetPublisher
         return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", string.Empty);
     }
 
-    private static bool IsCoveredByFixedOwnedEntry(string path, string outputDirectory, IEnumerable<string> ownedNames)
-        => ownedNames.Any(name =>
+    private static void EnsureFixedEntriesAreOwned(
+        string outputDirectory,
+        string artifactName,
+        IEnumerable<string> ownedNames,
+        IReadOnlyCollection<string> previousOwnedFiles)
+    {
+        var manifestPath = Path.GetFullPath(Path.Combine(outputDirectory, artifactName + ".powerforge-compilation.json"));
+        foreach (var name in ownedNames)
         {
-            var ownedPath = Path.GetFullPath(Path.Combine(outputDirectory, name));
-            return PowerShellCompilationPathSafety.PathEquals(path, ownedPath) || IsSameOrDescendant(path, ownedPath);
-        });
+            var target = Path.GetFullPath(Path.Combine(outputDirectory, name));
+            if (!EntryExists(target))
+                continue;
+
+            if (PowerShellCompilationPathSafety.PathEquals(target, manifestPath) && File.Exists(target))
+                continue;
+
+            var isOwned = File.Exists(target)
+                ? previousOwnedFiles.Any(path => PowerShellCompilationPathSafety.PathEquals(path, target))
+                : previousOwnedFiles.Any(path => IsSameOrDescendant(path, target));
+            if (!isOwned)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact publication target '{target}' already exists and is not owned by the previous artifact manifest.");
+            }
+        }
+    }
 
     private static void EnsureExistingParentHasNoLinks(string outputDirectory, string target)
     {

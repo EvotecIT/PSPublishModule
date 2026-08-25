@@ -568,7 +568,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_MultiFileExecutablePreservesNestedPowerShellRuntimeTree()
+    public void Build_MultiFileExecutablePreservesNestedPowerShellRuntimeTreeAndUnownedFiles()
     {
         using var fixture = ArtifactFixture.Create(
             """
@@ -614,14 +614,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
 
         var artifactDirectory = Path.GetDirectoryName(result.ArtifactPath)!;
-        var stalePath = Path.Combine(artifactDirectory, "stale.dll");
-        File.WriteAllText(stalePath, "stale");
+        var userFile = Path.Combine(artifactDirectory, "user-owned.dll");
+        File.WriteAllText(userFile, "user-owned");
 
         var rebuilt = new PowerShellCompilationArtifactBuilder().Build(spec);
 
         Assert.True(rebuilt.Succeeded, rebuilt.Error + Environment.NewLine + rebuilt.BuildOutput);
-        Assert.False(File.Exists(stalePath));
-        Assert.DoesNotContain(rebuilt.Manifest!.Files, file => Path.GetFileName(file.Path).Equals("stale.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("user-owned", File.ReadAllText(userFile));
+        Assert.DoesNotContain(rebuilt.Manifest!.Files, file => Path.GetFileName(file.Path).Equals("user-owned.dll", StringComparison.OrdinalIgnoreCase));
         Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, ".PowerForge.MultiFileProof.staging-*"));
         Assert.Empty(Directory.EnumerateDirectories(fixture.OutputPath, "PowerForge.MultiFileProof.backup-*"));
     }
