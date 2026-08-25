@@ -48,6 +48,25 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
+    public void Analyze_RejectsDuplicateEffectiveParameterSetMetadata()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Value { [CmdletBinding(DefaultParameterSetName='ByName')] " +
+            "param([Parameter()][Parameter(ParameterSetName='ByName')][string] $Value) return $Value }");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("duplicate metadata", StringComparison.OrdinalIgnoreCase) &&
+            diagnostic.Message.Contains("ByName", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Build_BinaryModuleReservesRemainingArgumentsMemberOnlyWhenGenerated()
     {
         const string parameterName = "__PowerForgeRemainingArguments";

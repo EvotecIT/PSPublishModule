@@ -60,23 +60,6 @@ public sealed partial class PowerShellCompilationAnalyzer
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics)
     {
-        foreach (var parameter in parameters)
-        {
-            var duplicateSet = parameter.Bindings
-                .GroupBy(static binding => binding.ParameterSetName, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault(static group => group.Count() > 1);
-            if (duplicateSet is null)
-                continue;
-            var source = paramBlock.Parameters.First(candidate =>
-                candidate.Name.VariablePath.UserPath.Equals(parameter.Name, StringComparison.OrdinalIgnoreCase));
-            diagnostics.Add(CreateDiagnostic(
-                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                $"Parameter '${parameter.Name}' declares duplicate metadata for parameter set '{DisplayParameterSetName(duplicateSet.Key)}'.",
-                file,
-                source.Extent,
-                PowerShellCompilationFeatureIds.ParameterBinding));
-        }
-
         var commandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(paramBlock);
         var namedSets = parameters
             .SelectMany(static parameter => parameter.Bindings)
@@ -101,6 +84,21 @@ public sealed partial class PowerShellCompilationAnalyzer
             string.IsNullOrWhiteSpace(binding.ParameterSetName)
                 ? sets.Select(setName => new { parameter.Name, SetName = setName, Binding = binding })
                 : new[] { new { parameter.Name, SetName = binding.ParameterSetName, Binding = binding } })).ToArray();
+        var duplicateMembership = effective
+            .GroupBy(item => item.Name + "\0" + item.SetName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateMembership is not null)
+        {
+            var duplicate = duplicateMembership.First();
+            var source = paramBlock.Parameters.First(candidate =>
+                candidate.Name.VariablePath.UserPath.Equals(duplicate.Name, StringComparison.OrdinalIgnoreCase));
+            diagnostics.Add(CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                $"Parameter '${duplicate.Name}' declares duplicate metadata for effective parameter set '{DisplayParameterSetName(duplicate.SetName)}'.",
+                file,
+                source.Extent,
+                PowerShellCompilationFeatureIds.ParameterBinding));
+        }
         var duplicatePosition = effective
             .Where(static item => item.Binding.Position.HasValue)
             .GroupBy(item => item.SetName + "\0" + item.Binding.Position!.Value, StringComparer.OrdinalIgnoreCase)
