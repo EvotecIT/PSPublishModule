@@ -31,7 +31,8 @@ public sealed class PowerShellCompiledMethod
         bool requiresPowerShellCommandRegions = false,
         string[]? aliases = null,
         bool requiresPowerShellBoundParameters = false,
-        bool isAdvancedFunction = false)
+        bool isAdvancedFunction = false,
+        PowerShellCompilationCommandBinding? commandBinding = null)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -44,6 +45,7 @@ public sealed class PowerShellCompiledMethod
         Aliases = aliases ?? Array.Empty<string>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         IsAdvancedFunction = isAdvancedFunction;
+        CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -78,6 +80,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether the source function uses advanced-function parameter binding.</summary>
     public bool IsAdvancedFunction { get; }
+
+    /// <summary>Advanced-function and positional binding behavior preserved for the generated command.</summary>
+    public PowerShellCompilationCommandBinding CommandBinding { get; }
 }
 
 /// <summary>

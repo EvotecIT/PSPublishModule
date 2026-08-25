@@ -14,6 +14,10 @@ internal static class Program
     {
 {{PARAMETER_SPECS}}
     };
+    private static readonly ParameterSpec[] PositionalParameters = Parameters
+        .Where(static parameter => parameter.Position.HasValue)
+        .OrderBy(static parameter => parameter.Position!.Value)
+        .ToArray();
 
     private static readonly string[][] UnsupportedCommonParameterNames =
     {
@@ -70,15 +74,15 @@ internal static class Program
                 continue;
             }
 
-            while (positionalIndex < Parameters.Length && raw[Parameters[positionalIndex].Name].Count > 0)
+            while (positionalIndex < PositionalParameters.Length && raw[PositionalParameters[positionalIndex].Name].Count > 0)
                 positionalIndex++;
-            if (positionalIndex >= Parameters.Length)
+            if (positionalIndex >= PositionalParameters.Length)
             {
                 if (AcceptsSurplusPositionalArguments)
                     continue;
                 throw new ArgumentException($"Unexpected positional argument '{token}'.");
             }
-            var positional = Parameters[positionalIndex];
+            var positional = PositionalParameters[positionalIndex];
             AddRawValue(raw, positional, token);
             positionalIndex++;
         }
@@ -100,7 +104,7 @@ internal static class Program
                     : null!;
                 continue;
             }
-            if (parameter.IsRequired && parameter.Type == typeof(string) && values[0].Length == 0)
+            if (parameter.IsRequired && parameter.Type == typeof(string) && values[0].Length == 0 && !parameter.AllowEmptyString)
                 throw new ArgumentException($"Required parameter '--{parameter.Name}' cannot be an empty string.");
             if (parameter.IsArray)
             {
@@ -155,22 +159,30 @@ internal static class Program
     {
         try
         {
-            if (type == typeof(string)) return value;
-            if (type == typeof(bool)) return bool.Parse(value);
-            if (type == typeof(byte)) return byte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(sbyte)) return sbyte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(short)) return short.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(ushort)) return ushort.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(int)) return int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(uint)) return uint.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(long)) return long.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(ulong)) return ulong.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (type == typeof(float)) return float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (type == typeof(double)) return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (type == typeof(decimal)) return decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
-            if (type == typeof(char) && value.Length == 1) return value[0];
+            var scalar = Nullable.GetUnderlyingType(type) ?? type;
+            if (scalar == typeof(string)) return value;
+            if (scalar == typeof(bool)) return bool.Parse(value);
+            if (scalar == typeof(byte)) return byte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(sbyte)) return sbyte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(short)) return short.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(ushort)) return ushort.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(int)) return int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(uint)) return uint.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(long)) return long.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(ulong)) return ulong.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            if (scalar == typeof(float)) return float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (scalar == typeof(double)) return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            if (scalar == typeof(decimal)) return decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
+            if (scalar == typeof(char) && value.Length == 1) return value[0];
+            if (scalar.IsEnum) return Enum.Parse(scalar, value, ignoreCase: true);
+            if (scalar == typeof(DateTime)) return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+            if (scalar == typeof(DateTimeOffset)) return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+            if (scalar == typeof(TimeSpan)) return TimeSpan.Parse(value, CultureInfo.InvariantCulture);
+            if (scalar == typeof(Guid)) return Guid.Parse(value);
+            if (scalar == typeof(Uri)) return new Uri(value, UriKind.RelativeOrAbsolute);
+            if (scalar == typeof(Version)) return Version.Parse(value);
         }
-        catch (Exception exception) when (exception is FormatException or OverflowException)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException)
         {
             throw new ArgumentException($"Value '{value}' is invalid for parameter '--{parameterName}' ({type.Name}).", exception);
         }
@@ -179,28 +191,9 @@ internal static class Program
 
     private static object ParseArray(IReadOnlyList<string> values, Type elementType, string parameterName)
     {
-        if (elementType == typeof(string)) return ParseArray<string>(values, elementType, parameterName);
-        if (elementType == typeof(bool)) return ParseArray<bool>(values, elementType, parameterName);
-        if (elementType == typeof(byte)) return ParseArray<byte>(values, elementType, parameterName);
-        if (elementType == typeof(sbyte)) return ParseArray<sbyte>(values, elementType, parameterName);
-        if (elementType == typeof(short)) return ParseArray<short>(values, elementType, parameterName);
-        if (elementType == typeof(ushort)) return ParseArray<ushort>(values, elementType, parameterName);
-        if (elementType == typeof(int)) return ParseArray<int>(values, elementType, parameterName);
-        if (elementType == typeof(uint)) return ParseArray<uint>(values, elementType, parameterName);
-        if (elementType == typeof(long)) return ParseArray<long>(values, elementType, parameterName);
-        if (elementType == typeof(ulong)) return ParseArray<ulong>(values, elementType, parameterName);
-        if (elementType == typeof(float)) return ParseArray<float>(values, elementType, parameterName);
-        if (elementType == typeof(double)) return ParseArray<double>(values, elementType, parameterName);
-        if (elementType == typeof(decimal)) return ParseArray<decimal>(values, elementType, parameterName);
-        if (elementType == typeof(char)) return ParseArray<char>(values, elementType, parameterName);
-        throw new ArgumentException($"Parameter '--{parameterName}' uses unsupported CLR array element type '{elementType.FullName}'.");
-    }
-
-    private static T[] ParseArray<T>(IReadOnlyList<string> values, Type elementType, string parameterName)
-    {
-        var result = new T[values.Count];
+        var result = Array.CreateInstance(elementType, values.Count);
         for (var index = 0; index < values.Count; index++)
-            result[index] = (T)ParseScalar(values[index], elementType, parameterName);
+            result.SetValue(ParseScalar(values[index], elementType, parameterName), index);
         return result;
     }
 
@@ -297,16 +290,22 @@ internal static class Program
             Type type,
             bool isRequired,
             bool isSwitch,
+            int? position,
             string[] aliases,
             bool allowNull,
+            bool allowEmptyString,
+            bool allowEmptyCollection,
             ValidationSpec[] validations)
         {
             Name = name;
             Type = type;
             IsRequired = isRequired;
             IsSwitch = isSwitch;
+            Position = position;
             Aliases = aliases;
             AllowNull = allowNull;
+            AllowEmptyString = allowEmptyString;
+            AllowEmptyCollection = allowEmptyCollection;
             Validations = validations;
         }
 
@@ -314,8 +313,11 @@ internal static class Program
         internal Type Type { get; }
         internal bool IsRequired { get; }
         internal bool IsSwitch { get; }
+        internal int? Position { get; }
         internal string[] Aliases { get; }
         internal bool AllowNull { get; }
+        internal bool AllowEmptyString { get; }
+        internal bool AllowEmptyCollection { get; }
         internal ValidationSpec[] Validations { get; }
         internal bool IsArray => Type.IsArray;
     }

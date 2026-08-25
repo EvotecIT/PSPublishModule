@@ -77,10 +77,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             typed.TypeName,
             targetFramework,
             invalid,
-            PowerShellCompilationCapability.PowerShellStreams |
-            PowerShellCompilationCapability.LocalFunctionCalls |
-            PowerShellCompilationCapability.BoundParameters |
-            PowerShellCompilationCapability.PowerShellObjects);
+            PowerShellCompilationCapabilities.BinaryModule);
         return new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
@@ -180,6 +177,44 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 throw new InvalidOperationException(
                     $"Function '{cmdlet.Method.SourceName}' parameter abbreviation '-{abbreviation}' becomes ambiguous with generated binary-cmdlet common parameters.");
         }
+
+        foreach (var parameter in cmdlet.Method.Parameters)
+        {
+            var duplicateSet = parameter.Bindings
+                .GroupBy(static binding => binding.ParameterSetName, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(static group => group.Count() > 1);
+            if (duplicateSet is not null)
+                throw new InvalidOperationException(
+                    $"Function '{cmdlet.Method.SourceName}' parameter '${parameter.Name}' declares duplicate metadata for parameter set '{(string.IsNullOrWhiteSpace(duplicateSet.Key) ? "__AllParameterSets" : duplicateSet.Key)}'.");
+        }
+
+        var namedSets = cmdlet.Method.Parameters
+            .SelectMany(static parameter => parameter.Bindings)
+            .Select(static binding => binding.ParameterSetName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Append(cmdlet.Method.CommandBinding.DefaultParameterSetName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (namedSets.Length > 32)
+            throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' declares {namedSets.Length} parameter sets; binary cmdlets support at most 32.");
+
+        var effective = cmdlet.Method.Parameters.SelectMany((parameter, index) =>
+            GetEffectiveBindings(cmdlet.Method, parameter, index).Select(binding => new { parameter.Name, Binding = binding })).ToArray();
+        var duplicatePosition = effective
+            .Where(static item => item.Binding.Position.HasValue)
+            .GroupBy(item => item.Binding.ParameterSetName + "\0" + item.Binding.Position!.Value, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Select(item => item.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
+        if (duplicatePosition is not null)
+            throw new InvalidOperationException(
+                $"Function '{cmdlet.Method.SourceName}' assigns more than one parameter to the same position in parameter set '{(string.IsNullOrWhiteSpace(duplicatePosition.First().Binding.ParameterSetName) ? "__AllParameterSets" : duplicatePosition.First().Binding.ParameterSetName)}'.");
+        var duplicateRemaining = effective
+            .Where(static item => item.Binding.ValueFromRemainingArguments)
+            .GroupBy(static item => item.Binding.ParameterSetName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Select(item => item.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
+        if (duplicateRemaining is not null)
+            throw new InvalidOperationException(
+                $"Function '{cmdlet.Method.SourceName}' assigns ValueFromRemainingArguments to more than one parameter in parameter set '{(string.IsNullOrWhiteSpace(duplicateRemaining.Key) ? "__AllParameterSets" : duplicateRemaining.Key)}'.");
     }
 
     private static string? FindNewCommonParameterAbbreviation(
@@ -215,7 +250,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
 
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
-        builder.AppendLine($"[Cmdlet({PowerShellCSharpLiteral.QuoteString(cmdlet.Verb)}, {PowerShellCSharpLiteral.QuoteString(cmdlet.Noun)})]");
+        builder.AppendLine(GenerateCmdletAttribute(cmdlet));
         var outputType = GetCmdletOutputTypeName(cmdlet.Method.ReturnType);
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
@@ -224,11 +259,18 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         for (var index = 0; index < cmdlet.Method.Parameters.Length; index++)
         {
             var parameter = cmdlet.Method.Parameters[index];
-            builder.AppendLine($"    [Parameter(Position = {index}{(parameter.IsMandatory ? ", Mandatory = true" : string.Empty)})]");
+            foreach (var binding in GetEffectiveBindings(cmdlet.Method, parameter, index))
+                builder.AppendLine("    " + GenerateParameterAttribute(binding));
             if (parameter.Aliases.Length > 0)
                 builder.AppendLine($"    [Alias({string.Join(", ", parameter.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
             if (parameter.AllowNull)
                 builder.AppendLine("    [AllowNull]");
+            if (parameter.AllowEmptyString)
+                builder.AppendLine("    [AllowEmptyString]");
+            if (parameter.AllowEmptyCollection)
+                builder.AppendLine("    [AllowEmptyCollection]");
+            if (parameter.SupportsWildcards)
+                builder.AppendLine("    [SupportsWildcards]");
             foreach (var validation in parameter.Validations)
                 builder.AppendLine("    " + GenerateValidationAttribute(validation));
             var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
@@ -260,7 +302,10 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("    }");
             builder.AppendLine();
         }
-        builder.AppendLine("    protected override void ProcessRecord()");
+        var lifecycleMethod = cmdlet.Method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)
+            ? "EndProcessing"
+            : "ProcessRecord";
+        builder.AppendLine($"    protected override void {lifecycleMethod}()");
         builder.AppendLine("    {");
         var arguments = cmdlet.Method.Parameters.Select(parameter =>
             PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
@@ -278,6 +323,102 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine("    }");
         builder.AppendLine("}");
         builder.AppendLine();
+    }
+
+    private static string GenerateCmdletAttribute(CmdletDescriptor cmdlet)
+    {
+        var arguments = new List<string>
+        {
+            PowerShellCSharpLiteral.QuoteString(cmdlet.Verb),
+            PowerShellCSharpLiteral.QuoteString(cmdlet.Noun)
+        };
+        var binding = cmdlet.Method.CommandBinding;
+        if (!string.IsNullOrWhiteSpace(binding.DefaultParameterSetName))
+            arguments.Add("DefaultParameterSetName = " + PowerShellCSharpLiteral.QuoteString(binding.DefaultParameterSetName));
+        if (binding.SupportsShouldProcess)
+            arguments.Add("SupportsShouldProcess = true");
+        if (!string.IsNullOrWhiteSpace(binding.ConfirmImpact))
+        {
+            if (!Enum.TryParse<ConfirmImpact>(binding.ConfirmImpact, ignoreCase: true, out var impact))
+                throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' declares unsupported ConfirmImpact '{binding.ConfirmImpact}'.");
+            arguments.Add("ConfirmImpact = ConfirmImpact." + impact);
+        }
+        return "[Cmdlet(" + string.Join(", ", arguments) + ")]";
+    }
+
+    private static PowerShellCompilationParameterBinding[] GetEffectiveBindings(
+        PowerShellCompiledMethod method,
+        PowerShellCompilationParameter parameter,
+        int parameterIndex)
+    {
+        var namedSets = method.Parameters
+            .SelectMany(static candidate => candidate.Bindings)
+            .Select(static binding => binding.ParameterSetName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Append(method.CommandBinding.DefaultParameterSetName)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var sets = namedSets.Length == 0 ? new[] { string.Empty } : namedSets;
+        var expanded = parameter.Bindings.SelectMany(binding =>
+            string.IsNullOrWhiteSpace(binding.ParameterSetName)
+                ? sets.Select(setName => CloneBinding(binding, setName))
+                : new[] { binding });
+        return expanded.Select(binding =>
+        {
+            var hasExplicitPosition = method.Parameters
+                .SelectMany(candidate => candidate.Bindings)
+                .Any(candidate => BindingAppliesToSet(candidate, binding.ParameterSetName) && candidate.Position.HasValue);
+            var position = binding.Position;
+            if (!position.HasValue && method.CommandBinding.PositionalBinding && !hasExplicitPosition)
+                position = GetImplicitPosition(method, parameterIndex, binding.ParameterSetName);
+            return CloneBinding(binding, binding.ParameterSetName, position);
+        }).ToArray();
+    }
+
+    private static int GetImplicitPosition(PowerShellCompiledMethod method, int parameterIndex, string setName)
+        => method.Parameters
+            .Take(parameterIndex)
+            .Count(parameter => parameter.Bindings.Any(binding => BindingAppliesToSet(binding, setName)));
+
+    private static bool BindingAppliesToSet(PowerShellCompilationParameterBinding binding, string setName)
+        => string.IsNullOrWhiteSpace(binding.ParameterSetName) ||
+           binding.ParameterSetName.Equals(setName, StringComparison.OrdinalIgnoreCase);
+
+    private static PowerShellCompilationParameterBinding CloneBinding(
+        PowerShellCompilationParameterBinding binding,
+        string parameterSetName,
+        int? position = null)
+        => new(
+            parameterSetName,
+            binding.Mandatory,
+            position ?? binding.Position,
+            binding.ValueFromPipeline,
+            binding.ValueFromPipelineByPropertyName,
+            binding.ValueFromRemainingArguments,
+            binding.DontShow,
+            binding.HelpMessage);
+
+    private static string GenerateParameterAttribute(PowerShellCompilationParameterBinding binding)
+    {
+        var arguments = new List<string>();
+        if (!string.IsNullOrWhiteSpace(binding.ParameterSetName))
+            arguments.Add("ParameterSetName = " + PowerShellCSharpLiteral.QuoteString(binding.ParameterSetName));
+        if (binding.Mandatory)
+            arguments.Add("Mandatory = true");
+        if (binding.Position.HasValue)
+            arguments.Add("Position = " + binding.Position.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (binding.ValueFromPipeline)
+            arguments.Add("ValueFromPipeline = true");
+        if (binding.ValueFromPipelineByPropertyName)
+            arguments.Add("ValueFromPipelineByPropertyName = true");
+        if (binding.ValueFromRemainingArguments)
+            arguments.Add("ValueFromRemainingArguments = true");
+        if (binding.DontShow)
+            arguments.Add("DontShow = true");
+        if (!string.IsNullOrWhiteSpace(binding.HelpMessage))
+            arguments.Add("HelpMessage = " + PowerShellCSharpLiteral.QuoteString(binding.HelpMessage));
+        return "[Parameter(" + string.Join(", ", arguments) + ")]";
     }
 
     private static string GenerateValidationAttribute(PowerShellCompilationValidation validation)

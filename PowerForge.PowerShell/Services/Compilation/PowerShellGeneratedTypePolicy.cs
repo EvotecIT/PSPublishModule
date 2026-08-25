@@ -31,10 +31,11 @@ internal static class PowerShellGeneratedTypePolicy
             return type.GetArrayRank() == 1 && IsSupported(type.GetElementType()!, targetFramework);
         if (type.IsGenericType)
         {
-            if (type.GetGenericTypeDefinition() != typeof(Dictionary<,>))
+            var definition = type.GetGenericTypeDefinition();
+            if (definition != typeof(Dictionary<,>) && definition != typeof(Nullable<>))
                 return false;
             return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
-                   IsSupportedNonGeneric(type.GetGenericTypeDefinition(), targetFramework);
+                   IsSupportedNonGeneric(definition, targetFramework);
         }
         if (type.IsByRef || type.IsPointer)
             return false;

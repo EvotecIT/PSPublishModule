@@ -85,7 +85,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             EmitExpression,
             CanAssign,
             GetTypeName,
-            type => PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework),
+            type => PowerShellCompilationParameterTypePolicy.CanUseInMethod(type, _targetFramework, _capabilities),
             member => string.IsNullOrWhiteSpace(_targetFramework) || PowerShellGeneratedMemberPolicy.IsSupported(member, _targetFramework!),
             CanNormalizeNullStringReceiver,
             Error);
@@ -99,7 +99,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         {
             var name = parameter.Name.VariablePath.UserPath;
             var parameterType = GetCompiledParameterType(parameter);
-            if (!PowerShellGeneratedTypePolicy.IsSupported(parameterType, _targetFramework))
+            if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(parameterType, _targetFramework, _capabilities))
                 throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameterType.FullName}' outside the generated project reference set.");
             if (_variables.ContainsKey(name))
                 throw Error(parameter, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");

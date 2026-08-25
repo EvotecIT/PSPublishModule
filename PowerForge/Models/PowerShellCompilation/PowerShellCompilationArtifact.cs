@@ -83,14 +83,9 @@ public sealed class PowerShellCompilationBuildSpec
         if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         return kind == PowerShellCompilationArtifactKind.BinaryModule
-            ? PowerShellCompilationCapability.PowerShellStreams |
-              PowerShellCompilationCapability.LocalFunctionCalls |
-              PowerShellCompilationCapability.BoundParameters |
-              PowerShellCompilationCapability.PowerShellObjects
+            ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
-                ? PowerShellCompilationCapability.LocalFunctionCalls |
-                  PowerShellCompilationCapability.BoundParameters |
-                  PowerShellCompilationCapability.ExecutableParameterBinding
+                ? PowerShellCompilationCapabilities.TypedExecutable
                 : PowerShellCompilationCapability.None;
     }
 

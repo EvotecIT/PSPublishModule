@@ -1,5 +1,4 @@
 using System.Management.Automation.Language;
-using System.Globalization;
 
 namespace PowerForge;
 
@@ -23,13 +22,6 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static readonly HashSet<string> SupportedAssignmentOperators = new(StringComparer.Ordinal)
     {
         "Equals", "PlusEquals", "MinusEquals", "MultiplyEquals", "DivideEquals", "RemEquals"
-    };
-
-    private static readonly HashSet<Type> SupportedParameterTypes = new()
-    {
-        typeof(bool), typeof(byte), typeof(sbyte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-        typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(char), typeof(string),
-        typeof(System.Collections.IDictionary), typeof(System.Collections.Hashtable), typeof(System.Collections.Specialized.OrderedDictionary)
     };
 
     private static PowerShellCompilationFilePlan AnalyzeFile(
@@ -60,7 +52,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             excludeModuleExports: Path.GetExtension(file).Equals(".psm1", StringComparison.OrdinalIgnoreCase));
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
-            var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, capabilities, localFunctionNames);
+            var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, targetFramework, capabilities, localFunctionNames);
             if (scriptUnit.IsCompilable && !RequiresArtifactGraphEmission(topLevelStatements, capabilities, localFunctionNames))
             {
                 try
@@ -101,6 +93,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 function.Body,
                 file,
                 GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false),
+                targetFramework,
                 capabilities,
                 localFunctionNames);
             if (function.IsFilter)
@@ -228,6 +221,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         ScriptBlockAst root,
         string file,
         IReadOnlyCollection<StatementAst> executableStatements,
+        string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ISet<string>? localFunctionNames)
     {
@@ -239,6 +233,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             file,
             diagnostics,
             localVariables,
+            targetFramework,
             capabilities,
             localFunctionNames,
             kind == PowerShellCompilationUnitKind.Script);
@@ -296,7 +291,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         candidate.Extent,
                         PowerShellCompilationFeatureIds.ScriptBlock));
                     break;
-                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute):
+                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities):
                     break;
                 case AttributeAst attribute:
                     diagnostics.Add(CreateDiagnostic(
@@ -306,7 +301,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                         attribute.Extent,
                         PowerShellCompilationFeatureIds.ParameterMetadata));
                     break;
-                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !IsSupportedParameterType(conversion.StaticType):
+                case ConvertExpressionAst conversion when conversion.Parent is AssignmentStatementAst assignment && ReferenceEquals(assignment.Left, conversion) && !PowerShellCompilationParameterTypePolicy.CanUseInMethod(conversion.StaticType, targetFramework: null, capabilities):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                         $"Typed local declaration '{conversion.StaticType.FullName}' is not supported by the typed compiler.",
@@ -548,121 +543,6 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static bool IsOrderedHashtableConversion(ConvertExpressionAst conversion)
         => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) &&
            conversion.Child is HashtableAst;
-
-    private static bool IsMandatoryParameter(ParameterAst parameter)
-        => parameter.Attributes
-            .OfType<AttributeAst>()
-            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
-            .SelectMany(static attribute => attribute.NamedArguments)
-            .Any(static argument =>
-                argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
-                TryGetBooleanAttributeValue(argument, out var value) && value);
-
-    private static bool IsSupportedMetadataAttribute(AttributeAst attribute)
-    {
-        if (IsAttributeNamed(attribute, "CmdletBinding"))
-            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
-        if (IsAttributeNamed(attribute, "Parameter"))
-        {
-            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.All(static argument =>
-                argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) &&
-                TryGetBooleanAttributeValue(argument, out _));
-        }
-        if (IsAttributeNamed(attribute, "Alias"))
-            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
-                   attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst { Value.Length: > 0 });
-        if (IsAttributeNamed(attribute, "AllowNull") ||
-            IsAttributeNamed(attribute, "ValidateNotNull") ||
-            IsAttributeNamed(attribute, "ValidateNotNullOrEmpty"))
-            return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.Count == 0;
-        if (IsAttributeNamed(attribute, "ValidateSet"))
-            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
-                   attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst);
-        if (IsAttributeNamed(attribute, "ValidatePattern"))
-            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
-                   attribute.PositionalArguments[0] is StringConstantExpressionAst;
-        if (IsAttributeNamed(attribute, "ValidateRange"))
-            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 2 &&
-                   attribute.PositionalArguments.All(static argument => TryGetInvariantNumericLiteral(argument, out _));
-        return false;
-    }
-
-    private static string[] GetAliases(ParameterAst parameter)
-        => parameter.Attributes
-            .OfType<AttributeAst>()
-            .Where(static attribute => IsAttributeNamed(attribute, "Alias"))
-            .SelectMany(static attribute => attribute.PositionalArguments.OfType<StringConstantExpressionAst>())
-            .Select(static argument => argument.Value)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-    private static bool HasMetadataAttribute(ParameterAst parameter, string name)
-        => parameter.Attributes.OfType<AttributeAst>().Any(attribute => IsAttributeNamed(attribute, name));
-
-    private static PowerShellCompilationValidation[] GetValidations(ParameterAst parameter)
-    {
-        var validations = new List<PowerShellCompilationValidation>();
-        foreach (var attribute in parameter.Attributes.OfType<AttributeAst>())
-        {
-            if (IsAttributeNamed(attribute, "ValidateNotNull"))
-                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.NotNull));
-            else if (IsAttributeNamed(attribute, "ValidateNotNullOrEmpty"))
-                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.NotNullOrEmpty));
-            else if (IsAttributeNamed(attribute, "ValidateSet"))
-                validations.Add(new PowerShellCompilationValidation(
-                    PowerShellCompilationValidationKind.Set,
-                    attribute.PositionalArguments.OfType<StringConstantExpressionAst>().Select(static argument => argument.Value).ToArray()));
-            else if (IsAttributeNamed(attribute, "ValidatePattern") &&
-                     attribute.PositionalArguments.Count == 1 &&
-                     attribute.PositionalArguments[0] is StringConstantExpressionAst pattern)
-                validations.Add(new PowerShellCompilationValidation(PowerShellCompilationValidationKind.Pattern, new[] { pattern.Value }));
-            else if (IsAttributeNamed(attribute, "ValidateRange") && attribute.PositionalArguments.Count == 2)
-                validations.Add(new PowerShellCompilationValidation(
-                    PowerShellCompilationValidationKind.Range,
-                    attribute.PositionalArguments.Select(argument =>
-                        TryGetInvariantNumericLiteral(argument, out var literal) ? literal : string.Empty).ToArray()));
-        }
-        return validations.ToArray();
-    }
-
-    private static bool TryGetInvariantNumericLiteral(ExpressionAst expression, out string literal)
-    {
-        object? value;
-        try
-        {
-            value = expression.SafeGetValue();
-        }
-        catch (InvalidOperationException)
-        {
-            literal = string.Empty;
-            return false;
-        }
-        if (value is not byte and not sbyte and not short and not ushort and not int and not uint and not long and not ulong and not float and not double and not decimal)
-        {
-            literal = string.Empty;
-            return false;
-        }
-        literal = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-        return literal.Length > 0;
-    }
-
-    private static bool TryGetBooleanAttributeValue(NamedAttributeArgumentAst argument, out bool value)
-    {
-        try
-        {
-            if (argument.Argument.SafeGetValue() is bool resolved)
-            {
-                value = resolved;
-                return true;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // Dynamic attribute arguments remain on the PowerShell runtime path.
-        }
-        value = false;
-        return false;
-    }
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
         => attribute.TypeName.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||

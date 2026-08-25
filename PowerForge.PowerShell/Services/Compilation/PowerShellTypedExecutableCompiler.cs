@@ -137,7 +137,8 @@ internal static class PowerShellTypedExecutableCompiler
             PowerShellAdvancedFunctionPolicy.IsAdvanced(definition.Function),
             method.RequiresPowerShellBoundParameters,
             method.RequiresPowerShellStreams,
-            method.RequiresPowerShellCommandRegions);
+            method.RequiresPowerShellCommandRegions,
+            PowerShellAdvancedFunctionPolicy.GetBinding(definition.Function.Body.ParamBlock));
         methods.Add(method);
         methodDescriptions.Add(CreateMethodDescription(definition.Unit, method, definition.Path));
         states[name] = VisitState.Complete;
@@ -170,7 +171,8 @@ internal static class PowerShellTypedExecutableCompiler
             metadata.IsSwitch,
             metadata.Aliases,
             metadata.AllowNull,
-            metadata.Validations);
+            metadata.Validations,
+            metadata.Bindings);
     }
 
     private static void ValidateCommands(string path, IEnumerable<StatementAst> statements, IReadOnlyDictionary<string, LocalDefinition> definitions)
@@ -269,7 +271,8 @@ internal sealed class PowerShellLocalFunctionSignature
         bool isAdvancedFunction,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellStreams = false,
-        bool requiresPowerShellCommandRegions = false)
+        bool requiresPowerShellCommandRegions = false,
+        PowerShellCompilationCommandBinding? commandBinding = null)
     {
         SourceName = sourceName;
         GeneratedName = generatedName;
@@ -279,6 +282,7 @@ internal sealed class PowerShellLocalFunctionSignature
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+        CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
     }
     internal string SourceName { get; }
     internal string GeneratedName { get; }
@@ -288,6 +292,7 @@ internal sealed class PowerShellLocalFunctionSignature
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
+    internal PowerShellCompilationCommandBinding CommandBinding { get; }
 }
 
 internal sealed class PowerShellLocalFunctionParameter
@@ -299,7 +304,8 @@ internal sealed class PowerShellLocalFunctionParameter
         bool isSwitch,
         string[] aliases,
         bool allowNull,
-        PowerShellCompilationValidation[] validations)
+        PowerShellCompilationValidation[] validations,
+        PowerShellCompilationParameterBinding[]? bindings = null)
     {
         Name = name;
         Type = type;
@@ -308,6 +314,7 @@ internal sealed class PowerShellLocalFunctionParameter
         Aliases = aliases;
         AllowNull = allowNull;
         Validations = validations;
+        Bindings = bindings ?? new[] { new PowerShellCompilationParameterBinding(mandatory: isMandatory) };
     }
     internal string Name { get; }
     internal Type Type { get; }
@@ -316,4 +323,5 @@ internal sealed class PowerShellLocalFunctionParameter
     internal string[] Aliases { get; }
     internal bool AllowNull { get; }
     internal PowerShellCompilationValidation[] Validations { get; }
+    internal PowerShellCompilationParameterBinding[] Bindings { get; }
 }

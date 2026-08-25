@@ -27,10 +27,61 @@ internal static class PowerShellAdvancedFunctionPolicy
         return argument is not null && IsTrue(argument.Argument);
     }
 
+    internal static PowerShellCompilationCommandBinding GetBinding(ParamBlockAst? parameterBlock)
+    {
+        var advanced = IsAdvanced(parameterBlock);
+        var cmdletBinding = parameterBlock?.Attributes
+            .OfType<AttributeAst>()
+            .FirstOrDefault(static attribute => IsAttributeNamed(attribute, "CmdletBinding"));
+        if (cmdletBinding is null)
+            return new PowerShellCompilationCommandBinding(advanced);
+
+        var positional = GetBoolean(cmdletBinding, "PositionalBinding", defaultValue: true);
+        var supportsShouldProcess = GetBoolean(cmdletBinding, "SupportsShouldProcess", defaultValue: false);
+        return new PowerShellCompilationCommandBinding(
+            advanced,
+            positional,
+            GetString(cmdletBinding, "DefaultParameterSetName"),
+            supportsShouldProcess,
+            GetString(cmdletBinding, "ConfirmImpact"));
+    }
+
     private static bool IsTrue(ExpressionAst expression)
         => expression is ConstantExpressionAst { Value: true } ||
            expression is VariableExpressionAst variable &&
            variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+    private static bool GetBoolean(AttributeAst attribute, string name, bool defaultValue)
+    {
+        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
+            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (argument is null)
+            return defaultValue;
+        try
+        {
+            return argument.Argument.SafeGetValue() is bool value ? value : defaultValue;
+        }
+        catch (InvalidOperationException)
+        {
+            return defaultValue;
+        }
+    }
+
+    private static string GetString(AttributeAst attribute, string name)
+    {
+        var argument = attribute.NamedArguments.FirstOrDefault(candidate =>
+            candidate.ArgumentName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (argument is null)
+            return string.Empty;
+        try
+        {
+            return argument.Argument.SafeGetValue() as string ?? string.Empty;
+        }
+        catch (InvalidOperationException)
+        {
+            return string.Empty;
+        }
+    }
 
     private static bool IsAttributeNamed(AttributeAst attribute, string name)
     {

@@ -180,7 +180,7 @@ powerforge powershell build .\Measure-Threshold.ps1 `
     --name Measure-Threshold
 ```
 
-Strict typed executables accept explicitly typed scalar, switch, and one-dimensional array parameters. Their generated CLI preserves required parameters, aliases, `AllowNull`, and the supported `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata. It supports exact names, aliases, unambiguous abbreviations, positional values, repeated array options, `--Name value`, `--Name=value`, switches, and `--`. Missing, duplicate, ambiguous, unknown, or validation-failing parameters are rejected before invoking compiled code.
+Strict typed executables accept process-bindable scalar, enum, nullable, URI/version, date/time, GUID, switch, and one-dimensional array parameters. Their generated CLI preserves required parameters, aliases, explicit or source-order positions, `AllowNull`, `AllowEmptyString`, `AllowEmptyCollection`, and the supported `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata. It supports exact names, aliases, unambiguous abbreviations, positional values, repeated array options, `--Name value`, `--Name=value`, switches, and `--`. Missing, duplicate, ambiguous, unknown, or validation-failing parameters are rejected before invoking compiled code. PowerShell parameter sets, pipeline binding, host-only types, and discovery-only metadata are rejected on this runtime-independent surface rather than silently ignored.
 
 The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Duplicate aliases and aliases that collide with an authored or automatic parameter name are rejected before host generation, matching PowerShell's metadata boundary. Pipeline objects use PowerShell's normal formatting system before going to stdout; information records also go to stdout, while warnings and errors go to stderr. Nonterminating error records do not by themselves change a successful process exit code; a top-level explicit `exit <code>` becomes the process exit code, and a terminating exception fails the process. `$PSCommandPath` resolves to the running artifact path. `$PSScriptRoot` normally resolves to the durable artifact directory, while a Package build with explicit or complete-module resources intentionally resolves the script body against the private extracted root; parameter-binding path metadata remains artifact-backed. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior. It also rejects `using module` and `using assembly` because those directives are resolved before an embedded script can receive file-backed path metadata.
 
@@ -238,7 +238,7 @@ It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the 
 
 `Hybrid` compiles complete eligible functions and retains diagnostics for everything else. A hybrid binary module removes compiled function definitions from its generated `.psm1`, imports the typed DLL, and keeps unsupported functions on the script path. Literal `$PSScriptRoot` dot-source dependencies are staged recursively with their relative layout, including dependencies reached from manifest runtime hooks. Dynamic, missing, wildcard, working-directory-relative, source-root-escaping, or symbolic-link/junction paths fail before publication. A hybrid CLR library extracts eligible methods without carrying script fallback because it is intended for direct .NET consumption.
 
-Binary modules can also compile typed control flow around deliberately bounded PowerShell command regions. Direct `Write-Verbose`, `Write-Debug`, and `Write-Warning` calls use the generated `PSCmdlet` stream APIs. Adjacent top-level command pipelines, parameter-only conditional command blocks, explicit discard assignments such as `$null = Invoke-Operation`, and a safe terminal command-result tail are grouped into one PowerShell invocation so binding and dispatch are amortized across the region. Parameters and typed locals created before the region are passed explicitly. Stream and command-region host requirements propagate through eligible local function graphs, so typed callers do not lose a callee's PowerShell host contract. A tail cannot write back to a CLR parameter or local, and a nested script block that captures unresolved module, environment, or automatic state is not eligible. The complete function stays on the Hybrid script path when either boundary cannot be preserved. The module-scoped dispatcher is cleared when the hybrid module is removed. Runtime-free CLR libraries and Strict typed EXEs never enable these PowerShell-backed regions.
+Binary modules can also compile typed control flow around deliberately bounded PowerShell command regions. Direct `Write-Verbose`, `Write-Debug`, and `Write-Warning` calls use the generated `PSCmdlet` stream APIs. Their parameter contract preserves parameter sets, mandatory/position flags, pipeline and property-name binding, remaining arguments, literal help, hidden parameters, empty-value markers, wildcard discovery, and a conservative set of PowerShell-host types. An implicit end body with pipeline-bound parameters is emitted through `EndProcessing`, so it runs once with the final bound value just as the authored advanced function does; explicit `begin`, `process`, and `clean` blocks remain a separate lifecycle feature and stay on fallback. Adjacent top-level command pipelines, parameter-only conditional command blocks, explicit discard assignments such as `$null = Invoke-Operation`, and a safe terminal command-result tail are grouped into one PowerShell invocation so binding and dispatch are amortized across the region. Parameters and typed locals created before the region are passed explicitly. Stream and command-region host requirements propagate through eligible local function graphs, so typed callers do not lose a callee's PowerShell host contract. A tail cannot write back to a CLR parameter or local, and a nested script block that captures unresolved module, environment, or automatic state is not eligible. The complete function stays on the Hybrid script path when either boundary cannot be preserved. The module-scoped dispatcher is cleared when the hybrid module is removed. Runtime-free CLR libraries and Strict typed EXEs never enable these PowerShell-backed regions.
 
 Only unconditional top-level literal dot-sourced files participate in the root module's typed source set. Conditional and function-local dot-sources plus manifest runtime hooks are still discovered and staged, but are counted as runtime fallback rather than being flattened into a different scope. Nested script modules and nested manifests keep their relative layout, manifest closure, and export policy.
 
@@ -250,8 +250,8 @@ Eligibility is whole-function and intentionally conservative. One unsupported co
 
 The current subset supports:
 
-- explicitly typed scalar, `SwitchParameter`, and one-dimensional typed-array parameters;
-- preserved function and parameter aliases plus `Parameter(Mandatory)`, `AllowNull`, `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata;
+- capability-classified CLR, PowerShell-host, process-bindable, `SwitchParameter`, nullable, enum, and one-dimensional typed-array parameters;
+- preserved function and parameter aliases plus parameter-set, position, pipeline, remaining-argument, literal-help, empty-value, wildcard, and validation metadata on hosts that implement those contracts;
 - bounded `$PSBoundParameters.ContainsKey('CanonicalParameterName')` queries, including metadata propagation across typed local calls and runtime-free Strict executable argument binding;
 - typed or safely inferred local variables;
 - explicit `return` values and one terminal implicit-output expression;
@@ -261,7 +261,7 @@ The current subset supports:
 - scalar string `-split` and string-array `-join`;
 - expandable strings containing statically typed string variables, with null strings rendered as empty text;
 - case-insensitive homogeneous string dictionaries created from ordinary or `[ordered]` string hashtable literals, including lookup and simple index assignment, plus conservative `IDictionary` parameter lookup and mutation;
-- empty `CmdletBinding()` metadata and `Parameter(Mandatory)` metadata, with mandatory binding preserved by generated binary cmdlets;
+- conservative `CmdletBinding` positional/default-set/ShouldProcess metadata and parameter binding metadata, with host-only behavior enabled only for generated binary cmdlets;
 - floating-point and decimal arithmetic with compatible operands;
 - explicitly typed integral accumulators and loop counters with checked assignment semantics;
 - unlabeled `break` and `continue` inside supported loops;
@@ -279,7 +279,7 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 - commands and pipelines outside the bounded binary-module region contract, including nested closures over unresolved runtime variables;
 - dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
-- unsupported parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
+- dynamic or host-incompatible parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
 - dynamic `$PSBoundParameters` access, noncanonical or computed keys, dynamic/string throw operands, and `[pscustomobject]` construction outside generated binary modules;
 - nonterminal or nested implicit pipeline output;
 - PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
@@ -449,7 +449,7 @@ powerforge powershell census `
     --output json
 ```
 
-The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 133 functions pass structural analysis, 103 survive graph and artifact shaping as typed CLR methods, and 30 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 8.34%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 15/281, PSWriteHTML 5/238, O365Essentials 76/282, ADEssentials 4/247, and PSWriteWord 1/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
+The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 220 functions pass structural analysis, 126 survive graph and artifact shaping as typed CLR methods, and 94 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 10.20%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 18/281, PSWriteHTML 17/238, O365Essentials 77/282, ADEssentials 6/247, and PSWriteWord 6/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and exact file content, so a changed corpus cannot silently pass merely because its aggregate counts stayed equal.
 
@@ -466,14 +466,14 @@ The current six-root run produces this leading emitted-function planning frontie
 
 | Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `parameter.type` | 1,518 | 566 | 57 | 6 | 12.96% |
-| `parameter.metadata` | 1,617 | 357 | 34 | 6 | 11.09% |
-| `parameter.default` | 829 | 357 | 31 | 6 | 10.85% |
-| `function.graph` | 30 | 30 | 30 | 3 | 10.77% |
-| `runtime.scope` | 1,594 | 385 | 29 | 6 | 10.69% |
-| `command.new-htmltab` | 22 | 22 | 22 | 1 | 10.12% |
-| `expression.conversion` | 702 | 237 | 10 | 6 | 9.15% |
-| `syntax.subexpression` | 734 | 191 | 8 | 6 | 8.99% |
+| `parameter.default` | 829 | 357 | 98 | 6 | 18.14% |
+| `function.graph` | 94 | 94 | 94 | 4 | 17.81% |
+| `runtime.scope` | 1,594 | 385 | 40 | 6 | 13.44% |
+| `command.new-htmltab` | 22 | 22 | 22 | 1 | 11.98% |
+| `syntax.memberexpression` | 18 | 18 | 18 | 5 | 11.66% |
+| `expression.conversion` | 500 | 153 | 16 | 5 | 11.50% |
+| `syntax.variableexpression` | 16 | 16 | 16 | 5 | 11.50% |
+| `syntax.subexpression` | 734 | 191 | 15 | 6 | 11.42% |
 
 This changes feature planning materially. `Register-ArgumentCompleter` leads the compatibility whole-unit frontier because it appears in many module-initialization bodies, but it disappears from the emitted-function frontier and must not be treated as 78 potential CLR methods. Likewise, a sample-specific command identifier such as `command.new-htmltab` is evidence for a generic command-boundary shape, not authorization for a product-specific compiler intrinsic. Recommendations must distinguish generic typed IR, a contract-driven PowerShell-backed command region, an authoring change, and behavior that should remain Package/Hybrid-only.
 

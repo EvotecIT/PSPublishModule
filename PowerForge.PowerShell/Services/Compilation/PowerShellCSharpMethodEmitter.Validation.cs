@@ -15,7 +15,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
             var parameterType = GetCompiledParameterType(parameter);
             var identifier = GetVariableIdentifier(name);
-            if (metadata.IsMandatory && parameterType == typeof(string))
+            if (metadata.IsMandatory && parameterType == typeof(string) && !metadata.AllowEmptyString)
             {
                 var condition = metadata.AllowNull
                     ? $"{identifier} is not null && {identifier}.Length == 0"
@@ -30,8 +30,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                     AppendLine($"if ({identifier} is null)");
                     AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow null values.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
                 }
-                AppendLine($"if ({identifier} is not null && {identifier}.Length == 0)");
-                AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                if (!metadata.AllowEmptyCollection)
+                {
+                    AppendLine($"if ({identifier} is not null && {identifier}.Length == 0)");
+                    AppendLine($"    throw new global::System.ArgumentException({PowerShellCSharpLiteral.QuoteString($"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.")}, {PowerShellCSharpLiteral.QuoteString(metadata.Name)});");
+                }
             }
             else if (metadata.IsMandatory && !metadata.AllowNull && !parameterType.IsValueType)
             {
