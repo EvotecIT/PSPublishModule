@@ -313,6 +313,16 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             arguments = arguments.Concat(new[] { "WriteVerbose", "WriteDebug", "WriteWarning" });
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
             arguments = arguments.Append("InvokePowerShellRegion");
+        if (cmdlet.Method.RequiresPowerShellRuntimeState)
+        {
+            arguments = arguments.Concat(new[]
+            {
+                "target => ShouldProcess(target)",
+                "(target, action) => ShouldProcess(target, action)",
+                "((global::System.Collections.IDictionary)SessionState.PSVariable.GetValue(\"PSVersionTable\"))[\"PSVersion\"]!",
+                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") || global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
+            });
+        }
         if (cmdlet.Method.RequiresPowerShellBoundParameters)
             arguments = arguments.Append("new global::System.Collections.Generic.HashSet<string>(MyInvocation.BoundParameters.Keys, global::System.StringComparer.OrdinalIgnoreCase)");
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({string.Join(", ", arguments)})";

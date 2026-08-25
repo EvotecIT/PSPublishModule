@@ -43,6 +43,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             arguments.AddRange(new[] { "__writeVerbose", "__writeDebug", "__writeWarning" });
         if (call.Signature.RequiresPowerShellCommandRegions)
             arguments.Add("__invokePowerShellRegion");
+        if (call.Signature.RequiresPowerShellRuntimeState)
+            arguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference" });
         if (call.Signature.RequiresPowerShellBoundParameters)
             arguments.Add(EmitBoundParameterSet(call.BoundParameterNames));
         return $"{call.Signature.GeneratedName}({string.Join(", ", arguments)})";

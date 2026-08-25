@@ -14,13 +14,15 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.PipelineParameterBinding |
         PowerShellCompilationCapability.PowerShellHostTypes |
         PowerShellCompilationCapability.PowerShellLanguageConversions |
-        PowerShellCompilationCapability.PowerShellLanguageOperators;
+        PowerShellCompilationCapability.PowerShellLanguageOperators |
+        PowerShellCompilationCapability.RuntimeStateIntrinsics;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =
         PowerShellCompilationCapability.LocalFunctionCalls |
         PowerShellCompilationCapability.BoundParameters |
-        PowerShellCompilationCapability.ExecutableParameterBinding;
+        PowerShellCompilationCapability.ExecutableParameterBinding |
+        PowerShellCompilationCapability.RuntimeStateIntrinsics;
 }
 
 /// <summary>Surfaces on which a resolved parameter type can be represented without changing its meaning.</summary>

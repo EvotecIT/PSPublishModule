@@ -238,14 +238,14 @@ public sealed partial class PowerShellCompilationAnalyzer
             localFunctionNames,
             kind == PowerShellCompilationUnitKind.Script);
 
-        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
 
         foreach (var statement in executableStatements)
         {
-            AnalyzeNode(statement, root, file, diagnostics, localVariables, capabilities, localFunctionNames);
+            AnalyzeNode(statement, root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
         }
 
         return new PowerShellCompilationUnitPlan(
@@ -263,6 +263,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
         HashSet<string> localVariables,
+        string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ISet<string>? localFunctionNames)
     {
@@ -352,6 +353,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
                     PowerShellBoundParametersPolicy.IsReference(variable) &&
                     PowerShellBoundParametersPolicy.IsSupportedReference(variable):
+                    break;
+                case VariableExpressionAst variable when
+                    unitRoot is ScriptBlockAst body &&
+                    PowerShellRuntimeStateIntrinsicPolicy.IsSupportedReference(variable, body, targetFramework, capabilities):
                     break;
                 case VariableExpressionAst variable when IsRuntimeVariable(variable, localVariables):
                     diagnostics.Add(CreateDiagnostic(
@@ -607,6 +612,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         string file,
         List<PowerShellCompilationDiagnostic> diagnostics,
         HashSet<string> localVariables,
+        string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ISet<string>? localFunctionNames)
     {
@@ -620,7 +626,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             block.Extent,
             PowerShellCompilationFeatureIds.PipelineLifecycle));
         foreach (var statement in block.Statements)
-            AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
+            AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
     }
 
     private static bool HasBlockingAncestor(Ast candidate, Ast statementRoot, Ast unitRoot)

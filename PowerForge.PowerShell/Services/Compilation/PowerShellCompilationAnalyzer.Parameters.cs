@@ -52,7 +52,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             return Array.Empty<PowerShellCompilationParameter>();
 
         foreach (var attribute in paramBlock.Attributes)
-            AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
+            AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
 
         var result = new List<PowerShellCompilationParameter>();
         foreach (var parameter in paramBlock.Parameters)
@@ -111,7 +111,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     file,
                     parameter.DefaultValue.Extent,
                     PowerShellCompilationFeatureIds.ParameterDefault));
-                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
+                AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
             }
             result.Add(new PowerShellCompilationParameter(
                 parameter.Name.VariablePath.UserPath,
@@ -130,7 +130,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 defaultValue));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
-                AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, capabilities, localFunctionNames);
+                AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
         }
 
         ValidateParameterBindingNames(paramBlock, file, diagnostics);
