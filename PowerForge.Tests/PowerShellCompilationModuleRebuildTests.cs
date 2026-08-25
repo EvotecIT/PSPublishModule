@@ -52,6 +52,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_HybridModuleReplacesMultilineTypedFunctionWithCompiledCmdlet()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "    function Get-MultilineTyped" + Environment.NewLine +
+            "    {" + Environment.NewLine +
+            "        return 42" + Environment.NewLine +
+            "    }" + Environment.NewLine +
+            "    Export-ModuleMember -Function Get-MultilineTyped",
+            ".psm1");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MultilineTyped",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal("Cmdlet:42", RunModuleProof(
+            result.ArtifactPath!,
+            "(Get-Command Get-MultilineTyped).CommandType.ToString() + ':' + (Get-MultilineTyped)"));
+    }
+
+    [Fact]
     public void Build_FileListDotSourceIsTransformedByHybridComposerWithoutCollision()
     {
         using var fixture = ArtifactFixture.Create(

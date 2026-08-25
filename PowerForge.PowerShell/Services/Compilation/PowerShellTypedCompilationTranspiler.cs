@@ -152,7 +152,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                     source.Parsed.Path,
                     source.Function.Extent.StartLineNumber,
                     source.Function.Extent.StartColumnNumber));
-                return GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+                return GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
             }))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var methods = new List<PowerShellCompiledMethod>();
@@ -175,7 +175,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             foreach (var source in functionSources)
             {
-                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
                 var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
                 if (!source.Unit.IsCompilable || duplicateFunctions.Contains(duplicateKey) || collidingFunctions.Contains(key) || excludedMethods?.Contains(key) == true)
                     continue;
@@ -232,7 +232,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         var candidates = definitions.Values
             .Where(source =>
             {
-                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber);
+                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
                 var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
                 return source.Unit.IsCompilable &&
                        !duplicateFunctions.Contains(duplicateKey) &&
@@ -428,7 +428,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.GeneratedName,
             emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
             source.Unit.Parameters,
-            source.Function.Extent.StartLineNumber,
+            source.Function.Body.Extent.StartLineNumber,
             source.Parsed.Path,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,

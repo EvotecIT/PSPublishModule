@@ -138,7 +138,7 @@ public sealed class PowerShellCompilationCensusTests
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Multiline Shape", Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "Module.psm1");
         Directory.CreateDirectory(root);
-        File.WriteAllText(source, "function InvalidName" + Environment.NewLine + "{" + Environment.NewLine + "    return 2" + Environment.NewLine + "}");
+        File.WriteAllText(source, "    function InvalidName" + Environment.NewLine + "    {" + Environment.NewLine + "        return 2" + Environment.NewLine + "    }");
         try
         {
             var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");

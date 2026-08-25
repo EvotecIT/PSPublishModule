@@ -282,7 +282,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 builder.AppendLine("    [AllowEmptyCollection]");
             if (parameter.SupportsWildcards)
                 builder.AppendLine("    [SupportsWildcards]");
-            foreach (var validation in parameter.Validations)
+            foreach (var validation in parameter.Validations.Where(validation => ShouldGenerateValidationAttribute(parameter, validation)))
                 builder.AppendLine("    " + GenerateValidationAttribute(validation));
             var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
             var initializer = parameter.IsSwitch || IsGeneratedValueType(parameter.TypeName)
@@ -487,6 +487,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             PowerShellCompilationValidationKind.Range => $"[ValidateRange({string.Join(", ", validation.Arguments)})]",
             _ => throw new InvalidOperationException($"Unsupported generated validation kind '{validation.Kind}'.")
         };
+
+    private static bool ShouldGenerateValidationAttribute(
+        PowerShellCompilationParameter parameter,
+        PowerShellCompilationValidation validation)
+        => validation.Kind != PowerShellCompilationValidationKind.NotNull ||
+           parameter.TypeName != typeof(string[]).FullName;
 
     private static string GetGeneratedTypeName(string fullName)
     {

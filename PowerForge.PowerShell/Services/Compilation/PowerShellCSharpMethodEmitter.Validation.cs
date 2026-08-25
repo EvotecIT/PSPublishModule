@@ -96,6 +96,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         foreach (var validation in parameter.Validations)
         {
+            if (validateCollectionElement &&
+                validation.Kind == PowerShellCompilationValidationKind.NotNull &&
+                valueType == typeof(string))
+            {
+                continue;
+            }
             var condition = validation.Kind switch
             {
                 PowerShellCompilationValidationKind.NotNull when !valueType.IsValueType => $"{value} is null",

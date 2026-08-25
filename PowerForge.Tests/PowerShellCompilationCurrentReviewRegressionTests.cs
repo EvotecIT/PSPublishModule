@@ -106,6 +106,38 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
+    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-StringElementCount { [CmdletBinding()] param([ValidateNotNull()] [string[]] $Values) return $Values.Length }; " +
+            "function Get-ObjectElementCount { [CmdletBinding()] param([ValidateNotNull()] [object[]] $Values) return $Values.Length }; " +
+            "Export-ModuleMember -Function Get-StringElementCount, Get-ObjectElementCount",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ValidateNotNullElements",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; " +
+            "try { 'string=' + (Get-StringElementCount -Values @('ok', $null)) } catch { 'string-rejected=' + $_.Exception.Message }; " +
+            "try { Get-ObjectElementCount -Values @([object] 'ok', $null); 'unexpected-object' } catch { 'object-rejected=' + $_.Exception.Message }");
+
+        Assert.Equal(0, run.ExitCode);
+        Assert.Contains("string=2", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("object-rejected=", run.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("unexpected-object", run.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StrictBinaryModuleRejectsRuntimeControlledExportContract()
     {
         using var fixture = ArtifactFixture.Create(

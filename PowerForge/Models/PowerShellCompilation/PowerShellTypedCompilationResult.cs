@@ -139,7 +139,7 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
 
-    /// <summary>One-based source line of the PowerShell function.</summary>
+    /// <summary>One-based source line of the PowerShell function body.</summary>
     public int SourceLine { get; }
 
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
