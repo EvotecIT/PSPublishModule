@@ -19,6 +19,19 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> Metadata { get; }
     }
 
+    private sealed class EvaluatedPublishInput
+    {
+        internal EvaluatedPublishInput(string fullPath, bool isSdkDefined)
+        {
+            FullPath = fullPath;
+            IsSdkDefined = isSdkDefined;
+        }
+
+        internal string FullPath { get; }
+
+        internal bool IsSdkDefined { get; }
+    }
+
     private static string[] ReadProjectReferenceItemListNames(
         XDocument document,
         IReadOnlyDictionary<string, string> evaluatedProperties)
@@ -154,6 +167,164 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             evaluatedItems = results;
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadEvaluatedPublishInputs(
+        ProjectEvaluationRequest request,
+        VerifiedPackageInputCatalog? verifiedPackages,
+        IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
+        IReadOnlyCollection<string> executableMsBuildInputs,
+        out EvaluatedPublishInput[] publishInputs)
+    {
+        publishInputs = Array.Empty<EvaluatedPublishInput>();
+        if (!TryReadEvaluatedProjectItemPaths(
+                request,
+                ["ResolvedFileToPublish"],
+                ["ComputeFilesToPublish"],
+                preservePublishBuildProjectReferences: false,
+                out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItems))
+        {
+            return !ContainsPotentialPublishItemMutation(
+                request.ProjectPath,
+                executableMsBuildInputs,
+                trustedBuildInfrastructureRoots);
+        }
+        if (!evaluatedItems.TryGetValue(
+                "ResolvedFileToPublish",
+                out EvaluatedProjectItem[]? resolvedFiles))
+        {
+            return true;
+        }
+
+        var results = new List<EvaluatedPublishInput>();
+        foreach (EvaluatedProjectItem item in resolvedFiles)
+        {
+            if (!item.Metadata.TryGetValue("RelativePath", out string? relativePath) ||
+                !IsControlledPublishRelativePath(relativePath))
+            {
+                return false;
+            }
+            if (verifiedPackages?.TryVerify(item.FullPath, out _) is true)
+                continue;
+
+            bool isPackageDefinition = false;
+            bool isSdkDefined = false;
+            if (item.Metadata.TryGetValue(
+                    "DefiningProjectFullPath",
+                    out string? definingProject) &&
+                !string.IsNullOrWhiteSpace(definingProject))
+            {
+                bool verifiedDefinition =
+                    verifiedPackages?.TryVerify(definingProject, out isPackageDefinition) is true;
+                isSdkDefined = !isPackageDefinition &&
+                    !verifiedDefinition &&
+                    IsTrustedExternalBuildInfrastructurePath(
+                        definingProject,
+                        trustedBuildInfrastructureRoots);
+            }
+            results.Add(new EvaluatedPublishInput(item.FullPath, isSdkDefined));
+        }
+
+        publishInputs = results.ToArray();
+        return true;
+    }
+
+    private static bool ContainsPotentialPublishItemMutation(
+        string projectPath,
+        IEnumerable<string> executableMsBuildInputs,
+        IEnumerable<string> trustedBuildInfrastructureRoots)
+    {
+        string? gitRoot = ReadGitText(
+            Path.GetDirectoryName(projectPath)!,
+            "rev-parse --show-toplevel");
+        string controlledRoot = Path.GetFullPath(
+            string.IsNullOrWhiteSpace(gitRoot)
+                ? Path.GetDirectoryName(projectPath)!
+                : gitRoot!);
+        foreach (string path in executableMsBuildInputs.Distinct(
+                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+        {
+            if (!IsSameOrBelowBuildInputPath(path, controlledRoot) ||
+                IsTrustedExternalBuildInfrastructurePath(path, trustedBuildInfrastructureRoots))
+            {
+                continue;
+            }
+
+            XDocument document;
+            try
+            {
+                document = XDocument.Load(path, LoadOptions.None);
+            }
+            catch
+            {
+                return true;
+            }
+
+            foreach (XElement element in document.Descendants().Where(candidate =>
+                         candidate.Ancestors().Any(ancestor =>
+                             ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
+            {
+                if (ControlledPublishFileItemNames.Contains(element.Name.LocalName))
+                    return true;
+                if ((element.Name.LocalName.Equals("Content", StringComparison.OrdinalIgnoreCase) ||
+                     element.Name.LocalName.Equals("None", StringComparison.OrdinalIgnoreCase)) &&
+                    element.Attributes().Any(attribute =>
+                        IsPublishItemSelectionAttribute(attribute.Name.LocalName) ||
+                        attribute.Name.LocalName.Equals("CopyToPublishDirectory", StringComparison.OrdinalIgnoreCase)) &&
+                    (element.Attributes().Any(attribute =>
+                         attribute.Name.LocalName.Equals("CopyToPublishDirectory", StringComparison.OrdinalIgnoreCase)) ||
+                     element.Elements().Any(metadata =>
+                         metadata.Name.LocalName.Equals("CopyToPublishDirectory", StringComparison.OrdinalIgnoreCase))))
+                {
+                    return true;
+                }
+                if (!element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string? itemName = element.Attributes().FirstOrDefault(attribute =>
+                    attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase))?.Value;
+                if (string.IsNullOrWhiteSpace(itemName))
+                    continue;
+                string decoded = DecodeMsBuildEscapes(itemName!).Trim();
+                if (ContainsUnresolvedBuildExpression(decoded) ||
+                    ControlledPublishFileItemNames.Contains(decoded) ||
+                    decoded.Equals("Content", StringComparison.OrdinalIgnoreCase) ||
+                    decoded.Equals("None", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPublishItemSelectionAttribute(string name)
+        => name.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Update", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsControlledPublishRelativePath(string value)
+    {
+        string candidate = DecodeMsBuildEscapes(value).Trim().Trim('\'', '"');
+        if (candidate.Length == 0 ||
+            Path.IsPathRooted(candidate) ||
+            ContainsUnresolvedBuildExpression(candidate) ||
+            ContainsUncontrolledEnvironmentReference(candidate) ||
+            ContainsUncontrolledAmbientPropertyFunction(candidate))
+        {
+            return false;
+        }
+
+        try
+        {
+            string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "powerforge-publish-root"));
+            string destination = Path.GetFullPath(Path.Combine(root, candidate));
+            return IsSameOrBelowBuildInputPath(destination, root);
         }
         catch
         {

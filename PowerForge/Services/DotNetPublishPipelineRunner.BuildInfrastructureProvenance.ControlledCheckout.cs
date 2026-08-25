@@ -313,6 +313,39 @@ public sealed partial class DotNetPublishPipelineRunner
             value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
+    internal static bool ContainsUncontrolledAmbientPropertyFunction(string value)
+    {
+        value = DecodeMsBuildEscapes(value);
+        string[] prefixes =
+        {
+            "$([System.Environment]::",
+            "$([System.DateTime]::",
+            "$([System.DateTimeOffset]::",
+            "$([System.Guid]::",
+            "$([System.Random]::",
+            "$([System.Security.Cryptography.RandomNumberGenerator]::",
+            "$([System.Globalization.CultureInfo]::",
+            "$([System.TimeZoneInfo]::",
+            "$([System.Diagnostics.Process]::",
+            "$([System.Reflection.Assembly]::",
+            "$([System.Runtime.InteropServices.RuntimeInformation]::",
+            "$([System.OperatingSystem]::",
+            "$([System.AppContext]::",
+            "$([Microsoft.Win32.Registry]::",
+            "$([MSBuild]::GetRegistryValue(",
+            "$([MSBuild]::GetRegistryValueFromView(",
+            "$([MSBuild]::DoesTaskHostExist(",
+            "$([MSBuild]::GetCurrentToolsDirectory(",
+            "$([MSBuild]::GetToolsDirectory",
+            "$([MSBuild]::GetVsInstallRoot(",
+            "$([MSBuild]::GetProgramFiles32(",
+            "$([MSBuild]::IsOSPlatform(",
+            "$([MSBuild]::IsOSUnixLike("
+        };
+        return prefixes.Any(prefix =>
+            value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
     private static bool ContainsValueProducingPropertyFunction(string value)
     {
         value = DecodeMsBuildEscapes(value);

@@ -77,6 +77,40 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
+    private static bool IsTrustedSdkGeneratedPublishInput(
+        string path,
+        IEnumerable<string>? outputRoots,
+        string projectDirectory,
+        IEnumerable<string> evaluatedProjectDirectories)
+    {
+        foreach (string root in outputRoots ?? Array.Empty<string>())
+        {
+            try
+            {
+                string traversalBoundary = FindCommonBuildInputPathRoot(root, projectDirectory);
+                if (!IsSameOrBelowBuildInputPath(path, root) ||
+                    evaluatedProjectDirectories.Any(directory =>
+                        IsSameOrBelowBuildInputPath(directory, root)) ||
+                    IsTrackedProjectOutputPath(path, projectDirectory) ||
+                    !HasSinglePhysicalLink(path) ||
+                    IsReparsePointPath(root) ||
+                    IsReparsePointPath(traversalBoundary) ||
+                    HasReparsePointBelowRoot(path, traversalBoundary))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+            catch
+            {
+                // SDK-generated publish inputs are trusted only with proven physical containment.
+            }
+        }
+
+        return false;
+    }
+
     private static bool HasSinglePhysicalLink(string path)
     {
         try
@@ -686,6 +720,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string? intermediateOutputPath,
             string? pathMap,
             GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs,
+            EvaluatedPublishInput[] publishInputs,
             VerifiedPackageInputCatalog? verifiedPackages)
         {
             BuildInputs = buildInputs;
@@ -699,6 +734,7 @@ public sealed partial class DotNetPublishPipelineRunner
             IntermediateOutputPath = intermediateOutputPath;
             PathMap = pathMap;
             GeneratedProjectReferenceOutputs = generatedProjectReferenceOutputs;
+            PublishInputs = publishInputs;
             VerifiedPackages = verifiedPackages;
         }
 
@@ -713,6 +749,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? IntermediateOutputPath { get; }
         internal string? PathMap { get; }
         internal GeneratedProjectReferenceOutput[] GeneratedProjectReferenceOutputs { get; }
+        internal EvaluatedPublishInput[] PublishInputs { get; }
         internal VerifiedPackageInputCatalog? VerifiedPackages { get; }
     }
 

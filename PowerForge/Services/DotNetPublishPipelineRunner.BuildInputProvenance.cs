@@ -311,13 +311,16 @@ public sealed partial class DotNetPublishPipelineRunner
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var generatedRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var projectDirectoriesByEvaluation = new Dictionary<string, string>(StringComparer.Ordinal);
         var buildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var msBuildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
         var verifiedPackagesByEvaluation = new Dictionary<string, VerifiedPackageInputCatalog?>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
+        var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
@@ -359,7 +362,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (string input in evaluation.SourceInputs)
                     sourceInputs.Add(input);
                 outputRootsByEvaluation[visitKey] = evaluation.OutputRoots;
+                generatedRootsByEvaluation[visitKey] = evaluation.OutputRoots
+                    .Concat(new[] { evaluation.IntermediateRoot, evaluation.IntermediateOutputPath })
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path!))
+                    .Distinct(comparison)
+                    .ToArray();
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
+                projectDirectoriesByEvaluation[visitKey] = projectDirectory;
                 buildInputsByEvaluation[visitKey] = evaluation.BuildInputs
                     .Concat(new[] { request.ProjectPath })
                     .Distinct(comparison)
@@ -369,6 +379,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 verifiedPackagesByEvaluation[visitKey] = evaluation.VerifiedPackages;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
+                evaluatedPublishInputs.AddRange(
+                    evaluation.PublishInputs.Select(input => (visitKey, input)));
                 if (string.IsNullOrEmpty(request.TargetFramework))
                 {
                     if (evaluation.TargetFrameworks.Length > 0)
@@ -387,6 +399,25 @@ public sealed partial class DotNetPublishPipelineRunner
                     foreach (EvaluatedProjectReference projectReference in evaluation.ProjectReferences)
                         pending.Enqueue(request.ForProject(projectReference));
                 }
+            }
+        }
+
+        foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
+        {
+            bool trustedGeneratedOutput = publishInput.IsSdkDefined &&
+                IsTrustedSdkGeneratedPublishInput(
+                    publishInput.FullPath,
+                    generatedRootsByEvaluation[evaluationKey],
+                    projectDirectoriesByEvaluation[evaluationKey],
+                    directories);
+            if (trustedGeneratedOutput)
+                continue;
+
+            buildInputs.Add(publishInput.FullPath);
+            if (File.Exists(publishInput.FullPath) &&
+                !IsTrustedExternalBuildInfrastructurePath(publishInput.FullPath))
+            {
+                sourceInputs.Add(publishInput.FullPath);
             }
         }
 
@@ -625,6 +656,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var expectedOutputPaths = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var generatedProjectReferenceOutputs = new List<GeneratedProjectReferenceOutput>();
+            EvaluatedPublishInput[] publishInputs = Array.Empty<EvaluatedPublishInput>();
             string? intermediateRoot = null;
             string? intermediateOutputPath = null;
             string? pathMap = null;
@@ -691,6 +723,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         verifiedPackageArchives);
                 string[] trustedBuildInfrastructureRoots =
                     ReadTrustedBuildInfrastructureRoots(properties, Path.GetDirectoryName(request.ProjectPath)!);
+                string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
+                string? msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
                 AddSemicolonSeparatedPathValues(
                     properties,
                     "MSBuildAllProjects",
@@ -710,6 +744,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     importPaths));
                 if (verifiedPackages is not null &&
                     !verifiedPackages.TrySetControlledBuildInputs(importPaths))
+                {
+                    return false;
+                }
+                if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
+                    !TryReadEvaluatedPublishInputs(
+                        request,
+                        verifiedPackages,
+                        trustedBuildInfrastructureRoots,
+                        importPaths,
+                        out publishInputs))
                 {
                     return false;
                 }
@@ -768,8 +812,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         ReadProjectReferenceOutputKeys(items, "EmbeddedResource");
                     HashSet<string> analyzerProjectReferences =
                         ReadProjectReferenceOutputKeys(items, "Analyzer");
-                    string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
-                    string? msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
                     foreach (string itemName in EvaluatedBuildItemNames)
                     {
                         if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
@@ -943,6 +985,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 intermediateOutputPath,
                 pathMap,
                 generatedProjectReferenceOutputs.ToArray(),
+                publishInputs,
                 verifiedPackages);
             return true;
         }

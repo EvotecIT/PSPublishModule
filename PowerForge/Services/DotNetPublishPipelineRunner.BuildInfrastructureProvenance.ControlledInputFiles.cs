@@ -105,6 +105,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 Path.GetDirectoryName(path)!,
                                 checkoutRoot) ||
                             ContainsUncontrolledEnvironmentReference(value) ||
+                            ContainsUncontrolledAmbientPropertyFunction(value) ||
                             ContainsUncontrolledFileSystemPropertyFunction(value) ||
                             ContainsUnresolvedBuildExpression(value)))
                     {
@@ -159,6 +160,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                       Path.GetDirectoryName(path)!,
                                       checkoutRoot) ||
                                   ContainsUncontrolledEnvironmentReference(value) ||
+                                  ContainsUncontrolledAmbientPropertyFunction(value) ||
                                   ContainsUncontrolledFileSystemPropertyFunction(value)))
                 {
                     return false;

@@ -90,6 +90,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     taskInputAllowedRoot) ||
                 ContainsUncontrolledEnvironmentReference(value) ||
+                ContainsUncontrolledAmbientPropertyFunction(value) ||
                 ContainsUncontrolledFileSystemPropertyFunction(value) ||
                 ContainsUnresolvedBuildExpression(value)))
         {

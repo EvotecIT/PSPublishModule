@@ -68,7 +68,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["GenerateTrustInfo"] = ["TrustInfoFile"],
             ["LC"] = ["OutputLicense"],
             ["MakeDir"] = ["Directories"],
-            ["Move"] = ["DestinationFiles"],
+            ["Move"] = ["DestinationFiles", "DestinationFolder"],
             ["RemoveDir"] = ["Directories"],
             ["Touch"] = ["Files"],
             ["Unzip"] = ["DestinationFolder"],

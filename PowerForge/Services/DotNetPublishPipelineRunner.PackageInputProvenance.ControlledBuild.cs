@@ -265,6 +265,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                               packageDirectory,
                                               "package-root") ||
                                           ContainsUncontrolledEnvironmentReference(value) ||
+                                          ContainsUncontrolledAmbientPropertyFunction(value) ||
                                           ContainsUncontrolledFileSystemPropertyFunction(value)))
                     {
                         return false;

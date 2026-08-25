@@ -71,6 +71,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     return false;
                 }
+                if (IsExecutableTransformTaskInput(task.Name.LocalName, attribute.Name.LocalName) &&
+                    !string.IsNullOrWhiteSpace(attribute.Value))
+                {
+                    return false;
+                }
                 if (IsUncontrolledCompilerFreeFormTaskInput(
                         task.Name.LocalName,
                         attribute.Name.LocalName) &&
@@ -177,6 +182,10 @@ public sealed partial class DotNetPublishPipelineRunner
             taskName.Equals("Vbc", StringComparison.OrdinalIgnoreCase) ||
             taskName.Equals("Fsc", StringComparison.OrdinalIgnoreCase)) &&
            attributeName.Equals("Analyzers", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExecutableTransformTaskInput(string taskName, string attributeName)
+        => taskName.Equals("XslTransformation", StringComparison.OrdinalIgnoreCase) &&
+           attributeName.Equals("XslCompiledDllPath", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsUncontrolledCompilerFreeFormTaskInput(
         string taskName,
