@@ -11,13 +11,19 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments)
     {
-        var pending = new Queue<string>(document.Descendants()
+        IEnumerable<string> taskInputs = document.Descendants()
             .Where(IsControlledBuildTaskElement)
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
-                !attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase) &&
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
-            .Select(attribute => attribute.Value));
+            .Select(attribute => attribute.Value);
+        IEnumerable<string> conditions = document.Descendants()
+            .SelectMany(element => element.Attributes())
+            .Where(attribute => attribute.Name.LocalName.Equals(
+                "Condition",
+                StringComparison.OrdinalIgnoreCase))
+            .Select(attribute => attribute.Value);
+        var pending = new Queue<string>(taskInputs.Concat(conditions));
         var inspected = new HashSet<string>(StringComparer.Ordinal);
         while (pending.Count > 0)
         {
@@ -114,7 +120,10 @@ public sealed partial class DotNetPublishPipelineRunner
                      .Where(element =>
                          element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
                          element.Parent is not null &&
-                         IsControlledBuildTaskElement(element.Parent)))
+                         IsControlledBuildTaskElement(element.Parent) &&
+                         !element.Parent.Name.LocalName.Equals(
+                             "ReadLinesFromFile",
+                             StringComparison.OrdinalIgnoreCase)))
         {
             string? assignedName = output.Attributes()
                 .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(

@@ -37,7 +37,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool HasOnlyControlledBuildFileInputs(
+    internal static bool HasOnlyControlledBuildFileInputs(
         string checkoutRoot,
         IReadOnlyCollection<string> controlledInputs)
     {
@@ -87,6 +87,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     continue;
                 }
+                if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!HasOnlyControlledResourceFileInputs(document, path, checkoutRoot))
+                        return false;
+                    continue;
+                }
                 if (!knownProjectExtension &&
                     (document.Root is null ||
                      !document.Root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase)))
@@ -100,7 +106,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         document,
                         path,
                         checkoutRoot,
-                        ReadControlledCheckoutTextInput))
+                        ReadControlledCheckoutTextInput) ||
+                    !HasOnlyControlledLiteralTaskFileInputs(document, path, checkoutRoot))
                 {
                     return false;
                 }
@@ -136,6 +143,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
                document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
+            (IsControlledBuildTaskElement(element) &&
+             element.Attributes().Any(attribute =>
+                 attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
+                 attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase))) ||
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
              (IsAmbientBuildDiscoveryTask(element.Name.LocalName) ||

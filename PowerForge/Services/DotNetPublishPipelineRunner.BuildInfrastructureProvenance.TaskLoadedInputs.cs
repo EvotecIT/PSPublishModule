@@ -6,6 +6,19 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private const long MaximumControlledBuildTextInputBytes = 4L * 1024L * 1024L;
 
+    private static readonly IReadOnlyDictionary<string, string[]> ControlledTaskFileInputAttributes =
+        new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["AL"] = ["EmbedResources", "LinkResources", "Sources", "TemplateFile", "Win32Icon", "Win32Resource"],
+            ["Copy"] = ["SourceFiles"],
+            ["Csc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"],
+            ["Fsc"] = ["Sources", "Win32Icon", "Win32Resource"],
+            ["GenerateResource"] = ["References", "Sources", "StateFile"],
+            ["GetFileHash"] = ["Files"],
+            ["Hash"] = ["Items"],
+            ["Vbc"] = ["ApplicationConfiguration", "Resources", "Sources", "Win32Icon", "Win32Resource"]
+        };
+
     private static bool HasOnlyControlledTaskLoadedFileInputs(
         XDocument document,
         string declaringPath,
@@ -41,6 +54,99 @@ public sealed partial class DotNetPublishPipelineRunner
                     ContainsUnresolvedBuildExpression(value)))
             {
                 return false;
+            }
+            foreach (string value in lines)
+            {
+                string candidate = DecodeMsBuildEscapes(value).Trim().Trim('\'', '"');
+                if (candidate.Length == 0 || ContainsUnresolvedBuildExpression(candidate))
+                    continue;
+                if (TryResolveControlledTaskInputPath(
+                        candidate,
+                        declaringPath,
+                        allowedRoot,
+                        out string loadedInputPath) &&
+                    (File.Exists(loadedInputPath) || Directory.Exists(loadedInputPath)) &&
+                    HasReparsePointBelowRoot(loadedInputPath, allowedRoot))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasOnlyControlledResourceFileInputs(
+        XDocument document,
+        string declaringPath,
+        string allowedRoot)
+    {
+        foreach (XElement data in document.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("data", StringComparison.OrdinalIgnoreCase) &&
+                     element.Attributes().Any(attribute =>
+                         attribute.Name.LocalName.Equals("type", StringComparison.OrdinalIgnoreCase) &&
+                         attribute.Value.IndexOf("ResXFileRef", StringComparison.OrdinalIgnoreCase) >= 0)))
+        {
+            string? value = data.Elements()
+                .FirstOrDefault(element => element.Name.LocalName.Equals(
+                    "value",
+                    StringComparison.OrdinalIgnoreCase))?
+                .Value;
+            string fileValue = value?.Split(new[] { ';' }, 2)[0].Trim() ?? string.Empty;
+            if (fileValue.Length == 0 ||
+                !TryResolveControlledTaskInputPath(
+                    fileValue,
+                    declaringPath,
+                    allowedRoot,
+                    out string inputPath) ||
+                !File.Exists(inputPath) ||
+                HasReparsePointBelowRoot(inputPath, allowedRoot))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasOnlyControlledLiteralTaskFileInputs(
+        XDocument document,
+        string declaringPath,
+        string allowedRoot)
+    {
+        foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
+        {
+            if (!ControlledTaskFileInputAttributes.TryGetValue(
+                    task.Name.LocalName,
+                    out string[]? inputAttributes))
+            {
+                continue;
+            }
+
+            foreach (XAttribute attribute in task.Attributes().Where(attribute =>
+                         inputAttributes.Contains(attribute.Name.LocalName, StringComparer.OrdinalIgnoreCase)))
+            {
+                foreach (string value in DecodeMsBuildEscapes(attribute.Value).Split(';'))
+                {
+                    string candidate = value.Trim().Trim('\'', '"');
+                    if (candidate.Length == 0 || ContainsUnresolvedBuildExpression(candidate))
+                        continue;
+                    if (candidate.IndexOf('*') >= 0 || candidate.IndexOf('?') >= 0)
+                        return false;
+                    if (!TryResolveControlledTaskInputPath(
+                            candidate,
+                            declaringPath,
+                            allowedRoot,
+                            out string inputPath))
+                    {
+                        return false;
+                    }
+                    if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
+                        HasReparsePointBelowRoot(inputPath, allowedRoot))
+                    {
+                        return false;
+                    }
+                }
             }
         }
 
