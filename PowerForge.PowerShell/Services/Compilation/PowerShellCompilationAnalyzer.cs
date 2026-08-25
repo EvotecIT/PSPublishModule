@@ -677,7 +677,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static bool IsExportModuleMemberStatement(StatementAst statement)
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
            pipeline.PipelineElements[0] is CommandAst command &&
-           command.GetCommandName()?.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) == true;
+           PowerShellModuleExportContract.IsExportModuleMember(command);
 
     private static bool HasUnsupportedNamedBlocks(ScriptBlockAst scriptBlock)
         => scriptBlock.DynamicParamBlock is not null || scriptBlock.BeginBlock is not null || scriptBlock.ProcessBlock is not null || GetNamedBlock(scriptBlock, "CleanBlock") is not null;

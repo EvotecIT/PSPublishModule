@@ -110,7 +110,7 @@ internal sealed class PowerShellModuleExportContract
         return TryRead(ast);
     }
 
-    private static bool IsExportModuleMember(CommandAst command)
+    internal static bool IsExportModuleMember(CommandAst command)
         => command.GetCommandName() is { } name &&
            (name.Equals("Export-ModuleMember", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("Microsoft.PowerShell.Core\\Export-ModuleMember", StringComparison.OrdinalIgnoreCase));

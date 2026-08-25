@@ -180,7 +180,19 @@ internal static class PowerShellPackagedScriptRewriter
     {
         foreach (var member in ast.FindAll(static node => node is MemberExpressionAst, searchNestedScriptBlocks: true).Cast<MemberExpressionAst>())
         {
-            if (!IsTopLevelInvocationPath(member, ast)) continue;
+            if (IsTopLevelMyCommandReference(member, ast) &&
+                !(member.Parent is MemberExpressionAst parent && ReferenceEquals(parent.Expression, member)))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not preserve the top-level invocation command object '{member.Extent.Text}'; inspect one of the explicitly supported MyCommand members instead.");
+            }
+            if (!IsTopLevelInvocationMetadata(member, ast)) continue;
+            if (member.Member is not StringConstantExpressionAst name ||
+                !IsSupportedInvocationMetadata(name.Value))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not preserve top-level invocation metadata '{member.Extent.Text}'. Supported MyCommand members are Path, Definition, Name, and CommandType.");
+            }
             yield return member;
         }
     }
@@ -246,18 +258,27 @@ internal static class PowerShellPackagedScriptRewriter
         }
     }
 
-    private static bool IsTopLevelInvocationPath(MemberExpressionAst member, ScriptBlockAst root)
+    private static bool IsTopLevelInvocationMetadata(MemberExpressionAst member, ScriptBlockAst root)
     {
-        if (member.Member is not StringConstantExpressionAst path ||
-            (!path.Value.Equals("Path", StringComparison.OrdinalIgnoreCase) &&
-             !path.Value.Equals("Definition", StringComparison.OrdinalIgnoreCase) &&
-             !path.Value.Equals("Name", StringComparison.OrdinalIgnoreCase)) ||
-            member.Expression is not MemberExpressionAst command ||
-            command.Member is not StringConstantExpressionAst myCommand || !myCommand.Value.Equals("MyCommand", StringComparison.OrdinalIgnoreCase) ||
-            command.Expression is not VariableExpressionAst invocation || !invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
+        if (member.Expression is not MemberExpressionAst command ||
+            !IsTopLevelMyCommandReference(command, root))
             return false;
 
-        for (var parent = member.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
+        return IsTopLevel(member, root);
+    }
+
+    private static bool IsTopLevelMyCommandReference(MemberExpressionAst member, ScriptBlockAst root)
+    {
+        if (member.Member is not StringConstantExpressionAst myCommand || !myCommand.Value.Equals("MyCommand", StringComparison.OrdinalIgnoreCase) ||
+            member.Expression is not VariableExpressionAst invocation || !invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return IsTopLevel(member, root);
+    }
+
+    private static bool IsTopLevel(Ast node, ScriptBlockAst root)
+    {
+        for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
         {
             if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
                 parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, root))
@@ -266,10 +287,21 @@ internal static class PowerShellPackagedScriptRewriter
         return true;
     }
 
+    private static bool IsSupportedInvocationMetadata(string name)
+        => name.Equals("Path", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Definition", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("CommandType", StringComparison.OrdinalIgnoreCase);
+
     private static string GetInvocationMetadataExpression(MemberExpressionAst member, string commandPathExpression)
-        => member.Member is StringConstantExpressionAst name && name.Value.Equals("Name", StringComparison.OrdinalIgnoreCase)
-            ? "$([System.IO.Path]::GetFileName(" + commandPathExpression + "))"
-            : commandPathExpression;
+        => member.Member is StringConstantExpressionAst name
+            ? name.Value.ToUpperInvariant() switch
+            {
+                "NAME" => "$([System.IO.Path]::GetFileName(" + commandPathExpression + "))",
+                "COMMANDTYPE" => "([System.Management.Automation.CommandTypes]::ExternalScript)",
+                _ => commandPathExpression
+            }
+            : throw new InvalidOperationException("Packaged invocation metadata must use a literal member name.");
 
     private static void ValidateHostInteraction(ScriptBlockAst ast)
     {

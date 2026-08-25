@@ -256,6 +256,49 @@ public sealed class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
+    public void Build_PackagedExecutablePreservesExternalScriptCommandType()
+    {
+        using var fixture = ArtifactFixture.Create("$MyInvocation.MyCommand.CommandType");
+        var result = BuildExecutable(fixture, "PowerForge.PackageCommandType", PowerShellCompilationMode.Package);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal((0, "ExternalScript", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Theory]
+    [InlineData("$MyInvocation.MyCommand.ModuleName")]
+    [InlineData("$MyInvocation.MyCommand")]
+    public void Build_PackagedExecutableRejectsUnmodeledTopLevelMyCommandMetadata(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.PackageUnsupportedMetadata", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("MyCommand", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModuleAcceptsQualifiedLiteralExportCommand()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-QualifiedStrictValue { return 29 }; Microsoft.PowerShell.Core\\Export-ModuleMember -Function Get-QualifiedStrictValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.QualifiedStrictExport",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-QualifiedStrictValue");
+        Assert.Equal((0, "29", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_PackagedExecutableConvertsExplicitBooleanParameterValues()
     {
         using var fixture = ArtifactFixture.Create("param([bool] $Flag); return $Flag");
