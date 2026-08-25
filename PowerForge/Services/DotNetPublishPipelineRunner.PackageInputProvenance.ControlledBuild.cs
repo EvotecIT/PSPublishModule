@@ -273,14 +273,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach ((XDocument document, string declaringPath) in executableDocuments)
                 {
                     if (ContainsControlledBuildPropertyEscape(document) ||
-                        !HasOnlyControlledTaskLoadedFileInputs(
-                            document,
-                            declaringPath,
-                            controlledProjectDirectory,
-                            "package-root",
-                            controlledSourceRoot,
-                            path => ReadControlledPackageOrProjectTextInput(path, controlledSourceRoot)) ||
-                        !HasOnlyControlledLiteralTaskFileInputs(
+                        !HasOnlyControlledDocumentTaskFileInputs(
                             document,
                             declaringPath,
                             controlledProjectDirectory,

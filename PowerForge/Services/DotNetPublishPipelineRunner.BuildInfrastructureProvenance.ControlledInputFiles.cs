@@ -149,14 +149,7 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach ((XDocument document, string path) in executableDocuments)
             {
                 if (ContainsControlledBuildPropertyEscape(document) ||
-                    !HasOnlyControlledTaskLoadedFileInputs(
-                        document,
-                        path,
-                        normalizedTaskInputBaseDirectory,
-                        checkoutRoot,
-                        checkoutRoot,
-                        ReadControlledCheckoutTextInput) ||
-                    !HasOnlyControlledLiteralTaskFileInputs(
+                    !HasOnlyControlledDocumentTaskFileInputs(
                         document,
                         path,
                         normalizedTaskInputBaseDirectory,
@@ -201,6 +194,7 @@ public sealed partial class DotNetPublishPipelineRunner
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
              (IsAmbientBuildDiscoveryTask(element.Name.LocalName) ||
+              IsExecutableCodeLoadingTask(element.Name.LocalName) ||
               element.Name.LocalName.Equals("DownloadFile", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
@@ -218,7 +212,12 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        foreach (string assignment in DecodeMsBuildEscapes(value!).Split(';'))
+        return ContainsUncontrolledEnvironmentAssignments(value!);
+    }
+
+    private static bool ContainsUncontrolledEnvironmentAssignments(string value)
+    {
+        foreach (string assignment in DecodeMsBuildEscapes(value).Split(';'))
         {
             string candidate = assignment.Trim().Trim('\'', '"');
             if (candidate.Length == 0)
@@ -235,6 +234,13 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         return false;
     }
+
+    private static bool IsExecutableCodeLoadingTask(string taskName)
+        => taskName.Equals("AspNetCompiler", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("LC", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("RegisterAssembly", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("SGen", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("UnregisterAssembly", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAmbientBuildDiscoveryTask(string taskName)
         => taskName.Equals("ResolveAssemblyReference", StringComparison.OrdinalIgnoreCase) ||

@@ -803,8 +803,6 @@ public sealed partial class DotNetPublishPipelineRunner
                                 continue;
                             }
                             string fullPath = Path.GetFullPath(fullPathElement.GetString()!);
-                            if (IsBelowGeneratedBuildRoot(fullPath, generatedBuildRoots))
-                                continue;
                             if (itemName.Equals("ProjectReference", StringComparison.Ordinal))
                             {
                                 inputs.Add(fullPath);
@@ -831,8 +829,9 @@ public sealed partial class DotNetPublishPipelineRunner
                                     mainEvaluationReferenceKeys.Add(referenceKey);
                                     rawReferences[referenceKey] = rawReference;
                                 }
+                                continue;
                             }
-                            else if (TryReadGeneratedProjectReferenceOutputs(
+                            if (TryReadGeneratedProjectReferenceOutputs(
                                          itemName,
                                          fullPath,
                                          item,
@@ -851,7 +850,25 @@ public sealed partial class DotNetPublishPipelineRunner
                                 generatedProjectReferenceOutputs.AddRange(generatedOutputs);
                                 continue;
                             }
-                            else if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
+                            if (IsBelowGeneratedBuildRoot(fullPath, generatedBuildRoots))
+                                continue;
+                            if (itemName.Equals("EmbeddedResource", StringComparison.Ordinal) &&
+                                TryResolveEvaluatedItemPath(
+                                    item,
+                                    "DependentUpon",
+                                    Path.GetDirectoryName(fullPath)!,
+                                    out string? dependentUponPath))
+                            {
+                                AddClassifiedEvaluatedInput(
+                                    dependentUponPath!,
+                                    isSourceInput: true,
+                                    inputs,
+                                    sourceInputs,
+                                    generatedBuildRoots,
+                                    verifiedPackages,
+                                    trustedBuildInfrastructureRoots);
+                            }
+                            if (!itemName.Equals("None", StringComparison.Ordinal) || IsOutputRelevantNoneItem(item))
                             {
                                 bool isSourceInput = EvaluatedSourceItemNames.Contains(itemName) ||
                                     (itemName.Equals("None", StringComparison.Ordinal) && IsOutputRelevantNoneItem(item));

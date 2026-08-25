@@ -42,10 +42,29 @@ public sealed partial class DotNetPublishPipelineRunner
             "Win32Resource"
         };
 
+    private static readonly ISet<string> ControlledSdkEnvironmentProperties =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AlEnvironment",
+            "CscEnvironment",
+            "VbcEnvironment"
+        };
+
     private static bool ContainsUncontrolledTaskInputPropertyFunction(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments)
     {
+        if (relatedDocuments
+            .SelectMany(related => related.Descendants())
+            .Where(element =>
+                element.Parent is not null &&
+                element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName))
+            .Any(element => ContainsUncontrolledEnvironmentAssignments(element.Value)))
+        {
+            return true;
+        }
+
         IEnumerable<string> taskInputs = document.Descendants()
             .Where(IsControlledBuildTaskElement)
             .SelectMany(element => element.Attributes())
