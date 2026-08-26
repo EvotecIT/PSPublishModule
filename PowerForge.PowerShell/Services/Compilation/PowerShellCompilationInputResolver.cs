@@ -138,13 +138,13 @@ public sealed class PowerShellCompilationInputResolver
                 "A loose BinaryModule file set requires Strict mode because it has no script-module entrypoint in which unsupported functions could be preserved. Point to a module root for Hybrid fallback.");
 
         var sourcePath = requestedPaths[0];
-        var moduleRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        var moduleRoot = FindCommonSourceRoot(requestedPaths);
         foreach (var requestedPath in requestedPaths)
         {
             PowerShellCompilationPathSafety.EnsureContained(
                 moduleRoot,
                 requestedPath,
-                $"Loose compilation source '{requestedPath}' must be contained by the first source directory '{moduleRoot}'.");
+                $"Loose compilation source '{requestedPath}' must be contained by the common source directory '{moduleRoot}'.");
             PowerShellCompilationPathSafety.EnsureNoLinks(
                 moduleRoot,
                 requestedPath,
@@ -161,6 +161,22 @@ public sealed class PowerShellCompilationInputResolver
             resolvedMode,
             requestedPaths,
             requestedPaths);
+    }
+
+    private static string FindCommonSourceRoot(IReadOnlyCollection<string> sourcePaths)
+    {
+        var first = sourcePaths.First();
+        var candidate = Path.GetDirectoryName(first) ?? Directory.GetCurrentDirectory();
+        while (!string.IsNullOrWhiteSpace(candidate))
+        {
+            var prefix = Path.GetFullPath(candidate)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (sourcePaths.All(path => PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(path), prefix)))
+                return candidate!;
+            candidate = Directory.GetParent(candidate)?.FullName;
+        }
+
+        throw new InvalidOperationException("Loose compilation sources must share a common filesystem root.");
     }
 
     /// <summary>Resolves a script, module manifest, script module, or module directory into one build input.</summary>

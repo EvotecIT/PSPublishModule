@@ -314,8 +314,8 @@ internal static class PowerShellPackagedScriptRewriter
         => member.Expression is VariableExpressionAst invocation &&
            invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) &&
            !IsTopLevel(member, root) &&
-           member.Member is StringConstantExpressionAst name &&
-           (name.Value.Equals("ScriptName", StringComparison.OrdinalIgnoreCase) ||
+           (member.Member is not StringConstantExpressionAst name ||
+            name.Value.Equals("ScriptName", StringComparison.OrdinalIgnoreCase) ||
             name.Value.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsSupportedMyInvocationReceiver(VariableExpressionAst invocation)

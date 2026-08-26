@@ -483,6 +483,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [Theory]
     [InlineData("function Get-CallerPath { $MyInvocation.ScriptName }; Get-CallerPath")]
     [InlineData("function Get-CallerPath { $invocation = $MyInvocation; $invocation.PSScriptRoot }; Get-CallerPath")]
+    [InlineData("function Get-CallerPath { $member = 'ScriptName'; $MyInvocation.$member }; Get-CallerPath")]
     public void Build_PackagedExecutableRejectsNestedCallerPathMetadata(string source)
     {
         using var fixture = ArtifactFixture.Create(source);
@@ -491,6 +492,57 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.False(result.Succeeded);
         Assert.Contains("invocation metadata", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesAliasTargetAvailabilityBeforeDeclaration()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "Set-Alias Invoke-Later Get-Later; try { $script:before = Invoke-Later } catch { $script:before = 'missing' }; " +
+            "function Get-Later { [CmdletBinding()] param(); return 'later' }; " +
+            "function Get-Before { [CmdletBinding()] param(); return $script:before }; " +
+            "Export-ModuleMember -Function Get-Later, Get-Before",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AliasTargetTiming",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Contains(result.Manifest!.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("command-availability timing", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-Before; Get-Later");
+        Assert.Equal((0, "missing" + Environment.NewLine + "later", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridModuleRoutesDecimalArithmeticObservedByRuntimeExceptionCatchToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-DecimalRoute { try { return [decimal] 1 / [decimal] 0 } " +
+            "catch [System.Management.Automation.RuntimeException] { return [object] 'runtime' } }; " +
+            "Export-ModuleMember -Function Get-DecimalRoute",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DecimalRuntimeCatch",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-DecimalRoute");
+        Assert.Equal((0, "runtime", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]

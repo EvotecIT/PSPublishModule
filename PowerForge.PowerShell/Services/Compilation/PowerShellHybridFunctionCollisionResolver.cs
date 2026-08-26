@@ -163,6 +163,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
 
     private static bool ReferencesFunction(CommandAst command, string functionName, ScriptBlockAst root)
     {
+        if (ReferencesAliasTarget(command, functionName))
+            return true;
         if (command.GetCommandName()?.Equals(functionName, StringComparison.OrdinalIgnoreCase) == true)
             return true;
         var commandName = command.GetCommandName();
@@ -200,6 +202,45 @@ internal static class PowerShellHybridFunctionCollisionResolver
             return true;
         }
         return true;
+    }
+
+    private static bool ReferencesAliasTarget(CommandAst command, string functionName)
+    {
+        var commandName = command.GetCommandName();
+        if (string.IsNullOrWhiteSpace(commandName) ||
+            !commandName.Equals("Set-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.EndsWith("\\Set-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.Equals("sal", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.Equals("New-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.EndsWith("\\New-Alias", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.Equals("nal", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var elements = command.CommandElements.Skip(1).ToArray();
+        var positional = new List<StringConstantExpressionAst>();
+        for (var index = 0; index < elements.Length; index++)
+        {
+            if (elements[index] is CommandParameterAst parameter)
+            {
+                if (parameter.ParameterName.Equals("Value", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (parameter.Argument is StringConstantExpressionAst inline)
+                        return CommandPatternMatches(inline.Value, functionName);
+                    if (parameter.Argument is null && index + 1 < elements.Length &&
+                        elements[index + 1] is StringConstantExpressionAst named)
+                        return CommandPatternMatches(named.Value, functionName);
+                    return true;
+                }
+                if (parameter.Argument is null && index + 1 < elements.Length && elements[index + 1] is ExpressionAst)
+                    index++;
+                continue;
+            }
+            if (elements[index] is StringConstantExpressionAst literal)
+                positional.Add(literal);
+            else
+                return true;
+        }
+        return positional.Count < 2 || CommandPatternMatches(positional[1].Value, functionName);
     }
 
     private static bool IsDynamicFunctionInvocation(CommandAst command)

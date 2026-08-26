@@ -58,6 +58,13 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
         if (operation is "Plus" or "Minus" or "Multiply" or "Divide" or "Rem")
         {
+            if ((leftType == typeof(decimal) || rightType == typeof(decimal)) &&
+                PowerShellRuntimeExceptionCatchPolicy.Contains(binary))
+            {
+                throw Error(
+                    binary,
+                    "Decimal arithmetic inside a RuntimeException catch cannot preserve PowerShell's runtime-error wrapping on the conservative compilation path.");
+            }
             if (operation == "Plus" && leftType == typeof(string) && rightType == typeof(string))
             {
                 // C# and constrained PowerShell string concatenation agree for this narrow case.

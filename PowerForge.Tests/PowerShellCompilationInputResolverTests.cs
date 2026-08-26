@@ -53,6 +53,23 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_LooseScriptSetDerivesCommonRootAcrossSiblingDirectories()
+    {
+        using var fixture = ResolverFixture.Create();
+        var first = fixture.Write("Public/Get-One.ps1", "function Get-One { return 1 }");
+        var second = fixture.Write("Private/Get-Two.ps1", "function Get-Two { return 2 }");
+
+        var resolver = new PowerShellCompilationInputResolver();
+        var forward = resolver.Resolve(new[] { first, second });
+        var reversed = resolver.Resolve(new[] { second, first });
+
+        Assert.Equal(fixture.Root, forward.ModuleRoot);
+        Assert.Equal(fixture.Root, reversed.ModuleRoot);
+        Assert.Equal(new[] { first, second }, forward.CompilationSourceFiles);
+        Assert.Equal(new[] { second, first }, reversed.CompilationSourceFiles);
+    }
+
+    [Fact]
     public void Resolve_LooseExecutableSetUsesExplicitEntrypointAndReachableDependencyClosure()
     {
         using var fixture = ResolverFixture.Create();
