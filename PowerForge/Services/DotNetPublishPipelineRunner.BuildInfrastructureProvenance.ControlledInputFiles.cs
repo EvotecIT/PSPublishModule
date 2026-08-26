@@ -216,17 +216,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         return ContainsUncontrolledImportActivation(document) ||
                ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
+               ContainsUncontrolledSdkTaskExecutionOverride(document) ||
                ContainsUncontrolledCompilerOptionOverride(document) ||
                document.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
              (!IsModeledControlledBuildTask(element.Name.LocalName) ||
               element.Name.LocalName.Equals("SignFile", StringComparison.OrdinalIgnoreCase) ||
-              element.Attributes().Any(attribute =>
-                  attribute.Name.LocalName.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
-                  attribute.Name.LocalName.Equals("ToolExe", StringComparison.OrdinalIgnoreCase) ||
-                  attribute.Name.LocalName.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
-                  attribute.Name.LocalName.Equals("DotnetFscCompilerPath", StringComparison.OrdinalIgnoreCase)) ||
+              ContainsUncontrolledTaskExecutionOverride(element) ||
               ContainsUncontrolledTaskEnvironmentOverride(element))) ||
             (element.Ancestors().Any(ancestor =>
                  ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)) &&
@@ -237,6 +234,73 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static bool ContainsUncontrolledTaskExecutionOverride(XElement task)
+    {
+        foreach (XAttribute attribute in task.Attributes())
+        {
+            string name = attribute.Name.LocalName;
+            if ((name.Equals("ToolPath", StringComparison.OrdinalIgnoreCase) ||
+                 name.Equals("ToolExe", StringComparison.OrdinalIgnoreCase) ||
+                 name.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
+                 name.Equals("DotnetFscCompilerPath", StringComparison.OrdinalIgnoreCase) ||
+                 name.Equals("SdkToolsPath", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(attribute.Value))
+            {
+                return true;
+            }
+
+            if (name.Equals("ExecuteAsTool", StringComparison.OrdinalIgnoreCase) &&
+                IsPotentiallyEnabledTaskBoolean(attribute.Value))
+            {
+                return true;
+            }
+
+            if (task.Name.LocalName.Equals("XslTransformation", StringComparison.OrdinalIgnoreCase) &&
+                name.Equals("UseTrustedSettings", StringComparison.OrdinalIgnoreCase) &&
+                IsPotentiallyEnabledTaskBoolean(attribute.Value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPotentiallyEnabledTaskBoolean(string value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           !value.Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsUncontrolledSdkTaskExecutionOverride(XDocument document)
+    {
+        string[] booleanProperties =
+        {
+            "ComReferenceExecuteAsTool",
+            "ExecuteAsTool",
+            "ResGenExecuteAsTool"
+        };
+        string[] valueProperties =
+        {
+            "LCEnvironment",
+            "LCToolPath",
+            "ResGenEnvironment",
+            "ResgenToolPath",
+            "ResolveComReferenceEnvironment",
+            "ResolveComReferenceToolPath",
+            "SGenEnvironment",
+            "SGenToolPath",
+            "WinMDExpEnvironment",
+            "WinMDExpToolPath"
+        };
+
+        return document.Descendants().Any(element =>
+            element.Parent is not null &&
+            element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+            ((booleanProperties.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase) &&
+              IsPotentiallyEnabledTaskBoolean(element.Value)) ||
+             (valueProperties.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase) &&
+              !string.IsNullOrWhiteSpace(element.Value))));
     }
 
     private static bool ContainsUncontrolledCompilerOptionOverride(XDocument document)
@@ -474,6 +538,19 @@ public sealed partial class DotNetPublishPipelineRunner
             "PostBuildEvent",
             "RunPostBuildEvent",
             "UseSharedCompilation",
+            "ComReferenceExecuteAsTool",
+            "ExecuteAsTool",
+            "ResGenExecuteAsTool",
+            "ResGenEnvironment",
+            "ResgenToolPath",
+            "ResolveComReferenceEnvironment",
+            "ResolveComReferenceToolPath",
+            "WinMDExpEnvironment",
+            "WinMDExpToolPath",
+            "LCEnvironment",
+            "LCToolPath",
+            "SGenEnvironment",
+            "SGenToolPath",
             "AlToolPath",
             "AlToolExe",
             "CscToolPath",

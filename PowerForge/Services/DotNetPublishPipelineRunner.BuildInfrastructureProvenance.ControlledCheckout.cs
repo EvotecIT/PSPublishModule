@@ -49,27 +49,12 @@ public sealed partial class DotNetPublishPipelineRunner
         values["NUGET_PACKAGES"] = packageRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
-            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key))
+            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key) ||
+                !IsOverwrittenControlledBuildEnvironmentVariable(variable.Key))
             {
                 controlledEnvironment = values;
                 return false;
             }
-            if (variable.Value is null)
-            {
-                values[variable.Key] = null;
-                continue;
-            }
-            if (!TryRemapControlledBuildValue(
-                    variable.Value,
-                    gitRoot,
-                    controlledSourceRoot,
-                    buildInputBaseDirectory,
-                    out string remappedValue))
-            {
-                controlledEnvironment = values;
-                return false;
-            }
-            values[variable.Key] = remappedValue;
         }
         if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
         {
@@ -87,6 +72,15 @@ public sealed partial class DotNetPublishPipelineRunner
         controlledEnvironment = values;
         return true;
     }
+
+    private static bool IsOverwrittenControlledBuildEnvironmentVariable(string name)
+        => name.Equals("ALL_PROXY", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DOTNET_ROOT", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DOTNET_ROOT(x86)", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("HTTP_PROXY", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("HTTPS_PROXY", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("NO_PROXY", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PATH", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsApprovedControlledBuildEnvironmentVariable(string name)
         => name.Equals("PATHEXT", StringComparison.OrdinalIgnoreCase) ||

@@ -68,13 +68,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         try
         {
             Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
-                new Dictionary<string, string?> { ["POWERFORGE_APPROVED_VALUE"] = "literal" },
+                new Dictionary<string, string?>(),
                 root,
                 controlledRoot,
                 out IReadOnlyDictionary<string, string?> environment));
             Assert.True(environment.TryGetValue(key, out string? inheritedValue));
             Assert.Null(inheritedValue);
-            Assert.Equal("literal", environment["POWERFORGE_APPROVED_VALUE"]);
             Assert.StartsWith(
                 Path.GetDirectoryName(controlledRoot)!,
                 environment["APPDATA"]!,

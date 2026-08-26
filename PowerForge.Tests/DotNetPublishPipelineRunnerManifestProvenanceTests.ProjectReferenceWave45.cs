@@ -55,7 +55,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 controlledRoot,
                 out _));
 
-            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
+            Assert.False(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
                 new Dictionary<string, string?>
                 {
                     ["Payload"] = Path.Combine("artifacts", "payload.dll")
