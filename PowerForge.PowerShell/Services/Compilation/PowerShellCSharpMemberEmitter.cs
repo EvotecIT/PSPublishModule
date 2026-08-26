@@ -49,6 +49,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         var name = GetMemberName(member);
         EnsureSupportedArrayMember(member, target, name);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
+        EnsureRuntimeExceptionSafePropertyRead(member, target, resolved);
         var type = resolved switch
         {
             PropertyInfo property => property.PropertyType,
@@ -67,6 +68,7 @@ internal sealed class PowerShellCSharpMemberEmitter
         var name = GetMemberName(member);
         EnsureSupportedArrayMember(member, target, name);
         var resolved = ResolveFieldOrProperty(member, target.Type, target.IsStatic, name);
+        EnsureRuntimeExceptionSafePropertyRead(member, target, resolved);
         var actualName = resolved.Name;
         var resultType = resolved is PropertyInfo property ? property.PropertyType : ((FieldInfo)resolved).FieldType;
         EnsureSupportedReferenceMember(member, target, name, resultType);
@@ -103,6 +105,19 @@ internal sealed class PowerShellCSharpMemberEmitter
            target.Type != typeof(string) &&
            !target.Type.IsArray &&
            !target.IsKnownNonNull;
+
+    private void EnsureRuntimeExceptionSafePropertyRead(MemberExpressionAst member, Target target, MemberInfo resolved)
+    {
+        if (resolved is not PropertyInfo || !PowerShellRuntimeExceptionCatchPolicy.Contains(member))
+            return;
+        if (!target.IsStatic &&
+            (target.Type == typeof(string) ||
+             target.Type.IsArray && resolved.Name.Equals("Length", StringComparison.Ordinal)))
+            return;
+        throw _error(
+            member,
+            $"CLR property read '{target.Type.FullName}.{resolved.Name}' inside a RuntimeException catch cannot preserve PowerShell's runtime-error wrapping on the conservative compilation path.");
+    }
 
     internal Type InferInvocationType(InvokeMemberExpressionAst invocation)
     {

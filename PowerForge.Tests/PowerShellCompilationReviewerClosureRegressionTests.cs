@@ -655,6 +655,46 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
+    [Theory]
+    [InlineData("return $ExecutionContext.SessionState.InvokeCommand.InvokeScript('$Host.Name')")]
+    [InlineData("$member = 'InvokeCommand'; return $ExecutionContext.SessionState.$member.InvokeScript('$Host.Name')")]
+    [InlineData("$state = $ExecutionContext.SessionState; return $state.InvokeCommand.InvokeScript('$Host.Name')")]
+    public void Build_PackagedExecutableRejectsSessionStateInvokeCommandEscape(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.SessionStateInvokeCommand", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("PSHost", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridModuleRoutesThrowingPropertyGetterObservedByRuntimeExceptionCatchToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-GetterRoute { [System.IO.MemoryStream] $stream = [System.IO.MemoryStream]::new(); $stream.Dispose(); " +
+            "try { return [object] $stream.Length } " +
+            "catch [System.Management.Automation.RuntimeException] { return [object] 'runtime' } }; " +
+            "Export-ModuleMember -Function Get-GetterRoute",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PropertyGetterRuntimeCatch",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-GetterRoute");
+        Assert.Equal((0, string.Empty, string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
     [Fact]
     public void Build_HybridModulePreservesBasicFunctionCommonParameterTokens()
     {

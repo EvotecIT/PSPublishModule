@@ -594,21 +594,21 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support indirect PSHost retrieval '{indirectHostReference.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
-        var executionContextHost = FindExecutionContextHostAccess(ast);
+        var executionContextHost = PowerShellPackagedHostAccessPolicy.FindExecutionContextHostAccess(ast);
         if (executionContextHost is not null)
         {
             throw new InvalidOperationException(
                 $"Packaged executable generation does not support interactive PSHost access through ExecutionContext '{executionContextHost.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
-        var psCmdletHost = FindPSCmdletHostAccess(ast);
+        var psCmdletHost = PowerShellPackagedHostAccessPolicy.FindPSCmdletHostAccess(ast);
         if (psCmdletHost is not null)
         {
             throw new InvalidOperationException(
                 $"Packaged executable generation does not support interactive PSHost access through PSCmdlet '{psCmdletHost.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
-        var dynamicScriptEvaluation = FindDynamicScriptEvaluation(ast);
+        var dynamicScriptEvaluation = PowerShellPackagedHostAccessPolicy.FindDynamicScriptEvaluation(ast);
         if (dynamicScriptEvaluation is not null)
         {
             throw new InvalidOperationException(
@@ -691,68 +691,6 @@ internal static class PowerShellPackagedScriptRewriter
         if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
         return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
     }
-
-    private static VariableExpressionAst? FindExecutionContextHostAccess(ScriptBlockAst ast)
-        => ast.FindAll(
-                static node => node is VariableExpressionAst variable &&
-                               variable.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase),
-                searchNestedScriptBlocks: true)
-            .Cast<VariableExpressionAst>()
-            .FirstOrDefault(static variable =>
-            {
-                if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
-                    return true;
-                return member.Member is not StringConstantExpressionAst name ||
-                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
-                       name.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
-            });
-
-    private static VariableExpressionAst? FindPSCmdletHostAccess(ScriptBlockAst ast)
-        => ast.FindAll(
-                static node => node is VariableExpressionAst variable &&
-                               variable.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase),
-                searchNestedScriptBlocks: true)
-            .Cast<VariableExpressionAst>()
-            .FirstOrDefault(static variable =>
-            {
-                if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
-                    return true;
-                return member.Member is not StringConstantExpressionAst name ||
-                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
-                       name.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
-            });
-
-    private static Ast? FindDynamicScriptEvaluation(ScriptBlockAst ast)
-    {
-        var command = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
-            .Cast<CommandAst>()
-            .FirstOrDefault(static candidate =>
-            {
-                var name = candidate.GetCommandName()?.Split('\\').Last();
-                return name?.Equals("Invoke-Expression", StringComparison.OrdinalIgnoreCase) == true ||
-                       name?.Equals("iex", StringComparison.OrdinalIgnoreCase) == true;
-            });
-        if (command is not null)
-            return command;
-
-        var scriptBlockFactory = ast.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: true)
-            .Cast<InvokeMemberExpressionAst>()
-            .FirstOrDefault(static invocation =>
-                invocation.Expression is TypeExpressionAst type &&
-                IsScriptBlockType(type.TypeName.FullName) &&
-                invocation.Member is StringConstantExpressionAst member &&
-                member.Value.Equals("Create", StringComparison.OrdinalIgnoreCase));
-        if (scriptBlockFactory is not null)
-            return scriptBlockFactory;
-
-        return ast.FindAll(static node => node is ConvertExpressionAst, searchNestedScriptBlocks: true)
-            .Cast<ConvertExpressionAst>()
-            .FirstOrDefault(static conversion => IsScriptBlockType(conversion.Type.TypeName.FullName));
-    }
-
-    private static bool IsScriptBlockType(string typeName)
-        => typeName.Equals("scriptblock", StringComparison.OrdinalIgnoreCase) ||
-           typeName.Equals("System.Management.Automation.ScriptBlock", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsInteractiveCommand(string? commandName)
     {
