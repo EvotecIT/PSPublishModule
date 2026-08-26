@@ -300,7 +300,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Value") == "Open TestimoX Monitoring"));
         Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "WixShellExecTarget" &&
-            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/"));
+            (string?)e.Attribute("Value") == "about:blank"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "PowerForgeLaunchOnExit" &&
             (string?)e.Attribute("BinaryRef") == "Wix4UtilCA_$(sys.BUILDARCHSHORT)" &&
@@ -308,8 +308,39 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "Publish").SingleOrDefault(e =>
             (string?)e.Attribute("Dialog") == "ExitDialog" &&
             (string?)e.Attribute("Control") == "Finish" &&
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(doc.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Dialog") == "ExitDialog" &&
+            (string?)e.Attribute("Control") == "Finish" &&
             (string?)e.Attribute("Event") == "DoAction" &&
-            (string?)e.Attribute("Value") == "PowerForgeLaunchOnExit"));
+            (string?)e.Attribute("Value") == "PowerForgeLaunchOnExit" &&
+            (string?)e.Attribute("Order") == "2"));
+    }
+
+    [Fact]
+    public void EmitSource_AssignsFormattedExitTargetFromTheExitDialog()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Launch bridge",
+            Target = "[INSTALLFOLDER]Icue.Bridge.exe"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.DoesNotContain(doc.Descendants(Wix + "Property"), element =>
+            (string?)element.Attribute("Id") == "WixShellExecTarget" &&
+            ((string?)element.Attribute("Value"))?.Contains("[INSTALLFOLDER]", StringComparison.Ordinal) == true);
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Control") == "Finish" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "[INSTALLFOLDER]Icue.Bridge.exe" &&
+            (string?)element.Attribute("Order") == "1");
     }
 
     [Fact]
