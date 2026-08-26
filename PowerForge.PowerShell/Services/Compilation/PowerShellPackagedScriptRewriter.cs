@@ -96,7 +96,10 @@ internal static class PowerShellPackagedScriptRewriter
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
 
-        var source = new StringBuilder(File.ReadAllText(sourcePath));
+        // Parser.ParseFile owns PowerShell's encoding detection (including Windows PowerShell's
+        // active-code-page handling for BOM-less files). Reuse that decoded text so the AST
+        // offsets and the buffer being rewritten always describe the same source.
+        var source = new StringBuilder(ast.Extent.Text);
         foreach (var replacement in replacements)
         {
             source.Remove(replacement.StartOffset, replacement.EndOffset - replacement.StartOffset);

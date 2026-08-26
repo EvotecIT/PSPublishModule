@@ -190,6 +190,17 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
 
             var bindings = GetParameterBindings(parameter);
+            if (!isScriptUnit &&
+                capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
+                bindings.Any(static binding => binding.ValueFromRemainingArguments))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                    $"Local function parameter '${parameter.Name.VariablePath.UserPath}' uses ValueFromRemainingArguments, whose command-line collection semantics are supported only on the strict executable entry point.",
+                    file,
+                    parameter.Extent,
+                    PowerShellCompilationFeatureIds.ParameterBinding));
+            }
             PowerShellCompilationLiteral? defaultValue = null;
             if (parameter.DefaultValue is not null &&
                 (!capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) ||

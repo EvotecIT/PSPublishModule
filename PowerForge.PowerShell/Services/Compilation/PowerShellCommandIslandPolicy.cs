@@ -54,7 +54,8 @@ internal static class PowerShellCommandIslandPolicy
                 .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true))
                 .OfType<CommandAst>()
                 .ToArray();
-            if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0))
+            if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
+                commands.Any(IsVariableSessionStateCommand))
                 continue;
             if (localFunctionNames is not null && commands.Any(command =>
                     command.InvocationOperator == TokenKind.Unknown &&
@@ -106,7 +107,8 @@ internal static class PowerShellCommandIslandPolicy
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
         var commands = statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>().ToArray();
-        if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0))
+        if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
+            commands.Any(IsVariableSessionStateCommand))
             return false;
         if (localFunctionNames is not null && commands.Any(command =>
                 command.InvocationOperator == TokenKind.Unknown &&
@@ -212,7 +214,8 @@ internal static class PowerShellCommandIslandPolicy
         var commands = candidate.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .OfType<CommandAst>()
             .ToArray();
-        if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0))
+        if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
+            commands.Any(IsVariableSessionStateCommand))
             return false;
         if (localFunctionNames is not null && commands.Any(command =>
                 command.InvocationOperator == TokenKind.Unknown &&
@@ -238,6 +241,52 @@ internal static class PowerShellCommandIslandPolicy
 
         assignment = candidate;
         return true;
+    }
+
+    private static bool IsVariableSessionStateCommand(CommandAst command)
+    {
+        var commandName = command.GetCommandName();
+        if (!string.IsNullOrWhiteSpace(commandName))
+        {
+            var separator = commandName.LastIndexOf('\\');
+            var leafName = separator >= 0 ? commandName.Substring(separator + 1) : commandName;
+            if (leafName.Equals("Get-Variable", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("Clear-Variable", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("gv", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("sv", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("nv", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("rv", StringComparison.OrdinalIgnoreCase) ||
+                leafName.Equals("clv", StringComparison.OrdinalIgnoreCase))
+                return !HasExplicitSharedScope(command);
+        }
+
+        return command.CommandElements
+            .OfType<StringConstantExpressionAst>()
+            .Any(static element =>
+                element.Value.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase) &&
+                !element.Value.StartsWith("Variable:script:", StringComparison.OrdinalIgnoreCase) &&
+                !element.Value.StartsWith("Variable:global:", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasExplicitSharedScope(CommandAst command)
+    {
+        for (var index = 1; index < command.CommandElements.Count; index++)
+        {
+            if (command.CommandElements[index] is not CommandParameterAst parameter ||
+                !parameter.ParameterName.Equals("Scope", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var argument = parameter.Argument ??
+                           (index + 1 < command.CommandElements.Count
+                               ? command.CommandElements[index + 1] as ExpressionAst
+                               : null);
+            return argument is StringConstantExpressionAst scope &&
+                   (scope.Value.Equals("Script", StringComparison.OrdinalIgnoreCase) ||
+                    scope.Value.Equals("Global", StringComparison.OrdinalIgnoreCase));
+        }
+        return false;
     }
 
     private static HashSet<string> GetAvailableVariablesBefore(

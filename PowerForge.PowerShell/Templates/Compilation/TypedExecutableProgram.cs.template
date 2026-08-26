@@ -85,6 +85,7 @@ internal static class Program
             }
 
             while (positionalIndex < PositionalParameters.Length &&
+                   !PositionalParameters[positionalIndex].AcceptsRemainingArguments &&
                    (raw[PositionalParameters[positionalIndex].Name].Count > 0 || boundEmptyCollections.Contains(PositionalParameters[positionalIndex].Name)))
                 positionalIndex++;
             if (positionalIndex >= PositionalParameters.Length)
@@ -95,7 +96,8 @@ internal static class Program
             }
             var positional = PositionalParameters[positionalIndex];
             AddRawValue(raw, positional, token);
-            positionalIndex++;
+            if (!positional.AcceptsRemainingArguments)
+                positionalIndex++;
         }
 
         boundParameters = raw
@@ -316,6 +318,7 @@ internal static class Program
             bool isRequired,
             bool isSwitch,
             int? position,
+            bool acceptsRemainingArguments,
             string[] aliases,
             bool allowNull,
             bool allowEmptyString,
@@ -327,6 +330,7 @@ internal static class Program
             IsRequired = isRequired;
             IsSwitch = isSwitch;
             Position = position;
+            AcceptsRemainingArguments = acceptsRemainingArguments;
             Aliases = aliases;
             AllowNull = allowNull;
             AllowEmptyString = allowEmptyString;
@@ -339,6 +343,7 @@ internal static class Program
         internal bool IsRequired { get; }
         internal bool IsSwitch { get; }
         internal int? Position { get; }
+        internal bool AcceptsRemainingArguments { get; }
         internal string[] Aliases { get; }
         internal bool AllowNull { get; }
         internal bool AllowEmptyString { get; }

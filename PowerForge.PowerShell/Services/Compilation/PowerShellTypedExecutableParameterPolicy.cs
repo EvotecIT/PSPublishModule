@@ -15,6 +15,32 @@ internal static class PowerShellTypedExecutableParameterPolicy
             "which cannot be bound from process arguments. Use a supported scalar or one-dimensional scalar array type.");
     }
 
+    internal static void EnsureBindingSupported(
+        IReadOnlyCollection<ParameterAst> sourceParameters,
+        IReadOnlyCollection<PowerShellCompilationParameter> parameters,
+        PowerShellCompilationCommandBinding commandBinding)
+    {
+        if (!string.IsNullOrWhiteSpace(commandBinding.DefaultParameterSetName) ||
+            parameters.SelectMany(static parameter => parameter.Bindings)
+                .Any(static binding => !string.IsNullOrWhiteSpace(binding.ParameterSetName)))
+        {
+            throw new InvalidOperationException(
+                "Strict executable entry points with named parameter sets require PowerShell parameter-set selection and are not supported by the runtime-independent argument binder.");
+        }
+
+        var parametersByName = parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
+        var scalarRemaining = sourceParameters.FirstOrDefault(parameter =>
+            parametersByName[parameter.Name.VariablePath.UserPath].Bindings
+                .Any(static binding => binding.ValueFromRemainingArguments) &&
+            !GetCompiledType(parameter.StaticType).IsArray);
+        if (scalarRemaining is not null)
+        {
+            throw new InvalidOperationException(
+                $"Strict executable entry-point parameter '${scalarRemaining.Name.VariablePath.UserPath}' uses ValueFromRemainingArguments with scalar type '{scalarRemaining.StaticType.FullName}', " +
+                "whose PowerShell whitespace-joining semantics are not supported by the runtime-independent argument binder. Use a one-dimensional array type.");
+        }
+    }
+
     internal static bool IsSupported(Type type)
     {
         var compiledType = GetCompiledType(type);

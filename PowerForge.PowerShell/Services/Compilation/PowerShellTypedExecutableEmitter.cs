@@ -39,20 +39,28 @@ internal static class PowerShellTypedExecutableEmitter
             PowerShellTypedExecutableParameterPolicy.EnsureSupported(parameter);
         var analyzedParameters = scriptUnit.Parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
         var commandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(ast.ParamBlock);
+        PowerShellTypedExecutableParameterPolicy.EnsureBindingSupported(parameters, analyzedParameters.Values, commandBinding);
         var hasExplicitPositions = analyzedParameters.Values
             .SelectMany(static parameter => parameter.Bindings)
             .Any(static binding => binding.Position.HasValue);
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select((parameter, index) =>
         {
             var metadata = analyzedParameters[parameter.Name.VariablePath.UserPath];
+            var acceptsRemainingArguments = metadata.Bindings.Any(static binding => binding.ValueFromRemainingArguments);
             var position = metadata.Bindings.Select(static binding => binding.Position).FirstOrDefault(static value => value.HasValue);
-            if (!position.HasValue && commandBinding.PositionalBinding && !hasExplicitPositions)
-                position = index;
+            if (!position.HasValue)
+            {
+                if (acceptsRemainingArguments)
+                    position = hasExplicitPositions || !commandBinding.PositionalBinding ? int.MaxValue : index;
+                else if (commandBinding.PositionalBinding && !hasExplicitPositions)
+                    position = index;
+            }
             return "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(metadata.Name) + ", typeof(" +
                    PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + "), " +
                    (metadata.IsMandatory ? "true" : "false") + ", " +
                    (metadata.IsSwitch ? "true" : "false") + ", " +
                    (position.HasValue ? position.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null") + ", " +
+                   (acceptsRemainingArguments ? "true" : "false") + ", " +
                    GenerateStringArray(metadata.Aliases) + ", " +
                    (metadata.AllowNull ? "true" : "false") + ", " +
                    (metadata.AllowEmptyString ? "true" : "false") + ", " +

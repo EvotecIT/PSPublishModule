@@ -73,8 +73,11 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         if (argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase))
             return TryGetBooleanAttributeValue(argument, out _);
-        if (argument.ArgumentName.Equals("ValueFromRemainingArguments", StringComparison.OrdinalIgnoreCase) ||
-            argument.ArgumentName.Equals("DontShow", StringComparison.OrdinalIgnoreCase) ||
+        if (argument.ArgumentName.Equals("ValueFromRemainingArguments", StringComparison.OrdinalIgnoreCase))
+            return (capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
+                    capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding)) &&
+                   TryGetBooleanAttributeValue(argument, out _);
+        if (argument.ArgumentName.Equals("DontShow", StringComparison.OrdinalIgnoreCase) ||
             argument.ArgumentName.Equals("ValueFromPipeline", StringComparison.OrdinalIgnoreCase) ||
             argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))
             return capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&

@@ -156,7 +156,7 @@ internal sealed class PowerShellCSharpMemberEmitter
             throw _error(index, "Typed indexing is currently supported only as a direct return value or compound-assignment operand so missing-index semantics remain exact.");
         }
         return target.Type.IsArray
-            ? $"({targetCode} is null ? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\") : {emitted})"
+            ? $"({targetCode} is null ? throw {GetNullArrayException(index)} : {emitted})"
             : emitted;
     }
 
@@ -173,7 +173,7 @@ internal sealed class PowerShellCSharpMemberEmitter
             throw _error(value, $"Array assignment value type '{valueType.FullName}' is not assignable to element type '{elementType.FullName}'.");
         var targetCode = EmitTarget(target);
         var indexCode = _emitExpression(index.Index);
-        var checkedTarget = $"({targetCode} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        var checkedTarget = $"({targetCode} ?? throw {GetNullArrayException(index)})";
         var normalizedIndex = $"(({indexCode}) < 0 ? {checkedTarget}.Length + ({indexCode}) : ({indexCode}))";
         return $"{checkedTarget}[{normalizedIndex}] = {_emitExpression(value)}";
     }
@@ -414,6 +414,12 @@ internal sealed class PowerShellCSharpMemberEmitter
             return new Target(type, true, _getTypeName(type));
         }
         var instanceType = _inferExpressionType(expression);
+        if (Nullable.GetUnderlyingType(instanceType) is not null)
+        {
+            throw _error(
+                expression,
+                $"Member observation on nullable value type '{instanceType.FullName}' requires PowerShell's boxing semantics and cannot be lowered as direct CLR member access.");
+        }
         if (instanceType == typeof(PSObject) || instanceType == typeof(PSCustomObject))
         {
             throw _error(
@@ -435,6 +441,30 @@ internal sealed class PowerShellCSharpMemberEmitter
                Expression: TypeExpressionAst,
                Member: StringConstantExpressionAst member
            } && member.Value.Equals("new", StringComparison.OrdinalIgnoreCase);
+
+    private string GetNullArrayException(Ast node)
+    {
+        if (_canEmitPowerShellRuntimeErrors)
+            return "new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\")";
+        if (IsInsideTypeDiscriminatingTry(node))
+        {
+            throw _error(
+                node,
+                "Indexing a potentially null array inside a typed try/catch cannot preserve PowerShell's runtime-error identity without a PowerShell host.");
+        }
+        return "new global::System.InvalidOperationException(\"Cannot index into a null array.\")";
+    }
+
+    private static bool IsInsideTypeDiscriminatingTry(Ast node)
+    {
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is TryStatementAst tryStatement &&
+                tryStatement.CatchClauses.Any(static clause => clause.CatchTypes.Count > 0))
+                return true;
+        }
+        return false;
+    }
 
     private Target ResolveIndexTarget(IndexExpressionAst index)
     {
