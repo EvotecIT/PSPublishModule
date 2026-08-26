@@ -165,7 +165,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     projectTemplate
                         .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
                         .Replace("{{TARGET_REFERENCE}}", PowerShellGeneratedReferenceAssemblyResolver.GetGeneratedProjectReference(spec.TargetFramework))
-                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName)),
+                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName))
+                        .Replace("{{ASSEMBLY_VERSION}}", EscapeXml(GetBinaryModuleAssemblyVersion(spec))),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
@@ -662,6 +663,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     private static string EscapeXml(string value)
         => System.Security.SecurityElement.Escape(value) ?? string.Empty;
+
+    private static string GetBinaryModuleAssemblyVersion(PowerShellCompilationBuildSpec spec)
+    {
+        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule ||
+            string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+            return "1.0.0.0";
+        var value = ModuleManifestValueReader.ReadTopLevelString(spec.ModuleManifestPath!, "ModuleVersion");
+        if (!Version.TryParse(value, out var version))
+            throw new InvalidOperationException($"Module manifest '{spec.ModuleManifestPath}' declares invalid ModuleVersion '{value}'.");
+        return new Version(
+            version.Major,
+            version.Minor,
+            Math.Max(0, version.Build),
+            Math.Max(0, version.Revision)).ToString(4);
+    }
 
     private static string BoundOutput(string output)
         => output.Length <= MaximumBuildOutputLength ? output : output.Substring(output.Length - MaximumBuildOutputLength);

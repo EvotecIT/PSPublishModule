@@ -43,6 +43,18 @@ internal static class PowerShellAssignmentTargetPolicy
     internal static bool IsReadOnlyAutomaticVariable(string name)
         => ReadOnlyAutomaticVariables.Contains(name);
 
+    /// <summary>Returns whether a parameter name collides with an automatic variable that is read-only on the selected runtime.</summary>
+    internal static bool IsReadOnlyAutomaticParameter(string name, string? targetFramework)
+    {
+        if (!ReadOnlyAutomaticVariables.Contains(name)) return false;
+        if (name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("IsLinux", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
+            return !string.Equals(targetFramework, "net472", StringComparison.OrdinalIgnoreCase);
+        return true;
+    }
+
     /// <summary>Returns whether the variable is the direct target of an assignment.</summary>
     internal static bool IsDirectAssignmentTarget(VariableExpressionAst variable)
     {

@@ -150,6 +150,16 @@ public sealed partial class PowerShellCompilationAnalyzer
         var result = new List<PowerShellCompilationParameter>();
         foreach (var parameter in paramBlock.Parameters)
         {
+            var parameterName = parameter.Name.VariablePath.UserPath;
+            if (PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticParameter(parameterName, targetFramework))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                    $"Parameter '${parameterName}' collides with a read-only automatic variable on target '{targetFramework ?? "the selected runtime"}'.",
+                    file,
+                    parameter.Extent,
+                    PowerShellCompilationFeatureIds.ParameterBinding));
+            }
             var type = parameter.StaticType;
             var hasExplicitType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
@@ -161,8 +171,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 diagnostics.Add(CreateDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
                     hasExplicitType
-                        ? $"Parameter '${parameter.Name.VariablePath.UserPath}' uses CLR type '{type.FullName}', which cannot be represented by the generated typed method surface."
-                        : $"Parameter '${parameter.Name.VariablePath.UserPath}' is untyped; add an explicit type before compiling it to a CLR method.",
+                        ? $"Parameter '${parameterName}' uses CLR type '{type.FullName}', which cannot be represented by the generated typed method surface."
+                        : $"Parameter '${parameterName}' is untyped; add an explicit type before compiling it to a CLR method.",
                     file,
                     parameter.Extent,
                     PowerShellCompilationFeatureIds.ParameterType));

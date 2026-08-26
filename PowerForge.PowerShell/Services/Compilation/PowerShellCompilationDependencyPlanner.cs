@@ -281,6 +281,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         PowerShellCompilationPathSafety.EnsureContained(moduleRoot, sourcePath, $"Module dependency '{value}' escapes the module root.");
         if (File.Exists(sourcePath))
             PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, sourcePath, $"Module dependency '{value}' traverses a symbolic link or junction.");
+        if (discovery == PowerShellCompilationDependencyDiscovery.FileList && localPaths.Contains(sourcePath))
+            return;
 
         var disposition = GetManifestDisposition(kind, mode, discovery, sourcePath);
         AddLocal(results, localPaths, moduleRoot, sourcePath, discovery, disposition,

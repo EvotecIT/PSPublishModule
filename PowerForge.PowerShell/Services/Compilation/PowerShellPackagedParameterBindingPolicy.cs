@@ -18,6 +18,19 @@ internal static class PowerShellPackagedParameterBindingPolicy
         var booleanParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parameterAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var authoredParameters = (ast.ParamBlock?.Parameters.AsEnumerable() ?? Enumerable.Empty<ParameterAst>()).ToArray();
+        var readOnlyParameter = authoredParameters.FirstOrDefault(parameter =>
+            PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticParameter(parameter.Name.VariablePath.UserPath, targetFramework));
+        if (readOnlyParameter is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged parameter '${readOnlyParameter.Name.VariablePath.UserPath}' collides with a read-only automatic variable on target '{targetFramework}'.");
+        }
+        var mandatoryParameter = authoredParameters.FirstOrDefault(IsMandatory);
+        if (mandatoryParameter is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged parameter '${mandatoryParameter.Name.VariablePath.UserPath}' is mandatory and may require interactive prompting when omitted; the embedded runspace has no console-backed PSHost. Use an optional parameter or a Strict executable contract.");
+        }
         var commonParameters = PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework);
         foreach (var parameter in authoredParameters)
         {
@@ -85,6 +98,17 @@ internal static class PowerShellPackagedParameterBindingPolicy
                fullName.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase) ||
                fullName.EndsWith("." + name + "Attribute", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsMandatory(ParameterAst parameter)
+        => parameter.Attributes.OfType<AttributeAst>()
+            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
+            .SelectMany(static attribute => attribute.NamedArguments)
+            .Where(static argument => argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase))
+            .Any(static argument =>
+            {
+                try { return argument.Argument.SafeGetValue() is true; }
+                catch (InvalidOperationException) { return false; }
+            });
 }
 
 internal sealed class PowerShellPackagedParameterInitializers

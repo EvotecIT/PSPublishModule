@@ -172,6 +172,18 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
+        var escapedInvocation = ast.FindAll(
+                static node => node is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .FirstOrDefault(variable => IsTopLevel(variable, ast) && !IsSupportedMyInvocationReceiver(variable));
+        if (escapedInvocation is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not preserve escaped top-level invocation metadata '{escapedInvocation.Extent.Text}'; inspect one of the explicitly supported MyCommand path members directly.");
+        }
+
         foreach (var member in ast.FindAll(static node => node is MemberExpressionAst, searchNestedScriptBlocks: true).Cast<MemberExpressionAst>())
         {
             if (IsTopLevelMyCommandReference(member, ast) &&
@@ -279,6 +291,10 @@ internal static class PowerShellPackagedScriptRewriter
         => member.Expression is VariableExpressionAst invocation &&
            invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) &&
            IsTopLevel(member, root);
+
+    private static bool IsSupportedMyInvocationReceiver(VariableExpressionAst invocation)
+        => invocation.Parent is MemberExpressionAst { Expression: var expression } &&
+           ReferenceEquals(expression, invocation);
 
     internal static void ValidateDotSources(
         ScriptBlockAst ast,
@@ -405,7 +421,8 @@ internal static class PowerShellPackagedScriptRewriter
         return unqualifiedName.Equals("Read-Host", StringComparison.OrdinalIgnoreCase) ||
                unqualifiedName.Equals("Get-Credential", StringComparison.OrdinalIgnoreCase) ||
                unqualifiedName.Equals("Show-Command", StringComparison.OrdinalIgnoreCase) ||
-               unqualifiedName.Equals("Out-GridView", StringComparison.OrdinalIgnoreCase);
+               unqualifiedName.Equals("Out-GridView", StringComparison.OrdinalIgnoreCase) ||
+               unqualifiedName.Equals("Write-Progress", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool SupportsShouldProcess(ScriptBlockAst ast)

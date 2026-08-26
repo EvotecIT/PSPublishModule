@@ -110,11 +110,11 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 if (parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
                 {
                     if (parameter.Argument is StringConstantExpressionAst inline &&
-                        inline.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                        CommandPatternMatches(inline.Value, functionName))
                         return true;
                     if (parameter.Argument is null && index + 1 < elements.Length &&
                         elements[index + 1] is StringConstantExpressionAst named &&
-                        named.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                        CommandPatternMatches(named.Value, functionName))
                         return true;
                 }
                 if (parameter.Argument is null && index + 1 < elements.Length && elements[index + 1] is ExpressionAst)
@@ -122,10 +122,17 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 continue;
             }
             if (elements[index] is StringConstantExpressionAst positional)
-                return positional.Value.Equals(functionName, StringComparison.OrdinalIgnoreCase);
+                return CommandPatternMatches(positional.Value, functionName);
         }
         return false;
     }
+
+    private static bool CommandPatternMatches(string pattern, string functionName)
+        => new System.Management.Automation.WildcardPattern(
+                pattern,
+                System.Management.Automation.WildcardOptions.IgnoreCase |
+                System.Management.Automation.WildcardOptions.CultureInvariant)
+            .IsMatch(functionName);
 
     private static bool IsModuleScope(Ast node, ScriptBlockAst root)
     {

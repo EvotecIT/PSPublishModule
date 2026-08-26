@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFramework>{{TARGET_FRAMEWORK}}</TargetFramework>
     <AssemblyName>{{ARTIFACT_NAME}}</AssemblyName>
+    <AssemblyVersion>{{ASSEMBLY_VERSION}}</AssemblyVersion>
+    <FileVersion>{{ASSEMBLY_VERSION}}</FileVersion>
     <RootNamespace>PowerForge.Compiled</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
