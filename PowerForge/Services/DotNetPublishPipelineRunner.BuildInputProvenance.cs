@@ -406,7 +406,8 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        var provenNoBuildPublishInputs = new HashSet<string>(comparison);
+        var provenNoBuildPublishInputsByEvaluation =
+            new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         if (buildPlan?.NoBuildInPublish == true)
         {
             foreach (IGrouping<string, (string EvaluationKey, EvaluatedPublishInput Input)> group in
@@ -429,7 +430,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
                 }
 
-                provenNoBuildPublishInputs.UnionWith(trustedInputs);
+                provenNoBuildPublishInputsByEvaluation[evaluationKey] =
+                    new HashSet<string>(trustedInputs, comparison);
             }
         }
 
@@ -442,7 +444,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectDirectoriesByEvaluation[evaluationKey],
                     directories) &&
                 (buildPlan?.NoBuildInPublish != true ||
-                 provenNoBuildPublishInputs.Contains(publishInput.FullPath));
+                 (provenNoBuildPublishInputsByEvaluation.TryGetValue(
+                      evaluationKey,
+                      out HashSet<string>? provenInputs) &&
+                  provenInputs.Contains(publishInput.FullPath)));
             if (trustedGeneratedOutput)
                 continue;
 

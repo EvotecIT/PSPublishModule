@@ -96,6 +96,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private static IEnumerable<string> EnumerateDotNetCandidates()
     {
         string executableName = IsWindows() ? "dotnet.exe" : "dotnet";
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_DOTNET_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath) && Path.IsPathRooted(configuredPath))
+            yield return configuredPath!;
+
         string? processPath = null;
         try
         {

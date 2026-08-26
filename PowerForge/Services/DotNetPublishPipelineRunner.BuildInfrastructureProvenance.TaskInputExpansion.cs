@@ -61,30 +61,20 @@ public sealed partial class DotNetPublishPipelineRunner
                     expanded = true;
                     continue;
                 }
-                foreach ((XDocument relatedDocument, string relatedPath) in relatedDocuments)
+                if (!TryReplayControlledTaskInputProperty(
+                        propertyName,
+                        relatedDocuments,
+                        evaluatedGlobalProperties,
+                        out string effectiveValue,
+                        out bool found))
                 {
-                    XElement[] propertyDefinitions = relatedDocument.Descendants().Where(property =>
-                            property.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
-                            property.Parent is not null &&
-                            property.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase))
-                        .ToArray();
-                    if (propertyDefinitions.Length == 0)
-                        continue;
-
-                    string effectiveValue = string.Empty;
-                    foreach (XElement property in propertyDefinitions)
-                    {
-                        string assignedValue = ResolveControlledThisFileDirectory(
-                            property.Value,
-                            relatedPath);
-                        effectiveValue = ReplaceOrdinalIgnoreCase(
-                            assignedValue,
-                            "$(" + propertyName + ")",
-                            effectiveValue);
-                    }
-                    pending.Enqueue(value.Replace(match.Value, effectiveValue));
-                    expanded = true;
+                    expandedValues = Array.Empty<string>();
+                    return false;
                 }
+                if (!found)
+                    continue;
+                pending.Enqueue(value.Replace(match.Value, effectiveValue));
+                expanded = true;
             }
 
             foreach (Match match in Regex.Matches(
@@ -173,6 +163,182 @@ public sealed partial class DotNetPublishPipelineRunner
 
         expandedValues = values.ToArray();
         return values.Count > 0;
+    }
+
+    private static bool TryReplayControlledTaskInputProperty(
+        string propertyName,
+        IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        out string effectiveValue,
+        out bool found)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (evaluatedGlobalProperties is not null)
+        {
+            foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+                properties[property.Key] = property.Value;
+        }
+        var unknownProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        found = false;
+        foreach ((XDocument relatedDocument, string relatedPath) in relatedDocuments)
+        {
+            foreach (XElement propertyGroup in relatedDocument.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
+            {
+                bool groupConditionKnown = TryIsControlledPropertyBranchActive(
+                    propertyGroup,
+                    properties,
+                    out bool branchActive);
+                bool groupActive = false;
+                if (groupConditionKnown && branchActive)
+                {
+                    groupConditionKnown = TryIsControlledPropertyAssignmentActive(
+                        propertyGroup,
+                        properties,
+                        out groupActive);
+                }
+
+                foreach (XElement property in propertyGroup.Elements())
+                {
+                    string assignedPropertyName = property.Name.LocalName;
+                    if (evaluatedGlobalProperties is not null &&
+                        evaluatedGlobalProperties.ContainsKey(assignedPropertyName))
+                    {
+                        if (assignedPropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                            found = true;
+                        continue;
+                    }
+
+                    if (!groupConditionKnown)
+                    {
+                        properties.Remove(assignedPropertyName);
+                        unknownProperties.Add(assignedPropertyName);
+                        if (assignedPropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                            found = true;
+                        continue;
+                    }
+                    if (!groupActive)
+                        continue;
+                    if (!TryIsControlledPropertyAssignmentActive(property, properties, out bool propertyActive))
+                    {
+                        properties.Remove(assignedPropertyName);
+                        unknownProperties.Add(assignedPropertyName);
+                        if (assignedPropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                            found = true;
+                        continue;
+                    }
+                    if (!propertyActive)
+                        continue;
+
+                    string assignedValue = ResolveControlledThisFileDirectory(property.Value, relatedPath);
+                    bool hasUnknownReference = false;
+                    assignedValue = Regex.Replace(
+                        assignedValue,
+                        @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)\)",
+                        propertyReference =>
+                        {
+                            string referencedPropertyName = propertyReference.Groups[1].Value;
+                            if (unknownProperties.Contains(referencedPropertyName) ||
+                                !properties.TryGetValue(referencedPropertyName, out string? priorValue))
+                            {
+                                hasUnknownReference = true;
+                                return propertyReference.Value;
+                            }
+                            return priorValue;
+                        },
+                        RegexOptions.CultureInvariant);
+                    if (hasUnknownReference)
+                    {
+                        properties.Remove(assignedPropertyName);
+                        unknownProperties.Add(assignedPropertyName);
+                    }
+                    else
+                    {
+                        properties[assignedPropertyName] = assignedValue;
+                        unknownProperties.Remove(assignedPropertyName);
+                    }
+                    if (assignedPropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                        found = true;
+                }
+            }
+        }
+
+        if (unknownProperties.Contains(propertyName))
+        {
+            effectiveValue = string.Empty;
+            return false;
+        }
+        effectiveValue = found && properties.TryGetValue(propertyName, out string? value)
+            ? value
+            : string.Empty;
+        return true;
+    }
+
+    private static bool TryIsControlledPropertyAssignmentActive(
+        XElement element,
+        IReadOnlyDictionary<string, string> properties,
+        out bool active)
+    {
+        XAttribute? condition = element.Attributes().FirstOrDefault(attribute =>
+            attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase));
+        if (condition is null || string.IsNullOrWhiteSpace(condition.Value))
+        {
+            active = true;
+            return true;
+        }
+
+        return TryEvaluateSimpleMsBuildCondition(condition.Value, properties, out active);
+    }
+
+    private static bool TryIsControlledPropertyBranchActive(
+        XElement element,
+        IReadOnlyDictionary<string, string> properties,
+        out bool active)
+    {
+        active = true;
+        foreach (XElement branch in element.Ancestors().Where(ancestor =>
+                     ancestor.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
+                     ancestor.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase)))
+        {
+            XElement? choose = branch.Parent;
+            if (choose is null ||
+                !choose.Name.LocalName.Equals("Choose", StringComparison.OrdinalIgnoreCase))
+            {
+                active = false;
+                return false;
+            }
+
+            XElement? selectedBranch = null;
+            foreach (XElement candidate in choose.Elements())
+            {
+                if (candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!TryIsControlledPropertyAssignmentActive(candidate, properties, out bool selected))
+                    {
+                        active = false;
+                        return false;
+                    }
+                    if (!selected)
+                        continue;
+                    selectedBranch = candidate;
+                    break;
+                }
+                if (candidate.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedBranch = candidate;
+                    break;
+                }
+            }
+
+            if (!ReferenceEquals(selectedBranch, branch))
+            {
+                active = false;
+                return true;
+            }
+        }
+
+        return true;
     }
 
     private static IEnumerable<ControlledStaticItem> EnumerateControlledStaticItems(
