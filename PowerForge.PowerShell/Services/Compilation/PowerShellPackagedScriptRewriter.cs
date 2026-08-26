@@ -333,12 +333,18 @@ internal static class PowerShellPackagedScriptRewriter
             return GetVariableMayRetrieveMyInvocation(command);
         if (!leafName.Equals("Get-Item", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("Get-Content", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("gi", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("gc", StringComparison.OrdinalIgnoreCase))
+            !leafName.Equals("gc", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("gci", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("dir", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("ls", StringComparison.OrdinalIgnoreCase))
             return false;
         return GetCommandArgumentLiterals(command).Any(static value =>
-            TryGetVariableProviderPattern(value, out var pattern) &&
-            VariablePatternMatches(pattern!, "MyInvocation"));
+        {
+            if (!TryGetVariableProviderPattern(value, out var pattern)) return false;
+            return string.IsNullOrWhiteSpace(pattern) || VariablePatternMatches(pattern!, "MyInvocation");
+        });
     }
 
     private static bool GetVariableMayRetrieveMyInvocation(CommandAst command)
@@ -391,7 +397,7 @@ internal static class PowerShellPackagedScriptRewriter
         const string prefix = "Variable:";
         if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
         pattern = value.Substring(prefix.Length).TrimStart('\\', '/');
-        return !string.IsNullOrWhiteSpace(pattern);
+        return true;
     }
 
     private static bool VariablePatternMatches(string pattern, string name)
@@ -509,6 +515,13 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support interactive PSHost access '{hostReference.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
+        var executionContextHost = FindExecutionContextHostAccess(ast);
+        if (executionContextHost is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support interactive PSHost access through ExecutionContext '{executionContextHost.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
+        }
+
         var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()));
@@ -518,6 +531,20 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace has no console-backed PSHost.");
         }
     }
+
+    private static VariableExpressionAst? FindExecutionContextHostAccess(ScriptBlockAst ast)
+        => ast.FindAll(
+                static node => node is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .FirstOrDefault(static variable =>
+            {
+                if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
+                    return true;
+                return member.Member is not StringConstantExpressionAst name ||
+                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase);
+            });
 
     private static bool IsInteractiveCommand(string? commandName)
     {

@@ -199,7 +199,16 @@ internal static class Program
             if (scalar == typeof(double)) return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
             if (scalar == typeof(decimal)) return decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
             if (scalar == typeof(char) && value.Length == 1) return value[0];
-            if (scalar.IsEnum) return Enum.Parse(scalar, value, ignoreCase: true);
+            if (scalar.IsEnum)
+            {
+                var names = value.Split(',').Select(static name => name.Trim()).ToArray();
+                var definedNames = Enum.GetNames(scalar);
+                if (names.Length == 0 ||
+                    names.Any(name => name.Length == 0 || !definedNames.Contains(name, StringComparer.OrdinalIgnoreCase)) ||
+                    names.Length > 1 && !Attribute.IsDefined(scalar, typeof(FlagsAttribute)))
+                    throw new FormatException("Enum arguments must use defined names.");
+                return Enum.Parse(scalar, value, ignoreCase: true);
+            }
             if (scalar == typeof(DateTime)) return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             if (scalar == typeof(DateTimeOffset)) return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             if (scalar == typeof(TimeSpan)) return TimeSpan.Parse(value, CultureInfo.InvariantCulture);

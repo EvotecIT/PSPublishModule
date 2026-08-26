@@ -79,6 +79,9 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [InlineData("$invocation = (Get-Variable -Scope Local | Where-Object Name -eq MyInvocation).Value; return $invocation.InvocationName")]
     [InlineData("$name = 'MyInvocation'; $invocation = Get-Variable -Name $name -ValueOnly; return $invocation.InvocationName")]
     [InlineData("$invocation = (Get-Item Variable:MyInvocation).Value; return $invocation.InvocationName")]
+    [InlineData("$invocation = (Get-ChildItem Variable:MyInvocation).Value; return $invocation.InvocationName")]
+    [InlineData("$invocation = (gci Variable:).Where({ $_.Name -eq 'MyInvocation' }).Value; return $invocation.InvocationName")]
+    [InlineData("$invocation = (dir Variable:MyInv*).Value; return $invocation.InvocationName")]
     [InlineData("$invocation = $ExecutionContext.SessionState.PSVariable.Get('MyInvocation'); return $invocation.InvocationName")]
     [InlineData("$name = 'MyInvocation'; $invocation = $ExecutionContext.SessionState.PSVariable.Get($name); return $invocation.InvocationName")]
     public void Build_PackagedExecutableRejectsIndirectTopLevelMyInvocationRetrieval(string source)
@@ -125,6 +128,20 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("Write-Progress", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
+    [InlineData("return $ExecutionContext.Host.UI.ReadLine()")]
+    [InlineData("$context = $ExecutionContext; return $context.Host.UI.ReadLine()")]
+    [InlineData("$member = 'Host'; return $ExecutionContext.$member.UI.ReadLine()")]
+    public void Build_PackagedExecutableRejectsExecutionContextHostInteraction(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.ExecutionContextHost", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("PSHost access through ExecutionContext", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
@@ -289,5 +306,23 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.False(result.Succeeded);
         Assert.Contains("interactive prompting", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_StrictExecutableAcceptsDefinedEnumNamesAndRejectsNumericValues()
+    {
+        using var fixture = ArtifactFixture.Create("param([DayOfWeek] $Day); return $Day.ToString()");
+        var result = BuildExecutable(fixture, "PowerForge.EnumArguments", PowerShellCompilationMode.Strict);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var accepted = Run(result.ArtifactPath!, "--Day=Friday");
+        Assert.Equal((0, "Friday", string.Empty),
+            (accepted.ExitCode, accepted.StandardOutput.Trim(), accepted.StandardError.Trim()));
+        foreach (var numeric in new[] { "999", "-1" })
+        {
+            var rejected = Run(result.ArtifactPath!, "--Day=" + numeric);
+            Assert.NotEqual(0, rejected.ExitCode);
+            Assert.Contains("invalid for parameter '--Day'", rejected.StandardError, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
