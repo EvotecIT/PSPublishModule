@@ -153,6 +153,6 @@ internal static class PowerShellHybridFunctionCollisionResolver
 
     private static bool IsImmediatelyInvoked(ScriptBlockExpressionAst expression)
         => expression.Parent is CommandAst command &&
-           command.InvocationOperator == TokenKind.Ampersand &&
+           command.InvocationOperator is TokenKind.Ampersand or TokenKind.Dot &&
            command.CommandElements.FirstOrDefault() == expression;
 }

@@ -42,8 +42,24 @@ public sealed partial class PowerShellCompilationAnalyzer
                    attribute.PositionalArguments[0] is StringConstantExpressionAst;
         if (IsAttributeNamed(attribute, "ValidateRange"))
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 2 &&
-                   attribute.PositionalArguments.All(static argument => TryGetInvariantNumericLiteral(argument, out _));
+                   attribute.PositionalArguments.All(static argument => TryGetInvariantNumericLiteral(argument, out _)) &&
+                   attribute.Parent is ParameterAst parameter &&
+                   IsSupportedValidateRangeType(parameter.StaticType);
         return false;
+    }
+
+    private static bool IsSupportedValidateRangeType(Type type)
+    {
+        var valueType = type.IsArray && type.GetArrayRank() == 1
+            ? type.GetElementType()!
+            : type;
+        valueType = Nullable.GetUnderlyingType(valueType) ?? valueType;
+        return valueType == typeof(byte) || valueType == typeof(sbyte) ||
+               valueType == typeof(short) || valueType == typeof(ushort) ||
+               valueType == typeof(int) || valueType == typeof(uint) ||
+               valueType == typeof(long) || valueType == typeof(ulong) ||
+               valueType == typeof(float) || valueType == typeof(double) ||
+               valueType == typeof(decimal);
     }
 
     private static bool IsSupportedCmdletBindingNamedArgument(

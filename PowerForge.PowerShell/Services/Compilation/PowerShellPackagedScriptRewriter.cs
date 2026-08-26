@@ -426,6 +426,8 @@ internal static class PowerShellPackagedScriptRewriter
                      searchNestedScriptBlocks: true).Cast<CommandAst>())
         {
             var expression = command.CommandElements.FirstOrDefault();
+            if (expression is ScriptBlockExpressionAst)
+                continue;
             if (!TryGetScriptRootRelativePath(expression, out var relativePath))
             {
                 throw new InvalidOperationException(
@@ -555,7 +557,8 @@ internal static class PowerShellPackagedScriptRewriter
                 if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
                     return true;
                 return member.Member is not StringConstantExpressionAst name ||
-                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase);
+                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
+                       name.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
             });
 
     private static bool IsInteractiveCommand(string? commandName)

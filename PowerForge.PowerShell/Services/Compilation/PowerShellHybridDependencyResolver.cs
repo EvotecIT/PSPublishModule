@@ -111,6 +111,8 @@ internal static class PowerShellHybridDependencyResolver
             {
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
+                if (expression is ScriptBlockExpressionAst)
+                    continue;
                 if (IsAcceptedConventionalLoader(current, command, conventionalLoaders))
                     continue;
                 var relativePath = NormalizeRelativePath(ReadLiteralPath(expression, current, command.Extent.StartLineNumber));

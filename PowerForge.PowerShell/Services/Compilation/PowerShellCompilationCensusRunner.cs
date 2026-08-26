@@ -617,10 +617,14 @@ public sealed class PowerShellCompilationCensusRunner
         IEnumerable<PowerShellCompilationFilePlan> files,
         PowerShellTypedCompilationResult emitted)
     {
+        var plannedFiles = files.ToArray();
+        var comparisonPath = emitted.Methods.FirstOrDefault()?.SourcePath ??
+                             plannedFiles.FirstOrDefault()?.FullPath ??
+                             Directory.GetCurrentDirectory();
         var methods = emitted.Methods
             .Select(static method => Path.GetFullPath(method.SourcePath) + "\0" + method.SourceName)
-            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        return files.Select(file =>
+            .ToHashSet(CreateMethodIdentityComparer(comparisonPath));
+        return plannedFiles.Select(file =>
         {
             var fullPath = Path.GetFullPath(file.FullPath);
             var functionExtents = File.Exists(fullPath)
@@ -679,6 +683,11 @@ public sealed class PowerShellCompilationCensusRunner
             return new PowerShellCompilationFilePlan(file.FullPath, file.RelativePath, units, file.Diagnostics);
         }).ToArray();
     }
+
+    internal static StringComparer CreateMethodIdentityComparer(string sourcePath)
+        => PowerShellCompilationPathSafety.GetPathComparison(sourcePath) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
     private static bool IsWithinExtent(int line, int column, IScriptExtent extent)
     {

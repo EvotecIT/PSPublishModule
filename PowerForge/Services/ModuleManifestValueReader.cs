@@ -197,7 +197,7 @@ internal static class ModuleManifestValueReader
         }
     }
 
-    private static string ReadPowerShellCompatibleText(string path)
+    internal static string ReadPowerShellCompatibleText(string path)
     {
         try
         {
