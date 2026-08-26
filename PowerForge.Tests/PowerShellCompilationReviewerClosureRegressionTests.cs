@@ -6,6 +6,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [InlineData("[CmdletBinding()] param(); $PSCmdlet.Host.UI.ReadLine()")]
     [InlineData("[CmdletBinding()] param(); $member = 'Host'; $PSCmdlet.$member.UI.ReadLine()")]
     [InlineData("[CmdletBinding()] param(); $escaped = $PSCmdlet; $escaped.Host.UI.ReadLine()")]
+    [InlineData("[CmdletBinding()] param(); $PSCmdlet.InvokeCommand.InvokeScript('$Host.Name')")]
     public void Build_PackagedExecutableRejectsPSCmdletHostAccess(string source)
     {
         using var fixture = ArtifactFixture.Create(source);
@@ -388,6 +389,31 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-OverflowCatch -Value 255");
+        Assert.Equal((0, "2", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesAuthoredNamedArgumentEvaluationOrder()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-Order { param([int] $A, [int] $B) return $A }; " +
+            "function Get-Order { param([int] $x); [int] $ignored = Invoke-Order -B ($x = 1) -A ($x = 2); return $x }; " +
+            "Export-ModuleMember -Function Get-Order",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NamedArgumentOrder",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-Order -x 0");
         Assert.Equal((0, "2", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }

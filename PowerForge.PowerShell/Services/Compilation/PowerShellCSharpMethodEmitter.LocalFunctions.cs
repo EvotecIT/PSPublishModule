@@ -47,7 +47,14 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             arguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference" });
         if (call.Signature.RequiresPowerShellBoundParameters)
             arguments.Add(EmitBoundParameterSet(call.BoundParameterNames));
-        return $"{call.Signature.GeneratedName}({string.Join(", ", arguments)})";
+        var invocation = $"{call.Signature.GeneratedName}({string.Join(", ", arguments)})";
+        if (call.ArgumentEvaluations.Length == 0)
+            return invocation;
+
+        var evaluations = string.Join(" ", call.ArgumentEvaluations);
+        return call.Signature.ReturnType == typeof(void)
+            ? $"(new global::System.Action(() => {{ {evaluations} {invocation}; }}))()"
+            : $"(new global::System.Func<{GetTypeName(call.Signature.ReturnType)}>(() => {{ {evaluations} return {invocation}; }}))()";
     }
 
     private BoundLocalFunctionCall BindLocalFunctionCall(CommandAst command)
@@ -76,6 +83,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         }
 
         var bound = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var authoredArguments = new List<AuthoredLocalFunctionArgument>();
         var positionalIndex = 0;
         var elements = command.CommandElements.Skip(1).ToArray();
         for (var index = 0; index < elements.Length; index++)
@@ -102,7 +110,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 {
                     throw Error(named, $"Local function parameter '-{parameter.Name}' requires a statically typed argument value.");
                 }
-                bound[parameter.Name] = BindArgument(parameter, argument);
+                var namedValue = BindArgument(parameter, argument);
+                bound[parameter.Name] = namedValue;
+                authoredArguments.Add(new AuthoredLocalFunctionArgument(parameter, namedValue));
                 continue;
             }
 
@@ -116,7 +126,25 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (positionalIndex >= signature.Parameters.Length)
                 throw Error(positional, $"Local function '{signature.SourceName}' received more positional arguments than its typed parameter contract permits.");
             var positionalParameter = signature.Parameters[positionalIndex++];
-            bound[positionalParameter.Name] = BindArgument(positionalParameter, positional);
+            var positionalValue = BindArgument(positionalParameter, positional);
+            bound[positionalParameter.Name] = positionalValue;
+            authoredArguments.Add(new AuthoredLocalFunctionArgument(positionalParameter, positionalValue));
+        }
+
+        var declarationOrder = signature.Parameters
+            .Where(parameter => authoredArguments.Any(argument =>
+                argument.Parameter.Name.Equals(parameter.Name, StringComparison.OrdinalIgnoreCase)))
+            .Select(static parameter => parameter.Name);
+        var authoredOrder = authoredArguments.Select(static argument => argument.Parameter.Name);
+        var argumentEvaluations = new List<string>();
+        if (!authoredOrder.SequenceEqual(declarationOrder, StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var argument in authoredArguments)
+            {
+                var temporary = GetTemporaryIdentifier("local_argument");
+                argumentEvaluations.Add($"{GetTypeName(argument.Parameter.Type)} {temporary} = {argument.Value};");
+                bound[argument.Parameter.Name] = temporary;
+            }
         }
 
         var arguments = signature.Parameters.Select(parameter =>
@@ -129,7 +157,11 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (parameter.Type == typeof(bool)) return "false";
             return $"default({GetTypeName(parameter.Type)})";
         }).ToList();
-        return new BoundLocalFunctionCall(signature, arguments.ToArray(), bound.Keys.ToArray());
+        return new BoundLocalFunctionCall(
+            signature,
+            arguments.ToArray(),
+            bound.Keys.ToArray(),
+            argumentEvaluations.ToArray());
     }
 
     private static string EmitBoundParameterSet(IEnumerable<string> boundParameterNames)
@@ -207,10 +239,32 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private sealed class BoundLocalFunctionCall
     {
-        internal BoundLocalFunctionCall(PowerShellLocalFunctionSignature signature, string[] arguments, string[] boundParameterNames)
-        { Signature = signature; Arguments = arguments; BoundParameterNames = boundParameterNames; }
+        internal BoundLocalFunctionCall(
+            PowerShellLocalFunctionSignature signature,
+            string[] arguments,
+            string[] boundParameterNames,
+            string[] argumentEvaluations)
+        {
+            Signature = signature;
+            Arguments = arguments;
+            BoundParameterNames = boundParameterNames;
+            ArgumentEvaluations = argumentEvaluations;
+        }
         internal PowerShellLocalFunctionSignature Signature { get; }
         internal string[] Arguments { get; }
         internal string[] BoundParameterNames { get; }
+        internal string[] ArgumentEvaluations { get; }
+    }
+
+    private sealed class AuthoredLocalFunctionArgument
+    {
+        internal AuthoredLocalFunctionArgument(PowerShellLocalFunctionParameter parameter, string value)
+        {
+            Parameter = parameter;
+            Value = value;
+        }
+
+        internal PowerShellLocalFunctionParameter Parameter { get; }
+        internal string Value { get; }
     }
 }

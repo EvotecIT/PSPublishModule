@@ -636,7 +636,8 @@ internal static class PowerShellPackagedScriptRewriter
                 if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
                     return true;
                 return member.Member is not StringConstantExpressionAst name ||
-                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase);
+                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
+                       name.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
             });
 
     private static Ast? FindDynamicScriptEvaluation(ScriptBlockAst ast)
