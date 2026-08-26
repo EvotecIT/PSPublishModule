@@ -185,4 +185,114 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             try { Directory.Delete(extractedRoot, recursive: true); } catch { }
         }
     }
+
+    [Theory]
+    [InlineData("#requires -Version 99.0\n'blocked'")]
+    [InlineData("#requires -RunAsAdministrator\n'blocked'")]
+    [InlineData("#requires -Modules PowerForge.Missing\n'blocked'")]
+    public void Build_PackagedExecutableRejectsFileLevelRequirements(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.Requires", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("#requires", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
+    [InlineData("param([Parameter(Mandatory)] [string] $Name); $Name")]
+    [InlineData("Read-Host 'Value'")]
+    [InlineData("process { 1 }")]
+    public void Analyze_PackageReportsDeterministicBuildValidation(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package);
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            resolved,
+            PowerShellCompilationMode.Package,
+            outputDirectory: fixture.OutputPath);
+
+        Assert.False(plan.CanProceed);
+        Assert.Contains(plan.Files.SelectMany(static file => file.Diagnostics), static diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.InputError &&
+            diagnostic.FeatureId == "powershell.package.validation");
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRebuildsCorruptedExtractionCache()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$PSScriptRoot; Get-Content -LiteralPath \"$PSScriptRoot/data.txt\"");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "data.txt"), "approved-payload");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CacheIntegrity",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            IncludeResource = new[] { "data.txt" },
+            SingleFile = false
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var first = Run(result.ArtifactPath!);
+        Assert.Equal(0, first.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(first.StandardError), first.StandardError);
+        var lines = first.StandardOutput.Split(
+            new[] { "\r\n", "\n" },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(2, lines.Length);
+        var extractedRoot = lines[0];
+        try
+        {
+            File.WriteAllText(Path.Combine(extractedRoot, "data.txt"), "tampered-payload");
+            var second = Run(result.ArtifactPath!);
+            Assert.Equal((0, extractedRoot + Environment.NewLine + "approved-payload", string.Empty),
+                (second.ExitCode, second.StandardOutput.Trim(), second.StandardError.Trim()));
+            var extractedEntry = Path.Combine(extractedRoot, Path.GetFileName(fixture.ScriptPath));
+            File.WriteAllText(extractedEntry, "'tampered-entry'");
+            var third = Run(result.ArtifactPath!);
+            Assert.Equal((0, extractedRoot + Environment.NewLine + "approved-payload", string.Empty),
+                (third.ExitCode, third.StandardOutput.Trim(), third.StandardError.Trim()));
+        }
+        finally
+        {
+            try { Directory.Delete(extractedRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesOutOfRangeArrayMutationCatchRouting()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-ArrayMutationRoute { param([int[]] $Numbers, [int] $Slot); " +
+            "try { $Numbers[$Slot] = 9; return 'assigned' } " +
+            "catch [System.Management.Automation.RuntimeException] { return 'caught' } }; " +
+            "Export-ModuleMember -Function Get-ArrayMutationRoute",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ArrayMutationRoute",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("new global::System.Management.Automation.RuntimeException", generated, StringComparison.Ordinal);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-ArrayMutationRoute -Numbers @(1) -Slot 2; Get-ArrayMutationRoute -Numbers @(1) -Slot -2");
+        Assert.Equal((0, "caught" + Environment.NewLine + "caught", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
 }

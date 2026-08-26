@@ -48,7 +48,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             input.ModuleRoot,
             normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
-        return new PowerShellCompilationPlan(
+        var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
             plan.TargetFramework,
@@ -59,6 +59,53 @@ public sealed partial class PowerShellCompilationAnalyzer
                 includeResource,
                 excludeResource,
                 outputDirectory));
+        return capabilityMode == PowerShellCompilationMode.Package
+            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
+            : combined;
+    }
+
+    private static PowerShellCompilationPlan ApplyPackagedValidation(
+        PowerShellCompilationPlan plan,
+        PowerShellCompilationResolvedInput input,
+        string targetFramework)
+    {
+        try
+        {
+            var embeddedScripts = input.CompilationSourceFiles
+                .Select(Path.GetFullPath)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                .ToArray();
+            PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework);
+            _ = PowerShellPackagedScriptRewriter.Rewrite(
+                input.SourcePath,
+                embeddedScriptPaths: embeddedScripts);
+            foreach (var dependency in embeddedScripts.Where(path =>
+                         !PowerShellCompilationPathSafety.PathEquals(path, input.SourcePath)))
+                PowerShellPackagedScriptRewriter.ValidateDependency(dependency, embeddedScripts);
+            return plan;
+        }
+        catch (InvalidOperationException exception)
+        {
+            var sourcePath = Path.GetFullPath(input.SourcePath);
+            var files = plan.Files.Select(file =>
+            {
+                if (!PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath))
+                    return file;
+                var diagnostic = new PowerShellCompilationDiagnostic(
+                    PowerShellCompilationDiagnosticCode.InputError,
+                    exception.Message,
+                    sourcePath,
+                    1,
+                    1,
+                    "powershell.package.validation");
+                return new PowerShellCompilationFilePlan(
+                    file.FullPath,
+                    file.RelativePath,
+                    file.Units,
+                    file.Diagnostics.Concat(new[] { diagnostic }).ToArray());
+            }).ToArray();
+            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies);
+        }
     }
 
     internal PowerShellCompilationPlan AnalyzeFiles(

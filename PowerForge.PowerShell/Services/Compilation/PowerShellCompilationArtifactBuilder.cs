@@ -191,10 +191,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan);
                 var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
+                var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources);
+                var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
                 File.WriteAllText(
-                    Path.Combine(workspace, "Source.ps1"),
-                    GeneratePackagedScript(spec.SourcePath, packagedSources),
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    packagedScriptPath,
+                    packagedScript,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
@@ -203,6 +205,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
                         .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases)
                         .Replace("{{ENTRY_RELATIVE_PATH}}", PowerShellCSharpLiteral.QuoteString(packagedSources.EntryRelativePath))
+                        .Replace("{{ENTRY_SHA256}}", PowerShellCSharpLiteral.QuoteString(ComputeSha256(packagedScriptPath)))
                         .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs)
                         .Replace("{{TARGET_FRAMEWORK}}", PowerShellCSharpLiteral.QuoteString(spec.TargetFramework)),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));

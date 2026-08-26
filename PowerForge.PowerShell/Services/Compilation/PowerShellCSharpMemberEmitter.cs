@@ -175,7 +175,8 @@ internal sealed class PowerShellCSharpMemberEmitter
         var indexCode = _emitExpression(index.Index);
         var checkedTarget = $"({targetCode} ?? throw {GetNullArrayException(index)})";
         var normalizedIndex = $"(({indexCode}) < 0 ? {checkedTarget}.Length + ({indexCode}) : ({indexCode}))";
-        return $"{checkedTarget}[{normalizedIndex}] = {_emitExpression(value)}";
+        var checkedIndex = $"({normalizedIndex} >= 0 && {normalizedIndex} < {checkedTarget}.Length ? {normalizedIndex} : throw {GetArrayIndexException(index)})";
+        return $"{checkedTarget}[{checkedIndex}] = {_emitExpression(value)}";
     }
 
     internal string EmitMemberAssignment(MemberExpressionAst member, Ast value)
@@ -453,6 +454,19 @@ internal sealed class PowerShellCSharpMemberEmitter
                 "Indexing a potentially null array inside a typed try/catch cannot preserve PowerShell's runtime-error identity without a PowerShell host.");
         }
         return "new global::System.InvalidOperationException(\"Cannot index into a null array.\")";
+    }
+
+    private string GetArrayIndexException(Ast node)
+    {
+        if (_canEmitPowerShellRuntimeErrors)
+            return "new global::System.Management.Automation.RuntimeException(\"Index was outside the bounds of the array.\")";
+        if (IsInsideTypeDiscriminatingTry(node))
+        {
+            throw _error(
+                node,
+                "Out-of-range array mutation inside a typed try/catch cannot preserve PowerShell's runtime-error identity without a PowerShell host.");
+        }
+        return "new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\")";
     }
 
     private static bool IsInsideTypeDiscriminatingTry(Ast node)

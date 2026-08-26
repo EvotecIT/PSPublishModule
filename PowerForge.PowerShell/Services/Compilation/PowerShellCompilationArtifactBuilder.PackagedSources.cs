@@ -77,7 +77,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {GetExecutableUnixMode(dependency)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(dependency))}, {GetExecutableUnixMode(dependency)}),");
         }
         for (var index = 0; index < resourceDependencies.Length; index++)
         {
@@ -87,7 +87,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             File.Copy(dependency.Path, Path.Combine(dependencyDirectory, fileName), overwrite: false);
             var logicalName = $"PowerForge.Compiled.Resource{index:D4}";
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {GetExecutableUnixMode(dependency.Path)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(dependency.Path))}, {GetExecutableUnixMode(dependency.Path)}),");
         }
         var resourcePaths = scriptDependencies
             .Select(dependency => FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/'))
@@ -122,19 +122,5 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     private static void ValidatePackagedDependency(string dependencyPath, IReadOnlyCollection<string> embeddedScriptPaths)
-    {
-        var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating exit semantics.");
-        PowerShellPackagedScriptRewriter.ValidateHostInteraction(ast);
-        PowerShellPackagedScriptRewriter.ValidateDotSources(ast, dependencyPath, embeddedScriptPaths);
-        var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
-            .Cast<ExitStatementAst>()
-            .FirstOrDefault();
-        if (exit is not null)
-        {
-            throw new InvalidOperationException(
-                $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
-        }
-    }
+        => PowerShellPackagedScriptRewriter.ValidateDependency(dependencyPath, embeddedScriptPaths);
 }

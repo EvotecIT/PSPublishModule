@@ -8,6 +8,7 @@ internal static class Program
 {
     private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
     private static readonly string EntryRelativePath = {{ENTRY_RELATIVE_PATH}};
+    private static readonly string EntrySha256 = {{ENTRY_SHA256}};
     private static readonly EmbeddedDependency[] Dependencies =
     {
 {{DEPENDENCY_SPECS}}
@@ -135,8 +136,21 @@ internal static class Program
             char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_'));
         var root = System.IO.Path.Combine(cacheRoot, safeName + "-" + assembly.ManifestModule.ModuleVersionId.ToString("N"));
         var completeMarker = System.IO.Path.Combine(root, ".complete");
-        if (!File.Exists(completeMarker))
+        string? invalidRoot = null;
+        if (!IsExtractionCacheValid(root, completeMarker, assembly))
         {
+            if (Directory.Exists(root))
+            {
+                invalidRoot = root + ".invalid-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    Directory.Move(root, invalidRoot);
+                }
+                catch (IOException) when (IsExtractionCacheValid(root, completeMarker, assembly))
+                {
+                    invalidRoot = null;
+                }
+            }
             var stagingRoot = root + ".staging-" + Guid.NewGuid().ToString("N");
             try
             {
@@ -160,7 +174,7 @@ internal static class Program
                 {
                     Directory.Move(stagingRoot, root);
                 }
-                catch (IOException) when (File.Exists(completeMarker))
+                catch (IOException) when (IsExtractionCacheValid(root, completeMarker, assembly))
                 {
                     Directory.Delete(stagingRoot, recursive: true);
                 }
@@ -168,12 +182,49 @@ internal static class Program
             catch
             {
                 try { Directory.Delete(stagingRoot, recursive: true); } catch { }
+                if (invalidRoot is not null)
+                {
+                    try { Directory.Delete(invalidRoot, recursive: true); } catch { }
+                }
                 throw;
             }
+            if (invalidRoot is not null)
+            {
+                try { Directory.Delete(invalidRoot, recursive: true); } catch { }
+            }
         }
-        if (!File.Exists(completeMarker))
-            throw new InvalidOperationException($"Packaged PowerShell extraction cache '{root}' is incomplete.");
+        if (!IsExtractionCacheValid(root, completeMarker, assembly))
+            throw new InvalidOperationException($"Packaged PowerShell extraction cache '{root}' is incomplete or failed payload validation.");
         return ResolveContainedExtractionPath(root, EntryRelativePath);
+    }
+
+    private static bool IsExtractionCacheValid(string root, string completeMarker, Assembly assembly)
+    {
+        try
+        {
+            if (!File.Exists(completeMarker) ||
+                !File.ReadAllText(completeMarker).Trim().Equals(assembly.ManifestModule.ModuleVersionId.ToString("N"), StringComparison.OrdinalIgnoreCase))
+                return false;
+            var entryPath = ResolveContainedExtractionPath(root, EntryRelativePath);
+            if (!File.Exists(entryPath) || !ComputeFileSha256(entryPath).Equals(EntrySha256, StringComparison.OrdinalIgnoreCase))
+                return false;
+            return Dependencies.All(dependency =>
+            {
+                var path = ResolveContainedExtractionPath(root, dependency.RelativePath);
+                return File.Exists(path) && ComputeFileSha256(path).Equals(dependency.Sha256, StringComparison.OrdinalIgnoreCase);
+            });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var algorithm = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     private static string ResolveContainedExtractionPath(string root, string relativePath)
@@ -312,15 +363,17 @@ internal static class Program
 
     private sealed class EmbeddedDependency
     {
-        internal EmbeddedDependency(string resourceName, string relativePath, int unixFileMode)
+        internal EmbeddedDependency(string resourceName, string relativePath, string sha256, int unixFileMode)
         {
             ResourceName = resourceName;
             RelativePath = relativePath;
+            Sha256 = sha256;
             UnixFileMode = unixFileMode;
         }
 
         internal string ResourceName { get; }
         internal string RelativePath { get; }
+        internal string Sha256 { get; }
         internal int UnixFileMode { get; }
     }
 

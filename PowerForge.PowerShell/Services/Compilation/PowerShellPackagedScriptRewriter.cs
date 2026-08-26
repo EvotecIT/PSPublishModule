@@ -27,6 +27,7 @@ internal static class PowerShellPackagedScriptRewriter
         var ast = Parser.ParseFile(sourcePath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
+        ValidateScriptRequirements(ast, sourcePath);
 
         var fileResolvedUsing = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
             .Cast<UsingStatementAst>()
@@ -475,6 +476,33 @@ internal static class PowerShellPackagedScriptRewriter
                     $"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because resolved dependency '{targetPath}' is not embedded with the artifact.");
             }
         }
+    }
+
+    internal static void ValidateDependency(
+        string dependencyPath,
+        IReadOnlyCollection<string> embeddedScriptPaths)
+    {
+        var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
+        ValidateScriptRequirements(ast, dependencyPath);
+        ValidateHostInteraction(ast);
+        ValidateDotSources(ast, dependencyPath, embeddedScriptPaths);
+        var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
+            .Cast<ExitStatementAst>()
+            .FirstOrDefault();
+        if (exit is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
+        }
+    }
+
+    private static void ValidateScriptRequirements(ScriptBlockAst ast, string sourcePath)
+    {
+        if (ast.ScriptRequirements is null) return;
+        throw new InvalidOperationException(
+            $"Packaged script '{sourcePath}' declares #requires directives, which AddScript cannot enforce with pwsh -File semantics. Remove the directives or keep the script on a file-backed PowerShell runtime path.");
     }
 
     private static bool TryGetScriptRootRelativePath(CommandElementAst? expression, out string? relativePath)

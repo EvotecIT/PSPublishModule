@@ -351,6 +351,7 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Whether artifact generation is allowed under the requested mode.</summary>
     public bool CanProceed => ParseErrorFiles == 0 &&
+                              Files.All(static file => file.Diagnostics.All(static diagnostic => diagnostic.Code != PowerShellCompilationDiagnosticCode.InputError)) &&
                               Dependencies.All(static dependency => dependency.Disposition != PowerShellCompilationDependencyDisposition.Missing) &&
                               (Mode != PowerShellCompilationMode.Strict || RuntimeFallbackUnits == 0);
 }

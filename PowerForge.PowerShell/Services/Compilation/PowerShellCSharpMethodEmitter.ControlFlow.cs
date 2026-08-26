@@ -166,7 +166,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var type = constraint.TypeName.GetReflectionType();
         if (type is null || !typeof(Exception).IsAssignableFrom(type))
             throw Error(constraint, $"Typed catch '{constraint.TypeName.FullName}' is not a statically resolvable CLR exception type.");
-        if (!PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework))
+        var powerShellRuntimeException = _capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+                                         type == typeof(System.Management.Automation.RuntimeException);
+        if (!PowerShellGeneratedTypePolicy.IsSupported(type, _targetFramework) && !powerShellRuntimeException)
             throw Error(constraint, $"Typed catch '{type.FullName}' is outside the generated project reference set.");
         return type;
     }
