@@ -42,6 +42,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             throw Error(assignment, $"Compound assignment '{assignment.Operator}' is not defined for CLR types '{_variables[name].FullName}' and '{rightType.FullName}' on the conservative compilation path.");
         if (operation != "=" && IsIntegral(_variables[name]) && !_explicitlyTypedVariables.Contains(name))
             throw Error(assignment, $"Integral compound assignment to untyped local '${name}' can promote dynamically in PowerShell and is not eligible for typed compilation.");
+        if (operation != "=" && IsIntegral(_variables[name]) && PowerShellRuntimeExceptionCatchPolicy.Contains(assignment))
+        {
+            throw Error(
+                assignment,
+                "Integral compound assignment inside a RuntimeException catch cannot preserve PowerShell's overflow-error wrapping on the conservative compilation path.");
+        }
 
         _declaredLocals.Add(name);
         var suffix = terminate ? ";" : string.Empty;

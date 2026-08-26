@@ -22,6 +22,16 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private string EmitRegexMatch(BinaryExpressionAst binary, string operation)
     {
+        if (_body.FindAll(
+                static node => node is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("Matches", StringComparison.OrdinalIgnoreCase) &&
+                               !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
+                searchNestedScriptBlocks: false).Any())
+        {
+            throw Error(
+                binary,
+                "Regex matching whose $Matches automatic-variable state is observed requires PowerShell runtime semantics.");
+        }
         EnsureScalarStrings(binary, operation);
         var options = operation.StartsWith("I", StringComparison.Ordinal)
             ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"

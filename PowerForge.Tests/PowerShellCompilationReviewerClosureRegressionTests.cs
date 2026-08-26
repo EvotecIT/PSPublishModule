@@ -3,6 +3,20 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 {
     [Theory]
+    [InlineData("[CmdletBinding()] param(); $PSCmdlet.Host.UI.ReadLine()")]
+    [InlineData("[CmdletBinding()] param(); $member = 'Host'; $PSCmdlet.$member.UI.ReadLine()")]
+    [InlineData("[CmdletBinding()] param(); $escaped = $PSCmdlet; $escaped.Host.UI.ReadLine()")]
+    public void Build_PackagedExecutableRejectsPSCmdletHostAccess(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.PSCmdletHost", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("PSHost", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
     [InlineData("return $ExecutionContext.SessionState.PSVariable.GetValue('Host').Name")]
     [InlineData("return $ExecutionContext.SessionState.PSVariable.Get('Host').Value.Name")]
     [InlineData("$name = 'Host'; return $ExecutionContext.SessionState.PSVariable.GetValue($name).Name")]
@@ -293,6 +307,88 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-ArrayMutationRoute -Numbers @(1) -Slot 2; Get-ArrayMutationRoute -Numbers @(1) -Slot -2");
         Assert.Equal((0, "caught" + Environment.NewLine + "caught", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesMatchesAutomaticVariable()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-MatchCapture { $Matches = @{'1' = 'old'}; $ok = 'new' -match '^(.)'; return $Matches.1 }; " +
+            "Export-ModuleMember -Function Get-MatchCapture",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MatchCapture",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("$Matches", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-MatchCapture");
+        Assert.Equal((0, "n", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesClrInvocationRuntimeExceptionCatch()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-MemberCatch { param([string] $Text); try { return $Text.Substring(99) } " +
+            "catch [System.Management.Automation.RuntimeException] { return 'caught' } }; " +
+            "Export-ModuleMember -Function Get-MemberCatch",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MemberCatch",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("runtime-error wrapping", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-MemberCatch -Text x");
+        Assert.Equal((0, "caught", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryModulePreservesIntegralOverflowRuntimeExceptionCatch()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-OverflowCatch { param([byte] $Value); try { $Value++; return 1 } " +
+            "catch [System.Management.Automation.RuntimeException] { return 2 } }; " +
+            "Export-ModuleMember -Function Get-OverflowCatch",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.OverflowCatch",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.True(
+            result.Manifest.Diagnostics.Any(static diagnostic =>
+                diagnostic.Message.Contains("overflow-error wrapping", StringComparison.OrdinalIgnoreCase)),
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-OverflowCatch -Value 255");
+        Assert.Equal((0, "2", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 }

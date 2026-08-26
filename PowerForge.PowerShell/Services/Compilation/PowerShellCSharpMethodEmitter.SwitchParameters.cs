@@ -19,6 +19,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private string EmitMemberInvocation(InvokeMemberExpressionAst invocation)
     {
         RejectObservableSwitchParameter(invocation.Expression, invocation);
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(invocation))
+        {
+            throw Error(
+                invocation,
+                "CLR member invocation inside a RuntimeException catch cannot preserve PowerShell's runtime-error wrapping on the conservative compilation path.");
+        }
         return _memberEmitter.EmitInvocation(invocation);
     }
 

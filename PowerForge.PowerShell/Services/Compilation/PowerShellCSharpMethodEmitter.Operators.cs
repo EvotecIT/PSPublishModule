@@ -145,6 +145,12 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 throw Error(unary, $"Increment and decrement are not defined for CLR type '{childType.FullName}' on the conservative compilation path.");
             if (!_explicitlyTypedVariables.Contains(variable.VariablePath.UserPath))
                 throw Error(unary, $"Increment or decrement of untyped local '${variable.VariablePath.UserPath}' can promote dynamically in PowerShell.");
+            if (IsIntegral(childType) && PowerShellRuntimeExceptionCatchPolicy.Contains(unary))
+            {
+                throw Error(
+                    unary,
+                    "Integral increment or decrement inside a RuntimeException catch cannot preserve PowerShell's overflow-error wrapping on the conservative compilation path.");
+            }
         }
         return operation switch
         {

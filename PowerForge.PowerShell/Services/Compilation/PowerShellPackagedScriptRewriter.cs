@@ -586,6 +586,13 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support interactive PSHost access through ExecutionContext '{executionContextHost.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
+        var psCmdletHost = FindPSCmdletHostAccess(ast);
+        if (psCmdletHost is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support interactive PSHost access through PSCmdlet '{psCmdletHost.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
+        }
+
         var dynamicScriptEvaluation = FindDynamicScriptEvaluation(ast);
         if (dynamicScriptEvaluation is not null)
         {
@@ -616,6 +623,20 @@ internal static class PowerShellPackagedScriptRewriter
                 return member.Member is not StringConstantExpressionAst name ||
                        name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase) ||
                        name.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
+            });
+
+    private static VariableExpressionAst? FindPSCmdletHostAccess(ScriptBlockAst ast)
+        => ast.FindAll(
+                static node => node is VariableExpressionAst variable &&
+                               variable.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase),
+                searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .FirstOrDefault(static variable =>
+            {
+                if (variable.Parent is not MemberExpressionAst member || !ReferenceEquals(member.Expression, variable))
+                    return true;
+                return member.Member is not StringConstantExpressionAst name ||
+                       name.Value.Equals("Host", StringComparison.OrdinalIgnoreCase);
             });
 
     private static Ast? FindDynamicScriptEvaluation(ScriptBlockAst ast)
