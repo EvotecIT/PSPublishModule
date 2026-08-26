@@ -7,7 +7,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(string sourcePath, PackagedSourceSet packagedSources)
         => PowerShellPackagedScriptRewriter.Rewrite(
             sourcePath,
-            allowDotSource: packagedSources.HasDependencies,
+            packagedCommandPathExpression: packagedSources.UsesExtractedRoot
+                ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path"
+                : null,
+            embeddedScriptPaths: packagedSources.EmbeddedScriptPaths,
             dependencyCommandPathExpression: packagedSources.HasDependencies
                 ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path"
                 : null,
@@ -57,6 +60,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 string.Empty,
                 hasDependencies: false,
                 Array.Empty<string>(),
+                Array.Empty<string>(),
                 usesExtractedRoot: false);
 
         var dependencyDirectory = Path.Combine(workspace, "EmbeddedDependencies");
@@ -67,7 +71,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             var dependency = scriptDependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
-            RejectDependencyExits(dependency);
+            ValidatePackagedDependency(dependency, scriptDependencies.Prepend(fullSourcePath).ToArray());
             var fileName = $"Dependency{index:D4}.ps1";
             File.Copy(dependency, Path.Combine(dependencyDirectory, fileName), overwrite: false);
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
@@ -94,6 +98,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string.Join(Environment.NewLine, projectResources),
             string.Join(Environment.NewLine, dependencySpecs),
             hasDependencies: true,
+            scriptDependencies,
             resourcePaths,
             usesExtractedRoot);
     }
@@ -111,12 +116,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 #endif
     }
 
-    private static void RejectDependencyExits(string dependencyPath)
+    private static void ValidatePackagedDependency(string dependencyPath, IReadOnlyCollection<string> embeddedScriptPaths)
     {
         var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating exit semantics.");
         PowerShellPackagedScriptRewriter.ValidateHostInteraction(ast);
+        PowerShellPackagedScriptRewriter.ValidateDotSources(ast, dependencyPath, embeddedScriptPaths);
         var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .FirstOrDefault();

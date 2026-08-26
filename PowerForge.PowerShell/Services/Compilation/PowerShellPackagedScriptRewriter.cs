@@ -16,7 +16,7 @@ internal static class PowerShellPackagedScriptRewriter
     internal static string Rewrite(
         string sourcePath,
         string? packagedCommandPathExpression = null,
-        bool allowDotSource = false,
+        IReadOnlyCollection<string>? embeddedScriptPaths = null,
         string? dependencyCommandPathExpression = null,
         IReadOnlyCollection<string>? embeddedResourceRelativePaths = null,
         string? packagedScriptRootExpression = null)
@@ -37,16 +37,7 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support '{fileResolvedUsing.Extent.Text}' because using module/assembly directives are resolved before the embedded script receives file-backed path metadata.");
         }
 
-        var dotSource = ast.FindAll(
-                static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
-                searchNestedScriptBlocks: true)
-            .Cast<CommandAst>()
-            .FirstOrDefault();
-        if (dotSource is not null && !allowDotSource)
-        {
-            throw new InvalidOperationException(
-                $"Packaged executable generation does not support dot-sourced command '{dotSource.Extent.Text}' because the dependency is not embedded with file-backed path semantics.");
-        }
+        ValidateDotSources(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
 
         ValidateHostInteraction(ast);
 
@@ -189,6 +180,11 @@ internal static class PowerShellPackagedScriptRewriter
                 throw new InvalidOperationException(
                     $"Packaged executable generation does not preserve the top-level invocation command object '{member.Extent.Text}'; inspect one of the explicitly supported MyCommand members instead.");
             }
+            if (IsTopLevelDirectMyInvocationMember(member, ast) && !IsTopLevelMyCommandReference(member, ast))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not preserve direct top-level invocation metadata '{member.Extent.Text}'; only explicitly supported MyCommand path metadata can be packaged.");
+            }
             if (!IsTopLevelInvocationMetadata(member, ast)) continue;
             if (member.Member is not StringConstantExpressionAst name ||
                 !IsSupportedInvocationMetadata(name.Value))
@@ -277,6 +273,71 @@ internal static class PowerShellPackagedScriptRewriter
             return false;
 
         return IsTopLevel(member, root);
+    }
+
+    private static bool IsTopLevelDirectMyInvocationMember(MemberExpressionAst member, ScriptBlockAst root)
+        => member.Expression is VariableExpressionAst invocation &&
+           invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) &&
+           IsTopLevel(member, root);
+
+    internal static void ValidateDotSources(
+        ScriptBlockAst ast,
+        string sourcePath,
+        IReadOnlyCollection<string> embeddedScriptPaths)
+    {
+        var allowed = embeddedScriptPaths
+            .Select(Path.GetFullPath)
+            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
+        foreach (var command in ast.FindAll(
+                     static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                     searchNestedScriptBlocks: true).Cast<CommandAst>())
+        {
+            var expression = command.CommandElements.FirstOrDefault();
+            if (!TryGetScriptRootRelativePath(expression, out var relativePath))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because its target is not a literal $PSScriptRoot path embedded with the artifact.");
+            }
+
+            string targetPath;
+            try
+            {
+                targetPath = Path.GetFullPath(Path.Combine(
+                    sourceDirectory,
+                    relativePath!.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar)));
+            }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation cannot resolve dot-sourced command '{command.Extent.Text}' to an embedded dependency.",
+                    exception);
+            }
+            if (!allowed.Contains(targetPath))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because resolved dependency '{targetPath}' is not embedded with the artifact.");
+            }
+        }
+    }
+
+    private static bool TryGetScriptRootRelativePath(CommandElementAst? expression, out string? relativePath)
+    {
+        relativePath = null;
+        if (expression is not ExpandableStringExpressionAst expandable ||
+            expandable.NestedExpressions.Count != 1 ||
+            expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
+            !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var text = expression.Extent.Text.Trim().Trim('"');
+        var prefixes = new[] { "$PSScriptRoot/", "$PSScriptRoot\\", "${PSScriptRoot}/", "${PSScriptRoot}\\" };
+        var prefix = prefixes.FirstOrDefault(candidate => text.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (prefix is null) return false;
+        var candidate = text.Substring(prefix.Length);
+        if (string.IsNullOrWhiteSpace(candidate) || candidate.IndexOf('$') >= 0 || candidate.IndexOf('`') >= 0)
+            return false;
+        relativePath = candidate;
+        return true;
     }
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)

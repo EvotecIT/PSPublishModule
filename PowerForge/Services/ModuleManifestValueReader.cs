@@ -1,4 +1,6 @@
 using System.IO;
+using System.Globalization;
+using System.Text;
 
 namespace PowerForge;
 
@@ -186,12 +188,34 @@ internal static class ModuleManifestValueReader
 
         try
         {
-            manifestText = File.ReadAllText(manifestPath);
+            manifestText = ReadPowerShellCompatibleText(manifestPath);
             return !string.IsNullOrWhiteSpace(manifestText);
         }
         catch
         {
             return false;
+        }
+    }
+
+    private static string ReadPowerShellCompatibleText(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(
+                path,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+                detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
+        }
+        catch (DecoderFallbackException)
+        {
+#if NETFRAMEWORK
+            return File.ReadAllText(path, Encoding.Default);
+#else
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var codePage = CultureInfo.CurrentCulture.TextInfo.ANSICodePage;
+            return File.ReadAllText(path, Encoding.GetEncoding(codePage));
+#endif
         }
     }
 }

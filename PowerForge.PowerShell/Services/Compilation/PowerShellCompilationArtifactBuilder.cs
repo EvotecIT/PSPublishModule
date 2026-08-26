@@ -702,6 +702,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string projectResources,
             string dependencySpecs,
             bool hasDependencies,
+            string[] embeddedScriptPaths,
             string[] embeddedResourceRelativePaths,
             bool usesExtractedRoot)
         {
@@ -709,6 +710,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ProjectResources = projectResources;
             DependencySpecs = dependencySpecs;
             HasDependencies = hasDependencies;
+            EmbeddedScriptPaths = embeddedScriptPaths;
             EmbeddedResourceRelativePaths = embeddedResourceRelativePaths;
             UsesExtractedRoot = usesExtractedRoot;
         }
@@ -717,6 +719,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         internal string ProjectResources { get; }
         internal string DependencySpecs { get; }
         internal bool HasDependencies { get; }
+        internal string[] EmbeddedScriptPaths { get; }
         internal string[] EmbeddedResourceRelativePaths { get; }
         internal bool UsesExtractedRoot { get; }
     }

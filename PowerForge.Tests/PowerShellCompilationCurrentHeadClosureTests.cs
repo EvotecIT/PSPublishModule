@@ -159,4 +159,94 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Contains("whitespace-joining semantics", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
+
+    [Theory]
+    [InlineData("$MyInvocation.InvocationName")]
+    [InlineData("$MyInvocation.ScriptName")]
+    [InlineData("$MyInvocation.HistoryId")]
+    public void Build_PackagedExecutableRejectsDirectTopLevelInvocationMetadata(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.DirectInvocationMetadata", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("direct top-level invocation metadata", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableRoutesWarningsLikePwshFile()
+    {
+        using var fixture = ArtifactFixture.Create("Write-Warning 'careful'; 'done'");
+        var result = BuildExecutable(fixture, "PowerForge.WarningRouting", PowerShellCompilationMode.Package);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal(0, run.ExitCode);
+        Assert.Contains("WARNING: careful", run.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("done", run.StandardOutput, StringComparison.Ordinal);
+        Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+    }
+
+    [Theory]
+    [InlineData("\"$PSScriptRoot/$Name.ps1\"")]
+    [InlineData("'$PSScriptRoot/Helper.ps1'")]
+    public void Build_PackagedExecutableRejectsUnresolvedDotSourceDespiteUnrelatedEmbeddedSource(string expression)
+    {
+        using var fixture = ArtifactFixture.Create($"param([string] $Name = 'Missing'); . {expression}; 'done'");
+        var helper = Path.Combine(fixture.RootPath, "Helper.ps1");
+        File.WriteAllText(helper, "'helper'");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DynamicPackagedDotSource",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper },
+            SingleFile = false
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("literal $PSScriptRoot path", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableKeepsCommandPathAndScriptRootAlignedForExplicitResources()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$root = Split-Path -Parent $PSCommandPath; " +
+            "\"$($root -eq $PSScriptRoot)|$(Get-Content -LiteralPath (Join-Path $root 'data.json'))\"");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "data.json"), "resource-proof");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ResourcePathIdentity",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            IncludeResource = new[] { "data.json" },
+            SingleFile = false
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal((0, "True|resource-proof", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void ManifestReaderDecodesBomlessAnsiUsingPowerShellCompatibleFallback()
+    {
+        using var fixture = ArtifactFixture.Create("'unused'");
+        var manifest = Path.Combine(fixture.RootPath, "Demo.psd1");
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        var ansi = System.Text.Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.ANSICodePage);
+        File.WriteAllBytes(manifest, ansi.GetBytes("@{ FunctionsToExport = @('Get-Café') }"));
+
+        var exports = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "FunctionsToExport");
+
+        Assert.Equal(new[] { "Get-Café" }, exports);
+    }
 }
