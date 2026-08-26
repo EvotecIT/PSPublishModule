@@ -417,4 +417,121 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Equal((0, "2", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
+
+    [Fact]
+    public void Build_PackagedExecutableRejectsDynamicCommandInvocation()
+    {
+        using var fixture = ArtifactFixture.Create("$command = 'Read-Host'; & $command");
+        var result = BuildExecutable(fixture, "PowerForge.DynamicInteractiveCommand", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dynamic command invocation", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesDynamicPreDeclarationInvocationTiming()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$name = 'Get-Later'; try { $script:before = & $name } catch { $script:before = 'missing' }; " +
+            "function Get-Later { [CmdletBinding()] param(); return 'later' }; " +
+            "function Get-Stable { [CmdletBinding()] param(); return 'stable' }; " +
+            "Export-ModuleMember -Function Get-Later, Get-Stable",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DynamicPreDeclaration",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("command-availability timing", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-Stable; Get-Later");
+        Assert.Equal((0, "stable" + Environment.NewLine + "later", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesSimpleFunctionLooseArgumentBinding()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-LooseValue { param([string] $Label); return 'preserved' }; " +
+            "Export-ModuleMember -Function Get-LooseValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.LooseSimpleBinding",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-LooseValue -Unknown value");
+        Assert.Equal((0, "preserved", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Theory]
+    [InlineData("function Get-CallerPath { $MyInvocation.ScriptName }; Get-CallerPath")]
+    [InlineData("function Get-CallerPath { $invocation = $MyInvocation; $invocation.PSScriptRoot }; Get-CallerPath")]
+    public void Build_PackagedExecutableRejectsNestedCallerPathMetadata(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.NestedCallerPath", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("invocation metadata", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableBindsAutomaticPagingParameters()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "[CmdletBinding(SupportsPaging = $true)] param(); " +
+            "return \"$($PSCmdlet.PagingParameters.First)|$($PSCmdlet.PagingParameters.Skip)|$($PSCmdlet.PagingParameters.IncludeTotalCount.IsPresent)\"");
+        var result = BuildExecutable(fixture, "PowerForge.PagingParameters", PowerShellCompilationMode.Package);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, "--First", "5", "--Skip", "2", "--IncludeTotalCount");
+        Assert.Equal((0, "5|2|True", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void DefaultRuntimeIdentifierMapsExtendedArchitecturesAndRejectsUnknownValues()
+    {
+        var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["S390x"] = "linux-s390x",
+            ["Ppc64le"] = "linux-ppc64le",
+            ["LoongArch64"] = "linux-loongarch64",
+            ["Armv6"] = "linux-armv6"
+        };
+        foreach (var pair in expected)
+        {
+            var architecture = Enum.Parse<System.Runtime.InteropServices.Architecture>(pair.Key, ignoreCase: true);
+            Assert.Equal(pair.Value, PowerShellCompilationArtifactBuilder.GetDefaultRuntimeIdentifier(
+                isWindows: false,
+                isMacOS: false,
+                hostRuntimeIdentifier: "linux-x64",
+                architecture));
+        }
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationArtifactBuilder.GetDefaultRuntimeIdentifier(
+                isWindows: false,
+                isMacOS: false,
+                hostRuntimeIdentifier: "linux-x64",
+                (System.Runtime.InteropServices.Architecture)int.MaxValue));
+    }
 }

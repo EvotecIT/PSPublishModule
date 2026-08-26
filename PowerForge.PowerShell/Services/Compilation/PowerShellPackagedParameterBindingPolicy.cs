@@ -48,6 +48,15 @@ internal static class PowerShellPackagedParameterBindingPolicy
             if (commonParameter.IsSwitch)
                 switchParameters.Add(commonParameter.Name);
         }
+        if (SupportsPaging(ast.ParamBlock))
+        {
+            foreach (var pagingParameter in new[] { "First", "Skip", "IncludeTotalCount" })
+            {
+                if (!parameters.Add(pagingParameter))
+                    throw AmbiguousBindingName(pagingParameter, pagingParameter, pagingParameter);
+            }
+            switchParameters.Add("IncludeTotalCount");
+        }
         foreach (var parameter in authoredParameters)
         {
             var name = parameter.Name.VariablePath.UserPath;
@@ -109,6 +118,18 @@ internal static class PowerShellPackagedParameterBindingPolicy
                 try { return argument.Argument.SafeGetValue() is true; }
                 catch (InvalidOperationException) { return false; }
             });
+
+    private static bool SupportsPaging(ParamBlockAst? parameterBlock)
+        => parameterBlock?.Attributes
+            .OfType<AttributeAst>()
+            .Where(static attribute => IsAttributeNamed(attribute, "CmdletBinding"))
+            .SelectMany(static attribute => attribute.NamedArguments)
+            .Where(static argument => argument.ArgumentName.Equals("SupportsPaging", StringComparison.OrdinalIgnoreCase))
+            .Any(static argument =>
+            {
+                try { return argument.Argument.SafeGetValue() is not bool value || value; }
+                catch (InvalidOperationException) { return true; }
+            }) == true;
 }
 
 internal sealed class PowerShellPackagedParameterInitializers

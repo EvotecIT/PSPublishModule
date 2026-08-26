@@ -38,7 +38,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                              node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
                             IsModuleScope(node, source.Root),
                     searchNestedScriptBlocks: true)
-                .Any(node => ReferencesFunction(node, definition.Function.Name, source.InvokeCommandAliases))))
+                .Any(node => ReferencesFunction(node, definition.Function.Name, source.InvokeCommandAliases, source.Root))))
             .Select(static definition => definition.Function.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallbackNames = duplicateNames
@@ -95,10 +95,14 @@ internal static class PowerShellHybridFunctionCollisionResolver
         => node is CommandAst ||
            node is InvokeMemberExpressionAst invocation && IsInvokeCommandDiscovery(invocation, invokeCommandAliases);
 
-    private static bool ReferencesFunction(Ast node, string functionName, HashSet<string> invokeCommandAliases)
+    private static bool ReferencesFunction(
+        Ast node,
+        string functionName,
+        HashSet<string> invokeCommandAliases,
+        ScriptBlockAst root)
         => node switch
         {
-            CommandAst command => ReferencesFunction(command, functionName),
+            CommandAst command => ReferencesFunction(command, functionName, root),
             InvokeMemberExpressionAst invocation => ReferencesFunction(invocation, functionName, invokeCommandAliases),
             _ => false
         };
@@ -157,11 +161,16 @@ internal static class PowerShellHybridFunctionCollisionResolver
            executionContext.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase) &&
            invokeCommand.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
 
-    private static bool ReferencesFunction(CommandAst command, string functionName)
+    private static bool ReferencesFunction(CommandAst command, string functionName, ScriptBlockAst root)
     {
         if (command.GetCommandName()?.Equals(functionName, StringComparison.OrdinalIgnoreCase) == true)
             return true;
         var commandName = command.GetCommandName();
+        if (commandName is null && IsDynamicFunctionInvocation(command))
+        {
+            var resolved = ResolveDynamicCommandName(command, root);
+            return resolved is null || CommandPatternMatches(resolved, functionName);
+        }
         if (commandName is null ||
             !commandName.Equals("Get-Command", StringComparison.OrdinalIgnoreCase) &&
             !commandName.EndsWith("\\Get-Command", StringComparison.OrdinalIgnoreCase) &&
@@ -191,6 +200,27 @@ internal static class PowerShellHybridFunctionCollisionResolver
             return true;
         }
         return true;
+    }
+
+    private static bool IsDynamicFunctionInvocation(CommandAst command)
+        => command.InvocationOperator is not TokenKind.Dot &&
+           command.CommandElements.FirstOrDefault() is VariableExpressionAst;
+
+    private static string? ResolveDynamicCommandName(CommandAst command, ScriptBlockAst root)
+    {
+        if (command.CommandElements.FirstOrDefault() is not VariableExpressionAst commandVariable)
+            return null;
+        var variableName = commandVariable.VariablePath.UserPath;
+        var assignment = root.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
+            .Cast<AssignmentStatementAst>()
+            .Where(candidate => candidate.Extent.StartOffset < command.Extent.StartOffset && IsModuleScope(candidate, root))
+            .Where(candidate => candidate.Left is VariableExpressionAst variable &&
+                                variable.VariablePath.UserPath.Equals(variableName, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static candidate => candidate.Extent.StartOffset)
+            .FirstOrDefault();
+        if (assignment?.Right is not CommandExpressionAst { Expression: StringConstantExpressionAst literal })
+            return null;
+        return literal.Value;
     }
 
     private static bool CommandPatternMatches(string pattern, string functionName)

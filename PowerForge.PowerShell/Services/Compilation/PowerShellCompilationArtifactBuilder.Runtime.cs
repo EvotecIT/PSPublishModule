@@ -18,12 +18,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string? hostRuntimeIdentifier,
         Architecture architecture)
     {
-        var architectureName = architecture switch
+        var architectureName = architecture.ToString().ToUpperInvariant() switch
         {
-            Architecture.X86 => "x86",
-            Architecture.Arm64 => "arm64",
-            Architecture.Arm => "arm",
-            _ => "x64"
+            "X86" => "x86",
+            "X64" => "x64",
+            "ARM" => "arm",
+            "ARM64" => "arm64",
+            "ARMV6" => "armv6",
+            "S390X" => "s390x",
+            "PPC64LE" => "ppc64le",
+            "LOONGARCH64" => "loongarch64",
+            _ => throw new InvalidOperationException(
+                $"The active process architecture '{architecture}' has no default .NET runtime identifier mapping. Specify RuntimeIdentifier explicitly.")
         };
         if (isWindows)
             return "win-" + architectureName;

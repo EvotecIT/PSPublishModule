@@ -176,11 +176,12 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
-        var indirectInvocation = FindIndirectVariableLookup(ast, "MyInvocation", topLevelOnly: true);
+        var indirectInvocation = FindIndirectVariableLookup(ast, "MyInvocation", topLevelOnly: false);
         if (indirectInvocation is not null)
         {
+            var scope = IsTopLevel(indirectInvocation, ast) ? "top-level " : string.Empty;
             throw new InvalidOperationException(
-                $"Packaged executable generation does not preserve indirect top-level invocation metadata lookup '{indirectInvocation.Extent.Text}'. Inspect one of the explicitly supported MyCommand path members directly.");
+                $"Packaged executable generation does not preserve indirect {scope}invocation metadata lookup '{indirectInvocation.Extent.Text}'. Inspect one of the explicitly supported top-level MyCommand path members directly.");
         }
 
         var escapedInvocation = ast.FindAll(
@@ -188,15 +189,21 @@ internal static class PowerShellPackagedScriptRewriter
                                variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase),
                 searchNestedScriptBlocks: true)
             .Cast<VariableExpressionAst>()
-            .FirstOrDefault(variable => IsTopLevel(variable, ast) && !IsSupportedMyInvocationReceiver(variable));
+            .FirstOrDefault(static variable => !IsSupportedMyInvocationReceiver(variable));
         if (escapedInvocation is not null)
         {
+            var scope = IsTopLevel(escapedInvocation, ast) ? "top-level " : string.Empty;
             throw new InvalidOperationException(
-                $"Packaged executable generation does not preserve escaped top-level invocation metadata '{escapedInvocation.Extent.Text}'; inspect one of the explicitly supported MyCommand path members directly.");
+                $"Packaged executable generation does not preserve escaped {scope}invocation metadata '{escapedInvocation.Extent.Text}'; inspect one of the explicitly supported top-level MyCommand path members directly.");
         }
 
         foreach (var member in ast.FindAll(static node => node is MemberExpressionAst, searchNestedScriptBlocks: true).Cast<MemberExpressionAst>())
         {
+            if (IsNestedCallerPathMetadata(member, ast))
+            {
+                throw new InvalidOperationException(
+                    $"Packaged executable generation does not preserve nested caller-path invocation metadata '{member.Extent.Text}' because embedded AddScript execution has no file-backed caller identity.");
+            }
             if (IsTopLevelMyCommandReference(member, ast) &&
                 !(member.Parent is MemberExpressionAst parent && ReferenceEquals(parent.Expression, member)))
             {
@@ -302,6 +309,14 @@ internal static class PowerShellPackagedScriptRewriter
         => member.Expression is VariableExpressionAst invocation &&
            invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) &&
            IsTopLevel(member, root);
+
+    private static bool IsNestedCallerPathMetadata(MemberExpressionAst member, ScriptBlockAst root)
+        => member.Expression is VariableExpressionAst invocation &&
+           invocation.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) &&
+           !IsTopLevel(member, root) &&
+           member.Member is StringConstantExpressionAst name &&
+           (name.Value.Equals("ScriptName", StringComparison.OrdinalIgnoreCase) ||
+            name.Value.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsSupportedMyInvocationReceiver(VariableExpressionAst invocation)
         => invocation.Parent is MemberExpressionAst { Expression: var expression } &&
@@ -608,7 +623,21 @@ internal static class PowerShellPackagedScriptRewriter
             throw new InvalidOperationException(
                 $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace has no console-backed PSHost.");
         }
+
+        var dynamicCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .FirstOrDefault(static command => IsDynamicCommandInvocation(command));
+        if (dynamicCommand is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support dynamic command invocation '{dynamicCommand.Extent.Text}' because hidden interactive or host requirements cannot be validated.");
+        }
     }
+
+    private static bool IsDynamicCommandInvocation(CommandAst command)
+        => command.GetCommandName() is null &&
+           command.InvocationOperator is not TokenKind.Dot &&
+           command.CommandElements.FirstOrDefault() is not ScriptBlockExpressionAst;
 
     private static VariableExpressionAst? FindExecutionContextHostAccess(ScriptBlockAst ast)
         => ast.FindAll(
