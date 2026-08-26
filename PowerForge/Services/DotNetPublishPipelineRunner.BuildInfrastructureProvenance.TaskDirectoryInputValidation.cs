@@ -14,9 +14,20 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             string fullDirectoryPath = Path.GetFullPath(directoryPath);
-            if (!Directory.Exists(fullDirectoryPath) ||
-                !IsSameOrBelowBuildInputPath(fullDirectoryPath, allowedRoot) ||
-                HasReparsePointBelowRoot(fullDirectoryPath, allowedRoot) ||
+            if (!IsSameOrBelowBuildInputPath(fullDirectoryPath, allowedRoot))
+            {
+                return false;
+            }
+
+            if (!Directory.Exists(fullDirectoryPath))
+            {
+                string virtualDirectoryProbe = fullDirectoryPath.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                return isControlledInput is not null && isControlledInput(virtualDirectoryProbe);
+            }
+
+            if (HasReparsePointBelowRoot(fullDirectoryPath, allowedRoot) ||
                 (isControlledInput is not null && !isControlledInput(fullDirectoryPath)))
             {
                 return false;

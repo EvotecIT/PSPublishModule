@@ -620,7 +620,26 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipArchive? archive = null;
             try
             {
-                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                string snapshotPath = Path.Combine(
+                    Path.GetTempPath(),
+                    "powerforge-package-" + Guid.NewGuid().ToString("N") + ".nupkg");
+                stream = new FileStream(
+                    snapshotPath,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite,
+                    FileShare.Read,
+                    81920,
+                    FileOptions.DeleteOnClose | FileOptions.SequentialScan);
+                using (FileStream source = File.Open(
+                           path,
+                           FileMode.Open,
+                           FileAccess.Read,
+                           FileShare.ReadWrite | FileShare.Delete))
+                {
+                    source.CopyTo(stream);
+                }
+                stream.Flush(flushToDisk: true);
+                stream.Position = 0;
                 using (var packageReader = new PackageArchiveReader(stream, leaveStreamOpen: true))
                 {
                     PrimarySignature? signature = packageReader

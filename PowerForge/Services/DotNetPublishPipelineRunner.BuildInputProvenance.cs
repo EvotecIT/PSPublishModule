@@ -5,27 +5,30 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static readonly string[] EvaluatedBuildItemNames =
-    [
-        "ProjectReference",
-        "Compile",
-        "Content",
-        "EmbeddedResource",
-        "AdditionalFiles",
-        "Analyzer",
-        "Reference",
-        "ReferencePath",
-        "ReferenceCopyLocalPaths",
-        "EditorConfigFiles",
-        "GlobalAnalyzerConfigFiles",
-        "ApplicationDefinition",
-        "Page",
-        "Resource",
-        "SplashScreen",
-        "RazorComponent",
-        "TypeScriptCompile",
-        "None"
-    ];
+    private static readonly string[] EvaluatedBuildItemNames = CreateEvaluatedBuildItemNames();
+
+    private static string[] CreateEvaluatedBuildItemNames()
+        =>
+        [
+            "ProjectReference",
+            "Compile",
+            "Content",
+            "EmbeddedResource",
+            "AdditionalFiles",
+            "Analyzer",
+            "Reference",
+            "ReferencePath",
+            "ReferenceCopyLocalPaths",
+            "EditorConfigFiles",
+            "GlobalAnalyzerConfigFiles",
+            "ApplicationDefinition",
+            "Page",
+            "Resource",
+            "SplashScreen",
+            "RazorComponent",
+            "TypeScriptCompile",
+            "None"
+        ];
 
     private static readonly HashSet<string> EvaluatedSourceItemNames = new(
     [

@@ -395,6 +395,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:VbcToolExe=");
         arguments.Add("-p:FscToolPath=");
         arguments.Add("-p:FscToolExe=");
+        arguments.Add("-p:KeyContainerName=");
     }
 
     private static bool TryBuildControlledPathMap(

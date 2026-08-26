@@ -218,7 +218,8 @@ public sealed partial class DotNetPublishPipelineRunner
         if (name.Equals("analyzer", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("analyzers", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("generator", StringComparison.OrdinalIgnoreCase) ||
-            name.Equals("generators", StringComparison.OrdinalIgnoreCase))
+            name.Equals("generators", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("keycontainer", StringComparison.OrdinalIgnoreCase))
         {
             rejectSwitch = true;
             return true;

@@ -40,6 +40,15 @@ public sealed partial class DotNetPublishPipelineRunner
                evaluatedGlobalProperties,
                isControlledInput,
                readLines ?? ReadControlledCheckoutTextInput) &&
+           HasOnlyControlledGenerateResourceSourcePaths(
+               document,
+               declaringPath,
+               taskInputBaseDirectory,
+               declaringAllowedRoot,
+               taskInputAllowedRoot,
+               relatedDocuments,
+               evaluatedGlobalProperties,
+               readLines ?? ReadControlledCheckoutTextInput) &&
            HasOnlyControlledPublishItemInputs(
                document,
                declaringPath,

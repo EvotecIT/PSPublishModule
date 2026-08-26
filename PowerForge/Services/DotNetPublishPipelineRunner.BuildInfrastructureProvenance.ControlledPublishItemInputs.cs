@@ -4,6 +4,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static readonly ISet<string> ControlledTargetFileItemNames =
+        new HashSet<string>(CreateEvaluatedBuildItemNames(), StringComparer.OrdinalIgnoreCase);
+
     private static readonly ISet<string> ControlledPublishFileItemNames =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -27,9 +30,9 @@ public sealed partial class DotNetPublishPipelineRunner
         Func<string, bool>? isControlledInput)
     {
         foreach (XElement item in document.Descendants().Where(element =>
-                     ControlledPublishFileItemNames.Contains(element.Name.LocalName) &&
-                     element.Ancestors().Any(ancestor =>
-                         ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
+                     (ControlledTargetFileItemNames.Contains(element.Name.LocalName) ||
+                      ControlledPublishFileItemNames.Contains(element.Name.LocalName)) &&
+                     IsControlledBuildTargetItem(element, relatedDocuments)))
         {
             foreach (XAttribute attribute in item.Attributes().Where(attribute =>
                          attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
@@ -80,6 +83,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
+            if (!IsControlledPublishFileItemName(item.Name.LocalName))
+                continue;
+
             IEnumerable<string> relativePaths = item.Attributes()
                 .Where(attribute => IsPublishRelativePathMetadata(attribute.Name.LocalName))
                 .Select(attribute => attribute.Value)
@@ -110,4 +116,44 @@ public sealed partial class DotNetPublishPipelineRunner
            name.Equals("TargetPath", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("Link", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("DestinationSubPath", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsControlledPublishFileItemName(string name)
+        => ControlledPublishFileItemNames.Contains(name);
+
+    private static bool IsControlledBuildTargetItem(
+        XElement item,
+        IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments)
+    {
+        XElement? target = item.Ancestors().FirstOrDefault(ancestor =>
+            ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+        if (target is null)
+            return false;
+
+        string[] scheduledTargets = target.Attributes()
+            .Where(attribute =>
+                attribute.Name.LocalName.Equals("BeforeTargets", StringComparison.OrdinalIgnoreCase) ||
+                attribute.Name.LocalName.Equals("AfterTargets", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(attribute => DecodeMsBuildEscapes(attribute.Value).Split(';'))
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .ToArray();
+        if (scheduledTargets.Length == 0 ||
+            scheduledTargets.Any(value => !value.Equals("Clean", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        string? targetName = target.Attributes().FirstOrDefault(attribute =>
+            attribute.Name.LocalName.Equals("Name", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (string.IsNullOrWhiteSpace(targetName))
+            return true;
+
+        return relatedDocuments.SelectMany(related => related.Document.Descendants())
+            .SelectMany(element => element.Attributes())
+            .Where(attribute => !ReferenceEquals(attribute.Parent, target) ||
+                                !attribute.Name.LocalName.Equals("Name", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(attribute => DecodeMsBuildEscapes(attribute.Value).Split(';'))
+            .Select(value => value.Trim())
+            .Any(value => value.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+    }
 }

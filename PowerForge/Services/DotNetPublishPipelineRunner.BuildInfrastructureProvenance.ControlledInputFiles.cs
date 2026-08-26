@@ -245,6 +245,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             "DotnetFscCompilerPath",
             "FscOtherFlags",
+            "KeyContainer",
+            "KeyContainerName",
             "OtherFlags"
         };
         if (document.Descendants().Any(element =>
@@ -260,8 +262,21 @@ public sealed partial class DotNetPublishPipelineRunner
             element.Parent is not null &&
             element.Parent.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) &&
             (element.Name.LocalName.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
-             element.Name.LocalName.Equals("FscCompilerTools", StringComparison.OrdinalIgnoreCase)));
+             element.Name.LocalName.Equals("FscCompilerTools", StringComparison.OrdinalIgnoreCase))) ||
+               document.Descendants().Any(element =>
+                   IsControlledBuildTaskElement(element) &&
+                   IsCompilerOrLinkerTask(element.Name.LocalName) &&
+                   element.Attributes().Any(attribute =>
+                       (attribute.Name.LocalName.Equals("KeyContainer", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Name.LocalName.Equals("KeyContainerName", StringComparison.OrdinalIgnoreCase)) &&
+                       !string.IsNullOrWhiteSpace(attribute.Value)));
     }
+
+    private static bool IsCompilerOrLinkerTask(string taskName)
+        => taskName.Equals("AL", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("Csc", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("Fsc", StringComparison.OrdinalIgnoreCase) ||
+           taskName.Equals("Vbc", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsModeledControlledBuildTask(string taskName)
         => ControlledTaskFileInputAttributes.ContainsKey(taskName) ||
@@ -465,7 +480,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "VbcToolPath",
             "VbcToolExe",
             "FscToolPath",
-            "FscToolExe"
+            "FscToolExe",
+            "KeyContainerName"
         };
         return localProperties!
             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)

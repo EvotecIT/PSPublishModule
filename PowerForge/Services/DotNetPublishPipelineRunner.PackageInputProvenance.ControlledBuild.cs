@@ -303,7 +303,16 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         private bool IsControlledPackageInput(string path)
-            => TryGetControlledPackageEntryName(path, out string name) && _entries.ContainsKey(name);
+        {
+            if (!TryGetControlledPackageEntryName(path, out string name))
+                return false;
+            if (!name.EndsWith("/", StringComparison.Ordinal))
+                return _entries.ContainsKey(name);
+
+            return _entries.Keys.Any(entry => entry.StartsWith(
+                name,
+                IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        }
 
         private bool IsControlledPackageOrProjectInput(string path, string controlledSourceRoot)
         {
