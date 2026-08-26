@@ -114,7 +114,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "NUGET_PLUGIN_PATHS",
             "NUGET_CREDENTIALPROVIDERS_PATH"
         };
-        return exactNames.Any(value => name.Equals(value, StringComparison.OrdinalIgnoreCase)) ||
+        return IsNativeLoaderInjectionEnvironmentVariable(name) ||
+               exactNames.Any(value => name.Equals(value, StringComparison.OrdinalIgnoreCase)) ||
                name.StartsWith("MSBUILDNODEHANDLER", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_ENABLE_PROFILING", StringComparison.OrdinalIgnoreCase) ||

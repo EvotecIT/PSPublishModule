@@ -267,7 +267,8 @@ public sealed partial class DotNetPublishPipelineRunner
                    IsControlledBuildTaskElement(element) &&
                    IsCompilerOrLinkerTask(element.Name.LocalName) &&
                    element.Attributes().Any(attribute =>
-                       (attribute.Name.LocalName.Equals("KeyContainer", StringComparison.OrdinalIgnoreCase) ||
+                       (attribute.Name.LocalName.Equals("Analyzers", StringComparison.OrdinalIgnoreCase) ||
+                        attribute.Name.LocalName.Equals("KeyContainer", StringComparison.OrdinalIgnoreCase) ||
                         attribute.Name.LocalName.Equals("KeyContainerName", StringComparison.OrdinalIgnoreCase)) &&
                        !string.IsNullOrWhiteSpace(attribute.Value)));
     }

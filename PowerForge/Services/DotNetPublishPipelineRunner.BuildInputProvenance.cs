@@ -16,9 +16,12 @@ public sealed partial class DotNetPublishPipelineRunner
             "EmbeddedResource",
             "AdditionalFiles",
             "Analyzer",
+            "COMFileReference",
+            "COMReference",
             "Reference",
             "ReferencePath",
             "ReferenceCopyLocalPaths",
+            "NativeReference",
             "EditorConfigFiles",
             "GlobalAnalyzerConfigFiles",
             "ApplicationDefinition",
@@ -847,6 +850,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
                             continue;
+                        if (IsAmbientReferenceResolutionItem(itemName) && values.GetArrayLength() > 0)
+                            return false;
                         foreach (JsonElement item in values.EnumerateArray())
                         {
                             if (itemName.Equals("Reference", StringComparison.Ordinal) &&
@@ -1039,6 +1044,11 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
     }
+
+    private static bool IsAmbientReferenceResolutionItem(string itemName)
+        => itemName.Equals("COMFileReference", StringComparison.Ordinal) ||
+           itemName.Equals("COMReference", StringComparison.Ordinal) ||
+           itemName.Equals("NativeReference", StringComparison.Ordinal);
 
     internal static void ValidateGeneratedConfigurationInputs(DotNetPublishPlan? plan)
     {
