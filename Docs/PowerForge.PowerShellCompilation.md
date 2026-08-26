@@ -314,6 +314,8 @@ A Hybrid executable is not implemented today. It is the natural future bridge fo
 
 ## Compiler architecture and feature growth
 
+The implementation sequence, ownership rules, migration gates, and active checklists are maintained in the [PowerShell Compilation Architecture Roadmap](PowerForge.PowerShellCompilation.Roadmap.md).
+
 The current implementation is already staged rather than being a text replacement engine:
 
 1. input discovery resolves the root script or module and its contained authored dependency closure without executing it;
