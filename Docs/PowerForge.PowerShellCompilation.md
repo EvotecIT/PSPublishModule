@@ -66,7 +66,7 @@ powerforge powershell build .\MyModule --emit-source
 The accepted input shapes are:
 
 - `.ps1`: defaults to a packaged executable;
-- several loose `.ps1` files: default to a Strict typed library; add `--kind dll` to expose their functions as real binary cmdlets;
+- several loose `.ps1` files: default to a Hybrid typed library that emits eligible functions and reports omissions; choose Strict explicitly when every function must compile;
 - `.psm1`: defaults to a hybrid binary module and uses a same-name sibling `.psd1` when present;
 - `.psd1`: resolves a literal `.psm1` `RootModule`;
 - directory: prefers a manifest matching the directory name, otherwise accepts one unambiguous top-level manifest or script module.
@@ -181,6 +181,8 @@ powerforge powershell build .\Measure-Threshold.ps1 `
 ```
 
 Strict typed executables accept process-bindable scalar, enum, nullable, URI/version, date/time, GUID, switch, and one-dimensional array parameters. Their generated CLI preserves required parameters, aliases, explicit or source-order positions, `AllowNull`, `AllowEmptyString`, `AllowEmptyCollection`, and the supported `ValidateNotNull`, `ValidateNotNullOrEmpty`, `ValidateSet`, `ValidateRange`, and `ValidatePattern` metadata. It supports exact names, aliases, unambiguous abbreviations, positional values, repeated array options, `--Name value`, `--Name=value`, switches, and `--`. Missing, duplicate, ambiguous, unknown, or validation-failing parameters are rejected before invoking compiled code. PowerShell parameter sets, pipeline binding, host-only types, and discovery-only metadata are rejected on this runtime-independent surface rather than silently ignored.
+
+Generated binary cmdlets apply PowerShell script-function invariant-culture conversion to numeric, date/time, and duration parameters before CLR property binding. This keeps accepted and rejected input independent of the caller's current culture, matching the authored advanced function rather than compiled-cmdlet culture defaults.
 
 The generated host accepts positional arguments, `--Name value`, `--Name=value`, switches and aliases such as `--Force`, common switches on advanced scripts, and `--` to stop named-argument parsing. A non-switch named parameter must have a value; use `--Name=-value` when that value begins with `-`. Duplicate aliases and aliases that collide with an authored or automatic parameter name are rejected before host generation, matching PowerShell's metadata boundary. Pipeline objects use PowerShell's normal formatting system before going to stdout; information and warning records also go to stdout, while errors go to stderr. Nonterminating error records do not by themselves change a successful process exit code; a top-level explicit `exit <code>` becomes the process exit code, and a terminating exception fails the process. `$PSCommandPath` normally resolves to the running artifact path and `$PSScriptRoot` to its durable directory. A Package build with explicit or complete-module resources instead resolves the script body's `$PSCommandPath` and `$PSScriptRoot` to the private extracted entry and root; parameter-binding path metadata remains artifact-backed. Packaging rejects `exit` inside a function, nested script block, trap, or caught region because exception instrumentation would change PowerShell behavior. It also rejects `using module` and `using assembly` because those directives are resolved before an embedded script can receive file-backed path metadata.
 

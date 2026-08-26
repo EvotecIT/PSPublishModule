@@ -8,6 +8,7 @@ namespace PowerForge;
 internal static class PowerShellBinaryCmdletSourceGenerator
 {
     private const string RemainingArgumentsMemberName = "__PowerForgeRemainingArguments";
+    private const string InvariantParameterAttributeName = "__PowerForgeInvariantParameterAttribute";
     private static readonly HashSet<string> CommandRegionMemberNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "InvokePowerShellRegion",
@@ -124,6 +125,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine();
         builder.AppendLine($"namespace {typed.NamespaceName};");
         builder.AppendLine();
+        if (cmdlets.SelectMany(static cmdlet => cmdlet.Method.Parameters).Any(RequiresInvariantParameterConversion))
+            AppendInvariantParameterAttribute(builder);
         if (cmdlets.Any(static cmdlet => cmdlet.Method.RequiresPowerShellCommandRegions))
         {
             builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
@@ -274,6 +277,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 builder.AppendLine("    " + GenerateParameterAttribute(binding));
             if (parameter.Aliases.Length > 0)
                 builder.AppendLine($"    [Alias({string.Join(", ", parameter.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
+            var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
+            if (RequiresInvariantParameterConversion(parameter))
+                builder.AppendLine($"    [{InvariantParameterAttributeName}(typeof({propertyType}))]");
             if (parameter.AllowNull)
                 builder.AppendLine("    [AllowNull]");
             if (parameter.AllowEmptyString)
@@ -284,7 +290,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 builder.AppendLine("    [SupportsWildcards]");
             foreach (var validation in parameter.Validations.Where(validation => ShouldGenerateValidationAttribute(parameter, validation)))
                 builder.AppendLine("    " + GenerateValidationAttribute(validation));
-            var propertyType = parameter.IsSwitch ? "SwitchParameter" : GetGeneratedTypeName(parameter.TypeName);
             var initializer = parameter.IsSwitch || IsGeneratedValueType(parameter.TypeName)
                 ? string.Empty
                 : parameter.TypeName == typeof(string).FullName
@@ -379,6 +384,38 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine("    }");
         builder.AppendLine("}");
         builder.AppendLine();
+    }
+
+    private static void AppendInvariantParameterAttribute(StringBuilder builder)
+    {
+        builder.AppendLine("[global::System.AttributeUsage(global::System.AttributeTargets.Property)]");
+        builder.AppendLine($"public sealed class {InvariantParameterAttributeName} : ArgumentTransformationAttribute");
+        builder.AppendLine("{");
+        builder.AppendLine("    private readonly global::System.Type _targetType;");
+        builder.AppendLine($"    public {InvariantParameterAttributeName}(global::System.Type targetType) => _targetType = targetType;");
+        builder.AppendLine("    public override object Transform(EngineIntrinsics engineIntrinsics, object inputData)");
+        builder.AppendLine("        => LanguagePrimitives.ConvertTo(inputData, _targetType, global::System.Globalization.CultureInfo.InvariantCulture);");
+        builder.AppendLine("}");
+        builder.AppendLine();
+    }
+
+    private static bool RequiresInvariantParameterConversion(PowerShellCompilationParameter parameter)
+    {
+        if (parameter.IsSwitch)
+            return false;
+        var type = Type.GetType(parameter.TypeName, throwOnError: false);
+        if (type is null)
+            return false;
+        if (type.IsArray)
+            type = type.GetElementType()!;
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return type == typeof(byte) || type == typeof(sbyte) ||
+               type == typeof(short) || type == typeof(ushort) ||
+               type == typeof(int) || type == typeof(uint) ||
+               type == typeof(long) || type == typeof(ulong) ||
+               type == typeof(float) || type == typeof(double) ||
+               type == typeof(decimal) || type == typeof(DateTime) ||
+               type == typeof(DateTimeOffset) || type == typeof(TimeSpan);
     }
 
     private static string GenerateCmdletAttribute(CmdletDescriptor cmdlet)

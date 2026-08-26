@@ -37,7 +37,7 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
-    public void Resolve_LooseScriptSetInfersStrictTypedLibrary()
+    public void Resolve_LooseScriptSetUsesHybridLibraryDefault()
     {
         using var fixture = ResolverFixture.Create();
         var first = fixture.Write("Get-One.ps1", "function Get-One { return 1 }");
@@ -48,7 +48,7 @@ public sealed class PowerShellCompilationInputResolverTests
         Assert.Equal(first, resolved.SourcePath);
         Assert.Null(resolved.ModuleManifestPath);
         Assert.Equal(PowerShellCompilationArtifactKind.Library, resolved.Kind);
-        Assert.Equal(PowerShellCompilationMode.Strict, resolved.Mode);
+        Assert.Equal(PowerShellCompilationMode.Hybrid, resolved.Mode);
         Assert.Equal(new[] { first, second }, resolved.CompilationSourceFiles);
     }
 
@@ -102,6 +102,20 @@ public sealed class PowerShellCompilationInputResolverTests
             PowerShellCompilationMode.Hybrid));
 
         Assert.Contains("requires Strict mode", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_LooseBinaryModuleSetDefaultsToStrictMode()
+    {
+        using var fixture = ResolverFixture.Create();
+        var first = fixture.Write("Get-One.ps1", "function Get-One { return 1 }");
+        var second = fixture.Write("Get-Two.ps1", "function Get-Two { return 2 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            new[] { first, second },
+            PowerShellCompilationArtifactKind.BinaryModule);
+
+        Assert.Equal(PowerShellCompilationMode.Strict, resolved.Mode);
     }
 
     [Fact]

@@ -94,9 +94,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Concat(resourceDependencies.Select(static dependency => dependency.RelativePath))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var usesExtractedRoot = resourceDependencies.Any(static dependency =>
-            dependency.Selection is PowerShellCompilationDependencySelection.ExplicitInclude or
-                PowerShellCompilationDependencySelection.PolicyInclude);
+        var usesExtractedRoot = scriptDependencies.Length > 0 ||
+                                resourceDependencies.Any(static dependency =>
+                                    dependency.Selection is PowerShellCompilationDependencySelection.ExplicitInclude or
+                                        PowerShellCompilationDependencySelection.PolicyInclude);
         return new PackagedSourceSet(
             Path.GetFileName(fullSourcePath),
             string.Join(Environment.NewLine, projectResources),

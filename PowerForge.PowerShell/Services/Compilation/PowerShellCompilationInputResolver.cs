@@ -130,7 +130,9 @@ public sealed class PowerShellCompilationInputResolver
                 closure,
                 closure);
         }
-        var resolvedMode = mode ?? PowerShellCompilationMode.Strict;
+        var resolvedMode = mode ?? (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompilationMode.Strict
+            : PowerShellCompilationBuildSpec.GetDefaultMode(resolvedKind));
         if (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule && resolvedMode != PowerShellCompilationMode.Strict)
             throw new InvalidOperationException(
                 "A loose BinaryModule file set requires Strict mode because it has no script-module entrypoint in which unsupported functions could be preserved. Point to a module root for Hybrid fallback.");

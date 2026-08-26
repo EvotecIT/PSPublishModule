@@ -33,13 +33,12 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlyAvailabilityNames = definitions
             .Where(definition => sources.Any(source => source.Root.FindAll(
-                    node => node is CommandAst command &&
+                    node => IsCommandReferenceCandidate(node) &&
                             (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
-                             command.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
-                            IsModuleScope(command, source.Root),
+                             node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
+                            IsModuleScope(node, source.Root),
                     searchNestedScriptBlocks: true)
-                .OfType<CommandAst>()
-                .Any(command => ReferencesFunction(command, definition.Function.Name))))
+                .Any(node => ReferencesFunction(node, definition.Function.Name))))
             .Select(static definition => definition.Function.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallbackNames = duplicateNames
@@ -92,6 +91,41 @@ internal static class PowerShellHybridFunctionCollisionResolver
             filtered.SourcePaths);
     }
 
+    private static bool IsCommandReferenceCandidate(Ast node)
+        => node is CommandAst ||
+           node is InvokeMemberExpressionAst invocation && IsInvokeCommandDiscovery(invocation);
+
+    private static bool ReferencesFunction(Ast node, string functionName)
+        => node switch
+        {
+            CommandAst command => ReferencesFunction(command, functionName),
+            InvokeMemberExpressionAst invocation => ReferencesFunction(invocation, functionName),
+            _ => false
+        };
+
+    private static bool ReferencesFunction(InvokeMemberExpressionAst invocation, string functionName)
+    {
+        if (!IsInvokeCommandDiscovery(invocation))
+            return false;
+        if (invocation.Arguments.Count == 0)
+            return true;
+        return invocation.Arguments[0] is StringConstantExpressionAst name
+            ? CommandPatternMatches(name.Value, functionName)
+            : true;
+    }
+
+    private static bool IsInvokeCommandDiscovery(InvokeMemberExpressionAst invocation)
+        => invocation.Member is StringConstantExpressionAst member &&
+           (member.Value.Equals("GetCommand", StringComparison.OrdinalIgnoreCase) ||
+            member.Value.Equals("GetCommands", StringComparison.OrdinalIgnoreCase)) &&
+           invocation.Expression is MemberExpressionAst
+           {
+               Expression: VariableExpressionAst executionContext,
+               Member: StringConstantExpressionAst invokeCommand
+           } &&
+           executionContext.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase) &&
+           invokeCommand.Value.Equals("InvokeCommand", StringComparison.OrdinalIgnoreCase);
+
     private static bool ReferencesFunction(CommandAst command, string functionName)
     {
         if (command.GetCommandName()?.Equals(functionName, StringComparison.OrdinalIgnoreCase) == true)
@@ -110,13 +144,12 @@ internal static class PowerShellHybridFunctionCollisionResolver
             {
                 if (parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (parameter.Argument is StringConstantExpressionAst inline &&
-                        CommandPatternMatches(inline.Value, functionName))
-                        return true;
+                    if (parameter.Argument is StringConstantExpressionAst inline)
+                        return CommandPatternMatches(inline.Value, functionName);
                     if (parameter.Argument is null && index + 1 < elements.Length &&
-                        elements[index + 1] is StringConstantExpressionAst named &&
-                        CommandPatternMatches(named.Value, functionName))
-                        return true;
+                        elements[index + 1] is StringConstantExpressionAst named)
+                        return CommandPatternMatches(named.Value, functionName);
+                    return true;
                 }
                 if (parameter.Argument is null && index + 1 < elements.Length && elements[index + 1] is ExpressionAst)
                     index++;
@@ -124,8 +157,9 @@ internal static class PowerShellHybridFunctionCollisionResolver
             }
             if (elements[index] is StringConstantExpressionAst positional)
                 return CommandPatternMatches(positional.Value, functionName);
+            return true;
         }
-        return false;
+        return true;
     }
 
     private static bool CommandPatternMatches(string pattern, string functionName)

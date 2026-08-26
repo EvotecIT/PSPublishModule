@@ -13,7 +13,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             ". \"$PSScriptRoot/Private/Get-Greeting.ps1\" -CallerRoot $PSScriptRoot; " +
             "\"default:$DefaultRoot\"; \"root:$PSScriptRoot\"; \"path:$PSCommandPath\"; " +
             "\"definition:$($MyInvocation.MyCommand.Definition)\"; " +
-            "\"sidecar:$(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'settings.txt'))\"; " +
+            "\"dependency:$(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Private/Get-Greeting.ps1'))\"; " +
             "Get-Greeting -Name $Name; Get-CallerRoot");
         var privateDirectory = Path.Combine(fixture.RootPath, "Private");
         Directory.CreateDirectory(privateDirectory);
@@ -41,23 +41,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.SourceFiles.Length);
-        File.WriteAllText(Path.Combine(fixture.OutputPath, "settings.txt"), "durable");
         var process = RunProcess(result.ArtifactPath!, "--Name=Ada");
         Assert.True(
             process.ExitCode == 0,
             $"Expected packaged dependency executable to succeed. Exit={process.ExitCode}; stdout={process.StandardOutput}; stderr={process.StandardError}");
         var lines = process.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         AssertPackagedPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[0].Substring("default:".Length));
-        AssertPackagedPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[1].Substring("root:".Length));
-        AssertPackagedPathsEqual(result.ArtifactPath!, lines[2].Substring("path:".Length));
-        AssertPackagedPathsEqual(result.ArtifactPath!, lines[3].Substring("definition:".Length));
-        Assert.Equal("sidecar:durable", lines[4]);
+        var extractedRoot = lines[1].Substring("root:".Length);
+        var extractedEntry = lines[2].Substring("path:".Length);
+        AssertPackagedPathsEqual(extractedRoot, Path.GetDirectoryName(extractedEntry)!);
+        AssertPackagedPathsEqual(extractedEntry, lines[3].Substring("definition:".Length));
+        Assert.Equal("dependency:True", lines[4]);
         Assert.True(
             process.StandardOutput.Contains("Hello, Ada from", StringComparison.Ordinal),
             $"Expected dependency output. Exit={process.ExitCode}; stderr={process.StandardError}; generated={File.ReadAllText(Directory.EnumerateFiles(result.GeneratedSourcePath!, "Source.ps1", SearchOption.AllDirectories).Single())}");
         Assert.Contains("Private", process.StandardOutput, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Path.GetDirectoryName(result.ArtifactPath!)!, lines[5], StringComparison.OrdinalIgnoreCase);
-        AssertPackagedPathsEqual(Path.GetDirectoryName(result.ArtifactPath!)!, lines[6]);
+        AssertPackagedPathsEqual(extractedRoot, lines[6]);
         Assert.True(string.IsNullOrWhiteSpace(process.StandardError), process.StandardError);
         Assert.Single(Directory.EnumerateFiles(result.GeneratedSourcePath!, "Dependency*.ps1", SearchOption.AllDirectories));
     }

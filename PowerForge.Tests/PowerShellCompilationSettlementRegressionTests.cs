@@ -6,6 +6,116 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 {
     [Fact]
+    public void Build_PackagedScriptDependencyUsesExtractedRootForDynamicReference()
+    {
+        using var fixture = ArtifactFixture.Create(
+            ". \"$PSScriptRoot/helper.ps1\"; $path = Join-Path $PSScriptRoot 'helper.ps1'; " +
+            "\"$(Test-Path -LiteralPath $path)|$(Get-HelperValue)\"");
+        var helper = Path.Combine(fixture.RootPath, "helper.ps1");
+        File.WriteAllText(helper, "function Get-HelperValue { return 17 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ScriptDependencyRoot",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper },
+            SingleFile = false
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal((0, "True|17", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Theory]
+    [InlineData("Invoke-Expression '$Host.Name'")]
+    [InlineData("iex '$Host.Name'")]
+    [InlineData("[scriptblock]::Create('$Host.Name').Invoke()")]
+    public void Build_PackagedExecutableRejectsDynamicScriptEvaluation(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+
+        var result = BuildExecutable(
+            fixture,
+            "PowerForge.DynamicEvaluation",
+            PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dynamic script evaluation", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Theory]
+    [InlineData("[bool]$ExecutionContext.InvokeCommand.GetCommand('Get-PowerForgeInvokeLater',[System.Management.Automation.CommandTypes]::All)")]
+    [InlineData("[bool]@($ExecutionContext.InvokeCommand.GetCommands('Get-PowerForgeInvoke*',[System.Management.Automation.CommandTypes]::All,$false)).Count")]
+    public void Build_HybridModulePreservesInvokeCommandDiscoveryTiming(string discovery)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"$script:before = {discovery}; " +
+            "function Get-PowerForgeInvokeLater { return 1 }; function Get-InvokeBefore { return $script:before }; " +
+            "Export-ModuleMember -Function Get-PowerForgeInvokeLater, Get-InvokeBefore",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InvokeCommandDiscovery",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("availability timing", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Microsoft.PowerShell.Core\\Import-Module -Name '{escapedPath}' -Force; Get-InvokeBefore");
+        Assert.Equal((0, "False", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridBinaryCmdletUsesScriptFunctionInvariantDateBinding()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-CultureDate { [CmdletBinding()] param([DateTime] $When) return $When.Year }; " +
+            "Export-ModuleMember -Function Get-CultureDate",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InvariantDateBinding",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledCmdlets.cs"));
+        Assert.Contains("__PowerForgeInvariantParameterAttribute", generated, StringComparison.Ordinal);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$old = [Globalization.CultureInfo]::CurrentCulture; try { " +
+            "[Globalization.CultureInfo]::CurrentCulture = [Globalization.CultureInfo]::GetCultureInfo('de-DE'); " +
+            $"Microsoft.PowerShell.Core\\Import-Module -Name '{escapedPath}' -Force; " +
+            "try { Get-CultureDate -When '19-06-2018'; 'unexpected' } catch { 'rejected' }; " +
+            "Get-CultureDate -When '06/19/2018' " +
+            "} finally { [Globalization.CultureInfo]::CurrentCulture = $old }");
+        Assert.Equal((0, "rejected" + Environment.NewLine + "2018", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_PackagedExecutableRejectsExecutionContextInvokeCommand()
     {
         using var fixture = ArtifactFixture.Create(
