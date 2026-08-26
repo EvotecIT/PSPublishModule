@@ -22,8 +22,7 @@ internal static class Program
         try
         {
             var source = ReadEmbeddedScript();
-            using var extractedSources = ExtractEmbeddedSources(source);
-            PowerForgePackagedEntryPoint.Path = extractedSources.EntryPath;
+            PowerForgePackagedEntryPoint.Path = ExtractEmbeddedSources(source);
             ConfigureBundledModules();
             var initialState = InitialSessionState.CreateDefault2();
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
@@ -123,25 +122,58 @@ internal static class Program
         return reader.ReadToEnd();
     }
 
-    private static ExtractedSourceSet ExtractEmbeddedSources(string entrySource)
+    private static string ExtractEmbeddedSources(string entrySource)
     {
-        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "PowerForge", "packaged-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        var entryPath = ResolveContainedExtractionPath(root, EntryRelativePath);
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(entryPath)!);
-        File.WriteAllText(entryPath, entrySource, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        foreach (var dependency in Dependencies)
+        var assembly = Assembly.GetExecutingAssembly();
+        var cacheBase = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(cacheBase))
+            cacheBase = System.IO.Path.GetTempPath();
+        var cacheRoot = System.IO.Path.Combine(cacheBase, "PowerForge", "PackagedSources");
+        Directory.CreateDirectory(cacheRoot);
+        var assemblyName = assembly.GetName().Name ?? "Artifact";
+        var safeName = string.Concat(assemblyName.Select(static character =>
+            char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_'));
+        var root = System.IO.Path.Combine(cacheRoot, safeName + "-" + assembly.ManifestModule.ModuleVersionId.ToString("N"));
+        var completeMarker = System.IO.Path.Combine(root, ".complete");
+        if (!File.Exists(completeMarker))
         {
-            var target = ResolveContainedExtractionPath(root, dependency.RelativePath);
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
-            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(dependency.ResourceName)
-                       ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found."))
-            using (var file = File.Create(target))
-                stream.CopyTo(file);
-            if (dependency.UnixFileMode != 0 && !OperatingSystem.IsWindows())
-                File.SetUnixFileMode(target, (UnixFileMode)dependency.UnixFileMode);
+            var stagingRoot = root + ".staging-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                Directory.CreateDirectory(stagingRoot);
+                var stagedEntryPath = ResolveContainedExtractionPath(stagingRoot, EntryRelativePath);
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(stagedEntryPath)!);
+                File.WriteAllText(stagedEntryPath, entrySource, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                foreach (var dependency in Dependencies)
+                {
+                    var target = ResolveContainedExtractionPath(stagingRoot, dependency.RelativePath);
+                    Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
+                    using (var stream = assembly.GetManifestResourceStream(dependency.ResourceName)
+                               ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found."))
+                    using (var file = File.Create(target))
+                        stream.CopyTo(file);
+                    if (dependency.UnixFileMode != 0 && !OperatingSystem.IsWindows())
+                        File.SetUnixFileMode(target, (UnixFileMode)dependency.UnixFileMode);
+                }
+                File.WriteAllText(System.IO.Path.Combine(stagingRoot, ".complete"), assembly.ManifestModule.ModuleVersionId.ToString("N"));
+                try
+                {
+                    Directory.Move(stagingRoot, root);
+                }
+                catch (IOException) when (File.Exists(completeMarker))
+                {
+                    Directory.Delete(stagingRoot, recursive: true);
+                }
+            }
+            catch
+            {
+                try { Directory.Delete(stagingRoot, recursive: true); } catch { }
+                throw;
+            }
         }
-        return new ExtractedSourceSet(root, entryPath);
+        if (!File.Exists(completeMarker))
+            throw new InvalidOperationException($"Packaged PowerShell extraction cache '{root}' is incomplete.");
+        return ResolveContainedExtractionPath(root, EntryRelativePath);
     }
 
     private static string ResolveContainedExtractionPath(string root, string relativePath)
@@ -292,22 +324,6 @@ internal static class Program
         internal int UnixFileMode { get; }
     }
 
-    private sealed class ExtractedSourceSet : IDisposable
-    {
-        internal ExtractedSourceSet(string root, string entryPath)
-        {
-            Root = root;
-            EntryPath = entryPath;
-        }
-
-        internal string Root { get; }
-        internal string EntryPath { get; }
-
-        public void Dispose()
-        {
-            try { Directory.Delete(Root, recursive: true); } catch { }
-        }
-    }
 }
 
 public static class PowerForgePackagedEntryPoint

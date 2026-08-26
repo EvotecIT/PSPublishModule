@@ -139,10 +139,20 @@ internal static class PowerShellHybridFunctionCollisionResolver
     {
         for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
         {
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
-                parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, root))
+            if (parent is FunctionDefinitionAst)
+                return false;
+            if (parent is ScriptBlockExpressionAst expression && !IsImmediatelyInvoked(expression))
+                return false;
+            if (parent is ScriptBlockAst scriptBlock &&
+                !ReferenceEquals(scriptBlock, root) &&
+                (scriptBlock.Parent is not ScriptBlockExpressionAst owner || !IsImmediatelyInvoked(owner)))
                 return false;
         }
         return true;
     }
+
+    private static bool IsImmediatelyInvoked(ScriptBlockExpressionAst expression)
+        => expression.Parent is CommandAst command &&
+           command.InvocationOperator == TokenKind.Ampersand &&
+           command.CommandElements.FirstOrDefault() == expression;
 }

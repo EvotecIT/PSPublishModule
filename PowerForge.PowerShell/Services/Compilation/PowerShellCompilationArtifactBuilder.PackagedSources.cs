@@ -89,7 +89,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
             dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {GetExecutableUnixMode(dependency.Path)}),");
         }
-        var resourcePaths = resourceDependencies.Select(static dependency => dependency.RelativePath).ToArray();
+        var resourcePaths = scriptDependencies
+            .Select(dependency => FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/'))
+            .Concat(resourceDependencies.Select(static dependency => dependency.RelativePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var usesExtractedRoot = resourceDependencies.Any(static dependency =>
             dependency.Selection is PowerShellCompilationDependencySelection.ExplicitInclude or
                 PowerShellCompilationDependencySelection.PolicyInclude);

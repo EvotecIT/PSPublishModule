@@ -39,8 +39,6 @@ internal static class PowerShellPackagedScriptRewriter
 
         ValidateDotSources(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
 
-        ValidateHostInteraction(ast);
-
         var explicitNamedBlock = FindExplicitNamedBlock(ast);
         if (explicitNamedBlock is not null)
         {
@@ -54,6 +52,7 @@ internal static class PowerShellPackagedScriptRewriter
         ValidateExits(ast, exits);
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
+        ValidateHostInteraction(ast);
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
@@ -80,7 +79,11 @@ internal static class PowerShellPackagedScriptRewriter
                 path.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase)
                     ? "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))"
                     : dependencyCommandPathExpression!)))
-            .Concat(embeddedResourcePaths.Select(path => new SourceReplacement(
+            .Concat(embeddedResourcePaths
+                .Where(path => !dependencyLoadPaths.Any(dependency =>
+                    dependency.Extent.StartOffset == path.Extent.StartOffset &&
+                    dependency.Extent.EndOffset == path.Extent.EndOffset))
+                .Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
                 "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))")))
@@ -172,7 +175,7 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
-        var indirectInvocation = FindIndirectMyInvocationLookup(ast);
+        var indirectInvocation = FindIndirectVariableLookup(ast, "MyInvocation", topLevelOnly: true);
         if (indirectInvocation is not null)
         {
             throw new InvalidOperationException(
@@ -303,34 +306,36 @@ internal static class PowerShellPackagedScriptRewriter
         => invocation.Parent is MemberExpressionAst { Expression: var expression } &&
            ReferenceEquals(expression, invocation);
 
-    private static Ast? FindIndirectMyInvocationLookup(ScriptBlockAst ast)
+    private static Ast? FindIndirectVariableLookup(ScriptBlockAst ast, string variableName, bool topLevelOnly)
     {
         var command = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
-            .FirstOrDefault(candidate => IsTopLevel(candidate, ast) && RetrievesMyInvocation(candidate));
+            .FirstOrDefault(candidate =>
+                (!topLevelOnly || IsTopLevel(candidate, ast)) &&
+                RetrievesVariable(candidate, variableName));
         if (command is not null) return command;
 
         return ast.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: true)
             .Cast<InvokeMemberExpressionAst>()
             .FirstOrDefault(candidate =>
-                IsTopLevel(candidate, ast) &&
+                (!topLevelOnly || IsTopLevel(candidate, ast)) &&
                 candidate.Member is StringConstantExpressionAst member &&
                 (member.Value.Equals("Get", StringComparison.OrdinalIgnoreCase) ||
                  member.Value.Equals("GetValue", StringComparison.OrdinalIgnoreCase)) &&
                 ReferencesPsVariableIntrinsics(candidate.Expression) &&
                 (candidate.Arguments.Count != 1 ||
                  candidate.Arguments[0] is not StringConstantExpressionAst argument ||
-                 VariablePatternMatches(argument.Value, "MyInvocation")));
+                 VariablePatternMatches(argument.Value, variableName)));
     }
 
-    private static bool RetrievesMyInvocation(CommandAst command)
+    private static bool RetrievesVariable(CommandAst command, string variableName)
     {
         var commandName = command.GetCommandName();
         if (string.IsNullOrWhiteSpace(commandName)) return false;
         var leafName = commandName!.Split('\\').Last();
         if (leafName.Equals("Get-Variable", StringComparison.OrdinalIgnoreCase) ||
             leafName.Equals("gv", StringComparison.OrdinalIgnoreCase))
-            return GetVariableMayRetrieveMyInvocation(command);
+            return GetVariableMayRetrieve(command, variableName);
         if (!leafName.Equals("Get-Item", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("Get-Content", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) &&
@@ -340,14 +345,14 @@ internal static class PowerShellPackagedScriptRewriter
             !leafName.Equals("dir", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("ls", StringComparison.OrdinalIgnoreCase))
             return false;
-        return GetCommandArgumentLiterals(command).Any(static value =>
+        return GetCommandArgumentLiterals(command).Any(value =>
         {
             if (!TryGetVariableProviderPattern(value, out var pattern)) return false;
-            return string.IsNullOrWhiteSpace(pattern) || VariablePatternMatches(pattern!, "MyInvocation");
+            return string.IsNullOrWhiteSpace(pattern) || VariablePatternMatches(pattern!, variableName);
         });
     }
 
-    private static bool GetVariableMayRetrieveMyInvocation(CommandAst command)
+    private static bool GetVariableMayRetrieve(CommandAst command, string variableName)
     {
         var elements = command.CommandElements.Skip(1).ToArray();
         for (var index = 0; index < elements.Length; index++)
@@ -356,13 +361,13 @@ internal static class PowerShellPackagedScriptRewriter
                 !parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (parameter.Argument is StringConstantExpressionAst inline)
-                return VariablePatternMatches(inline.Value, "MyInvocation");
+                return VariablePatternMatches(inline.Value, variableName);
             return index + 1 >= elements.Length ||
                    elements[index + 1] is not StringConstantExpressionAst named ||
-                   VariablePatternMatches(named.Value, "MyInvocation");
+                   VariablePatternMatches(named.Value, variableName);
         }
         return elements.FirstOrDefault() is not StringConstantExpressionAst positional ||
-               VariablePatternMatches(positional.Value, "MyInvocation");
+               VariablePatternMatches(positional.Value, variableName);
     }
 
     private static IEnumerable<string> GetCommandArgumentLiterals(CommandAst command)
@@ -513,6 +518,13 @@ internal static class PowerShellPackagedScriptRewriter
         {
             throw new InvalidOperationException(
                 $"Packaged executable generation does not support interactive PSHost access '{hostReference.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
+        }
+
+        var indirectHostReference = FindIndirectVariableLookup(ast, "Host", topLevelOnly: false);
+        if (indirectHostReference is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support indirect PSHost retrieval '{indirectHostReference.Extent.Text}'. Use a typed console entry point or keep this script on pwsh -File.");
         }
 
         var executionContextHost = FindExecutionContextHostAccess(ast);

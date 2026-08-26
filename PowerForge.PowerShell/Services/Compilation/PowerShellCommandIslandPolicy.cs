@@ -261,6 +261,8 @@ internal static class PowerShellCommandIslandPolicy
                 leafName.Equals("rv", StringComparison.OrdinalIgnoreCase) ||
                 leafName.Equals("clv", StringComparison.OrdinalIgnoreCase))
                 return !HasExplicitSharedScope(command);
+            if (IsProviderPathCommand(leafName) && HasNonLiteralProviderPath(command))
+                return true;
         }
 
         return command.CommandElements
@@ -269,6 +271,30 @@ internal static class PowerShellCommandIslandPolicy
                 element.Value.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase) &&
                 !element.Value.StartsWith("Variable:script:", StringComparison.OrdinalIgnoreCase) &&
                 !element.Value.StartsWith("Variable:global:", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsProviderPathCommand(string commandName)
+        => commandName.ToUpperInvariant() is
+            "GET-ITEM" or "GI" or
+            "GET-CONTENT" or "GC" or "CAT" or "TYPE" or
+            "GET-CHILDITEM" or "GCI" or "DIR" or "LS" or
+            "TEST-PATH" or
+            "SET-ITEM" or "SI" or "SET-CONTENT" or "SC" or
+            "ADD-CONTENT" or "AC" or "CLEAR-ITEM" or "CLI" or
+            "CLEAR-CONTENT" or "CLC" or "NEW-ITEM" or "NI" or
+            "REMOVE-ITEM" or "RI" or "RM" or "DEL" or "ERASE" or "RD" or "RMDIR" or
+            "RENAME-ITEM" or "RNI" or "REN" or
+            "COPY-ITEM" or "CPI" or "CP" or "COPY" or
+            "MOVE-ITEM" or "MI" or "MV" or "MOVE";
+
+    private static bool HasNonLiteralProviderPath(CommandAst command)
+    {
+        var arguments = command.CommandElements.Skip(1).ToArray();
+        if (arguments.Length == 0)
+            return true;
+        if (arguments.Any(static argument => argument is not CommandParameterAst and not StringConstantExpressionAst))
+            return true;
+        return !arguments.OfType<StringConstantExpressionAst>().Any();
     }
 
     private static bool HasExplicitSharedScope(CommandAst command)
