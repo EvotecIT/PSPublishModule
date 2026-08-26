@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace PowerForge.Web;
 
 /// <summary>Collects bounded daily end-user HTTP traffic from Cloudflare GraphQL Analytics.</summary>
-public sealed class CloudflareAnalyticsCollector
+public sealed partial class CloudflareAnalyticsCollector
 {
     /// <summary>Fleet provider kind handled by this collector.</summary>
     public const string ProviderKind = "cloudflare-analytics";
