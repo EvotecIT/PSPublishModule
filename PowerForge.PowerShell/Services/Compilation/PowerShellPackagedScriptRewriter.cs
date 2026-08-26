@@ -619,7 +619,7 @@ internal static class PowerShellPackagedScriptRewriter
         if (aliasInteraction is not null)
         {
             throw new InvalidOperationException(
-                $"Packaged executable generation does not support alias declaration '{aliasInteraction.Extent.Text}' because its target is dynamic or resolves to an interactive command without a console-backed PSHost.");
+                $"Packaged executable generation does not support alias declaration '{aliasInteraction.Extent.Text}' because its target cannot be proven safe or resolves to an interactive command without a console-backed PSHost.");
         }
 
         var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
@@ -648,6 +648,12 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static CommandAst? FindUninspectableOrInteractiveAlias(ScriptBlockAst ast)
     {
+        var providerMutation = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .FirstOrDefault(command => PowerShellAliasDefinitionPolicy.TargetsAliasProvider(command, ast));
+        if (providerMutation is not null)
+            return providerMutation;
+
         var definitions = ast.FindAll(
                 static node => node is CommandAst command && PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command),
                 searchNestedScriptBlocks: true)

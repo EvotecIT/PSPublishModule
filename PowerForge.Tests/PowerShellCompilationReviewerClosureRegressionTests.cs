@@ -603,6 +603,20 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Theory]
+    [InlineData("Set-Item Alias:Ask Read-Host; Ask 'Prompt'")]
+    [InlineData("New-Item -Path Alias:Ask -Value Read-Host; Ask 'Prompt'")]
+    [InlineData("$path = 'Alias:Ask'; Set-Item -Path $path -Value Read-Host; Ask 'Prompt'")]
+    public void Build_PackagedExecutableRejectsAliasProviderMutations(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.PackagedAliasProvider", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("alias declaration", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
     [Fact]
     public void Build_PackagedExecutableAllowsLiteralNonInteractiveAliasTargets()
     {
