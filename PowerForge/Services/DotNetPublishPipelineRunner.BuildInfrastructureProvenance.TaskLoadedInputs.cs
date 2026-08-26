@@ -15,18 +15,35 @@ public sealed partial class DotNetPublishPipelineRunner
         Func<string, bool>? isControlledInput = null)
     {
         foreach (XElement data in document.Descendants().Where(element =>
-                     element.Name.LocalName.Equals("data", StringComparison.OrdinalIgnoreCase) &&
-                     element.Attributes().Any(attribute =>
-                         attribute.Name.LocalName.Equals("type", StringComparison.OrdinalIgnoreCase) &&
-                         attribute.Value.IndexOf("ResXFileRef", StringComparison.OrdinalIgnoreCase) >= 0)))
+                     element.Name.LocalName.Equals("data", StringComparison.OrdinalIgnoreCase) ||
+                     element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase)))
         {
+            string? mimeType = data.Attributes().FirstOrDefault(attribute =>
+                attribute.Name.LocalName.Equals("mimetype", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (!string.IsNullOrWhiteSpace(mimeType))
+                return false;
+
+            string? type = data.Attributes().FirstOrDefault(attribute =>
+                attribute.Name.LocalName.Equals("type", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (string.IsNullOrWhiteSpace(type))
+                continue;
+            string resourceType = type!.Split(',')[0].Trim();
+            if (!resourceType.Equals("System.Resources.ResXFileRef", StringComparison.OrdinalIgnoreCase))
+                return false;
+
             string? value = data.Elements()
                 .FirstOrDefault(element => element.Name.LocalName.Equals(
                     "value",
                     StringComparison.OrdinalIgnoreCase))?
                 .Value;
-            string fileValue = value?.Split(new[] { ';' }, 2)[0].Trim() ?? string.Empty;
+            string[] valueParts = value?.Split(new[] { ';' }, 3) ?? Array.Empty<string>();
+            string fileValue = valueParts.Length > 0 ? valueParts[0].Trim() : string.Empty;
+            string referencedType = valueParts.Length > 1
+                ? valueParts[1].Split(',')[0].Trim()
+                : string.Empty;
             if (fileValue.Length == 0 ||
+                (!referencedType.Equals("System.String", StringComparison.OrdinalIgnoreCase) &&
+                 !referencedType.Equals("System.Byte[]", StringComparison.OrdinalIgnoreCase)) ||
                 !TryResolveControlledTaskInputPath(
                     fileValue,
                     declaringPath,

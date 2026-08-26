@@ -67,13 +67,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
                     if (isControlledInput is null)
                     {
-                        if (!File.Exists(inputPath) ||
+                        if (File.Exists(inputPath) &&
                             HasReparsePointBelowRoot(inputPath, taskInputAllowedRoot))
                         {
                             return false;
                         }
                     }
-                    else if (!isControlledInput(inputPath))
+                    else if (File.Exists(inputPath) && !isControlledInput(inputPath))
                     {
                         return false;
                     }

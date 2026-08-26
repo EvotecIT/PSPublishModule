@@ -63,16 +63,27 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 foreach ((XDocument relatedDocument, string relatedPath) in relatedDocuments)
                 {
-                    foreach (XElement property in relatedDocument.Descendants().Where(property =>
-                                 property.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
-                                 property.Parent is not null &&
-                                 property.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
+                    XElement[] propertyDefinitions = relatedDocument.Descendants().Where(property =>
+                            property.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
+                            property.Parent is not null &&
+                            property.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    if (propertyDefinitions.Length == 0)
+                        continue;
+
+                    string effectiveValue = string.Empty;
+                    foreach (XElement property in propertyDefinitions)
                     {
-                        pending.Enqueue(value.Replace(
-                            match.Value,
-                            ResolveControlledThisFileDirectory(property.Value, relatedPath)));
-                        expanded = true;
+                        string assignedValue = ResolveControlledThisFileDirectory(
+                            property.Value,
+                            relatedPath);
+                        effectiveValue = ReplaceOrdinalIgnoreCase(
+                            assignedValue,
+                            "$(" + propertyName + ")",
+                            effectiveValue);
                     }
+                    pending.Enqueue(value.Replace(match.Value, effectiveValue));
+                    expanded = true;
                 }
             }
 

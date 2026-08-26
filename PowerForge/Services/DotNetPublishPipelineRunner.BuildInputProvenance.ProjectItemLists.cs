@@ -21,15 +21,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed class EvaluatedPublishInput
     {
-        internal EvaluatedPublishInput(string fullPath, bool isSdkDefined)
+        internal EvaluatedPublishInput(
+            string fullPath,
+            bool isSdkDefined,
+            bool isControlledEquivalent = false)
         {
             FullPath = fullPath;
             IsSdkDefined = isSdkDefined;
+            IsControlledEquivalent = isControlledEquivalent;
         }
 
         internal string FullPath { get; }
 
         internal bool IsSdkDefined { get; }
+
+        internal bool IsControlledEquivalent { get; }
     }
 
     private static string[] ReadProjectReferenceItemListNames(
@@ -178,66 +184,39 @@ public sealed partial class DotNetPublishPipelineRunner
         ProjectEvaluationRequest request,
         VerifiedPackageInputCatalog? verifiedPackages,
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
+        IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        string? evaluatedPathMap,
+        bool proveControlledGeneratedInputs,
         out EvaluatedPublishInput[] publishInputs)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
-        if (!TryReadEvaluatedProjectItemPaths(
-                request,
-                ["ResolvedFileToPublish"],
-                ["ComputeFilesToPublish"],
-                preservePublishBuildProjectReferences: false,
-                out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItems))
-        {
-            return !ContainsPotentialPublishItemMutation(
+        if (!proveControlledGeneratedInputs &&
+            !ContainsPotentialPublishItemMutation(
                 request.ProjectPath,
                 executableMsBuildInputs,
-                trustedBuildInfrastructureRoots);
-        }
-        if (!evaluatedItems.TryGetValue(
-                "ResolvedFileToPublish",
-                out EvaluatedProjectItem[]? resolvedFiles))
+                trustedBuildInfrastructureRoots,
+                verifiedPackages))
         {
             return true;
         }
 
-        var results = new List<EvaluatedPublishInput>();
-        foreach (EvaluatedProjectItem item in resolvedFiles)
-        {
-            if (!item.Metadata.TryGetValue("RelativePath", out string? relativePath) ||
-                !IsControlledPublishRelativePath(relativePath))
-            {
-                return false;
-            }
-            if (verifiedPackages?.TryVerify(item.FullPath, out _) is true)
-                continue;
-
-            bool isPackageDefinition = false;
-            bool isSdkDefined = false;
-            if (item.Metadata.TryGetValue(
-                    "DefiningProjectFullPath",
-                    out string? definingProject) &&
-                !string.IsNullOrWhiteSpace(definingProject))
-            {
-                bool verifiedDefinition =
-                    verifiedPackages?.TryVerify(definingProject, out isPackageDefinition) is true;
-                isSdkDefined = !isPackageDefinition &&
-                    !verifiedDefinition &&
-                    IsTrustedExternalBuildInfrastructurePath(
-                        definingProject,
-                        trustedBuildInfrastructureRoots);
-            }
-            results.Add(new EvaluatedPublishInput(item.FullPath, isSdkDefined));
-        }
-
-        publishInputs = results.ToArray();
-        return true;
+        return TryReadControlledEvaluatedPublishInputs(
+            request,
+            verifiedPackages,
+            trustedBuildInfrastructureRoots,
+            evaluatedBuildInputs,
+            executableMsBuildInputs,
+            evaluatedPathMap,
+            proveControlledGeneratedInputs,
+            out publishInputs);
     }
 
     private static bool ContainsPotentialPublishItemMutation(
         string projectPath,
         IEnumerable<string> executableMsBuildInputs,
-        IEnumerable<string> trustedBuildInfrastructureRoots)
+        IEnumerable<string> trustedBuildInfrastructureRoots,
+        VerifiedPackageInputCatalog? verifiedPackages)
     {
         string? gitRoot = ReadGitText(
             Path.GetDirectoryName(projectPath)!,
@@ -250,7 +229,8 @@ public sealed partial class DotNetPublishPipelineRunner
                      IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
         {
             if (!IsSameOrBelowBuildInputPath(path, controlledRoot) ||
-                IsTrustedExternalBuildInfrastructurePath(path, trustedBuildInfrastructureRoots))
+                IsTrustedExternalBuildInfrastructurePath(path, trustedBuildInfrastructureRoots) ||
+                verifiedPackages?.TryVerify(path, out _) is true)
             {
                 continue;
             }

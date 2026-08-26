@@ -314,7 +314,6 @@ public sealed partial class DotNetPublishPipelineRunner
         var generatedRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var expectedOutputPathsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var projectDirectoriesByEvaluation = new Dictionary<string, string>(StringComparer.Ordinal);
-        var requestsByEvaluation = new Dictionary<string, ProjectEvaluationRequest>(StringComparer.Ordinal);
         var buildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var msBuildInputsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -352,6 +351,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
+                        buildPlan?.NoBuildInPublish == true,
                         out EvaluatedProjectInputs? evaluation) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
@@ -371,7 +371,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     .ToArray();
                 expectedOutputPathsByEvaluation[visitKey] = evaluation.ExpectedOutputPaths;
                 projectDirectoriesByEvaluation[visitKey] = projectDirectory;
-                requestsByEvaluation[visitKey] = request;
                 buildInputsByEvaluation[visitKey] = evaluation.BuildInputs
                     .Concat(new[] { request.ProjectPath })
                     .Distinct(comparison)
@@ -413,6 +412,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 string evaluationKey = group.Key;
                 string[] trustedInputs = group
                     .Where(entry => entry.Input.IsSdkDefined &&
+                        entry.Input.IsControlledEquivalent &&
                         IsTrustedSdkGeneratedPublishInput(
                             entry.Input.FullPath,
                             generatedRootsByEvaluation[evaluationKey],
@@ -421,18 +421,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Select(entry => entry.Input.FullPath)
                     .Distinct(comparison)
                     .ToArray();
-                if (trustedInputs.Length == 0 ||
-                    !requestsByEvaluation.TryGetValue(
-                        evaluationKey,
-                        out ProjectEvaluationRequest? request) ||
-                    !TryProveControlledGeneratedOutputs(
-                        request,
-                        trustedInputs,
-                        buildInputsByEvaluation[evaluationKey],
-                        msBuildInputsByEvaluation[evaluationKey],
-                        pathMapsByEvaluation[evaluationKey],
-                        verifiedPackagesByEvaluation[evaluationKey],
-                        controlledGeneratedOutputProofs))
+                if (trustedInputs.Length == 0)
                 {
                     continue;
                 }
@@ -608,6 +597,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
+        bool proveControlledPublishInputs,
         out EvaluatedProjectInputs? evaluation)
     {
         evaluation = null;
@@ -708,6 +698,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             var importPaths = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string[] trustedBuildInfrastructureRoots = Array.Empty<string>();
             PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations =
                 Array.Empty<PreprocessedProjectReferenceDeclaration>();
             PreprocessedProjectPropertyDefinition[] preResolvePropertyDefinitions =
@@ -762,8 +753,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         properties,
                         packageRoots,
                         verifiedPackageArchives);
-                string[] trustedBuildInfrastructureRoots =
-                    ReadTrustedBuildInfrastructureRoots(properties, Path.GetDirectoryName(request.ProjectPath)!);
+                trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
+                    properties,
+                    Path.GetDirectoryName(request.ProjectPath)!);
                 string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
                 string? msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
                 AddSemicolonSeparatedPathValues(
@@ -785,16 +777,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     importPaths));
                 if (verifiedPackages is not null &&
                     !verifiedPackages.TrySetControlledBuildInputs(importPaths))
-                {
-                    return false;
-                }
-                if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
-                    !TryReadEvaluatedPublishInputs(
-                        request,
-                        verifiedPackages,
-                        trustedBuildInfrastructureRoots,
-                        importPaths,
-                        out publishInputs))
                 {
                     return false;
                 }
@@ -1011,6 +993,20 @@ public sealed partial class DotNetPublishPipelineRunner
                     references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
                     inputs.Add(reference.ProjectPath);
                 }
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
+                !TryReadEvaluatedPublishInputs(
+                    request,
+                    verifiedPackages,
+                    trustedBuildInfrastructureRoots,
+                    inputs,
+                    importPaths.Concat(new[] { request.ProjectPath }).ToArray(),
+                    pathMap,
+                    proveControlledPublishInputs,
+                    out publishInputs))
+            {
+                return false;
             }
 
             evaluation = new EvaluatedProjectInputs(

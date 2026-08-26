@@ -1330,7 +1330,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [projectPath],
                     buildConfiguration: "Release");
 
-            Assert.False(provenance.Dirty);
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
             Assert.Empty(provenance.DirtyPaths);
 
             File.WriteAllBytes(restoredAnalyzer, [0x04, 0x05, 0x06]);
