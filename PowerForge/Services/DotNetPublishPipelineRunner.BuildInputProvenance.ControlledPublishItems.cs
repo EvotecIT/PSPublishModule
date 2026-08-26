@@ -29,7 +29,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     evaluatedBuildInputs,
                     executableMsBuildInputs,
-                    request.GlobalProperties,
+                    request.ReadEffectiveGlobalProperties(),
+                    evaluatedProjectContexts: null,
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -255,6 +256,11 @@ public sealed partial class DotNetPublishPipelineRunner
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
         {
+            if (property.Key.Equals("MSBuildToolsPath", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("MSBuildSDKsPath", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase) ||

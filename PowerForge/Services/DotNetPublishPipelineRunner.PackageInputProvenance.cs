@@ -365,6 +365,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
         private readonly string[] _archivePaths;
+        private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
@@ -372,7 +373,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
             VerifiedPackageArchiveCache archives,
-            string[] archivePaths)
+            string[] archivePaths,
+            IEnumerable<string> sdkManagedPackageKeys)
         {
             _packageRoots = packageRoots
                 .Select(Path.GetFullPath)
@@ -381,6 +383,10 @@ public sealed partial class DotNetPublishPipelineRunner
             _lockedPackageHashes = lockedPackageHashes;
             _archives = archives;
             _archivePaths = archivePaths;
+            _sdkManagedArchivePaths = new HashSet<string>(
+                archivePaths.Where(path => sdkManagedPackageKeys.Any(packageKey =>
+                    PackageArchiveMatchesKey(path, packageKey))),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
         internal static VerifiedPackageInputCatalog? TryCreate(
@@ -410,13 +416,36 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
-            AddSdkManagedPackageHashes(properties, projectDirectory, allRoots, hashes);
+            var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddSdkManagedPackageHashes(
+                properties,
+                projectDirectory,
+                allRoots,
+                hashes,
+                sdkManagedPackageKeys);
             if (allRoots.Count == 0)
                 return null;
             if (!TryPrimeLockedPackageArchives(allRoots, hashes, archives, out string[] archivePaths))
                 return null;
 
-            return new VerifiedPackageInputCatalog(allRoots, hashes, archives, archivePaths);
+            return new VerifiedPackageInputCatalog(
+                allRoots,
+                hashes,
+                archives,
+                archivePaths,
+                sdkManagedPackageKeys);
+        }
+
+        private static bool PackageArchiveMatchesKey(string archivePath, string packageKey)
+        {
+            int separator = packageKey.LastIndexOf('|');
+            if (separator <= 0 || separator == packageKey.Length - 1)
+                return false;
+            string expectedName = packageKey.Substring(0, separator) + "." +
+                                  packageKey.Substring(separator + 1) + ".nupkg";
+            return Path.GetFileName(archivePath).Equals(
+                expectedName,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -433,6 +462,41 @@ public sealed partial class DotNetPublishPipelineRunner
 
             isPackageInput = false;
             return false;
+        }
+
+        internal bool TryMapControlledPackageInput(
+            string controlledPath,
+            string controlledPackageRoot,
+            out string mappedPath)
+        {
+            mappedPath = string.Empty;
+            try
+            {
+                string fullControlledPath = Path.GetFullPath(controlledPath);
+                if (!IsSameOrBelowBuildInputPath(fullControlledPath, controlledPackageRoot))
+                    return false;
+                string relative = FrameworkCompatibility.GetRelativePath(
+                    controlledPackageRoot,
+                    fullControlledPath);
+                foreach (string packageRoot in _packageRoots)
+                {
+                    string candidate = Path.GetFullPath(Path.Combine(packageRoot, relative));
+                    if (!IsSameOrBelowBuildInputPath(candidate, packageRoot) ||
+                        (!File.Exists(candidate) && !Directory.Exists(candidate)) ||
+                        !TryVerifyBelowRoot(candidate, packageRoot))
+                    {
+                        continue;
+                    }
+                    mappedPath = candidate;
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                mappedPath = string.Empty;
+                return false;
+            }
         }
 
         private bool TryVerifyBelowRoot(string path, string root)
@@ -458,10 +522,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
-                string packageDirectory = Path.Combine(root, packageId, packageVersion);
                 string expectedName = packageId + "." + packageVersion + ".nupkg";
-                string? archivePath = Directory.EnumerateFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly)
-                    .FirstOrDefault(candidate => Path.GetFileName(candidate).Equals(
+                string? archivePath = _archivePaths.FirstOrDefault(candidate =>
+                        Path.GetFileName(candidate).Equals(
                         expectedName,
                         StringComparison.OrdinalIgnoreCase));
                 if (string.IsNullOrWhiteSpace(archivePath))
@@ -471,7 +534,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
 
                 string packageRelativePath = string.Join("/", segments.Skip(2));
-                return archive.VerifyExtractedFile(packageRelativePath, path);
+                return Directory.Exists(path)
+                    ? archive.VerifyExtractedDirectory(packageRelativePath, path)
+                    : archive.VerifyExtractedFile(packageRelativePath, path);
             }
             catch
             {
@@ -722,6 +787,52 @@ public sealed partial class DotNetPublishPipelineRunner
 
             _extractedFileHashes.Remove(fullExtractedPath);
             return false;
+        }
+
+        internal bool VerifyExtractedDirectory(string relativePath, string extractedPath)
+        {
+            try
+            {
+                string normalizedPrefix = relativePath.Replace('\\', '/').Trim('/');
+                if (normalizedPrefix.Length > 0)
+                    normalizedPrefix += "/";
+                string[] expectedEntries = _entries.Keys
+                    .Where(name => name.StartsWith(
+                        normalizedPrefix,
+                        IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    .ToArray();
+                if (expectedEntries.Length == 0 || !Directory.Exists(extractedPath))
+                    return false;
+
+                string fullDirectory = Path.GetFullPath(extractedPath);
+                string[] actualFiles = Directory.GetFiles(
+                    fullDirectory,
+                    "*",
+                    SearchOption.AllDirectories);
+                if (actualFiles.Length != expectedEntries.Length)
+                    return false;
+
+                var expected = new HashSet<string>(
+                    expectedEntries,
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                foreach (string actualFile in actualFiles)
+                {
+                    string entryName = normalizedPrefix + FrameworkCompatibility.GetRelativePath(
+                            fullDirectory,
+                            actualFile)
+                        .Replace('\\', '/');
+                    if (!expected.Contains(entryName) ||
+                        !VerifyExtractedFile(entryName, actualFile))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private byte[] GetEntryHash(string relativePath, ZipArchiveEntry entry)

@@ -414,6 +414,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> evaluatedMsBuildInputs,
         IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
         out string? gitRoot,
         out string? controlledProjectPath)
     {
@@ -455,7 +456,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2),
                 BuildControlledGitConfiguration(filterNames));
             if (checkout.ExitCode != 0 || checkout.TimedOut || !File.Exists(controlledProjectPath))
+            {
                 return false;
+            }
             if (!TryVerifyControlledGitConfiguration(
                     gitRoot!,
                     revision!,
@@ -469,7 +472,9 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             if (!TryInitializeControlledSubmodules(checkoutRoot, filterNames))
+            {
                 return false;
+            }
 
             var controlledBuildInputs = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
@@ -523,14 +528,61 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledGlobalProperties[property.Key] = controlledValue;
             }
 
+            var controlledProjectContexts = new Dictionary<
+                string,
+                IReadOnlyDictionary<string, string>[]>(
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (KeyValuePair<string, IReadOnlyDictionary<string, string>[]> project in
+                     evaluatedProjectContexts ??
+                     new Dictionary<string, IReadOnlyDictionary<string, string>[]>() )
+            {
+                string fullProjectPath = Path.GetFullPath(project.Key);
+                if (!IsSameOrBelowBuildInputPath(fullProjectPath, gitRoot!))
+                {
+                    return false;
+                }
+                string controlledContextProjectPath = Path.GetFullPath(Path.Combine(
+                    checkoutRoot,
+                    FrameworkCompatibility.GetRelativePath(gitRoot!, fullProjectPath)));
+                if (!IsSameOrBelowBuildInputPath(controlledContextProjectPath, checkoutRoot) ||
+                    !controlledMsBuildInputs.Contains(controlledContextProjectPath))
+                {
+                    return false;
+                }
+
+                var contexts = new List<IReadOnlyDictionary<string, string>>();
+                foreach (IReadOnlyDictionary<string, string> context in project.Value)
+                {
+                    var controlledContext = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (KeyValuePair<string, string> property in context)
+                    {
+                        if (!TryRemapControlledBuildValue(
+                                property.Value,
+                                gitRoot!,
+                                checkoutRoot,
+                                Path.GetDirectoryName(fullProjectPath)!,
+                                out string controlledValue))
+                        {
+                            return false;
+                        }
+                        controlledContext[property.Key] = controlledValue;
+                    }
+                    contexts.Add(controlledContext);
+                }
+                controlledProjectContexts[controlledContextProjectPath] = contexts.ToArray();
+            }
+
             if (!HasOnlyControlledBuildFileInputs(
                     checkoutRoot,
                     controlledBuildInputs,
                     controlledMsBuildInputs,
                     controlledGlobalProperties,
                     Path.GetDirectoryName(controlledProjectPath!)!,
-                    controlledProjectPath))
+                    controlledProjectPath,
+                    controlledProjectContexts))
+            {
                 return false;
+            }
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
             if (!TryVerifyControlledGitConfiguration(

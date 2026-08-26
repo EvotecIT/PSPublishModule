@@ -72,11 +72,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
             .Select(attribute => attribute.Value);
         IEnumerable<string> conditions = document.Descendants()
+            .Where(IsControlledBuildTaskElement)
+            .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
                 "Condition",
                 StringComparison.OrdinalIgnoreCase))
-            .Select(attribute => attribute.Value);
+            .Select(attribute => attribute.Value)
+            .Distinct(StringComparer.Ordinal);
         IEnumerable<string> sdkTaskInputs = relatedDocuments
             .SelectMany(related => related.Descendants())
             .Where(element =>

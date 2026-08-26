@@ -636,17 +636,13 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
             "-getProperty:MSBuildToolsPath",
-            "-getProperty:MSBuildSDKsPath"
+            "-getProperty:MSBuildSDKsPath",
+            "-getProperty:CustomAfterMicrosoftCommonTargets"
         };
         if (request.Configuration is not null)
             arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         foreach (string itemName in EvaluatedBuildItemNames)
             arguments.Add("-getItem:" + itemName);
-        if (!string.IsNullOrEmpty(request.TargetFramework))
-        {
-            arguments.Add("-target:ResolveReferences");
-            arguments.Add("-getItem:_MSBuildProjectReferenceExistent");
-        }
         if (request.HasExplicitTargetFramework)
         {
             arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
@@ -675,7 +671,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 request.EnvironmentVariables,
                 TimeSpan.FromMinutes(2));
             if (process.ExitCode != 0 || process.TimedOut)
+            {
                 return false;
+            }
 
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
@@ -717,6 +715,9 @@ public sealed partial class DotNetPublishPipelineRunner
             bool hasDynamicProjectReferenceTaskOutputs = false;
             EvaluatedProjectItem[] dynamicProjectReferences = Array.Empty<EvaluatedProjectItem>();
             VerifiedPackageInputCatalog? verifiedPackages = null;
+            string? msBuildToolsPath = null;
+            string? msBuildSdksPath = null;
+            string? customAfterMicrosoftCommonTargets = null;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -767,8 +768,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
                     Path.GetDirectoryName(request.ProjectPath)!);
-                string? msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
-                string? msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
+                msBuildToolsPath = ReadItemText(properties, "MSBuildToolsPath");
+                msBuildSdksPath = ReadItemText(properties, "MSBuildSDKsPath");
+                customAfterMicrosoftCommonTargets = ReadItemText(
+                    properties,
+                    "CustomAfterMicrosoftCommonTargets");
                 AddSemicolonSeparatedPathValues(
                     properties,
                     "MSBuildAllProjects",
@@ -781,7 +785,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         out preResolvePropertyDefinitions,
                         out hasDynamicProjectReferenceTaskOutputs,
                         out dynamicProjectReferences))
+                {
                     return false;
+                }
                 importPaths.UnionWith(preprocessedImports);
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
                     request.ProjectPath,
@@ -851,7 +857,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         if (!items.TryGetProperty(itemName, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
                             continue;
                         if (IsAmbientReferenceResolutionItem(itemName) && values.GetArrayLength() > 0)
+                        {
                             return false;
+                        }
                         foreach (JsonElement item in values.EnumerateArray())
                         {
                             if (itemName.Equals("Reference", StringComparison.Ordinal) &&
@@ -969,31 +977,35 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (EvaluatedProjectReference projectReference in rawReferences.Values)
                     references[BuildEvaluatedProjectReferenceKey(projectReference)] = projectReference;
             }
-            else if (rawReferences.Count > 0)
+            else if (rawReferences.Count > 0 ||
+                     projectReferenceDeclarations.Any(declaration =>
+                         declaration.IsTargetTime &&
+                         !IsTrustedExternalBuildInfrastructurePath(
+                             declaration.DefiningProjectPath,
+                             trustedBuildInfrastructureRoots) &&
+                         declaration.Element.Attributes().Any(attribute =>
+                             attribute.Name.LocalName.Equals(
+                                 "Include",
+                                 StringComparison.OrdinalIgnoreCase))) ||
+                     hasDynamicProjectReferenceTaskOutputs)
             {
-                if (!root.TryGetProperty("Items", out JsonElement resolvedItems) ||
-                    !TryReadResolvedProjectReferences(
-                        resolvedItems,
-                        request.ProjectPath,
-                        importPaths,
-                        projectReferenceDeclarations,
-                        evaluatedProjectReferenceConditionProperties,
-                        taskWideProjectReferencePropertyRemovals,
-                        hasDynamicProjectReferenceTaskOutputs,
-                        out EvaluatedProjectReference[] finalResolvedReferences))
-                {
-                    return false;
-                }
-                if (!TryReadAuthoritativeResolvedProjectReferences(
+                if (!TryReadControlledResolvedProjectReferences(
                         request,
+                        verifiedPackages,
+                        inputs,
+                        importPaths
+                            .Concat(new[] { request.ProjectPath })
+                            .Concat(rawReferences.Values.Select(reference => reference.ProjectPath))
+                            .ToArray(),
                         rawReferences.Values.ToArray(),
-                        finalResolvedReferences,
-                        importPaths,
+                        taskWideProjectReferencePropertyRemovals,
                         projectReferenceDeclarations,
                         evaluatedProjectReferenceConditionProperties,
-                        taskWideProjectReferencePropertyRemovals,
                         hasDynamicProjectReferenceTaskOutputs,
-                        out EvaluatedProjectReference[] resolvedReferences))
+                        intermediateRoot,
+                        customAfterMicrosoftCommonTargets,
+                        out EvaluatedProjectReference[] resolvedReferences,
+                        out string resolvedItemsJson))
                 {
                     return false;
                 }
@@ -1005,6 +1017,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     references[BuildEvaluatedProjectReferenceKey(reference)] = reference;
                     inputs.Add(reference.ProjectPath);
+                }
+                using JsonDocument resolvedItemsDocument = JsonDocument.Parse(resolvedItemsJson);
+                if (!TryProcessControlledProjectReferenceItems(
+                        resolvedItemsDocument.RootElement,
+                        request.ProjectPath,
+                        msBuildToolsPath,
+                        msBuildSdksPath,
+                        importPaths,
+                        projectReferenceDeclarations,
+                        evaluatedProjectReferenceConditionProperties,
+                        taskWideProjectReferencePropertyRemovals,
+                        rawReferences.Values.Concat(resolvedReferences),
+                        inputs,
+                        sourceInputs,
+                        generatedBuildRoots,
+                        verifiedPackages,
+                        trustedBuildInfrastructureRoots,
+                        generatedProjectReferenceOutputs))
+                {
+                    return false;
                 }
             }
 

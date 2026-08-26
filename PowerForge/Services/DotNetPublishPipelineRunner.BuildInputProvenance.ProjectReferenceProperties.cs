@@ -487,12 +487,6 @@ public sealed partial class DotNetPublishPipelineRunner
             .Split(new[] { ';' })
             .Where(segment => !string.IsNullOrWhiteSpace(segment))
             .ToArray();
-        if (segments.Length != 1)
-        {
-            tables = Array.Empty<Dictionary<string, string>>();
-            return false;
-        }
-
         var table = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (string segment in segments)
         {

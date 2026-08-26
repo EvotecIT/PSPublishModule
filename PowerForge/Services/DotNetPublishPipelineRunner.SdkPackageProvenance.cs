@@ -9,7 +9,8 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement properties,
         string projectDirectory,
         IEnumerable<string> packageRoots,
-        Dictionary<string, string> hashes)
+        Dictionary<string, string> hashes,
+        HashSet<string> sdkManagedPackageKeys)
     {
         string assetsPath = ReadEvaluatedPath(properties, "ProjectAssetsFile", projectDirectory)
             ?? Path.Combine(projectDirectory, "obj", "project.assets.json");
@@ -46,11 +47,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 libraries.ValueKind == JsonValueKind.Object)
             {
                 foreach (JsonProperty library in libraries.EnumerateObject())
-                    AddAutoReferencedPackageHash(library, autoReferenced, hashes);
+                    AddAutoReferencedPackageHash(
+                        library,
+                        autoReferenced,
+                        hashes,
+                        sdkManagedPackageKeys);
             }
 
             foreach (string download in downloads)
-                AddSdkDownloadPackageHash(download, packageRoots, hashes);
+                AddSdkDownloadPackageHash(
+                    download,
+                    packageRoots,
+                    hashes,
+                    sdkManagedPackageKeys);
         }
         catch
         {
@@ -91,7 +100,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AddAutoReferencedPackageHash(
         JsonProperty library,
         HashSet<string> autoReferenced,
-        Dictionary<string, string> hashes)
+        Dictionary<string, string> hashes,
+        HashSet<string> sdkManagedPackageKeys)
     {
         int separator = library.Name.LastIndexOf('/');
         if (separator <= 0 || separator == library.Name.Length - 1)
@@ -107,16 +117,16 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
-        AddPackageHash(
-            packageId + "|" + library.Name.Substring(separator + 1),
-            sha512.GetString(),
-            hashes);
+        string packageKey = packageId + "|" + library.Name.Substring(separator + 1);
+        AddPackageHash(packageKey, sha512.GetString(), hashes);
+        AddSdkManagedPackageKey(packageKey, sha512.GetString(), hashes, sdkManagedPackageKeys);
     }
 
     private static void AddSdkDownloadPackageHash(
         string packageKey,
         IEnumerable<string> packageRoots,
-        Dictionary<string, string> hashes)
+        Dictionary<string, string> hashes,
+        HashSet<string> sdkManagedPackageKeys)
     {
         string[] parts = packageKey.Split('|');
         if (parts.Length != 2)
@@ -162,6 +172,21 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         AddPackageHash(packageKey, discoveredHash, hashes);
+        AddSdkManagedPackageKey(packageKey, discoveredHash, hashes, sdkManagedPackageKeys);
+    }
+
+    private static void AddSdkManagedPackageKey(
+        string packageKey,
+        string? expectedHash,
+        IReadOnlyDictionary<string, string> hashes,
+        HashSet<string> sdkManagedPackageKeys)
+    {
+        if (!string.IsNullOrWhiteSpace(expectedHash) &&
+            hashes.TryGetValue(packageKey, out string? actualHash) &&
+            string.Equals(actualHash, expectedHash, StringComparison.Ordinal))
+        {
+            sdkManagedPackageKeys.Add(packageKey);
+        }
     }
 
     private static void AddPackageHash(

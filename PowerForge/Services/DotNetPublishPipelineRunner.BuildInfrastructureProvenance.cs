@@ -172,7 +172,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     evaluatedBuildInputs,
                     evaluatedMsBuildInputs,
-                    request.GlobalProperties,
+                    request.ReadEffectiveGlobalProperties(),
+                    evaluatedProjectContexts: null,
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -670,6 +671,18 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? Configuration { get; }
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
+
+        internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in GlobalProperties)
+                properties[property.Key] = property.Value;
+            if (!string.IsNullOrWhiteSpace(Configuration))
+                properties["Configuration"] = Configuration!;
+            if (!string.IsNullOrWhiteSpace(TargetFramework))
+                properties["TargetFramework"] = TargetFramework!;
+            return properties;
+        }
 
         internal ProjectEvaluationRequest ForProject(string projectPath, string? targetFramework)
             => new(

@@ -131,14 +131,10 @@ public sealed partial class DotNetPublishPipelineRunner
             ScheduledProjectReferenceTargetGraph scheduledTargets = requiresTargetGraph
                 ? ReadScheduledProjectReferenceTargets(request, document, initialTargetExpressions)
                 : ScheduledProjectReferenceTargetGraph.Empty;
-            string[] projectReferenceEvaluationTargets =
-                ReadProjectReferenceEvaluationTargetNames(
-                    taskOutputProperties,
-                    scheduledTargets);
             bool evaluatedItemListsSucceeded = TryReadEvaluatedProjectItemPaths(
                     request,
                     ReadProjectReferenceItemListNames(document, taskOutputProperties),
-                    projectReferenceEvaluationTargets,
+                    Array.Empty<string>(),
                     preservePublishBuildProjectReferences: hasDeclaredProjectReferences ||
                         hasDynamicProjectReferenceTaskOutputs,
                     out IReadOnlyDictionary<string, EvaluatedProjectItem[]> evaluatedItemLists);
@@ -353,30 +349,6 @@ public sealed partial class DotNetPublishPipelineRunner
             return IsMsBuildPropertyFunctionExpression(value);
         }
         return expanded.Trim().Equals("ProjectReference", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string[] ReadProjectReferenceEvaluationTargetNames(
-        IReadOnlyDictionary<string, string> evaluatedProperties,
-        ScheduledProjectReferenceTargetGraph scheduledTargets)
-    {
-        return scheduledTargets.ReadExecutionOrder()
-            .Where(target => target.Descendants().Any(element =>
-                (element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
-                 element.Attributes().Any(attribute =>
-                     attribute.Name.LocalName.Equals("ItemName", StringComparison.OrdinalIgnoreCase) &&
-                     IsPotentialProjectReferenceTaskOutput(attribute.Value, evaluatedProperties))) ||
-                (element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
-                 element.Attributes().Any(attribute =>
-                     (attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase) ||
-                      attribute.Name.LocalName.Equals("Update", StringComparison.OrdinalIgnoreCase) ||
-                      attribute.Name.LocalName.Equals("Remove", StringComparison.OrdinalIgnoreCase)) &&
-                     (attribute.Value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-                      IsMsBuildPropertyFunctionExpression(attribute.Value))))))
-            .Select(target => target.Attribute("Name")?.Value.Trim())
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
     private static ScheduledProjectReferenceTargetGraph ReadScheduledProjectReferenceTargets(

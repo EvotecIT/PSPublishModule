@@ -148,7 +148,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_RejectsHeadMutationDuringEvaluation()
+    public void ReadSourceProvenance_ContainsHeadMutationInsideDetachedEvaluation()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -170,6 +170,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"restore \"{projectPath}\" --use-lock-file --nologo");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source\"");
+            string approvedRevision = RunGit(root, "rev-parse HEAD").Trim();
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
@@ -177,10 +178,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [projectPath],
                     buildConfiguration: "Release");
 
-            Assert.True(provenance.Dirty);
-            Assert.Contains(
-                provenance.DirtyReasons,
-                reason => reason.Contains("Git HEAD changed", StringComparison.Ordinal));
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.Equal(approvedRevision, RunGit(root, "rev-parse HEAD").Trim());
         }
         finally
         {

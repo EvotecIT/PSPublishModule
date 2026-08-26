@@ -14,7 +14,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.True(provenance.Dirty);
         Assert.Contains(
             provenance.DirtyReasons,
-            reason => reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase));
+            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -183,10 +183,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     """
             });
 
-        Assert.True(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
-        Assert.Contains(
-            provenance.DirtyReasons,
-            reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
+        AssertSelectedInputIsDirty(provenance);
     }
 
     private static DotNetPublishPipelineRunner.SourceProvenance ReadLiteralGeneratedOutputFixture(

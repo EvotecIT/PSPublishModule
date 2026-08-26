@@ -15,6 +15,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "AssemblyOriginatorKeyFile",
             "CodeAnalysisRuleSet",
             "CompilerResponseFile",
+            "CustomAfterMicrosoftCommonTargets",
             "FrameworkPathOverride",
             "KeyOriginatorFile",
             "ResolvedCodeAnalysisRuleSet",
@@ -90,6 +91,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         : taskInputAllowedRoot;
                     if (!HasOnlyControlledDirectoryTaskInput(inputPath, allowedRoot, isControlledInput))
                         return false;
+                }
+                else if (property.Name.LocalName.Equals(
+                             "CustomAfterMicrosoftCommonTargets",
+                             StringComparison.OrdinalIgnoreCase) &&
+                         !File.Exists(inputPath))
+                {
+                    return false;
                 }
                 else if (isControlledInput is not null)
                 {

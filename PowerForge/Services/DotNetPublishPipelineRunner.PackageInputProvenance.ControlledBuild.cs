@@ -37,11 +37,12 @@ public sealed partial class DotNetPublishPipelineRunner
                             directory,
                             "*.nupkg",
                             SearchOption.TopDirectoryOnly))
-                        .FirstOrDefault(candidate => Path.GetFileName(candidate).Equals(
+                        .Where(candidate => Path.GetFileName(candidate).Equals(
                             expectedName,
-                            StringComparison.OrdinalIgnoreCase));
-                    if (string.IsNullOrWhiteSpace(archivePath) ||
-                        archives.TryGetOrOpen(archivePath!, package.Value) is null)
+                            StringComparison.OrdinalIgnoreCase))
+                        .FirstOrDefault(candidate =>
+                            archives.TryGetOrOpen(candidate, package.Value) is not null);
+                    if (string.IsNullOrWhiteSpace(archivePath))
                     {
                         return false;
                     }
@@ -111,13 +112,16 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool TrySeedControlledPackageSource(
             string destination,
             string controlledSourceRoot,
-            string controlledProjectPath)
+            string controlledProjectPath,
+            bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
                 destination,
                 _archivePaths,
+                _sdkManagedArchivePaths,
                 _controlledBuildInputsByArchive,
                 controlledSourceRoot,
-                controlledProjectPath);
+                controlledProjectPath,
+                allowSdkManagedToolchainPackages);
     }
 
     private sealed partial class VerifiedPackageArchiveCache
@@ -125,9 +129,11 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool TrySeedControlledPackageSource(
             string destination,
             IReadOnlyCollection<string> archivePaths,
+            HashSet<string> sdkManagedArchivePaths,
             IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive,
             string controlledSourceRoot,
-            string controlledProjectPath)
+            string controlledProjectPath,
+            bool allowSdkManagedToolchainPackages)
         {
             try
             {
@@ -135,21 +141,29 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (string archivePath in archivePaths.OrderBy(path => path, StringComparer.Ordinal))
                 {
                     if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
+                    {
                         return false;
+                    }
                     IReadOnlyCollection<string> controlledBuildInputs =
                         controlledBuildInputsByArchive.TryGetValue(
                             Path.GetFullPath(archivePath),
                             out HashSet<string>? inputs)
                             ? inputs
                             : Array.Empty<string>();
-                    if (!cached.Archive.HasOnlyControlledBuildInputs(
+                    if (!(allowSdkManagedToolchainPackages &&
+                          sdkManagedArchivePaths.Contains(Path.GetFullPath(archivePath))) &&
+                        !cached.Archive.HasOnlyControlledBuildInputs(
                             controlledBuildInputs,
                             controlledSourceRoot,
                             controlledProjectPath))
+                    {
                         return false;
+                    }
                     string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
+                    {
                         return false;
+                    }
                     cached.Archive.CopyTo(destinationPath);
                 }
                 return true;

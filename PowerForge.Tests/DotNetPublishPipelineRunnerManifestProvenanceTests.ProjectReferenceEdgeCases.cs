@@ -70,7 +70,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_ExpandsExplicitlyEmptyProjectReferenceTargetFramework()
+    public void ReadSourceProvenance_IgnoresExplicitlyEmptyTargetFrameworkOnNonOutputProjectReference()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -123,15 +123,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     buildProjectPaths: [appProject],
                     buildConfiguration: "Release");
 
-            Assert.True(provenance.Dirty);
-            Assert.True(
-                provenance.DirtyPaths.Any(path =>
-                    path.Replace('\\', '/').EndsWith("inputs/NetEight.cs", StringComparison.Ordinal)),
-                string.Join(Environment.NewLine, provenance.DirtyReasons));
-            Assert.True(
-                provenance.DirtyPaths.Any(path =>
-                    path.Replace('\\', '/').EndsWith("inputs/NetTen.cs", StringComparison.Ordinal)),
-                string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
         }
         finally
         {

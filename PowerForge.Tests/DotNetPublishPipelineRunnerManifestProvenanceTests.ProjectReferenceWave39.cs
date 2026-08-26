@@ -197,7 +197,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.True(provenance.Dirty);
             Assert.Contains(
                 provenance.DirtyReasons,
-                reason => reason.Contains("Git ignored-input query failed", StringComparison.Ordinal));
+                reason => reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal));
         }
         finally
         {

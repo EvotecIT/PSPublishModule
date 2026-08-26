@@ -54,6 +54,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 string propertyName = match.Groups[1].Value;
                 if (propertyName.Equals("MSBuildThisFileDirectory", StringComparison.OrdinalIgnoreCase))
                     continue;
+                if (propertyName.Equals("MSBuildProjectDirectory", StringComparison.OrdinalIgnoreCase))
+                {
+                    pending.Enqueue(value.Replace(match.Value, taskInputBaseDirectory));
+                    expanded = true;
+                    continue;
+                }
                 if (evaluatedGlobalProperties is not null &&
                     evaluatedGlobalProperties.TryGetValue(propertyName, out string? evaluatedValue))
                 {
