@@ -543,7 +543,7 @@ internal static class PowerShellCompiledModuleManifest
            path.StartsWith("//", StringComparison.Ordinal) ||
            path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':';
 
-    private static string ResolveSourceManifest(string sourcePath, string? moduleManifestPath)
+    internal static string ResolveSourceManifest(string sourcePath, string? moduleManifestPath)
         => string.IsNullOrWhiteSpace(moduleManifestPath)
             ? Path.ChangeExtension(sourcePath, ".psd1")
             : Path.GetFullPath(moduleManifestPath!.Trim().Trim('"'));

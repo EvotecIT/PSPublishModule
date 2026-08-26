@@ -45,11 +45,13 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string> sourceFiles)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
-        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath ?? spec.SourcePath))
-                         ?? Directory.GetCurrentDirectory();
+        var manifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
+        if (!File.Exists(manifestPath)) manifestPath = null;
+        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         return AnalyzeCore(
             spec.SourcePath,
-            spec.ModuleManifestPath,
+            manifestPath,
             moduleRoot,
             spec.Kind,
             spec.Mode,
@@ -276,7 +278,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
 
         var normalized = PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(value);
         if (Path.IsPathRooted(normalized) || LooksLikeWindowsRootedPath(value))
-            throw new InvalidOperationException($"Module dependency '{value}' must be relative to its manifest.");
+            throw new InvalidOperationException($"Module manifest file reference '{value}' must remain relative to the module root.");
         var sourcePath = Path.GetFullPath(Path.Combine(manifestDirectory, normalized));
         PowerShellCompilationPathSafety.EnsureContained(moduleRoot, sourcePath, $"Module dependency '{value}' escapes the module root.");
         if (File.Exists(sourcePath))

@@ -73,6 +73,24 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
+    [Theory]
+    [InlineData("$invocation = Get-Variable -Name MyInvocation -ValueOnly; return $invocation.InvocationName")]
+    [InlineData("$invocation = gv MyInv* -ValueOnly; return $invocation.InvocationName")]
+    [InlineData("$invocation = (Get-Variable -Scope Local | Where-Object Name -eq MyInvocation).Value; return $invocation.InvocationName")]
+    [InlineData("$name = 'MyInvocation'; $invocation = Get-Variable -Name $name -ValueOnly; return $invocation.InvocationName")]
+    [InlineData("$invocation = (Get-Item Variable:MyInvocation).Value; return $invocation.InvocationName")]
+    [InlineData("$invocation = $ExecutionContext.SessionState.PSVariable.Get('MyInvocation'); return $invocation.InvocationName")]
+    [InlineData("$name = 'MyInvocation'; $invocation = $ExecutionContext.SessionState.PSVariable.Get($name); return $invocation.InvocationName")]
+    public void Build_PackagedExecutableRejectsIndirectTopLevelMyInvocationRetrieval(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.IndirectInvocation", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("indirect top-level invocation metadata", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
     [Fact]
     public void Build_HybridModuleRejectsPowerShellBindingExceptionCatchBeforeLocalCallLowering()
     {
@@ -169,6 +187,31 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
+    public void Build_HybridModulePreservesPreDeclarationGcmAliasDiscovery()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "$script:before = [bool](gcm Get-PowerForgeAliasLater -ErrorAction SilentlyContinue); " +
+            "function Get-PowerForgeAliasLater { return 1 }; function Get-AliasBefore { return $script:before }; " +
+            "Export-ModuleMember -Function Get-PowerForgeAliasLater, Get-AliasBefore",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AliasDiscovery",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("availability timing", StringComparison.OrdinalIgnoreCase));
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Microsoft.PowerShell.Core\\Import-Module -Name '{escapedPath}' -Force; Get-AliasBefore");
+        Assert.Equal((0, "False", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_BinaryModuleUsesManifestVersionForAssemblyIdentity()
     {
         using var fixture = ArtifactFixture.Create(
@@ -191,6 +234,50 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = Assert.Single(result.Manifest!.Files, file => file.Role == "TypedAssembly");
         Assert.Equal(new Version(2, 3, 4, 0), AssemblyName.GetAssemblyName(assembly.Path).Version);
+    }
+
+    [Fact]
+    public void Build_BinaryModuleRejectsMismatchedAutomaticallyDiscoveredSiblingManifest()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-SelectedValue { return 1 }; Export-ModuleMember -Function Get-SelectedValue",
+            ".psm1");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'Other.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-SelectedValue') }");
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath,
+                fixture.OutputPath,
+                "PowerForge.StaleSibling",
+                PowerShellCompilationArtifactKind.BinaryModule,
+                PowerShellCompilationMode.Hybrid)));
+
+        Assert.Contains("does not own selected compilation source", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_BinaryModuleUsesAutomaticallyDiscoveredSiblingManifestForIdentityAndPayload()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-SiblingValue { return 1 }; Export-ModuleMember -Function Get-SiblingValue",
+            ".psm1");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Data.txt"), "payload");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'Source.psm1'; ModuleVersion = '4.5.6'; FunctionsToExport = @('Get-SiblingValue'); FileList = @('Data.txt') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.SiblingManifest",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = Assert.Single(result.Manifest!.Files, file => file.Role == "TypedAssembly");
+        Assert.Equal(new Version(4, 5, 6, 0), AssemblyName.GetAssemblyName(assembly.Path).Version);
+        Assert.Equal("payload", File.ReadAllText(Path.Combine(fixture.OutputPath, "PowerForge.SiblingManifest", "Data.txt")));
     }
 
     [Fact]

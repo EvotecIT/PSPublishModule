@@ -172,6 +172,13 @@ internal static class PowerShellPackagedScriptRewriter
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
+        var indirectInvocation = FindIndirectMyInvocationLookup(ast);
+        if (indirectInvocation is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not preserve indirect top-level invocation metadata lookup '{indirectInvocation.Extent.Text}'. Inspect one of the explicitly supported MyCommand path members directly.");
+        }
+
         var escapedInvocation = ast.FindAll(
                 static node => node is VariableExpressionAst variable &&
                                variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase),
@@ -295,6 +302,104 @@ internal static class PowerShellPackagedScriptRewriter
     private static bool IsSupportedMyInvocationReceiver(VariableExpressionAst invocation)
         => invocation.Parent is MemberExpressionAst { Expression: var expression } &&
            ReferenceEquals(expression, invocation);
+
+    private static Ast? FindIndirectMyInvocationLookup(ScriptBlockAst ast)
+    {
+        var command = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .FirstOrDefault(candidate => IsTopLevel(candidate, ast) && RetrievesMyInvocation(candidate));
+        if (command is not null) return command;
+
+        return ast.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: true)
+            .Cast<InvokeMemberExpressionAst>()
+            .FirstOrDefault(candidate =>
+                IsTopLevel(candidate, ast) &&
+                candidate.Member is StringConstantExpressionAst member &&
+                (member.Value.Equals("Get", StringComparison.OrdinalIgnoreCase) ||
+                 member.Value.Equals("GetValue", StringComparison.OrdinalIgnoreCase)) &&
+                ReferencesPsVariableIntrinsics(candidate.Expression) &&
+                (candidate.Arguments.Count != 1 ||
+                 candidate.Arguments[0] is not StringConstantExpressionAst argument ||
+                 VariablePatternMatches(argument.Value, "MyInvocation")));
+    }
+
+    private static bool RetrievesMyInvocation(CommandAst command)
+    {
+        var commandName = command.GetCommandName();
+        if (string.IsNullOrWhiteSpace(commandName)) return false;
+        var leafName = commandName!.Split('\\').Last();
+        if (leafName.Equals("Get-Variable", StringComparison.OrdinalIgnoreCase) ||
+            leafName.Equals("gv", StringComparison.OrdinalIgnoreCase))
+            return GetVariableMayRetrieveMyInvocation(command);
+        if (!leafName.Equals("Get-Item", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("Get-Content", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("gi", StringComparison.OrdinalIgnoreCase) &&
+            !leafName.Equals("gc", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return GetCommandArgumentLiterals(command).Any(static value =>
+            TryGetVariableProviderPattern(value, out var pattern) &&
+            VariablePatternMatches(pattern!, "MyInvocation"));
+    }
+
+    private static bool GetVariableMayRetrieveMyInvocation(CommandAst command)
+    {
+        var elements = command.CommandElements.Skip(1).ToArray();
+        for (var index = 0; index < elements.Length; index++)
+        {
+            if (elements[index] is not CommandParameterAst parameter ||
+                !parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (parameter.Argument is StringConstantExpressionAst inline)
+                return VariablePatternMatches(inline.Value, "MyInvocation");
+            return index + 1 >= elements.Length ||
+                   elements[index + 1] is not StringConstantExpressionAst named ||
+                   VariablePatternMatches(named.Value, "MyInvocation");
+        }
+        return elements.FirstOrDefault() is not StringConstantExpressionAst positional ||
+               VariablePatternMatches(positional.Value, "MyInvocation");
+    }
+
+    private static IEnumerable<string> GetCommandArgumentLiterals(CommandAst command)
+    {
+        foreach (var element in command.CommandElements.Skip(1))
+        {
+            if (element is StringConstantExpressionAst literal)
+            {
+                yield return literal.Value;
+                continue;
+            }
+            foreach (var nested in element.FindAll(static node => node is StringConstantExpressionAst, searchNestedScriptBlocks: true)
+                         .Cast<StringConstantExpressionAst>())
+                yield return nested.Value;
+        }
+    }
+
+    private static bool ReferencesPsVariableIntrinsics(ExpressionAst expression)
+    {
+        for (Ast? current = expression; current is MemberExpressionAst member; current = member.Expression)
+        {
+            if (member.Member is StringConstantExpressionAst name &&
+                name.Value.Equals("PSVariable", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool TryGetVariableProviderPattern(string value, out string? pattern)
+    {
+        pattern = null;
+        const string prefix = "Variable:";
+        if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+        pattern = value.Substring(prefix.Length).TrimStart('\\', '/');
+        return !string.IsNullOrWhiteSpace(pattern);
+    }
+
+    private static bool VariablePatternMatches(string pattern, string name)
+        => new System.Management.Automation.WildcardPattern(
+                pattern,
+                System.Management.Automation.WildcardOptions.IgnoreCase |
+                System.Management.Automation.WildcardOptions.CultureInvariant)
+            .IsMatch(name);
 
     internal static void ValidateDotSources(
         ScriptBlockAst ast,

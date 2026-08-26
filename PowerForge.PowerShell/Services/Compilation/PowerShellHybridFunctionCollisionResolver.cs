@@ -99,7 +99,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
         var commandName = command.GetCommandName();
         if (commandName is null ||
             !commandName.Equals("Get-Command", StringComparison.OrdinalIgnoreCase) &&
-            !commandName.EndsWith("\\Get-Command", StringComparison.OrdinalIgnoreCase))
+            !commandName.EndsWith("\\Get-Command", StringComparison.OrdinalIgnoreCase) &&
+            !commandName.Equals("gcm", StringComparison.OrdinalIgnoreCase))
             return false;
 
         var elements = command.CommandElements.Skip(1).ToArray();

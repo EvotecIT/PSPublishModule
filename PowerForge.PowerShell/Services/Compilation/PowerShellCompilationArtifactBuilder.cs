@@ -52,7 +52,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
                 .ToArray();
             if (missingDependencies.Length > 0)
+            {
+                var missingManifestReference = missingDependencies.FirstOrDefault(static dependency =>
+                    dependency.Discovery is PowerShellCompilationDependencyDiscovery.RequiredAssemblies or
+                        PowerShellCompilationDependencyDiscovery.NestedModules or
+                        PowerShellCompilationDependencyDiscovery.ScriptsToProcess or
+                        PowerShellCompilationDependencyDiscovery.TypesToProcess or
+                        PowerShellCompilationDependencyDiscovery.FormatsToProcess or
+                        PowerShellCompilationDependencyDiscovery.FileList);
+                if (missingManifestReference is not null)
+                    throw new FileNotFoundException($"Required module manifest file reference '{missingManifestReference.RelativePath}' was not found.", missingManifestReference.SourcePath);
                 throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
+            }
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
             if (plan.ParseErrorFiles > 0)
@@ -366,9 +377,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable &&
             !extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Executable compilation requires a standalone .ps1 entrypoint; a .psm1 module has no unambiguous application entrypoint.", nameof(spec));
-        if (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+        var effectiveManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath)
+            : spec.ModuleManifestPath;
+        if (!string.IsNullOrWhiteSpace(effectiveManifestPath) &&
+            (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || File.Exists(effectiveManifestPath)))
         {
-            var moduleManifestPath = spec.ModuleManifestPath!;
+            var moduleManifestPath = effectiveManifestPath!;
             if (!File.Exists(moduleManifestPath))
                 throw new FileNotFoundException("PowerShell module manifest was not found.", moduleManifestPath);
             if (!Path.GetExtension(moduleManifestPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
@@ -451,7 +466,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         IEnumerable<string> compilationSourcePaths)
     {
-        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule || string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule)
             return;
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var compilationSources = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
@@ -666,12 +681,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     private static string GetBinaryModuleAssemblyVersion(PowerShellCompilationBuildSpec spec)
     {
-        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule ||
-            string.IsNullOrWhiteSpace(spec.ModuleManifestPath))
+        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule)
             return "1.0.0.0";
-        var value = ModuleManifestValueReader.ReadTopLevelString(spec.ModuleManifestPath!, "ModuleVersion");
+        var manifestPath = PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath);
+        if (!File.Exists(manifestPath)) return "1.0.0.0";
+        var value = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion");
+        if (string.IsNullOrWhiteSpace(value)) return "1.0.0.0";
         if (!Version.TryParse(value, out var version))
-            throw new InvalidOperationException($"Module manifest '{spec.ModuleManifestPath}' declares invalid ModuleVersion '{value}'.");
+            throw new InvalidOperationException($"Module manifest '{manifestPath}' declares invalid ModuleVersion '{value}'.");
         return new Version(
             version.Major,
             version.Minor,
