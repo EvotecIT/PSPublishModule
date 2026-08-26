@@ -57,6 +57,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ["AddToWin32Manifest"] = ["ManifestPath"],
             ["AL"] = ["OutputAssembly"],
+            ["AspNetCompiler"] = ["TargetPath"],
             ["Copy"] = ["DestinationFiles", "DestinationFolder"],
             ["Csc"] = ["DocumentationFile", "ErrorLog", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
             ["Delete"] = ["Files"],
@@ -74,7 +75,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ["Unzip"] = ["DestinationFolder"],
             ["UpdateManifest"] = ["OutputManifest"],
             ["Vbc"] = ["DocumentationFile", "ErrorLog", "GeneratedFilesOutputPath", "OutputAssembly", "OutputRefAssembly", "PdbFile", "TouchedFilesPath"],
-            ["WinMDExp"] = ["OutputWindowsMetadataFile"],
+            ["WinMDExp"] = ["OutputDocumentationFile", "OutputPDBFile", "OutputWindowsMetadataFile"],
             ["WriteLinesToFile"] = ["File"],
             ["XmlPoke"] = ["XmlInputPath"],
             ["XslTransformation"] = ["OutputPaths"],
