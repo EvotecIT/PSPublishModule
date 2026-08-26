@@ -41,7 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static Dictionary<string, string?> CreateTrustedGitEnvironment(
+    internal static Dictionary<string, string?> CreateTrustedGitEnvironment(
         IReadOnlyDictionary<string, string?>? requestedEnvironment = null,
         IReadOnlyList<KeyValuePair<string, string>>? controlledConfiguration = null)
     {
@@ -59,6 +59,17 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         foreach (string name in environment.Keys
                      .Where(name => name.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase))
+                     .ToArray())
+        {
+            environment[name] = null;
+        }
+        foreach (object key in Environment.GetEnvironmentVariables().Keys)
+        {
+            if (key is string name && IsNativeLoaderInjectionEnvironmentVariable(name))
+                environment[name] = null;
+        }
+        foreach (string name in environment.Keys
+                     .Where(IsNativeLoaderInjectionEnvironmentVariable)
                      .ToArray())
         {
             environment[name] = null;
@@ -92,6 +103,12 @@ public sealed partial class DotNetPublishPipelineRunner
         environment["GIT_OPTIONAL_LOCKS"] = "0";
         return environment;
     }
+
+    private static bool IsNativeLoaderInjectionEnvironmentVariable(string name)
+        => name.StartsWith("LD_", StringComparison.Ordinal) ||
+           name.StartsWith("DYLD_", StringComparison.Ordinal) ||
+           name.Equals("LIBPATH", StringComparison.Ordinal) ||
+           name.Equals("SHLIB_PATH", StringComparison.Ordinal);
 
     private static IEnumerable<string> EnumerateDotNetCandidates()
     {

@@ -27,9 +27,11 @@ public sealed partial class DotNetPublishPipelineRunner
             "recurse",
             "ruleset",
             "sourcelink",
+            "sdkpath",
             "template",
             "testcoveragemodulepaths",
             "use",
+            "vbruntime",
             "win32appconfig",
             "win32icon",
             "win32manifest",
@@ -55,7 +57,8 @@ public sealed partial class DotNetPublishPipelineRunner
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "lib",
-            "libpath"
+            "libpath",
+            "sdkpath"
         };
 
     private static bool HasOnlyControlledCompilerResponseFileInputs(
