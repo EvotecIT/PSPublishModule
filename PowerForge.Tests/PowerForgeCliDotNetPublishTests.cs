@@ -64,7 +64,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --validate --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet publish --config \"{configPath}\" --target monitoring --validate --output json");
 
             Assert.NotEqual(0, exitCode);
             Assert.Contains("misspelled", stdout + stderr, StringComparison.OrdinalIgnoreCase);
@@ -132,7 +132,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -200,7 +200,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet publish --config \"{configPath}\" --target monitoring --plan --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -225,7 +225,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         var repoRoot = FindRepositoryRoot();
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using var document = JsonDocument.Parse(stdout);
@@ -239,7 +239,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         var repoRoot = FindRepositoryRoot();
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --checksums-signature checksums.p7s --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind portable-cli --checksums-signature checksums.p7s --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using JsonDocument document = JsonDocument.Parse(stdout);
@@ -255,7 +255,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         var repoRoot = FindRepositoryRoot();
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind portable-cli --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using var document = JsonDocument.Parse(stdout);
@@ -271,7 +271,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         const string revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind powershell-module --artifact-id Sample --project-root . --artifact sample.nupkg --checksums SHA256SUMS.txt --source-revision {revision} --signing-evidence sample.signing.json --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind powershell-module --artifact-id Sample --project-root . --artifact sample.nupkg --checksums SHA256SUMS.txt --source-revision {revision} --signing-evidence sample.signing.json --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using JsonDocument document = JsonDocument.Parse(stdout);
@@ -285,7 +285,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         const string revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --project-root . --manifest manifest.json --checksums SHA256SUMS.txt --config config.json --installer Sample.MSI --source-revision {revision} --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --project-root . --manifest manifest.json --checksums SHA256SUMS.txt --config config.json --installer Sample.MSI --source-revision {revision} --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using JsonDocument document = JsonDocument.Parse(stdout);
@@ -298,7 +298,7 @@ public sealed class PowerForgeCliDotNetPublishTests
         var repoRoot = FindRepositoryRoot();
         var (exitCode, stdout, stderr) = await RunCliAsync(
             repoRoot,
-            $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample --project-root . --artifact sample.zip --checksums SHA256SUMS.txt --source-revision abcdef1 --manifest manifest.json --config config.json --output json");
+            $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind portable-cli --artifact-id Sample --project-root . --artifact sample.zip --checksums SHA256SUMS.txt --source-revision abcdef1 --manifest manifest.json --config config.json --output json");
 
         Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
         using JsonDocument document = JsonDocument.Parse(stdout);
@@ -333,7 +333,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id Sample.CLI --project-root \"{tempRoot}\" --artifact missing.zip --checksums \"{checksumsPath}\" --source-revision {new string('b', 40)} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind portable-cli --artifact-id Sample.CLI --project-root \"{tempRoot}\" --artifact missing.zip --checksums \"{checksumsPath}\" --source-revision {new string('b', 40)} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --output json");
 
             Assert.True(exitCode == 2, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -423,7 +423,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet release-artifact verify --kind portable-cli --artifact-id \"{artifactId}\" --project-root \"{tempRoot}\" --artifact \"{executablePath}\" --checksums \"{checksumsPath}\" --source-revision {sourceRevision} --manifest \"{manifestPath}\" --config \"{configurationPath}\" --rid win-x64 --framework net10.0 --style PortableCompat --sign-thumbprint {realSignature.Thumbprint} --output json");
 
             Assert.True(exitCode == 1, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
             using JsonDocument document = JsonDocument.Parse(stdout);
@@ -481,7 +481,7 @@ public sealed class PowerForgeCliDotNetPublishTests
 
             var (exitCode, stdout, stderr) = await RunCliAsync(
                 repoRoot,
-                $"run --project \"{Path.Combine(repoRoot, "PowerForge.Cli", "PowerForge.Cli.csproj")}\" -c Release --framework net10.0 -- dotnet publish --config \"{configPath}\" --project-root \"{repoRoot}\" --validate --output json");
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet publish --config \"{configPath}\" --project-root \"{repoRoot}\" --validate --output json");
 
             Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
 
@@ -526,6 +526,9 @@ public sealed class PowerForgeCliDotNetPublishTests
 
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }
+
+    private static string GetCliAssemblyPath(string repoRoot)
+        => Path.Combine(repoRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
 
     private static string FindRepositoryRoot()
     {

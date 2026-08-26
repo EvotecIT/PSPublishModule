@@ -16,7 +16,7 @@ public static partial class ManifestEditor
     public static bool TrySetTopLevelModuleVersion(string filePath, string newVersion)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;
@@ -108,7 +108,7 @@ public static partial class ManifestEditor
     public static bool TrySetRequiredModules(string filePath, RequiredModuleReference[] modules)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;
@@ -194,7 +194,7 @@ public static partial class ManifestEditor
         var items = values ?? new Dictionary<string, string[]>();
         if (items.Count == 0) return false;
 
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;
@@ -282,7 +282,7 @@ public static partial class ManifestEditor
     public static bool TrySetTopLevelString(string filePath, string key, string newValue)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;
@@ -312,7 +312,7 @@ public static partial class ManifestEditor
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
         if (string.IsNullOrWhiteSpace(key)) return false;
 
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;
@@ -348,7 +348,7 @@ public static partial class ManifestEditor
     public static bool TrySetTopLevelStringArray(string filePath, string key, string[] values)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens; ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
         if (errors != null && errors.Length > 0) return false;

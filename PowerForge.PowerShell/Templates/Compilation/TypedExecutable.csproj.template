@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>{{TARGET_FRAMEWORK}}</TargetFramework>
+    <AssemblyName>{{ARTIFACT_NAME}}</AssemblyName>
+    <RootNamespace>PowerForge.Compiled</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <PublishSingleFile>{{SINGLE_FILE}}</PublishSingleFile>
+    <SelfContained>{{SELF_CONTAINED}}</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>{{SINGLE_FILE}}</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed>{{PUBLISH_TRIMMED}}</PublishTrimmed>
+    <PublishAot>{{PUBLISH_AOT}}</PublishAot>
+  </PropertyGroup>
+</Project>

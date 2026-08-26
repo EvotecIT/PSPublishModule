@@ -114,6 +114,9 @@ internal static partial class Program
             return CommandRun(filteredArgs, cli, logger);
         case "workspace":
             return CommandWorkspace(filteredArgs, cli, logger);
+        case "powershell":
+        case "ps":
+            return CommandPowerShell(filteredArgs, cli, logger);
         case "github":
             return CommandGitHub(filteredArgs, cli, logger);
         case "homeassistant":

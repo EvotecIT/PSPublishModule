@@ -53,4 +53,14 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Templates\Compilation\TypedLibrary.cs.template" LogicalName="PowerForge.PowerShell.Compilation.TypedLibrary.cs.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\TypedLibrary.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.TypedLibrary.csproj.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\PackagedExecutable.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.PackagedExecutable.csproj.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\PackagedProgram.cs.template" LogicalName="PowerForge.PowerShell.Compilation.PackagedProgram.cs.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\TypedExecutable.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.TypedExecutable.csproj.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\TypedExecutableProgram.cs.template" LogicalName="PowerForge.PowerShell.Compilation.TypedExecutableProgram.cs.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\BinaryModule.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.BinaryModule.csproj.template" WithCulture="false" />
+  </ItemGroup>
 </Project>
