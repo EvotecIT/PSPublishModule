@@ -615,6 +615,13 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support dynamic script evaluation '{dynamicScriptEvaluation.Extent.Text}' because host and invocation requirements hidden in generated script text cannot be validated.");
         }
 
+        var aliasInteraction = FindUninspectableOrInteractiveAlias(ast);
+        if (aliasInteraction is not null)
+        {
+            throw new InvalidOperationException(
+                $"Packaged executable generation does not support alias declaration '{aliasInteraction.Extent.Text}' because its target is dynamic or resolves to an interactive command without a console-backed PSHost.");
+        }
+
         var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()));
@@ -638,6 +645,46 @@ internal static class PowerShellPackagedScriptRewriter
         => command.GetCommandName() is null &&
            command.InvocationOperator is not TokenKind.Dot &&
            command.CommandElements.FirstOrDefault() is not ScriptBlockExpressionAst;
+
+    private static CommandAst? FindUninspectableOrInteractiveAlias(ScriptBlockAst ast)
+    {
+        var definitions = ast.FindAll(
+                static node => node is CommandAst command && PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command),
+                searchNestedScriptBlocks: true)
+            .Cast<CommandAst>()
+            .ToArray();
+        var targets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var definition in definitions)
+        {
+            if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out var aliasName, out var targetName))
+                return definition;
+            if (!targets.TryGetValue(aliasName, out var aliasTargets))
+            {
+                aliasTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                targets.Add(aliasName, aliasTargets);
+            }
+            aliasTargets.Add(targetName);
+        }
+
+        foreach (var definition in definitions)
+        {
+            PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out _, out var targetName);
+            if (ResolvesToInteractiveCommand(targetName, targets, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                return definition;
+        }
+        return null;
+    }
+
+    private static bool ResolvesToInteractiveCommand(
+        string commandName,
+        IReadOnlyDictionary<string, HashSet<string>> aliasTargets,
+        HashSet<string> visited)
+    {
+        if (IsInteractiveCommand(commandName)) return true;
+        if (!visited.Add(commandName)) return true;
+        if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
+        return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
+    }
 
     private static VariableExpressionAst? FindExecutionContextHostAccess(ScriptBlockAst ast)
         => ast.FindAll(

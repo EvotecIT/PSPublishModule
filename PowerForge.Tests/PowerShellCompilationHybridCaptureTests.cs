@@ -17,7 +17,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "function Get-CapturedScalar { [CmdletBinding()] param([string] $Value) [int] $count = 1; [string] $captured = Write-Output $Value; " +
             "$count += 1; if ($captured -eq $Value) { return $count }; return 0 }; " +
             "function Get-CapturedArrayLength { [CmdletBinding()] param([string[]] $Values) [string[]] $captured = Write-Output $Values; return $captured.Length }; " +
-            "function Get-CapturedNullLength { [string] $captured = Write-Output -InputObject $null; return $captured.Length }; " +
+            "function Get-CapturedNullLength { [CmdletBinding()] param(); [string] $captured = Write-Output -InputObject $null; return $captured.Length }; " +
             "function Get-CapturedHelper { [CmdletBinding()] param([string] $InputText) [string] $captured = Write-Output $InputText; return $captured }; " +
             "function Get-CapturedOuter { [CmdletBinding()] param([string] $InputText) return Get-CapturedHelper -InputText $InputText }",
             ".psm1");

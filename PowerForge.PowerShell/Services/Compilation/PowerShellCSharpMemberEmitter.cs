@@ -203,6 +203,12 @@ internal sealed class PowerShellCSharpMemberEmitter
             throw _error(member, $"CLR member '{target.Type.FullName}.{name}' was not found as a readable and writable instance field or property.");
         if (members.Length > 1)
             throw _error(member, $"Writable CLR member '{target.Type.FullName}.{name}' is ambiguous on the conservative compilation path.");
+        if (members[0] is PropertyInfo && PowerShellRuntimeExceptionCatchPolicy.Contains(member))
+        {
+            throw _error(
+                member,
+                $"CLR property assignment '{target.Type.FullName}.{members[0].Name}' inside a RuntimeException catch cannot preserve PowerShell's runtime-error wrapping on the conservative compilation path.");
+        }
         var memberType = members[0] is PropertyInfo propertyInfo ? propertyInfo.PropertyType : ((FieldInfo)members[0]).FieldType;
         var valueType = _inferExpressionType(value);
         if (!_isSupportedType(memberType) || !_canAssign(memberType, valueType))

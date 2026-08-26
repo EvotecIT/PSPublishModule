@@ -160,7 +160,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModuleBracesCapturedCommandRegionVariableNames()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierBracedRegion { ${a-b} = 1; Write-Output ${a-b}; return 2 }",
+            "function Get-FrontierBracedRegion { [CmdletBinding()] param(); ${a-b} = 1; Write-Output ${a-b}; return 2 }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

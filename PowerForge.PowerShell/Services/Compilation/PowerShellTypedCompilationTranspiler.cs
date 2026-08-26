@@ -356,6 +356,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 capabilities,
                 signatures,
                 source.Unit.Parameters).Emit();
+            EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != emitted.ReturnType)
                 throw new PowerShellCSharpEmissionException(
                     source.Function,
@@ -413,6 +414,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 targetFramework,
                 capabilities,
                 parameterMetadata: source.Unit.Parameters).Emit();
+            EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
         }
@@ -420,6 +422,20 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
         }
+    }
+
+    private static void EnsureBasicFunctionBinarySurfacePreserved(
+        FunctionSource source,
+        PowerShellCSharpMethodEmission emitted,
+        PowerShellCompilationCapability capabilities)
+    {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
+            !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions)
+            return;
+        throw new PowerShellCSharpEmissionException(
+            source.Function,
+            $"Basic function '{source.Function.Name}' uses PowerShell stream or command-host behavior that cannot preserve loose handling of generated binary-cmdlet common-parameter names.");
     }
 
     private static PowerShellCompiledMethod CreateCompiledMethod(FunctionSource source, PowerShellCSharpMethodEmission emitted)

@@ -26,6 +26,7 @@ public sealed class PowerShellCompilationCommandIslandTests
             }
 
             function Get-PipelineIsland {
+                [CmdletBinding()]
                 param([string] $Name)
                 $Name | ForEach-Object { $_.ToUpperInvariant() }
             }
@@ -111,7 +112,7 @@ public sealed class PowerShellCompilationCommandIslandTests
         var source = Path.Combine(root, "CoarseIsland.psm1");
         File.WriteAllText(
             source,
-            "function Get-CoarseIsland { param([string] $Name, [bool] $Upper); " +
+            "function Get-CoarseIsland { [CmdletBinding()] param([string] $Name, [bool] $Upper); " +
             "if ($Upper) { Write-Output $Name.ToUpperInvariant() } else { Write-Output $Name }; " +
             "Write-Output 'tail-region'; return $Name }");
 

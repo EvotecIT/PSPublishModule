@@ -586,4 +586,82 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
                 hostRuntimeIdentifier: "linux-x64",
                 (System.Runtime.InteropServices.Architecture)int.MaxValue));
     }
+
+    [Theory]
+    [InlineData("Set-Alias Ask Read-Host; Ask 'Prompt'")]
+    [InlineData("Set-Alias Ask Read-Host; New-Alias AskAgain Ask; AskAgain 'Prompt'")]
+    [InlineData("Set-Alias -Scope Local Ask Read-Host; Ask 'Prompt'")]
+    [InlineData("Set-Alias -EA Stop -Na Ask -Va Read-Host; Ask 'Prompt'")]
+    [InlineData("$target = 'Read-Host'; Set-Alias Ask $target; Ask 'Prompt'")]
+    public void Build_PackagedExecutableRejectsInteractiveOrDynamicAliasTargets(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var result = BuildExecutable(fixture, "PowerForge.PackagedAliasHost", PowerShellCompilationMode.Package);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("alias declaration", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_PackagedExecutableAllowsLiteralNonInteractiveAliasTargets()
+    {
+        using var fixture = ArtifactFixture.Create("Set-Alias Say Write-Output; Say 'ok'");
+        var result = BuildExecutable(fixture, "PowerForge.PackagedSafeAlias", PowerShellCompilationMode.Package);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!);
+        Assert.Equal((0, "ok", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridModuleRoutesThrowingPropertySetterObservedByRuntimeExceptionCatchToFallback()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-SetterRoute { param([long] $Value); [System.IO.MemoryStream] $stream = [System.IO.MemoryStream]::new(); " +
+            "try { $stream.Position = $Value; return [object] 'set' } " +
+            "catch [System.Management.Automation.RuntimeException] { return [object] 'runtime' } }; " +
+            "Export-ModuleMember -Function Get-SetterRoute",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.PropertySetterRuntimeCatch",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-SetterRoute -Value -1");
+        Assert.Equal((0, "runtime", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesBasicFunctionCommonParameterTokens()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-BasicVerbose { Write-Verbose 'message'; return 'done' }; " +
+            "Export-ModuleMember -Function Get-BasicVerbose",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BasicCommonParameter",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; Get-BasicVerbose -Verbose");
+        Assert.Equal((0, "done", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
 }

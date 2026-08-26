@@ -245,7 +245,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModulePreservesSwitchParameterInsideCommandRegion()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierSwitch { param([switch] $Force) Write-Output $Force.IsPresent }",
+            "function Get-FrontierSwitch { [CmdletBinding()] param([switch] $Force) Write-Output $Force.IsPresent }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -270,7 +270,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var fixture = ArtifactFixture.Create(
             "function Invoke-FrontierFallback { [CmdletBinding()] param([System.Collections.IDictionary] $Headers) " +
             "process { [PSCustomObject]@{ Value = $Headers['X-Test'] } } }; " +
-            "function Get-FrontierTail { param([System.Collections.IDictionary] $Headers) $Uri = 'unused'; " +
+            "function Get-FrontierTail { [CmdletBinding()] param([System.Collections.IDictionary] $Headers) $Uri = 'unused'; " +
             "$Output = Invoke-FrontierFallback -Headers $Headers; $Output }; Export-ModuleMember -Function Get-FrontierTail",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
