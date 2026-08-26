@@ -179,7 +179,12 @@ internal static class Program
         {
             var scalar = Nullable.GetUnderlyingType(type) ?? type;
             if (scalar == typeof(string)) return value;
-            if (scalar == typeof(bool)) return bool.Parse(value);
+            if (scalar == typeof(bool))
+            {
+                if (value.Equals("$true", StringComparison.OrdinalIgnoreCase)) return true;
+                if (value.Equals("$false", StringComparison.OrdinalIgnoreCase)) return false;
+                return bool.Parse(value);
+            }
             if (scalar == typeof(byte)) return byte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
             if (scalar == typeof(sbyte)) return sbyte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
             if (scalar == typeof(short)) return short.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
@@ -268,7 +273,7 @@ internal static class Program
         var prefixLength = token.StartsWith("--", StringComparison.Ordinal) ? 2 : token.StartsWith("-", StringComparison.Ordinal) ? 1 : 0;
         if (prefixLength == 0 || token.Length == prefixLength || !IsParameterNameStart(token[prefixLength]))
             return false;
-        var separator = token.IndexOf('=', prefixLength);
+        var separator = token.IndexOfAny(new[] { '=', ':' }, prefixLength);
         name = separator < 0 ? token.Substring(prefixLength) : token.Substring(prefixLength, separator - prefixLength);
         value = separator < 0 ? null : token.Substring(separator + 1);
         return true;

@@ -75,13 +75,44 @@ public sealed class PowerShellCompilationBuildSpec
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
 
-    /// <summary>Returns the typed-language capabilities enabled by an artifact build.</summary>
-    public static PowerShellCompilationCapability GetCapabilities(
+    /// <summary>Returns whether an artifact kind can be produced with the requested mode.</summary>
+    public static bool IsModeSupported(
         PowerShellCompilationArtifactKind kind,
         PowerShellCompilationMode mode)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind)) throw new ArgumentOutOfRangeException(nameof(kind));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        return mode switch
+        {
+            PowerShellCompilationMode.Package => kind == PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid => kind != PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict => true,
+            _ => false
+        };
+    }
+
+    /// <summary>Rejects an artifact kind and mode combination that the compilation pipeline cannot produce.</summary>
+    public static void EnsureModeSupported(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode)
+    {
+        if (IsModeSupported(kind, mode))
+            return;
+        if (mode == PowerShellCompilationMode.Analyze)
+            throw new ArgumentException("Analyze selects planning behavior and is not an artifact build mode. Use Package, Hybrid, or Strict.", nameof(mode));
+        if (mode == PowerShellCompilationMode.Package)
+            throw new ArgumentException("Package compilation is supported only for Executable artifacts.", nameof(mode));
+        if (mode == PowerShellCompilationMode.Hybrid)
+            throw new ArgumentException("Hybrid executable compilation is not supported. Use Package for broad PowerShell compatibility or Strict for a genuinely typed executable.", nameof(mode));
+        throw new ArgumentException($"Compilation mode '{mode}' is not supported for artifact kind '{kind}'.", nameof(mode));
+    }
+
+    /// <summary>Returns the typed-language capabilities enabled by an artifact build.</summary>
+    public static PowerShellCompilationCapability GetCapabilities(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode)
+    {
+        EnsureModeSupported(kind, mode);
         return kind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Library

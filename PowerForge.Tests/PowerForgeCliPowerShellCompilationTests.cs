@@ -25,6 +25,37 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         Assert.Contains(errorFragment, document.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("exe", "Hybrid", "Hybrid executable")]
+    [InlineData("library", "Package", "only for Executable")]
+    [InlineData("dll", "Package", "only for Executable")]
+    public async Task Analyze_RejectsArtifactModesThatCannotProduceTheRequestedKind(
+        string kind,
+        string mode,
+        string errorFragment)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Artifact Mode Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        File.WriteAllText(source, "param([int] $Value); return $Value");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell analyze \"{source}\" --kind {kind} --mode {mode} --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+            Assert.Contains(errorFragment, document.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     [Fact]
     public async Task BuildStrictTypedExecutable_ExposesRuntimeIndependentCliContract()
     {

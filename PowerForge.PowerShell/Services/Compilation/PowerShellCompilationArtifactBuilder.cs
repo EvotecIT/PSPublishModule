@@ -390,8 +390,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentOutOfRangeException(nameof(spec), "Signing timeout must be positive.");
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) && !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Executables currently target net8.0 or net10.0.", nameof(spec));
-        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Hybrid)
-            throw new ArgumentException("Hybrid executable compilation is not supported. Use Package for broad PowerShell compatibility or Strict for a genuinely typed executable.", nameof(spec));
+        PowerShellCompilationBuildSpec.EnsureModeSupported(spec.Kind, spec.Mode);
         if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
             (spec.SelfContained || !string.IsNullOrWhiteSpace(spec.RuntimeIdentifier)))
             throw new ArgumentException("SelfContained and RuntimeIdentifier are executable-only publication options.", nameof(spec));

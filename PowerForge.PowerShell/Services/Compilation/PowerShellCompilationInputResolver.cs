@@ -24,6 +24,7 @@ public sealed class PowerShellCompilationResolvedInput
         ArtifactName = artifactName;
         Kind = kind;
         Mode = mode;
+        PowerShellCompilationBuildSpec.EnsureModeSupported(kind, mode);
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
@@ -212,7 +213,7 @@ public sealed class PowerShellCompilationInputResolver
             throw new InvalidOperationException(
                 "Executable compilation accepts a standalone .ps1 entrypoint. Use BinaryModule for module inputs until module-to-executable entrypoint semantics are defined.");
         }
-        var resolvedMode = mode ?? GetDefaultMode(resolvedKind);
+        var resolvedMode = mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(resolvedKind);
         string[] compilationSourceFiles;
         string[] sourceFiles;
         var recursiveSourceDirectories = Array.Empty<string>();
@@ -361,11 +362,6 @@ public sealed class PowerShellCompilationInputResolver
         PowerShellCompilationPathSafety.EnsureContained(root, path, $"Module {role} '{relativePath}' escapes the module root.");
         return path;
     }
-
-    private static PowerShellCompilationMode GetDefaultMode(PowerShellCompilationArtifactKind kind)
-        => kind == PowerShellCompilationArtifactKind.Executable
-            ? PowerShellCompilationMode.Package
-            : PowerShellCompilationMode.Hybrid;
 
     private static bool IsPowerShellSource(string path)
         => Path.GetExtension(path) is var extension &&

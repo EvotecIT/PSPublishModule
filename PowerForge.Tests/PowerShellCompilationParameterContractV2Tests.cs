@@ -124,6 +124,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictExecutableKeepsUnpositionedParametersNamedOnlyBesideExplicitPositions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "[CmdletBinding()] param([string] $First, [Parameter(Position=1)][string] $Second); return \"$First|$Second\"");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MixedPositionContract",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var accepted = RunProcess(result.ArtifactPath!, "Ada");
+        var surplus = RunProcess(result.ArtifactPath!, "Ada", "Grace");
+
+        Assert.Equal((0, "|Ada", string.Empty),
+            (accepted.ExitCode, accepted.StandardOutput.Trim(), accepted.StandardError.Trim()));
+        Assert.NotEqual(0, surplus.ExitCode);
+        Assert.Contains("Unexpected positional argument", surplus.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Transpile_KeepsNamedParameterSetSelectionOutOfTypedLocalCalls()
     {
         using var fixture = ArtifactFixture.Create(

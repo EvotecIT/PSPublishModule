@@ -48,6 +48,45 @@ public sealed class PowerShellCompilationAnalyzerTests
             (PowerShellCompilationArtifactKind)999));
     }
 
+    [Theory]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, true)]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, false)]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict, true)]
+    [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Package, false)]
+    [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, true)]
+    [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict, true)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Package, false)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid, true)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict, true)]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Analyze, false)]
+    public void PublicBuildSpecExposesTheArtifactModeCompatibilityMatrix(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode,
+        bool expected)
+    {
+        Assert.Equal(expected, PowerShellCompilationBuildSpec.IsModeSupported(kind, mode));
+        if (expected)
+            PowerShellCompilationBuildSpec.EnsureModeSupported(kind, mode);
+        else
+            Assert.Throws<ArgumentException>(() => PowerShellCompilationBuildSpec.EnsureModeSupported(kind, mode));
+    }
+
+    [Fact]
+    public void Analyze_RejectsAnExplicitModeThatCannotProduceTheResolvedArtifactKind()
+    {
+        using var fixture = CompilationFixture.Create("param([int] $Value); return $Value");
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Package);
+
+        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationAnalyzer().Analyze(
+            resolved,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Analyze_AcceptsTypedArithmeticLoopAsWholeFunction()
     {

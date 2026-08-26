@@ -47,6 +47,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictTypedExecutableAcceptsPowerShellColonSwitchValues()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([switch] $Force); if ($Force) { return $true }; return $false");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedColonSwitch",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var disabled = RunProcess(result.ArtifactPath!, "-Force:$false");
+        var enabled = RunProcess(result.ArtifactPath!, "-Force:$true");
+
+        Assert.Equal((0, "False", string.Empty),
+            (disabled.ExitCode, disabled.StandardOutput.Trim(), disabled.StandardError.Trim()));
+        Assert.Equal((0, "True", string.Empty),
+            (enabled.ExitCode, enabled.StandardOutput.Trim(), enabled.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_BinaryModuleEmitsPowerShellParameterAttributesAndSwitchAdapter()
     {
         using var fixture = ArtifactFixture.Create(
