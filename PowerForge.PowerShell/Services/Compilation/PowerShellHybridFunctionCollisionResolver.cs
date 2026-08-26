@@ -12,7 +12,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
         string? targetFramework)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
-        var sources = new List<(string Path, ScriptBlockAst Root)>();
+        var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
         foreach (var sourcePath in typed.SourcePaths)
         {
             Token[] tokens;
@@ -20,7 +20,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
             var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
             if (errors.Length > 0)
                 return typed;
-            sources.Add((sourcePath, ast));
+            sources.Add((sourcePath, ast, FindInvokeCommandAliases(ast)));
             definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                 .Cast<FunctionDefinitionAst>()
                 .Select(function => (sourcePath, ast, function)));
@@ -33,12 +33,12 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlyAvailabilityNames = definitions
             .Where(definition => sources.Any(source => source.Root.FindAll(
-                    node => IsCommandReferenceCandidate(node) &&
+                    node => IsCommandReferenceCandidate(node, source.InvokeCommandAliases) &&
                             (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
                              node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
                             IsModuleScope(node, source.Root),
                     searchNestedScriptBlocks: true)
-                .Any(node => ReferencesFunction(node, definition.Function.Name))))
+                .Any(node => ReferencesFunction(node, definition.Function.Name, source.InvokeCommandAliases))))
             .Select(static definition => definition.Function.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallbackNames = duplicateNames
@@ -91,21 +91,24 @@ internal static class PowerShellHybridFunctionCollisionResolver
             filtered.SourcePaths);
     }
 
-    private static bool IsCommandReferenceCandidate(Ast node)
+    private static bool IsCommandReferenceCandidate(Ast node, HashSet<string> invokeCommandAliases)
         => node is CommandAst ||
-           node is InvokeMemberExpressionAst invocation && IsInvokeCommandDiscovery(invocation);
+           node is InvokeMemberExpressionAst invocation && IsInvokeCommandDiscovery(invocation, invokeCommandAliases);
 
-    private static bool ReferencesFunction(Ast node, string functionName)
+    private static bool ReferencesFunction(Ast node, string functionName, HashSet<string> invokeCommandAliases)
         => node switch
         {
             CommandAst command => ReferencesFunction(command, functionName),
-            InvokeMemberExpressionAst invocation => ReferencesFunction(invocation, functionName),
+            InvokeMemberExpressionAst invocation => ReferencesFunction(invocation, functionName, invokeCommandAliases),
             _ => false
         };
 
-    private static bool ReferencesFunction(InvokeMemberExpressionAst invocation, string functionName)
+    private static bool ReferencesFunction(
+        InvokeMemberExpressionAst invocation,
+        string functionName,
+        HashSet<string> invokeCommandAliases)
     {
-        if (!IsInvokeCommandDiscovery(invocation))
+        if (!IsInvokeCommandDiscovery(invocation, invokeCommandAliases))
             return false;
         if (invocation.Arguments.Count == 0)
             return true;
@@ -114,11 +117,39 @@ internal static class PowerShellHybridFunctionCollisionResolver
             : true;
     }
 
-    private static bool IsInvokeCommandDiscovery(InvokeMemberExpressionAst invocation)
+    private static bool IsInvokeCommandDiscovery(
+        InvokeMemberExpressionAst invocation,
+        HashSet<string> invokeCommandAliases)
         => invocation.Member is StringConstantExpressionAst member &&
            (member.Value.Equals("GetCommand", StringComparison.OrdinalIgnoreCase) ||
             member.Value.Equals("GetCommands", StringComparison.OrdinalIgnoreCase)) &&
-           invocation.Expression is MemberExpressionAst
+           (IsDirectInvokeCommandReceiver(invocation.Expression) ||
+            invocation.Expression is VariableExpressionAst alias &&
+            invokeCommandAliases.Contains(alias.VariablePath.UserPath));
+
+    private static HashSet<string> FindInvokeCommandAliases(ScriptBlockAst root)
+    {
+        var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in root.FindAll(
+                     static node => node is AssignmentStatementAst,
+                     searchNestedScriptBlocks: true)
+                 .Cast<AssignmentStatementAst>()
+                 .Where(assignment => IsModuleScope(assignment, root))
+                 .OrderBy(static assignment => assignment.Extent.StartOffset))
+        {
+            if (assignment.Left is not VariableExpressionAst target ||
+                assignment.Right is not CommandExpressionAst commandExpression)
+                continue;
+            if (IsDirectInvokeCommandReceiver(commandExpression.Expression) ||
+                commandExpression.Expression is VariableExpressionAst source &&
+                aliases.Contains(source.VariablePath.UserPath))
+                aliases.Add(target.VariablePath.UserPath);
+        }
+        return aliases;
+    }
+
+    private static bool IsDirectInvokeCommandReceiver(ExpressionAst expression)
+        => expression is MemberExpressionAst
            {
                Expression: VariableExpressionAst executionContext,
                Member: StringConstantExpressionAst invokeCommand

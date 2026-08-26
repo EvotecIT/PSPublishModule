@@ -8,6 +8,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [InlineData("$name = 'Host'; return $ExecutionContext.SessionState.PSVariable.GetValue($name).Name")]
     [InlineData("return (Get-Variable Host -ValueOnly).Name")]
     [InlineData("return (Get-Item Variable:Host).Value.Name")]
+    [InlineData("$path = 'Variable:Host'; return (Get-Item $path).Value.Name")]
     public void Build_PackagedExecutableRejectsIndirectHostRetrieval(string source)
     {
         using var fixture = ArtifactFixture.Create(source);

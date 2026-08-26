@@ -51,6 +51,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [Theory]
     [InlineData("[bool]$ExecutionContext.InvokeCommand.GetCommand('Get-PowerForgeInvokeLater',[System.Management.Automation.CommandTypes]::All)")]
     [InlineData("[bool]@($ExecutionContext.InvokeCommand.GetCommands('Get-PowerForgeInvoke*',[System.Management.Automation.CommandTypes]::All,$false)).Count")]
+    [InlineData("& { $discovery = $ExecutionContext.InvokeCommand; [bool]$discovery.GetCommand('Get-PowerForgeInvokeLater',[System.Management.Automation.CommandTypes]::All) }")]
+    [InlineData("& { $first = $ExecutionContext.InvokeCommand; $discovery = $first; [bool]@($discovery.GetCommands('Get-PowerForgeInvoke*',[System.Management.Automation.CommandTypes]::All,$false)).Count }")]
     public void Build_HybridModulePreservesInvokeCommandDiscoveryTiming(string discovery)
     {
         using var fixture = ArtifactFixture.Create(

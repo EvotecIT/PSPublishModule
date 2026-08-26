@@ -312,7 +312,7 @@ internal static class PowerShellPackagedScriptRewriter
             .Cast<CommandAst>()
             .FirstOrDefault(candidate =>
                 (!topLevelOnly || IsTopLevel(candidate, ast)) &&
-                RetrievesVariable(candidate, variableName));
+                RetrievesVariable(candidate, variableName, ast));
         if (command is not null) return command;
 
         return ast.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: true)
@@ -328,7 +328,7 @@ internal static class PowerShellPackagedScriptRewriter
                  VariablePatternMatches(argument.Value, variableName)));
     }
 
-    private static bool RetrievesVariable(CommandAst command, string variableName)
+    private static bool RetrievesVariable(CommandAst command, string variableName, ScriptBlockAst root)
     {
         var commandName = command.GetCommandName();
         if (string.IsNullOrWhiteSpace(commandName)) return false;
@@ -345,11 +345,48 @@ internal static class PowerShellPackagedScriptRewriter
             !leafName.Equals("dir", StringComparison.OrdinalIgnoreCase) &&
             !leafName.Equals("ls", StringComparison.OrdinalIgnoreCase))
             return false;
-        return GetCommandArgumentLiterals(command).Any(value =>
+        var arguments = command.CommandElements.Skip(1)
+            .Where(static element => element is not CommandParameterAst)
+            .ToArray();
+        if (arguments.Any(argument =>
+                argument is not StringConstantExpressionAst &&
+                !IsArtifactBackedPath(argument, command, root, new HashSet<string>(StringComparer.OrdinalIgnoreCase))))
+            return true;
+        return arguments.OfType<StringConstantExpressionAst>().Any(argument =>
         {
-            if (!TryGetVariableProviderPattern(value, out var pattern)) return false;
+            if (!TryGetVariableProviderPattern(argument.Value, out var pattern)) return false;
             return string.IsNullOrWhiteSpace(pattern) || VariablePatternMatches(pattern!, variableName);
         });
+    }
+
+    private static bool IsArtifactBackedPath(
+        Ast expression,
+        CommandAst command,
+        ScriptBlockAst root,
+        HashSet<string> visited)
+    {
+        var variables = expression.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .ToArray();
+        if (variables.Any(static variable =>
+                variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
+                variable.VariablePath.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        foreach (var variable in variables)
+        {
+            var name = variable.VariablePath.UserPath;
+            if (!visited.Add(name)) continue;
+            var assignment = root.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
+                .Cast<AssignmentStatementAst>()
+                .Where(candidate => candidate.Extent.StartOffset < command.Extent.StartOffset &&
+                                    candidate.Left is VariableExpressionAst target &&
+                                    target.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(static candidate => candidate.Extent.StartOffset)
+                .FirstOrDefault();
+            if (assignment is not null && IsArtifactBackedPath(assignment.Right, command, root, visited))
+                return true;
+        }
+        return false;
     }
 
     private static bool GetVariableMayRetrieve(CommandAst command, string variableName)
@@ -368,21 +405,6 @@ internal static class PowerShellPackagedScriptRewriter
         }
         return elements.FirstOrDefault() is not StringConstantExpressionAst positional ||
                VariablePatternMatches(positional.Value, variableName);
-    }
-
-    private static IEnumerable<string> GetCommandArgumentLiterals(CommandAst command)
-    {
-        foreach (var element in command.CommandElements.Skip(1))
-        {
-            if (element is StringConstantExpressionAst literal)
-            {
-                yield return literal.Value;
-                continue;
-            }
-            foreach (var nested in element.FindAll(static node => node is StringConstantExpressionAst, searchNestedScriptBlocks: true)
-                         .Cast<StringConstantExpressionAst>())
-                yield return nested.Value;
-        }
     }
 
     private static bool ReferencesPsVariableIntrinsics(ExpressionAst expression)
