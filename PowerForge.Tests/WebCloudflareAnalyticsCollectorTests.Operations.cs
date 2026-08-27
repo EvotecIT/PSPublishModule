@@ -99,6 +99,45 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task CollectOperations_RejectsRangesOutsideProviderRetention()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(notOlderThan: 3600),
+            _ => throw new InvalidOperationException("Operational queries must not run outside provider retention.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.False(result.Success);
+        Assert.Equal("retention-boundary", result.Http.ErrorCode);
+        Assert.Equal("not-attempted", result.Firewall.ErrorCode);
+        Assert.Equal("not-attempted", result.Rum.ErrorCode);
+        Assert.Equal(2, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task CollectOperations_UsesBoundedFallbackWhenProbeOmitsMaximumDuration()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxDuration: null),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.True(result.Success);
+        Assert.Equal(4, result.RequestCount);
+    }
+
+    [Fact]
     public async Task CollectOperations_FailsClosedWhenProviderPageLimitIsReached()
     {
         var handler = new ScriptedHandler((_, index) => index switch
@@ -140,6 +179,27 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Equal(6, result.RequestCount);
         Assert.Contains("page=1", handler.Requests[4].Uri.Query, StringComparison.Ordinal);
         Assert.Contains("page=2", handler.Requests[5].Uri.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CollectOperations_MatchesRumSiteByZoneAndHost()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            4 => RumSitesForHostsResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.True(result.Rum.Configured);
+        Assert.True(result.Rum.Enabled);
+        Assert.True(result.Rum.AutoInstall);
     }
 
     [Fact]
@@ -255,7 +315,18 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     {
         success = true,
         errors = Array.Empty<object>(),
-        result = new[] { new { auto_install = autoInstall, ruleset = new { enabled, zone_tag = ZoneId } } }
+        result = new[] { new { host = "officeimo.com", auto_install = autoInstall, ruleset = new { enabled, zone_tag = ZoneId } } }
+    });
+
+    private static HttpResponseMessage RumSitesForHostsResponse() => JsonResponse(new
+    {
+        success = true,
+        errors = Array.Empty<object>(),
+        result = new[]
+        {
+            new { host = "other.officeimo.com", auto_install = false, ruleset = new { enabled = false, zone_tag = ZoneId } },
+            new { host = "officeimo.com", auto_install = true, ruleset = new { enabled = true, zone_tag = ZoneId } }
+        }
     });
 
     private static HttpResponseMessage RumSitesPageResponse(bool includeMatch, int totalPages, int itemCount)
@@ -264,6 +335,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             .Select(index => new
             {
                 auto_install = includeMatch && index == 0,
+                host = includeMatch && index == 0 ? "officeimo.com" : $"other-{index}.officeimo.com",
                 ruleset = new
                 {
                     enabled = includeMatch && index == 0,

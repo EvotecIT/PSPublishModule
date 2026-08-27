@@ -29,6 +29,16 @@ public sealed partial class CloudflareAnalyticsCollector
             return result;
         }
 
+        if (probe.NotOlderThanSeconds is > 0 &&
+            options.FromUtc < _timeProvider.GetUtcNow().Subtract(TimeSpan.FromSeconds(probe.NotOlderThanSeconds.Value)))
+        {
+            result.Http = FailedCapability("retention-boundary", "The requested Cloudflare operational range starts before the provider-reported retention boundary.");
+            result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because the requested range is outside provider retention.");
+            if (result.Rum.Requested)
+                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because the requested range is outside provider retention.");
+            return result;
+        }
+
         string token;
         try { token = await _tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false); }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -53,7 +63,12 @@ public sealed partial class CloudflareAnalyticsCollector
 
         if (!string.IsNullOrWhiteSpace(options.AccountId))
         {
-            var rum = await InspectRumSiteAsync(options.AccountId!, options.ZoneId, token, cancellationToken).ConfigureAwait(false);
+            var rum = await InspectRumSiteAsync(
+                options.AccountId!,
+                options.ZoneId,
+                NormalizeSiteHost(options.SiteBaseUrl),
+                token,
+                cancellationToken).ConfigureAwait(false);
             result.Rum = rum.State;
             result.RequestCount += rum.RequestCount;
         }
@@ -124,7 +139,12 @@ public sealed partial class CloudflareAnalyticsCollector
         return OperationalPartitionResult.Succeeded(buckets, requestCount);
     }
 
-    private async Task<(CloudflareRumSiteState State, int RequestCount)> InspectRumSiteAsync(string accountId, string zoneId, string token, CancellationToken cancellationToken)
+    private async Task<(CloudflareRumSiteState State, int RequestCount)> InspectRumSiteAsync(
+        string accountId,
+        string zoneId,
+        string siteHost,
+        string token,
+        CancellationToken cancellationToken)
     {
         var requestCount = 0;
         try
@@ -142,7 +162,11 @@ public sealed partial class CloudflareAnalyticsCollector
                 var envelope = await response.Content.ReadFromJsonAsync<CloudflareRumSitesEnvelope>(JsonOptions, cancellationToken).ConfigureAwait(false);
                 if (envelope?.Success != true || envelope.Errors.Length > 0)
                     return (FailedRum("rum-lookup-error", "Cloudflare RUM site lookup returned errors."), requestCount);
-                var site = envelope.Result.FirstOrDefault(value => string.Equals(value.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase));
+                var site = envelope.Result.FirstOrDefault(value =>
+                    string.Equals(value.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase) &&
+                    value.Host is not null &&
+                    TryNormalizeHostDimension(value.Host, out var rumHost) &&
+                    string.Equals(rumHost, siteHost, StringComparison.Ordinal));
                 if (site is not null)
                     return (new CloudflareRumSiteState { Requested = true, Configured = true, Enabled = site.Ruleset?.Enabled == true, AutoInstall = site.AutoInstall == true }, requestCount);
 
@@ -225,7 +249,9 @@ public sealed partial class CloudflareAnalyticsCollector
         CloudflareOperationalCollectionOptions options,
         CloudflareAnalyticsCapabilityProbeResult probe)
     {
-        var duration = TimeSpan.FromSeconds(probe.MaxDurationSeconds ?? throw new InvalidOperationException("Cloudflare capability probe omitted the maximum duration."));
+        var duration = probe.MaxDurationSeconds is > 0
+            ? TimeSpan.FromSeconds(probe.MaxDurationSeconds.Value)
+            : TimeSpan.FromDays(1);
         for (var start = options.FromUtc; start < options.ThroughUtc;)
         {
             var candidateEnd = start + duration;

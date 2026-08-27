@@ -135,6 +135,7 @@ internal sealed class CloudflareRumResultInfo
 }
 internal sealed class CloudflareRumSiteInfo
 {
+    [JsonPropertyName("host")] public string? Host { get; set; }
     [JsonPropertyName("auto_install")] public bool? AutoInstall { get; set; }
     [JsonPropertyName("ruleset")] public CloudflareRumRuleset? Ruleset { get; set; }
 }
