@@ -29,6 +29,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
 
         Assert.True(result.Success);
+        Assert.Equal("officeimo", result.SiteId);
         Assert.True(result.Http.Success);
         Assert.True(result.Firewall.Success);
         Assert.Equal(5, result.RequestCount);
@@ -47,6 +48,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Equal(22d * 100d / 25d, first.CacheHitPercent, precision: 6);
         Assert.Contains("clientRequestHTTPHost", handler.Requests[2].Body, StringComparison.Ordinal);
         Assert.Contains("firewallEventsAdaptiveGroups", handler.Requests[3].Body, StringComparison.Ordinal);
+        Assert.Contains("clientRequestScheme", handler.Requests[3].Body, StringComparison.Ordinal);
         Assert.Equal(HttpMethod.Get, handler.Requests[4].Method);
         Assert.Contains("/rum/site_info/list", handler.Requests[4].Uri.AbsoluteUri, StringComparison.Ordinal);
     }
@@ -115,9 +117,19 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
 
         Assert.False(result.Success);
         Assert.Equal("retention-boundary", result.Http.ErrorCode);
-        Assert.Equal("not-attempted", result.Firewall.ErrorCode);
+        Assert.Equal("retention-boundary", result.Firewall.ErrorCode);
         Assert.Equal("not-attempted", result.Rum.ErrorCode);
         Assert.Equal(2, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task CollectOperations_RequiresAnHourAlignedUtcWindow()
+    {
+        using var client = new HttpClient(new ScriptedHandler((_, _) => throw new InvalidOperationException("No request expected.")));
+        var options = CreateOperationalOptions(includeAccount: false);
+        options.FromUtc = options.FromUtc.AddMinutes(15);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateCollector(client).CollectOperationsAsync(options));
     }
 
     [Fact]
@@ -225,6 +237,114 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task CollectOperations_UsesFirewallSpecificCapabilityLimits()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxPageSize: 1000, firewallMaxPageSize: 25),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.True(result.Firewall.Success);
+        Assert.Contains("\"limit\":25", handler.Requests[3].Body, StringComparison.Ordinal);
+        Assert.Contains("\"limit\":1000", handler.Requests[2].Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CollectOperations_RejectsIncompleteRumConfiguration()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            4 => JsonResponse(new
+            {
+                success = true,
+                errors = Array.Empty<object>(),
+                result = new[] { new { host = "officeimo.com", auto_install = (bool?)null, ruleset = new { enabled = (bool?)null, zone_tag = ZoneId } } }
+            }),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.Equal("invalid-response", result.Rum.ErrorCode);
+        Assert.False(result.Rum.Configured);
+    }
+
+    [Fact]
+    public async Task CollectOperations_RejectsRumAccountThatDoesNotOwnTheZone()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com", "ffffffffffffffffffffffffffffffff"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("RUM lookup must not run for a mismatched account.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.Equal("account-zone-mismatch", result.Rum.ErrorCode);
+        Assert.Equal(4, result.RequestCount);
+    }
+
+    [Theory]
+    [InlineData("2026-08-10T08:00:00Z")]
+    [InlineData("2026-08-10T09:15:00Z")]
+    public async Task CollectOperations_RejectsInvalidHttpHourDimensions(string hour)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(HttpOperationRow(hour, "hit", 200, 1, 100, 1)),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.False(result.Http.Success);
+        Assert.Equal("invalid-response", result.Http.ErrorCode);
+        Assert.Empty(result.Hours);
+    }
+
+    [Theory]
+    [InlineData("2026-08-10T11:00:00Z")]
+    [InlineData("2026-08-10T10:00:30Z")]
+    public async Task CollectOperations_RejectsInvalidFirewallHourDimensions(string hour)
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(FirewallOperationRow(hour, "block", 1, 1)),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.False(result.Firewall.Success);
+        Assert.Equal("invalid-response", result.Firewall.ErrorCode);
+        Assert.Empty(result.Hours);
+    }
+
+    [Fact]
     public async Task CollectOperations_DiscardsPartialFirewallRowsWhenDatasetIsInvalid()
     {
         var invalidRow = new
@@ -303,7 +423,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         SiteBaseUrl = "https://officeimo.com/",
         FromUtc = new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero),
         ThroughUtc = new DateTimeOffset(2026, 8, 10, 11, 0, 0, TimeSpan.Zero),
-        AccountId = includeAccount ? "0123456789abcdef0123456789abcdef" : null
+        AccountId = includeAccount ? TestAccountId : null
     };
 
     private static object HttpOperationRow(string hour, string cacheStatus, int status, ulong count, ulong bytes, double sampleInterval) => new

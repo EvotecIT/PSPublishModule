@@ -11,6 +11,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
     private static readonly DateTimeOffset CompletionTime = new(2026, 8, 10, 12, 34, 56, TimeSpan.Zero);
     private const string ZoneId = "abcdef0123456789abcdef0123456789";
+    private const string TestAccountId = "0123456789abcdef0123456789abcdef";
 
     [Fact]
     public async Task Probe_DiscoversPlanSpecificDatasetLimitsWithoutExposingTheToken()

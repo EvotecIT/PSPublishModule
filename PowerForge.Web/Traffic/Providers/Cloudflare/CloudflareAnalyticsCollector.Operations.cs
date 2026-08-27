@@ -16,6 +16,7 @@ public sealed partial class CloudflareAnalyticsCollector
         var probe = await ProbeAsync(options.ZoneId, options.SiteBaseUrl, cancellationToken).ConfigureAwait(false);
         var result = new CloudflareOperationalCollectionResult
         {
+            SiteId = options.SiteId,
             CollectedAtUtc = _timeProvider.GetUtcNow(),
             RequestCount = probe.RequestCount,
             Rum = new CloudflareRumSiteState { Requested = !string.IsNullOrWhiteSpace(options.AccountId) }
@@ -26,16 +27,6 @@ public sealed partial class CloudflareAnalyticsCollector
             result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because zone validation failed.");
             if (result.Rum.Requested)
                 result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because zone validation failed.");
-            return result;
-        }
-
-        if (probe.NotOlderThanSeconds is > 0 &&
-            options.FromUtc < _timeProvider.GetUtcNow().Subtract(TimeSpan.FromSeconds(probe.NotOlderThanSeconds.Value)))
-        {
-            result.Http = FailedCapability("retention-boundary", "The requested Cloudflare operational range starts before the provider-reported retention boundary.");
-            result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because the requested range is outside provider retention.");
-            if (result.Rum.Requested)
-                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because the requested range is outside provider retention.");
             return result;
         }
 
@@ -51,26 +42,58 @@ public sealed partial class CloudflareAnalyticsCollector
             return result;
         }
 
-        var http = await CollectHttpOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
+        var now = _timeProvider.GetUtcNow();
+        var http = IsOutsideRetention(options.FromUtc, now, probe.NotOlderThanSeconds)
+            ? OperationalPartitionResult.Failed("retention-boundary", "The requested Cloudflare HTTP operational range starts before the provider-reported retention boundary.", 0)
+            : await CollectHttpOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
         result.RequestCount += http.RequestCount;
         result.Http = http.State;
 
-        var firewall = await CollectFirewallOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
+        OperationalPartitionResult firewall;
+        if (!probe.FirewallDatasetEnabled)
+            firewall = OperationalPartitionResult.Failed("dataset-unavailable", "Cloudflare firewallEventsAdaptiveGroups is not enabled for this zone.", 0);
+        else if (probe.FirewallMaxPageSize <= 0)
+            firewall = OperationalPartitionResult.Failed("invalid-response", "Cloudflare did not report a usable firewall analytics page size.", 0);
+        else if (probe.FirewallMaxDurationSeconds is <= 0 || probe.FirewallNotOlderThanSeconds is <= 0)
+            firewall = OperationalPartitionResult.Failed("invalid-response", "Cloudflare reported an invalid firewall duration or retention boundary.", 0);
+        else if (IsOutsideRetention(options.FromUtc, now, probe.FirewallNotOlderThanSeconds))
+            firewall = OperationalPartitionResult.Failed("retention-boundary", "The requested Cloudflare firewall operational range starts before the provider-reported retention boundary.", 0);
+        else
+            firewall = await CollectFirewallOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
         result.RequestCount += firewall.RequestCount;
         result.Firewall = firewall.State;
         result.Hours = CombineBuckets(http.Buckets, firewall.Buckets);
         result.Success = result.Http.Success;
 
+        if (string.Equals(result.Http.ErrorCode, "retention-boundary", StringComparison.Ordinal) &&
+            string.Equals(result.Firewall.ErrorCode, "retention-boundary", StringComparison.Ordinal))
+        {
+            if (result.Rum.Requested)
+                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because the requested operational range is outside provider retention.");
+            return result;
+        }
+
         if (!string.IsNullOrWhiteSpace(options.AccountId))
         {
-            var rum = await InspectRumSiteAsync(
-                options.AccountId!,
-                options.ZoneId,
-                NormalizeSiteHost(options.SiteBaseUrl),
-                token,
-                cancellationToken).ConfigureAwait(false);
-            result.Rum = rum.State;
-            result.RequestCount += rum.RequestCount;
+            if (string.IsNullOrWhiteSpace(probe.ZoneAccountId))
+            {
+                result.Rum = FailedRum("invalid-response", "Cloudflare zone lookup omitted the owning account identifier.");
+            }
+            else if (!string.Equals(probe.ZoneAccountId, options.AccountId, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Rum = FailedRum("account-zone-mismatch", "The configured Cloudflare account does not own the selected zone.");
+            }
+            else
+            {
+                var rum = await InspectRumSiteAsync(
+                    options.AccountId!,
+                    options.ZoneId,
+                    NormalizeSiteHost(options.SiteBaseUrl),
+                    token,
+                    cancellationToken).ConfigureAwait(false);
+                result.Rum = rum.State;
+                result.RequestCount += rum.RequestCount;
+            }
         }
         return result;
     }
@@ -83,7 +106,7 @@ public sealed partial class CloudflareAnalyticsCollector
     {
         var buckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
         var requestCount = 0;
-        foreach (var partition in BuildOperationalPartitions(options, probe))
+        foreach (var partition in BuildOperationalPartitions(options, probe.MaxDurationSeconds))
         {
             var response = await SendAsync<CloudflareOperationalData>(HttpOperationalQuery, new
             {
@@ -99,7 +122,7 @@ public sealed partial class CloudflareAnalyticsCollector
             if (rows.Length >= probe.MaxPageSize)
                 return OperationalPartitionResult.Failed("row-limit-reached", "Cloudflare reached the HTTP operational row limit, so the requested range cannot be marked complete.", requestCount);
             var partitionBuckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
-            if (!TryMapHttp(rows, partitionBuckets, out var error))
+            if (!TryMapHttp(rows, partition.FromUtc, partition.ThroughUtc, partitionBuckets, out var error))
                 return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
             if (!TryMergeBuckets(buckets, partitionBuckets, out error))
                 return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
@@ -115,12 +138,12 @@ public sealed partial class CloudflareAnalyticsCollector
     {
         var buckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
         var requestCount = 0;
-        foreach (var partition in BuildOperationalPartitions(options, probe))
+        foreach (var partition in BuildOperationalPartitions(options, probe.FirewallMaxDurationSeconds))
         {
             var response = await SendAsync<CloudflareOperationalData>(FirewallOperationalQuery, new
             {
                 zoneTag = options.ZoneId.ToLowerInvariant(),
-                limit = probe.MaxPageSize,
+                limit = probe.FirewallMaxPageSize,
                 filter = BuildFirewallFilter(options.SiteBaseUrl, partition.FromUtc, partition.ThroughUtc)
             }, token, cancellationToken).ConfigureAwait(false);
             requestCount++;
@@ -128,10 +151,10 @@ public sealed partial class CloudflareAnalyticsCollector
                 return OperationalPartitionResult.Failed(code!, message!, requestCount);
             if (zone!.Firewall is not { } rows)
                 return OperationalPartitionResult.Failed("invalid-response", "Cloudflare returned no firewall dataset.", requestCount);
-            if (rows.Length >= probe.MaxPageSize)
+            if (rows.Length >= probe.FirewallMaxPageSize)
                 return OperationalPartitionResult.Failed("row-limit-reached", "Cloudflare reached the firewall operational row limit, so the requested range cannot be marked complete.", requestCount);
             var partitionBuckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
-            if (!TryMapFirewall(rows, partitionBuckets, out var error))
+            if (!TryMapFirewall(rows, partition.FromUtc, partition.ThroughUtc, partitionBuckets, out var error))
                 return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
             if (!TryMergeBuckets(buckets, partitionBuckets, out error))
                 return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
@@ -160,15 +183,19 @@ public sealed partial class CloudflareAnalyticsCollector
                 if (!response.IsSuccessStatusCode)
                     return (FailedRum(MapStatus(response.StatusCode), $"Cloudflare RUM site lookup returned HTTP {(int)response.StatusCode}."), requestCount);
                 var envelope = await response.Content.ReadFromJsonAsync<CloudflareRumSitesEnvelope>(JsonOptions, cancellationToken).ConfigureAwait(false);
-                if (envelope?.Success != true || envelope.Errors.Length > 0)
+                if (envelope?.Success != true || envelope.Errors is { Length: > 0 } || envelope.Result is null || envelope.Result.Any(value => value is null))
                     return (FailedRum("rum-lookup-error", "Cloudflare RUM site lookup returned errors."), requestCount);
                 var site = envelope.Result.FirstOrDefault(value =>
-                    string.Equals(value.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(value!.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase) &&
                     value.Host is not null &&
                     TryNormalizeHostDimension(value.Host, out var rumHost) &&
                     string.Equals(rumHost, siteHost, StringComparison.Ordinal));
                 if (site is not null)
-                    return (new CloudflareRumSiteState { Requested = true, Configured = true, Enabled = site.Ruleset?.Enabled == true, AutoInstall = site.AutoInstall == true }, requestCount);
+                {
+                    if (site.Ruleset?.Enabled is null || site.AutoInstall is null)
+                        return (FailedRum("invalid-response", "Cloudflare RUM site lookup returned incomplete configuration state."), requestCount);
+                    return (new CloudflareRumSiteState { Requested = true, Configured = true, Enabled = site.Ruleset.Enabled.Value, AutoInstall = site.AutoInstall.Value }, requestCount);
+                }
 
                 var totalPages = envelope.ResultInfo?.TotalPages;
                 if (totalPages is > 0)
@@ -187,7 +214,12 @@ public sealed partial class CloudflareAnalyticsCollector
         catch { return (FailedRum("request-failed", "Cloudflare RUM site lookup failed."), requestCount); }
     }
 
-    private static bool TryMapHttp(IEnumerable<CloudflareHttpOperationalGroup?>? rows, IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets, out string? error)
+    private static bool TryMapHttp(
+        IEnumerable<CloudflareHttpOperationalGroup?>? rows,
+        DateTimeOffset fromUtc,
+        DateTimeOffset throughUtc,
+        IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets,
+        out string? error)
     {
         error = null;
         if (rows is null) { error = "Cloudflare returned no HTTP operational dataset."; return false; }
@@ -199,7 +231,8 @@ public sealed partial class CloudflareAnalyticsCollector
                 !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
                 !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count))
             { error = "Cloudflare returned an invalid HTTP operational row."; return false; }
-            var hour = NormalizeHour(row.Dimensions.HourUtc.Value);
+            if (!TryValidateOperationalHour(row.Dimensions.HourUtc.Value, fromUtc, throughUtc, out var hour))
+            { error = "Cloudflare returned an HTTP operational row outside the requested hourly window."; return false; }
             var bucket = GetBucket(buckets, hour);
             try
             {
@@ -219,7 +252,12 @@ public sealed partial class CloudflareAnalyticsCollector
         return true;
     }
 
-    private static bool TryMapFirewall(IEnumerable<CloudflareFirewallOperationalGroup?>? rows, IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets, out string? error)
+    private static bool TryMapFirewall(
+        IEnumerable<CloudflareFirewallOperationalGroup?>? rows,
+        DateTimeOffset fromUtc,
+        DateTimeOffset throughUtc,
+        IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets,
+        out string? error)
     {
         error = null;
         if (rows is null) { error = "Cloudflare returned no firewall dataset."; return false; }
@@ -229,7 +267,9 @@ public sealed partial class CloudflareAnalyticsCollector
                 !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
                 !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count))
             { error = "Cloudflare returned an invalid firewall row."; return false; }
-            var bucket = GetBucket(buckets, NormalizeHour(row.Dimensions.HourUtc.Value));
+            if (!TryValidateOperationalHour(row.Dimensions.HourUtc.Value, fromUtc, throughUtc, out var hour))
+            { error = "Cloudflare returned a firewall row outside the requested hourly window."; return false; }
+            var bucket = GetBucket(buckets, hour);
             try
             {
                 bucket.FirewallEvents = checked(bucket.FirewallEvents + count);
@@ -247,10 +287,10 @@ public sealed partial class CloudflareAnalyticsCollector
 
     private static IEnumerable<(DateTimeOffset FromUtc, DateTimeOffset ThroughUtc)> BuildOperationalPartitions(
         CloudflareOperationalCollectionOptions options,
-        CloudflareAnalyticsCapabilityProbeResult probe)
+        int? maxDurationSeconds)
     {
-        var duration = probe.MaxDurationSeconds is > 0
-            ? TimeSpan.FromSeconds(probe.MaxDurationSeconds.Value)
+        var duration = maxDurationSeconds is > 0
+            ? TimeSpan.FromSeconds(maxDurationSeconds.Value)
             : TimeSpan.FromDays(1);
         for (var start = options.FromUtc; start < options.ThroughUtc;)
         {
@@ -269,7 +309,8 @@ public sealed partial class CloudflareAnalyticsCollector
         {
             ["datetime_geq"] = FormatUtc(fromUtc),
             ["datetime_lt"] = FormatUtc(throughUtc),
-            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant()
+            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant(),
+            ["clientRequestScheme"] = siteUri.Scheme.ToLowerInvariant()
         };
         if (sitePath != "/")
         {
@@ -332,7 +373,20 @@ public sealed partial class CloudflareAnalyticsCollector
     private static bool IsCached(string? status) => status?.Trim().ToLowerInvariant() is "hit" or "revalidated" or "stale" or "updating";
     private static bool IsMitigated(string? action) => action?.Trim().ToLowerInvariant() is "block" or "challenge" or "jschallenge" or "managedchallenge" or "managed_challenge";
     private static bool IsValidSampleInterval(double value) => double.IsFinite(value) && value >= 1d;
-    private static DateTimeOffset NormalizeHour(DateTimeOffset value) => new(value.UtcDateTime.Year, value.UtcDateTime.Month, value.UtcDateTime.Day, value.UtcDateTime.Hour, 0, 0, TimeSpan.Zero);
+    private static bool IsOutsideRetention(DateTimeOffset fromUtc, DateTimeOffset now, int? notOlderThanSeconds) =>
+        notOlderThanSeconds is > 0 && fromUtc < now.Subtract(TimeSpan.FromSeconds(notOlderThanSeconds.Value));
+
+    private static bool TryValidateOperationalHour(
+        DateTimeOffset value,
+        DateTimeOffset fromUtc,
+        DateTimeOffset throughUtc,
+        out DateTimeOffset hourUtc)
+    {
+        hourUtc = value.ToUniversalTime();
+        if (hourUtc.Minute != 0 || hourUtc.Second != 0 || hourUtc.Millisecond != 0 || hourUtc.Ticks % TimeSpan.TicksPerSecond != 0)
+            return false;
+        return hourUtc >= fromUtc && hourUtc < throughUtc;
+    }
     private static string FormatUtc(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
     private static CloudflareOperationalCapabilityState FailedCapability(string code, string message) => new() { ErrorCode = code, ErrorMessage = message };
     private static CloudflareRumSiteState FailedRum(string code, string message) => new() { Requested = true, ErrorCode = code, ErrorMessage = message };
@@ -342,7 +396,9 @@ public sealed partial class CloudflareAnalyticsCollector
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.SiteId)) throw new ArgumentException("Cloudflare operational collection requires a site identifier.", nameof(options));
         ValidateZoneId(options.ZoneId); _ = NormalizeSiteHost(options.SiteBaseUrl);
-        if (options.FromUtc == default || options.ThroughUtc == default || options.FromUtc >= options.ThroughUtc || options.ThroughUtc > _timeProvider.GetUtcNow() || options.ThroughUtc - options.FromUtc > TimeSpan.FromDays(7))
+        if (options.FromUtc == default || options.ThroughUtc == default || options.FromUtc >= options.ThroughUtc || options.ThroughUtc > _timeProvider.GetUtcNow() || options.ThroughUtc - options.FromUtc > TimeSpan.FromDays(7) ||
+            options.FromUtc.Offset != TimeSpan.Zero || options.ThroughUtc.Offset != TimeSpan.Zero ||
+            options.FromUtc.Ticks % TimeSpan.TicksPerHour != 0 || options.ThroughUtc.Ticks % TimeSpan.TicksPerHour != 0)
             throw new ArgumentException("Cloudflare operational window must be a closed UTC range no longer than seven days.", nameof(options));
         if (!string.IsNullOrWhiteSpace(options.AccountId) && (options.AccountId.Length != 32 || !options.AccountId.All(Uri.IsHexDigit)))
             throw new ArgumentException("Cloudflare accountId must be a 32-character hexadecimal identifier.", nameof(options));

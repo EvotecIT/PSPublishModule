@@ -87,10 +87,15 @@ public sealed partial class CloudflareAnalyticsCollector
             Success = true,
             DatasetEnabled = true,
             ZoneName = zoneName,
+            ZoneAccountId = zoneResponse.Value.Account?.Id,
             RequestCount = 2,
             MaxPageSize = Math.Min(settings.MaxPageSize.Value, ClientMaximumRowsPerDay),
             MaxDurationSeconds = settings.MaxDuration,
-            NotOlderThanSeconds = settings.NotOlderThan
+            NotOlderThanSeconds = settings.NotOlderThan,
+            FirewallDatasetEnabled = zones[0].Settings?.FirewallEventsAdaptiveGroups?.Enabled == true,
+            FirewallMaxPageSize = Math.Min(zones[0].Settings?.FirewallEventsAdaptiveGroups?.MaxPageSize ?? 0, ClientMaximumRowsPerDay),
+            FirewallMaxDurationSeconds = zones[0].Settings?.FirewallEventsAdaptiveGroups?.MaxDuration,
+            FirewallNotOlderThanSeconds = zones[0].Settings?.FirewallEventsAdaptiveGroups?.NotOlderThan
         };
     }
 
@@ -531,6 +536,12 @@ public sealed partial class CloudflareAnalyticsCollector
             zones(filter: { zoneTag: $zoneTag }) {
               settings {
                 httpRequestsAdaptiveGroups {
+                  enabled
+                  maxPageSize
+                  maxDuration
+                  notOlderThan
+                }
+                firewallEventsAdaptiveGroups {
                   enabled
                   maxPageSize
                   maxDuration

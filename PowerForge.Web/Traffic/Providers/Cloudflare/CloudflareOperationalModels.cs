@@ -77,6 +77,8 @@ public sealed class CloudflareOperationalCollectionResult
 {
     /// <summary>Whether zone traffic completed. Optional WAF/RUM gaps do not erase traffic evidence.</summary>
     public bool Success { get; set; }
+    /// <summary>Stable fleet site identifier for this pulse.</summary>
+    public string SiteId { get; set; } = string.Empty;
     /// <summary>Capture time.</summary>
     public DateTimeOffset CollectedAtUtc { get; set; }
     /// <summary>Number of provider requests attempted.</summary>
@@ -125,8 +127,8 @@ internal sealed class CloudflareFirewallOperationalDimensions
 internal sealed class CloudflareRumSitesEnvelope
 {
     [JsonPropertyName("success")] public bool? Success { get; set; }
-    [JsonPropertyName("result")] public CloudflareRumSiteInfo[] Result { get; set; } = Array.Empty<CloudflareRumSiteInfo>();
-    [JsonPropertyName("errors")] public CloudflareApiError[] Errors { get; set; } = Array.Empty<CloudflareApiError>();
+    [JsonPropertyName("result")] public CloudflareRumSiteInfo?[]? Result { get; set; } = Array.Empty<CloudflareRumSiteInfo?>();
+    [JsonPropertyName("errors")] public CloudflareApiError[]? Errors { get; set; } = Array.Empty<CloudflareApiError>();
     [JsonPropertyName("result_info")] public CloudflareRumResultInfo? ResultInfo { get; set; }
 }
 internal sealed class CloudflareRumResultInfo

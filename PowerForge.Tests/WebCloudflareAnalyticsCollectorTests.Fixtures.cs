@@ -106,7 +106,11 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private static HttpResponseMessage CapabilityResponse(
         int maxPageSize = 1000,
         int? maxDuration = 86_400,
-        int? notOlderThan = 2_678_400) => JsonResponse(new
+        int? notOlderThan = 2_678_400,
+        bool firewallEnabled = true,
+        int? firewallMaxPageSize = null,
+        int? firewallMaxDuration = null,
+        int? firewallNotOlderThan = null) => JsonResponse(new
     {
         errors = (object?)null,
         data = new
@@ -119,7 +123,14 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
                     {
                         settings = new
                         {
-                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan }
+                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan },
+                            firewallEventsAdaptiveGroups = new
+                            {
+                                enabled = firewallEnabled,
+                                maxPageSize = firewallMaxPageSize ?? maxPageSize,
+                                maxDuration = firewallMaxDuration ?? maxDuration,
+                                notOlderThan = firewallNotOlderThan ?? notOlderThan
+                            }
                         }
                     }
                 }
@@ -133,11 +144,11 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         data = new { viewer = new { zones = new object?[] { null } } }
     });
 
-    private static HttpResponseMessage ZoneResponse(string name) => JsonResponse(new
+    private static HttpResponseMessage ZoneResponse(string name, string? accountId = TestAccountId) => JsonResponse(new
     {
         success = true,
         errors = Array.Empty<object>(),
-        result = new { id = ZoneId, name }
+        result = new { id = ZoneId, name, account = accountId is null ? null : new { id = accountId } }
     });
 
     private static object TrafficRow(
