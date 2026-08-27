@@ -236,7 +236,17 @@ internal static class PowerShellTypedExecutableCompiler
         internal PowerShellCompilationUnitPlan Unit { get; }
     }
 
-    private sealed record SemanticEmission(PowerShellLoweredFunction Function, PowerShellCSharpMethodEmission Emission);
+    private sealed class SemanticEmission
+    {
+        internal SemanticEmission(PowerShellLoweredFunction function, PowerShellCSharpMethodEmission emission)
+        {
+            Function = function;
+            Emission = emission;
+        }
+
+        internal PowerShellLoweredFunction Function { get; }
+        internal PowerShellCSharpMethodEmission Emission { get; }
+    }
 }
 
 internal sealed class PowerShellTypedExecutableCompilation
