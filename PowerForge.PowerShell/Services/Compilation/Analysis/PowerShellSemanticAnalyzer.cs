@@ -195,7 +195,7 @@ internal sealed class PowerShellSemanticAnalyzer
                 if (assigned.Contains(read.Symbol.StableKey)) continue;
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSD1001",
-                    $"Local variable '${read.Symbol.Name}' may remain unassigned on at least one reachable path.",
+                    $"Local variable '${read.Symbol.Name}' is read before it is definitely assigned and may remain unassigned on at least one reachable path.",
                     read.Span));
             }
         }
@@ -275,6 +275,8 @@ internal sealed class PowerShellSemanticAnalyzer
             if (expressions.Length == 0)
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "The function has no success output."));
             var facts = expressions.Select(expression => ResolveType(expression, functions)).ToArray();
+            if (facts.All(static fact => fact.Provenance != PowerShellTypeFactProvenance.Unknown && fact.ClrType == typeof(void)))
+                return function.WithAnalysis(returnType: new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "All reachable success-output expressions are output-free."));
             var known = facts.Where(static fact =>
                 fact.Provenance != PowerShellTypeFactProvenance.Unknown &&
                 fact.ClrType != typeof(void)).ToArray();

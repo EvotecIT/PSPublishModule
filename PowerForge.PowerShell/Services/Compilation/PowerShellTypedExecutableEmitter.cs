@@ -72,7 +72,7 @@ internal static class PowerShellTypedExecutableEmitter
                    GenerateValidations(metadata.Validations) + "),";
         }));
         var arguments = parameters.Select(parameter =>
-            "(" + PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + ")values[" +
+            "(" + PowerShellCSharpSymbolRenderer.TypeName(GetCompiledParameterType(parameter)) + ")values[" +
             PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]").ToList();
         if (method.RequiresPowerShellBoundParameters)
             arguments.Add("boundParameters");
@@ -105,7 +105,7 @@ internal static class PowerShellTypedExecutableEmitter
 
     private static string GenerateDefaultFactory(Type type)
         => type.IsValueType
-            ? "static () => default(" + PowerShellCSharpMethodEmitter.GetTypeName(type) + ")"
+            ? "static () => default(" + PowerShellCSharpSymbolRenderer.TypeName(type) + ")"
             : "static () => null!";
 
     private static string GenerateValueParser(Type type)
@@ -113,7 +113,7 @@ internal static class PowerShellTypedExecutableEmitter
         var isArray = type.IsArray;
         var scalar = Nullable.GetUnderlyingType(isArray ? type.GetElementType()! : type) ??
                      (isArray ? type.GetElementType()! : type);
-        var scalarTypeName = PowerShellCSharpMethodEmitter.GetTypeName(isArray ? type.GetElementType()! : type);
+        var scalarTypeName = PowerShellCSharpSymbolRenderer.TypeName(isArray ? type.GetElementType()! : type);
         var parse = GetParserExpression(scalar);
         return isArray
             ? "static (values, name) => values.Select(value => (" + scalarTypeName + ")" + parse.Replace("{{VALUE}}", "value").Replace("{{NAME}}", "name") + ").ToArray()"
@@ -123,7 +123,7 @@ internal static class PowerShellTypedExecutableEmitter
     private static string GetParserExpression(Type scalar)
     {
         if (scalar.IsEnum)
-            return "ParseEnum<" + PowerShellCSharpMethodEmitter.GetTypeName(scalar) + ">({{VALUE}}, {{NAME}})";
+            return "ParseEnum<" + PowerShellCSharpSymbolRenderer.TypeName(scalar) + ">({{VALUE}}, {{NAME}})";
         if (scalar == typeof(string)) return "{{VALUE}}";
         if (scalar == typeof(bool)) return "ParseBoolean({{VALUE}}, {{NAME}})";
         if (scalar == typeof(byte)) return "ParseByte({{VALUE}}, {{NAME}})";

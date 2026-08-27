@@ -106,12 +106,17 @@ public sealed class PowerShellTypedCompilationTranspiler
             .Where(static group => group.Count() > 1)
             .SelectMany(group => group.Select(item =>
             {
-                diagnostics.Add(new PowerShellCompilationDiagnostic(
-                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    $"Function '{item.Function.Name}' is declared more than once and has multiple retained definitions across the resolved module source scope.",
-                    item.Path,
-                    item.Function.Extent.StartLineNumber,
-                    item.Function.Extent.StartColumnNumber));
+                if (!diagnostics.Any(diagnostic =>
+                        PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, item.Path) &&
+                        diagnostic.Message.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase)))
+                {
+                    diagnostics.Add(new PowerShellCompilationDiagnostic(
+                        PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                        $"Function '{item.Function.Name}' has multiple retained definitions across the resolved module source scope.",
+                        item.Path,
+                        item.Function.Extent.StartLineNumber,
+                        item.Function.Extent.StartColumnNumber));
+                }
                 return GetMethodKey(item.Path, item.Function.Name, item.Function.Body.Extent.StartLineNumber);
             }))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -141,7 +146,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             .Where(source => source.Unit.IsCompilable &&
                              !duplicateFunctions.Contains(GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber)))
             .GroupBy(static source =>
-                PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name) + "\0" +
+                PowerShellCSharpSymbolRenderer.Identifier(source.Function.Name) + "\0" +
                 string.Join("\0", source.Unit.Parameters.Select(static parameter => parameter.TypeName)),
                 StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
@@ -149,7 +154,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             {
                 diagnostics.Add(new PowerShellCompilationDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                    $"Function '{source.Function.Name}' collides with another generated CLR method signature '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name)}'.",
+                    $"Function '{source.Function.Name}' collides with another generated CLR method signature '{PowerShellCSharpSymbolRenderer.Identifier(source.Function.Name)}'.",
                     source.Parsed.Path,
                     source.Function.Extent.StartLineNumber,
                     source.Function.Extent.StartColumnNumber));
@@ -539,7 +544,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationCapability capabilities)
         => CreateSignature(
             source,
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(source.Function.Name),
+            PowerShellCSharpSymbolRenderer.Identifier(source.Function.Name),
             returnType,
             requiresPowerShellBoundParameters: false,
             requiresPowerShellStreams: false,
@@ -611,12 +616,12 @@ public sealed class PowerShellTypedCompilationTranspiler
         var template = ReadTemplate();
         var source = template
             .Replace("{{NAMESPACE}}", SanitizeQualifiedName(namespaceName))
-            .Replace("{{TYPE_NAME}}", PowerShellCSharpMethodEmitter.SanitizeIdentifier(typeName))
+            .Replace("{{TYPE_NAME}}", PowerShellCSharpSymbolRenderer.Identifier(typeName))
             .Replace("{{METHODS}}", string.Join(Environment.NewLine + Environment.NewLine, methodSources));
         return new PowerShellTypedCompilationResult(
             sourcePaths[0],
             SanitizeQualifiedName(namespaceName),
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(typeName),
+            PowerShellCSharpSymbolRenderer.Identifier(typeName),
             source,
             methods,
             diagnostics
@@ -637,7 +642,7 @@ public sealed class PowerShellTypedCompilationTranspiler
     }
 
     private static string SanitizeQualifiedName(string value)
-        => string.Join(".", value.Split('.').Select(PowerShellCSharpMethodEmitter.SanitizeIdentifier));
+        => string.Join(".", value.Split('.').Select(PowerShellCSharpSymbolRenderer.Identifier));
 
     private static string GetMethodKey(string sourcePath, string name, int sourceLine)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + sourceLine;
@@ -657,11 +662,11 @@ public sealed class PowerShellTypedCompilationTranspiler
     {
         var generatedMethods = asts.SelectMany(ast => ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>())
-            .Select(static function => PowerShellCSharpMethodEmitter.SanitizeIdentifier(function.Name))
+            .Select(static function => PowerShellCSharpSymbolRenderer.Identifier(function.Name))
             .ToHashSet(StringComparer.Ordinal);
-        var candidate = PowerShellCSharpMethodEmitter.SanitizeIdentifier(requestedTypeName);
+        var candidate = PowerShellCSharpSymbolRenderer.Identifier(requestedTypeName);
         while (generatedMethods.Contains(candidate))
-            candidate = PowerShellCSharpMethodEmitter.SanitizeIdentifier("_" + candidate.TrimStart('@'));
+            candidate = PowerShellCSharpSymbolRenderer.Identifier("_" + candidate.TrimStart('@'));
         return candidate;
     }
 

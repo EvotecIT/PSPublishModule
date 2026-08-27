@@ -31,7 +31,7 @@ internal static class PowerShellClrMemberSemanticBinder
             receiverBehavior = PowerShellClrReceiverBehavior.PowerShellRuntimeException;
         else if (!target.Type.IsValueType && !target.IsKnownNonNull)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime error identity.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime-error identity.", span));
             return null;
         }
         if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
@@ -190,8 +190,10 @@ internal static class PowerShellClrMemberSemanticBinder
 
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2607", $"CLR invocation returns target-incompatible type '{resultType.FullName}'.", span);
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+            return Reject(diagnostics, "PSB2619", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' inside a RuntimeException catch cannot preserve PowerShell runtime-error wrapping.", span);
         if (!TrySelectInvocationBehavior(target, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects), out var receiverBehavior))
-            return Reject(diagnostics, "PSB2608", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' on a potentially null receiver requires PowerShell runtime error identity.", span);
+            return Reject(diagnostics, "PSB2608", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' on a potentially null receiver requires PowerShell runtime-error identity.", span);
 
         var parameters = selected.GetParameters();
         for (var index = 0; index < arguments.Length; index++)
@@ -280,7 +282,7 @@ internal static class PowerShellClrMemberSemanticBinder
             var type = typeExpression.TypeName.GetReflectionType();
             if (type is null || !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2611", $"CLR type '{typeExpression.TypeName.FullName}' is not target-compatible.", PowerShellSourceParser.GetSpan(document, typeExpression.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2611", $"CLR type '{typeExpression.TypeName.FullName}' is not available in the generated project reference set for the requested target.", PowerShellSourceParser.GetSpan(document, typeExpression.Extent)));
                 target = default;
                 return false;
             }
@@ -291,9 +293,10 @@ internal static class PowerShellClrMemberSemanticBinder
         var receiver = bindExpression(syntax, null);
         if (receiver is null) { target = default; return false; }
         var receiverType = receiver.Type.ClrType;
-        if (Nullable.GetUnderlyingType(receiverType) is not null || receiverType == typeof(PSObject) || receiverType == typeof(PSCustomObject))
+        if (Nullable.GetUnderlyingType(receiverType) is not null || receiverType == typeof(PSObject) || receiverType == typeof(PSCustomObject) ||
+            receiver.Type.Explanation.Contains("SwitchParameter", StringComparison.Ordinal))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2612", $"Receiver type '{receiverType.FullName}' requires PowerShell boxing or adapted-object semantics.", receiver.Span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2612", $"Receiver type '{receiverType.FullName}' requires PowerShell boxing semantics or preservation of adapted-object identity, including SwitchParameter identity.", receiver.Span));
             target = default;
             return false;
         }

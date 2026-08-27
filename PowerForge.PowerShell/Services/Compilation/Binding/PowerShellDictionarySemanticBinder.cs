@@ -70,16 +70,16 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2705", "Typed indexing supports one-dimensional CLR arrays only.", target.Span));
             return null;
         }
+        if (!IsSideEffectFreeIndex(syntax.Index))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2707", "Typed indexing requires a side-effect-free variable or constant index.", PowerShellSourceParser.GetSpan(document, syntax.Index.Extent)));
+            return null;
+        }
         var index = bindExpression(syntax.Index, indexType);
         if (index is null) return null;
         if (indexType != typeof(object) && index.Type.ClrType != indexType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2706", $"Typed indexing requires one scalar {indexType.Name} index for this target.", index.Span));
-            return null;
-        }
-        if (!IsSideEffectFreeIndex(syntax.Index))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2707", "Typed indexing requires a side-effect-free variable or constant index.", index.Span));
             return null;
         }
         var usePowerShellRuntimeErrors = kind == PowerShellBoundIndexKind.Array && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
@@ -122,15 +122,15 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2705", "Typed indexing supports one-dimensional CLR arrays only.", target.Span));
             return null;
         }
+        if (!IsSideEffectFreeIndex(indexSyntax.Index))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2707", "Typed indexing requires a side-effect-free variable or constant index.", PowerShellSourceParser.GetSpan(document, indexSyntax.Index.Extent)));
+            return null;
+        }
         var index = bindExpression(indexSyntax.Index, indexType);
         if (index is null || indexType != typeof(object) && index.Type.ClrType != indexType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2706", $"Typed indexing requires one scalar {indexType.Name} index for this target.", index?.Span ?? span));
-            return null;
-        }
-        if (!IsSideEffectFreeIndex(indexSyntax.Index))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2707", "Typed indexing requires a side-effect-free variable or constant index.", index.Span));
             return null;
         }
         var valueType = kind == PowerShellBoundIndexKind.Array

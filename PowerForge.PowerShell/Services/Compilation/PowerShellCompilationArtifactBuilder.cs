@@ -120,12 +120,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ? transpiler.TranspileForBinaryModule(
                         compilationSourcePaths,
                         "PowerForge.Compiled",
-                        PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
+                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
                         spec.TargetFramework)
                     : transpiler.Transpile(
                         compilationSourcePaths,
                         "PowerForge.Compiled",
-                        PowerShellCSharpMethodEmitter.SanitizeIdentifier(artifactName) + "Methods",
+                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
                         spec.TargetFramework);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
@@ -144,13 +144,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (typed.Methods.Length == 0 &&
                     !(spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid))
                 {
-                    var firstBlocker = typed.Diagnostics.FirstOrDefault();
-                    throw new InvalidOperationException(firstBlocker is null
+                    var blockerSummary = DescribeBlockers(typed.Diagnostics);
+                    throw new InvalidOperationException(string.IsNullOrWhiteSpace(blockerSummary)
                         ? "No PowerShell functions were eligible for typed CLR compilation."
-                        : $"No PowerShell functions were eligible for typed CLR compilation. First blocker: {firstBlocker.Message}");
+                        : $"No PowerShell functions were eligible for typed CLR compilation. Blockers: {blockerSummary}");
                 }
                 if (spec.Mode == PowerShellCompilationMode.Strict && typed.Diagnostics.Length > 0)
-                    throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s).");
+                    throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s). {DescribeBlockers(typed.Diagnostics)}");
                 if (spec.Mode == PowerShellCompilationMode.Strict &&
                     plan.Files.SelectMany(static file => file.Units).Any(static unit => unit.Kind != PowerShellCompilationUnitKind.Function))
                     throw new InvalidOperationException("Strict DLL compilation rejected a top-level script unit because DLL emitters currently produce typed functions only.");
@@ -735,6 +735,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     private static string BoundOutput(string output)
         => output.Length <= MaximumBuildOutputLength ? output : output.Substring(output.Length - MaximumBuildOutputLength);
+
+    private static string DescribeBlockers(IEnumerable<PowerShellCompilationDiagnostic> diagnostics)
+        => string.Join(" ", diagnostics.Select(static diagnostic => diagnostic.Message)
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.Ordinal));
 
     private sealed class CopiedArtifact
     {

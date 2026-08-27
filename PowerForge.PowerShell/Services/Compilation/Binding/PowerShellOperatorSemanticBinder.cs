@@ -284,13 +284,14 @@ internal static class PowerShellOperatorSemanticBinder
 
     private static bool ObservesMatchesAutomaticVariable(Ast syntax)
     {
-        var root = syntax;
+        Ast root = syntax;
         while (root.Parent is not null && root is not FunctionDefinitionAst) root = root.Parent;
+        if (root is FunctionDefinitionAst function) root = function.Body;
         return root.FindAll(
             static node => node is VariableExpressionAst variable &&
                            variable.VariablePath.UserPath.Equals("Matches", StringComparison.OrdinalIgnoreCase) &&
                            !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
-            searchNestedScriptBlocks: false).Any();
+            searchNestedScriptBlocks: true).Any();
     }
 
     internal static PowerShellBoundExpression? BindUnary(

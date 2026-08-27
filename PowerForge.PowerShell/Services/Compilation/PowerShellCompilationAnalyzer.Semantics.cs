@@ -118,6 +118,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             diagnostic.Span.StartOffset >= target.DeclarationOffset &&
             diagnostic.Span.StartOffset <= target.EndOffset);
         var analyzedFallback = analyzed?.Disposition.Kind != PowerShellExecutionDispositionKind.Typed ? analyzed?.Disposition : null;
+        if (analyzedFallback is null && semanticDiagnostic is null) return unit;
         var message = analyzedFallback?.Explanation ?? semanticDiagnostic?.Message ??
             $"{(unit.Kind == PowerShellCompilationUnitKind.Script ? "Script" : "Function")} '{unit.Name}' did not produce a lowered semantic contract.";
         var featureId = analyzedFallback?.ReasonCode ?? semanticDiagnostic?.Code ?? PowerShellCompilationFeatureIds.FunctionGraph;

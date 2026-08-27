@@ -23,7 +23,7 @@ internal static class PowerShellStringSemanticBinder
         {
             if (nested is not VariableExpressionAst)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2802", "Typed expandable strings accept statically typed String variables; subexpressions remain on the PowerShell path.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", "Expandable-string subexpressions are not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
                 return null;
             }
             var expression = bindExpression(nested, typeof(string));

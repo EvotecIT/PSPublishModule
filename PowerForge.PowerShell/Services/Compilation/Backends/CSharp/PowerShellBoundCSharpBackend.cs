@@ -21,7 +21,7 @@ internal sealed class PowerShellBoundCSharpBackend
     {
         var builder = new StringBuilder();
         var parameterParts = function.Parameters.Select(parameter =>
-            $"{PowerShellCSharpMethodEmitter.GetTypeName(parameter.ClrType)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Symbol.Name)}").ToList();
+            $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
         var requiresBoundParameters = function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
             parameter.Contract.DefaultValue is not null ||
             !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
@@ -48,7 +48,7 @@ internal sealed class PowerShellBoundCSharpBackend
             parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
         var parameters = string.Join(", ", parameterParts);
         builder.Append("    public static ")
-            .Append(PowerShellCSharpMethodEmitter.GetTypeName(function.ReturnType))
+            .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
             .Append('(')
@@ -74,7 +74,7 @@ internal sealed class PowerShellBoundCSharpBackend
             parameter.Contract)).ToArray();
         var prologue = new PowerShellParameterPrologueRenderer(
             targetCapabilities,
-            PowerShellCSharpMethodEmitter.GetTypeName,
+            PowerShellCSharpSymbolRenderer.TypeName,
             GetTemporaryIdentifier).Render(parameterContracts);
         if (prologue.Length > 0)
         {
@@ -103,12 +103,12 @@ internal sealed class PowerShellBoundCSharpBackend
         switch (statement)
         {
             case PowerShellLoweredLocalDeclarationStatement declaration:
-                builder.Append(prefix).Append(PowerShellCSharpMethodEmitter.GetTypeName(declaration.ClrType)).Append(' ')
-                    .Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(declaration.Symbol.Name)).AppendLine(" = default!;");
+                builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.TypeName(declaration.ClrType)).Append(' ')
+                    .Append(PowerShellCSharpSymbolRenderer.Identifier(declaration.Symbol.Name)).AppendLine(" = default!;");
                 return;
             case PowerShellLoweredAssignmentStatement assignment:
                 builder.Append(prefix);
-                if (assignment.Declare) builder.Append(PowerShellCSharpMethodEmitter.GetTypeName(assignment.ClrType)).Append(' ');
+                if (assignment.Declare) builder.Append(PowerShellCSharpSymbolRenderer.TypeName(assignment.ClrType)).Append(' ');
                 builder.Append(EmitMutation(
                     assignment.Target,
                     assignment.ClrType,
@@ -177,7 +177,7 @@ internal sealed class PowerShellBoundCSharpBackend
             case PowerShellLoweredForStatement loop:
                 var initializer = loop.Initializer is null
                     ? string.Empty
-                    : (loop.DeclareInitializer ? PowerShellCSharpMethodEmitter.GetTypeName(loop.Initializer.TargetClrType) + " " : string.Empty) + EmitExpression(loop.Initializer);
+                    : (loop.DeclareInitializer ? PowerShellCSharpSymbolRenderer.TypeName(loop.Initializer.TargetClrType) + " " : string.Empty) + EmitExpression(loop.Initializer);
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
@@ -187,10 +187,10 @@ internal sealed class PowerShellBoundCSharpBackend
                 var collection = EmitExpression(loop.Collection);
                 var enumerable = loop.ScalarString
                     ? $"new[] {{ {collection} }}"
-                    : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(loop.ElementType)}>())";
+                    : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)}>())";
                 builder.Append(prefix).Append("foreach (")
-                    .Append(PowerShellCSharpMethodEmitter.GetTypeName(loop.ElementType)).Append(' ')
-                    .Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(loop.Variable.Name)).Append(" in ")
+                    .Append(PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)).Append(' ')
+                    .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" in ")
                     .Append(enumerable).AppendLine(")");
                 EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier);
                 return;
@@ -216,7 +216,7 @@ internal sealed class PowerShellBoundCSharpBackend
                     }
                     foreach (var exceptionType in clause.ExceptionTypes)
                     {
-                        builder.Append(prefix).Append("catch (").Append(PowerShellCSharpMethodEmitter.GetTypeName(exceptionType)).AppendLine(")");
+                        builder.Append(prefix).Append("catch (").Append(PowerShellCSharpSymbolRenderer.TypeName(exceptionType)).AppendLine(")");
                         EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier);
                     }
                 }
@@ -239,20 +239,20 @@ internal sealed class PowerShellBoundCSharpBackend
 
     private static string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
         => "new object?[] { " + string.Join(", ", arguments.Select(argument =>
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(argument.Symbol.Name))) + " }";
+            PowerShellCSharpSymbolRenderer.Identifier(argument.Symbol.Name))) + " }";
 
     private static void EmitCommandCapture(
         StringBuilder builder,
         PowerShellLoweredCommandCaptureStatement capture,
         string prefix)
     {
-        var targetType = PowerShellCSharpMethodEmitter.GetTypeName(capture.TargetType);
+        var targetType = PowerShellCSharpSymbolRenderer.TypeName(capture.TargetType);
         var invocation = $"__invokePowerShellCapture({PowerShellCSharpLiteral.QuoteString(capture.Source)}, {EmitCommandRegionArguments(capture.Arguments)})";
         var converted = $"({targetType})global::System.Management.Automation.LanguagePrimitives.ConvertTo({invocation}, typeof({targetType}), global::System.Globalization.CultureInfo.InvariantCulture)!";
         if (capture.TargetType == typeof(string)) converted = $"({converted} ?? string.Empty)";
         builder.Append(prefix);
         if (capture.Declare) builder.Append(targetType).Append(' ');
-        builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(capture.Target.Name))
+        builder.Append(PowerShellCSharpSymbolRenderer.Identifier(capture.Target.Name))
             .Append(" = ").Append(converted).AppendLine(";");
     }
 
@@ -273,7 +273,7 @@ internal sealed class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         var valueIdentifier = getTemporaryIdentifier("switch_value");
         var matchedIdentifier = getTemporaryIdentifier("switch_matched");
-        builder.Append(prefix).Append(PowerShellCSharpMethodEmitter.GetTypeName(statement.Value.ClrType)).Append(' ')
+        builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.TypeName(statement.Value.ClrType)).Append(' ')
             .Append(valueIdentifier).Append(" = ").Append(EmitExpression(statement.Value)).AppendLine(";");
         builder.Append(prefix).Append("bool ").Append(matchedIdentifier).AppendLine(" = false;");
         builder.Append(prefix).AppendLine("do");
@@ -303,7 +303,7 @@ internal sealed class PowerShellBoundCSharpBackend
         => expression switch
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
-            PowerShellLoweredVariableExpression variable => PowerShellCSharpMethodEmitter.SanitizeIdentifier(variable.Symbol.Name),
+            PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
@@ -344,7 +344,7 @@ internal sealed class PowerShellBoundCSharpBackend
 
     private static string EmitConversion(PowerShellLoweredConversionExpression conversion)
     {
-        var type = PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType);
+        var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
         return conversion.UsePowerShellLanguageRuntime
             ? $"({type})global::System.Management.Automation.LanguagePrimitives.ConvertTo((object?)({EmitExpression(conversion.Operand)}), typeof({type}), global::System.Globalization.CultureInfo.InvariantCulture)!"
             : $"({type})({EmitExpression(conversion.Operand)})";
@@ -372,11 +372,11 @@ internal sealed class PowerShellBoundCSharpBackend
         if (invocation.RequiresPowerShellRuntimeState)
             callArguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference" });
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
-        var call = $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
+        var call = $"{PowerShellCSharpSymbolRenderer.Identifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
         if (!reordered) return call;
         var evaluations = authored.Select(parameterIndex =>
-            $"{PowerShellCSharpMethodEmitter.GetTypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");
-        return $"new global::System.Func<{PowerShellCSharpMethodEmitter.GetTypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
+            $"{PowerShellCSharpSymbolRenderer.TypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");
+        return $"new global::System.Func<{PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
     }
 
     private static string EmitBoundParameterSet(IEnumerable<string> names)
@@ -388,7 +388,7 @@ internal sealed class PowerShellBoundCSharpBackend
         var operand = EmitExpression(expression.Operand);
         if (Nullable.GetUnderlyingType(expression.TargetType) is not null)
             return $"new global::System.Func<bool>(() => {{ _ = (object?)({operand}); return {(expression.Negate ? "true" : "false")}; }})()";
-        var test = $"((object?)({operand}) is {PowerShellCSharpMethodEmitter.GetTypeName(expression.TargetType)})";
+        var test = $"((object?)({operand}) is {PowerShellCSharpSymbolRenderer.TypeName(expression.TargetType)})";
         return expression.Negate ? $"!{test}" : test;
     }
 
@@ -422,7 +422,7 @@ internal sealed class PowerShellBoundCSharpBackend
     {
         var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
         var candidate = expression.CollectionOnRight ? expression.LeftTemporary : expression.RightTemporary;
-        var comparison = $"global::System.Linq.Enumerable.Any(({collection} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(expression.ElementType)}>()), {expression.ItemTemporary} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){expression.ItemTemporary}, (object?)({candidate}), {(expression.IgnoreCase ? "true" : "false")}, global::System.Globalization.CultureInfo.InvariantCulture))";
+        var comparison = $"global::System.Linq.Enumerable.Any(({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(expression.ElementType)}>()), {expression.ItemTemporary} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){expression.ItemTemporary}, (object?)({candidate}), {(expression.IgnoreCase ? "true" : "false")}, global::System.Globalization.CultureInfo.InvariantCulture))";
         if (expression.Negate) comparison = $"!({comparison})";
         return $"new global::System.Func<bool>(() => {{ var {expression.LeftTemporary} = {EmitExpression(expression.Left)}; var {expression.RightTemporary} = {EmitExpression(expression.Right)}; return {comparison}; }})()";
     }
@@ -522,14 +522,14 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitClrMember(PowerShellLoweredClrMemberExpression member)
     {
         if (member.IsStatic)
-            return $"{PowerShellCSharpMethodEmitter.GetTypeName(member.DeclaringType)}.{member.MemberName}";
+            return $"{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType)}.{member.MemberName}";
         if (member.Receiver is null) throw new InvalidOperationException("Instance CLR member has no lowered receiver.");
         var receiver = EmitExpression(member.Receiver);
         return member.ReceiverBehavior switch
         {
             PowerShellClrReceiverBehavior.NormalizeNullString => $"({receiver} ?? string.Empty).{member.MemberName}",
             PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
-                $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
+                $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
             PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
             PowerShellClrReceiverBehavior.PowerShellAdapter =>
                 $"new global::System.Func<int>(() => {{ var __pf_adapted_value = (object?)({receiver}); if (__pf_adapted_value is null) return 0; var __pf_count = global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[\"Count\"]?.Value; return __pf_count is null ? 1 : (int)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__pf_count, typeof(int), global::System.Globalization.CultureInfo.InvariantCulture)!; }})()",
@@ -541,9 +541,9 @@ internal sealed class PowerShellBoundCSharpBackend
     {
         var arguments = string.Join(", ", invocation.Arguments.Select(EmitExpression));
         if (invocation.InvocationKind == PowerShellClrInvocationKind.Constructor)
-            return $"new {PowerShellCSharpMethodEmitter.GetTypeName(invocation.DeclaringType)}({arguments})";
+            return $"new {PowerShellCSharpSymbolRenderer.TypeName(invocation.DeclaringType)}({arguments})";
         if (invocation.InvocationKind == PowerShellClrInvocationKind.StaticMethod)
-            return $"{PowerShellCSharpMethodEmitter.GetTypeName(invocation.DeclaringType)}.{invocation.MemberName}({arguments})";
+            return $"{PowerShellCSharpSymbolRenderer.TypeName(invocation.DeclaringType)}.{invocation.MemberName}({arguments})";
         if (invocation.Receiver is null) throw new InvalidOperationException("Instance CLR invocation has no lowered receiver.");
         var receiver = EmitExpression(invocation.Receiver);
         if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullString)
@@ -558,8 +558,8 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitArray(PowerShellLoweredArrayExpression array)
     {
         var elementType = array.ClrType.GetElementType()!;
-        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(elementType)}>()";
-        return $"new {PowerShellCSharpMethodEmitter.GetTypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
+        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(elementType)}>()";
+        return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 
     private static string EmitMutation(
@@ -570,7 +570,7 @@ internal sealed class PowerShellBoundCSharpBackend
         bool normalizeNullString,
         bool checkedIntegral)
     {
-        var identifier = PowerShellCSharpMethodEmitter.SanitizeIdentifier(target.Name);
+        var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
             PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
         {
@@ -593,7 +593,7 @@ internal sealed class PowerShellBoundCSharpBackend
             _ => throw new InvalidOperationException($"Mutation '{operation}' has no C# rendering owner.")
         };
         return checkedIntegral
-            ? $"{identifier} = checked(({PowerShellCSharpMethodEmitter.GetTypeName(targetType)})({identifier} {symbol} {right}))"
+            ? $"{identifier} = checked(({PowerShellCSharpSymbolRenderer.TypeName(targetType)})({identifier} {symbol} {right}))"
             : $"{identifier} {symbol}= {right}";
     }
 
@@ -661,7 +661,7 @@ internal sealed class PowerShellBoundCSharpBackend
         if (nullableType is not null)
         {
             var scalar = new PowerShellLoweredLiteralExpression(literal.Span, nullableType, literal.Value);
-            return $"new {PowerShellCSharpMethodEmitter.GetTypeName(literal.ClrType)}({EmitLiteral(scalar)})";
+            return $"new {PowerShellCSharpSymbolRenderer.TypeName(literal.ClrType)}({EmitLiteral(scalar)})";
         }
         if (literal.ClrType.IsEnum)
         {
@@ -669,7 +669,7 @@ internal sealed class PowerShellBoundCSharpBackend
             var value = Type.GetTypeCode(underlying) is TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64
                 ? Convert.ToUInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "UL"
                 : Convert.ToInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "L";
-            return $"({PowerShellCSharpMethodEmitter.GetTypeName(literal.ClrType)}){value}";
+            return $"({PowerShellCSharpSymbolRenderer.TypeName(literal.ClrType)}){value}";
         }
         if (literal.Value is string text) return PowerShellCSharpLiteral.QuoteString(text);
         if (literal.Value is bool boolean) return boolean ? "true" : "false";

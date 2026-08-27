@@ -25,6 +25,18 @@ internal sealed class PowerShellSemanticBinder
                 static group => group.Key,
                 group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
                 StringComparer.OrdinalIgnoreCase);
+        for (var iteration = 0; iteration < functionsByName.Count; iteration++)
+        {
+            var changed = false;
+            foreach (var declaration in declarations)
+            {
+                if (!functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) || signature.DeclaredReturnType is not null)
+                    continue;
+                var inferred = PowerShellLocalCallSemanticBinder.InferReturnType(declaration.Syntax, signature.Parameters, functionsByName);
+                if (inferred is not null) changed |= signature.RefineReturnType(inferred);
+            }
+            if (!changed) break;
+        }
         var functions = new List<PowerShellBoundFunction>();
 
         foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
@@ -134,15 +146,16 @@ internal sealed class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, scopeLeak.Extent)));
             return null;
         }
-        var locals = DeclareLocals(document, function, symbols);
-        var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
-
-        var statements = new List<PowerShellBoundStatement>();
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames)
             : -1;
+        var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
+        var locals = DeclareLocals(document, function, symbols, runtimeTailOffset);
+        var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
+
+        var statements = new List<PowerShellBoundStatement>();
         for (var index = 0; index < authoredStatements.Length; index++)
         {
             var statement = authoredStatements[index];
@@ -224,7 +237,12 @@ internal sealed class PowerShellSemanticBinder
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
             var type = clrType == typeof(object) && !hasAuthoredType
                 ? PowerShellTypeFact.Unknown
-                : new PowerShellTypeFact(clrType, PowerShellTypeFactProvenance.Explicit, $"Parameter '${name}' has an authored type constraint.");
+                : new PowerShellTypeFact(
+                    clrType,
+                    PowerShellTypeFactProvenance.Explicit,
+                    parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+                        ? $"Parameter '${name}' has an authored SwitchParameter contract represented as Boolean only when its object identity is not observed."
+                        : $"Parameter '${name}' has an authored type constraint.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
             var bound = new PowerShellBoundParameter(symbol, type, contract);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
@@ -236,7 +254,8 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundLocal[] DeclareLocals(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
-        IDictionary<string, PowerShellSemanticSymbolBinding> symbols)
+        IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        int? excludedTailOffset = null)
     {
         var locals = new List<PowerShellBoundLocal>();
         var assignments = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
@@ -245,6 +264,7 @@ internal sealed class PowerShellSemanticBinder
             .OrderBy(static assignment => assignment.Extent.StartOffset);
         foreach (var assignment in assignments)
         {
+            if (excludedTailOffset.HasValue && assignment.Extent.StartOffset >= excludedTailOffset.Value) continue;
             var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
             if (variable is null) continue;
             var name = variable.VariablePath.UserPath;
@@ -651,6 +671,8 @@ internal sealed class PowerShellSemanticBinder
             if (expression is null) return null;
             var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
             if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions)) return null;
+            if (isTerminal && IsLocalFunctionPipeline(pipeline, functions))
+                return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
             return expression is null
                 ? null
                 : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
@@ -818,6 +840,15 @@ internal sealed class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName):
+                if (functionBody?.ParamBlock?.Parameters.Any(parameter =>
+                        parameter.Name.VariablePath.UserPath.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) != true)
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic(
+                        "PSB2502",
+                        $"$PSBoundParameters.ContainsKey requires the literal canonical name of a declared parameter; '{parameterName}' is not declared by this function.",
+                        span));
+                    return null;
+                }
                 return new PowerShellBoundParameterPresenceExpression(span, parameterName);
             case InvokeMemberExpressionAst invocation:
                 return PowerShellClrMemberSemanticBinder.BindInvocation(

@@ -144,7 +144,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     }
 
     internal static string GetRuntimeRegionHostTypeName(PowerShellTypedCompilationResult typed)
-        => PowerShellCSharpMethodEmitter.SanitizeIdentifier(typed.TypeName + "PowerShellRegionHost");
+        => PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName + "PowerShellRegionHost");
 
     private static CmdletDescriptor CreateDescriptor(PowerShellCompiledMethod method)
     {
@@ -153,14 +153,14 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             throw new InvalidOperationException($"Function '{method.SourceName}' cannot be exported as a binary cmdlet because it does not use Verb-Noun naming.");
         var verb = method.SourceName.Substring(0, separator);
         var noun = method.SourceName.Substring(separator + 1);
-        return new CmdletDescriptor(method, verb, noun, PowerShellCSharpMethodEmitter.SanitizeIdentifier(verb + noun + "Command"));
+        return new CmdletDescriptor(method, verb, noun, PowerShellCSharpSymbolRenderer.Identifier(verb + noun + "Command"));
     }
 
     private static void ValidateDescriptor(CmdletDescriptor cmdlet, string? targetFramework)
     {
         var renamedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
-            var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
+            var memberName = PowerShellCSharpSymbolRenderer.Identifier(parameter.Name);
             return !memberName.TrimStart('@').Equals(parameter.Name, StringComparison.OrdinalIgnoreCase);
         });
         if (renamedParameter is not null)
@@ -170,14 +170,14 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${commonParameter.Name}' collides with a PowerShell common parameter and cannot be exported as a binary cmdlet.");
         var reservedParameter = cmdlet.Method.Parameters.FirstOrDefault(parameter =>
         {
-            var memberName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name);
+            var memberName = PowerShellCSharpSymbolRenderer.Identifier(parameter.Name);
             return ReservedMemberNames.Contains(memberName) ||
                    (!cmdlet.Method.IsAdvancedFunction && memberName.Equals(RemainingArgumentsMemberName, StringComparison.OrdinalIgnoreCase)) ||
                    memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
                    cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
-            throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpMethodEmitter.SanitizeIdentifier(reservedParameter.Name)}'.");
+            throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpSymbolRenderer.Identifier(reservedParameter.Name)}'.");
         if (!cmdlet.Method.IsAdvancedFunction)
         {
             var generatedCommonNames = PowerShellCommonParameterPolicy
@@ -295,7 +295,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 : parameter.TypeName == typeof(string).FullName
                     ? " = string.Empty;"
                     : " = default!;";
-            builder.AppendLine($"    public {propertyType} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name)} {{ get; set; }}{initializer}");
+            builder.AppendLine($"    public {propertyType} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Name)} {{ get; set; }}{initializer}");
             builder.AppendLine();
         }
         if (!cmdlet.Method.IsAdvancedFunction)
@@ -359,7 +359,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine($"    protected override void {lifecycleMethod}()");
         builder.AppendLine("    {");
         var arguments = cmdlet.Method.Parameters.Select(parameter =>
-            PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
+            PowerShellCSharpSymbolRenderer.Identifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
         if (cmdlet.Method.RequiresPowerShellStreams)
             arguments = arguments.Concat(new[] { "WriteVerbose", "WriteDebug", "WriteWarning" });
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
@@ -535,7 +535,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     {
         var resolved = Type.GetType(fullName, throwOnError: false);
         if (resolved is not null)
-            return PowerShellCSharpMethodEmitter.GetTypeName(resolved);
+            return PowerShellCSharpSymbolRenderer.TypeName(resolved);
         if (fullName.EndsWith("[]", StringComparison.Ordinal))
             return GetGeneratedTypeName(fullName.Substring(0, fullName.Length - 2)) + "[]";
         if (fullName == typeof(void).FullName) return "void";

@@ -36,7 +36,14 @@ internal sealed class PowerShellLocalCallSignature
     internal PowerShellLocalCallParameter[] Parameters { get; }
     internal bool IsAdvanced { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
-    internal Type? DeclaredReturnType { get; }
+    internal Type? DeclaredReturnType { get; private set; }
+
+    internal bool RefineReturnType(Type type)
+    {
+        if (DeclaredReturnType is not null) return false;
+        DeclaredReturnType = type;
+        return true;
+    }
 }
 
 /// <summary>Applies deterministic local-function parameter binding before call-graph analysis.</summary>
@@ -75,17 +82,32 @@ internal static class PowerShellLocalCallSemanticBinder
             declaredReturnType);
     }
 
-    private static Type? InferReturnType(FunctionDefinitionAst function, IReadOnlyList<PowerShellLocalCallParameter> parameters)
+    internal static Type? InferReturnType(
+        FunctionDefinitionAst function,
+        IReadOnlyList<PowerShellLocalCallParameter> parameters,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature>? functions = null)
     {
-        var parameterTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in function.Body.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+                     .OfType<AssignmentStatementAst>().OrderBy(static assignment => assignment.Extent.StartOffset))
+        {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not { } variable ||
+                knownTypes.ContainsKey(variable.VariablePath.UserPath))
+                continue;
+            var expression = Unwrap(assignment.Right);
+            var type = assignment.Left is ConvertExpressionAst typed && typed.StaticType != typeof(object)
+                ? typed.StaticType
+                : InferExpressionType(expression, knownTypes, functions);
+            if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
+        }
         var output = function.Body.EndBlock?.Statements
             .SelectMany(static statement => statement.FindAll(
                 static node => node is ReturnStatementAst || node is PipelineAst && node.Parent is NamedBlockAst,
                 searchNestedScriptBlocks: false))
             .Select(node => node switch
             {
-                ReturnStatementAst { Pipeline: not null } returned => InferExpressionType(Unwrap(returned.Pipeline), parameterTypes),
-                PipelineAst pipeline => InferExpressionType(Unwrap(pipeline), parameterTypes),
+                ReturnStatementAst { Pipeline: not null } returned => InferExpressionType(Unwrap(returned.Pipeline), knownTypes, functions),
+                PipelineAst pipeline => InferExpressionType(Unwrap(pipeline), knownTypes, functions),
                 _ => null
             })
             .Where(static type => type is not null && type != typeof(void))
@@ -95,20 +117,25 @@ internal static class PowerShellLocalCallSemanticBinder
         return output.Length == 1 ? output[0] : null;
     }
 
-    private static Type? InferExpressionType(Ast syntax, IReadOnlyDictionary<string, Type> parameterTypes)
+    private static Type? InferExpressionType(
+        Ast syntax,
+        IReadOnlyDictionary<string, Type> knownTypes,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature>? functions = null)
         => syntax switch
         {
             StringConstantExpressionAst => typeof(string),
             ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
-            VariableExpressionAst variable when parameterTypes.TryGetValue(variable.VariablePath.UserPath, out var type) => type,
+            VariableExpressionAst variable when knownTypes.TryGetValue(variable.VariablePath.UserPath, out var type) => type,
             ConvertExpressionAst conversion when conversion.StaticType != typeof(object) => conversion.StaticType,
-            ArrayLiteralAst array => InferArrayType(array.Elements, parameterTypes),
+            ArrayLiteralAst array => InferArrayType(array.Elements, knownTypes),
             ArrayExpressionAst array => InferArrayType(
                 array.SubExpression.Statements
                     .OfType<PipelineAst>()
                     .SelectMany(static pipeline => pipeline.PipelineElements.OfType<CommandExpressionAst>())
                     .Select(static expression => expression.Expression),
-                parameterTypes),
+                knownTypes),
+            CommandAst command when functions is not null && command.GetCommandName() is { } name &&
+                                    functions.TryGetValue(name, out var signature) => signature.DeclaredReturnType,
             _ => syntax is ExpressionAst expression && expression.StaticType != typeof(object) ? expression.StaticType : null
         };
 

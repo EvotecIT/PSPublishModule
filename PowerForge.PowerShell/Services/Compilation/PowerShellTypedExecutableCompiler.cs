@@ -210,10 +210,13 @@ internal static class PowerShellTypedExecutableCompiler
 
     private static InvalidOperationException CreatePlanFailure(PowerShellCompilationPlan plan)
     {
-        var blocker = plan.Files.SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics))).FirstOrDefault();
-        return new InvalidOperationException(blocker is null
+        var blockers = plan.Files.SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
+            .Select(static diagnostic => diagnostic.Message)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return new InvalidOperationException(blockers.Length == 0
             ? "Strict typed executable generation requires every source-closure unit to be eligible for direct CLR compilation."
-            : $"Strict typed executable generation requires every source-closure unit to be eligible. First blocker: {blocker.Message}");
+            : $"Strict typed executable generation requires every source-closure unit to be eligible. Blockers: {string.Join(" ", blockers)}");
     }
 
     private sealed class ParsedSource

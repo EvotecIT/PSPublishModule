@@ -60,6 +60,13 @@ internal static class PowerShellMutationSemanticBinder
                 value.ValueState);
             targetType = target.Type.ClrType;
         }
+        if (operation == PowerShellBoundMutationOperator.Assign &&
+            target.Type.Provenance == PowerShellTypeFactProvenance.Inferred &&
+            targetType != value.Type.ClrType)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2408", $"Assignment changes inferred local '${target.Symbol.Name}' from CLR type '{targetType.FullName}' to '{value.Type.ClrType.FullName}'. Inferred locals require one exact CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
         if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2401", $"Assignment requires PowerShell conversion from '{value.Type.ClrType.FullName}' to '{targetType.FullName}', which is not an implicit CLR conversion.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
@@ -117,6 +124,11 @@ internal static class PowerShellMutationSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
         }
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax) && PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2409", "Integral increment or decrement inside a RuntimeException catch cannot preserve PowerShell overflow-error wrapping.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return true;
+        }
         mutation = new PowerShellBoundMutationExpression(
             PowerShellSourceParser.GetSpan(document, syntax.Extent),
             target.Symbol,
@@ -140,7 +152,7 @@ internal static class PowerShellMutationSemanticBinder
     {
         Ast current = syntax;
         while (current.Parent is CommandExpressionAst or PipelineAst) current = current.Parent;
-        return current.Parent is NamedBlockAst or StatementBlockAst ||
+        return current.Parent is NamedBlockAst or StatementBlockAst or ReturnStatementAst ||
                current.Parent is ForStatementAst loop &&
                (ReferenceEquals(loop.Initializer, current) || ReferenceEquals(loop.Iterator, current));
     }

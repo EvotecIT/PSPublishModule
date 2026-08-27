@@ -123,7 +123,7 @@ internal sealed class PowerShellTypedLowerer
 
             functions.Add(new PowerShellLoweredFunction(
                 function.Symbol,
-                PowerShellCSharpMethodEmitter.SanitizeIdentifier(function.Symbol.Name),
+                PowerShellCSharpSymbolRenderer.Identifier(function.Symbol.Name),
                 function.ReturnType.ClrType,
                 function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType, parameter.Contract)).ToArray(),
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
