@@ -32,6 +32,11 @@ internal sealed class PowerShellBoundCSharpBackend
             parameterParts.Add("global::System.Action<string> __writeDebug");
             parameterParts.Add("global::System.Action<string> __writeWarning");
         }
+        if (function.RequiresPowerShellCommandRegions)
+        {
+            parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+            parameterParts.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
+        }
         if (function.RequiresPowerShellRuntimeState)
         {
             parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
@@ -85,6 +90,7 @@ internal sealed class PowerShellBoundCSharpBackend
             function.ReturnType,
             builder.ToString(),
             requiresPowerShellStreams: function.RequiresPowerShellStreams,
+            requiresPowerShellCommandRegions: function.RequiresPowerShellCommandRegions,
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             help: function.Help?.ToPublicModel(),
@@ -143,6 +149,14 @@ internal sealed class PowerShellBoundCSharpBackend
                     .Append("(global::System.Convert.ToString(")
                     .Append(EmitExpression(stream.Message))
                     .AppendLine(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty);");
+                return;
+            case PowerShellLoweredCommandRegionStatement region:
+                builder.Append(prefix).Append("__invokePowerShellRegion(")
+                    .Append(PowerShellCSharpLiteral.QuoteString(region.Source))
+                    .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
+                return;
+            case PowerShellLoweredCommandCaptureStatement capture:
+                EmitCommandCapture(builder, capture, prefix);
                 return;
             case PowerShellLoweredIfStatement conditional:
                 for (var index = 0; index < conditional.Clauses.Length; index++)
@@ -222,6 +236,25 @@ internal sealed class PowerShellBoundCSharpBackend
             default:
                 throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
         }
+    }
+
+    private static string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
+        => "new object?[] { " + string.Join(", ", arguments.Select(argument =>
+            PowerShellCSharpMethodEmitter.SanitizeIdentifier(argument.Symbol.Name))) + " }";
+
+    private static void EmitCommandCapture(
+        StringBuilder builder,
+        PowerShellLoweredCommandCaptureStatement capture,
+        string prefix)
+    {
+        var targetType = PowerShellCSharpMethodEmitter.GetTypeName(capture.TargetType);
+        var invocation = $"__invokePowerShellCapture({PowerShellCSharpLiteral.QuoteString(capture.Source)}, {EmitCommandRegionArguments(capture.Arguments)})";
+        var converted = $"({targetType})global::System.Management.Automation.LanguagePrimitives.ConvertTo({invocation}, typeof({targetType}), global::System.Globalization.CultureInfo.InvariantCulture)!";
+        if (capture.TargetType == typeof(string)) converted = $"({converted} ?? string.Empty)";
+        builder.Append(prefix);
+        if (capture.Declare) builder.Append(targetType).Append(' ');
+        builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(capture.Target.Name))
+            .Append(" = ").Append(converted).AppendLine(";");
     }
 
     private static void EmitBlock(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements, int indent, Func<string, string> getTemporaryIdentifier)
@@ -323,6 +356,8 @@ internal sealed class PowerShellBoundCSharpBackend
         var callArguments = arguments.ToList();
         if (invocation.RequiresPowerShellStreams)
             callArguments.AddRange(new[] { "__writeVerbose", "__writeDebug", "__writeWarning" });
+        if (invocation.RequiresPowerShellCommandRegions)
+            callArguments.AddRange(new[] { "__invokePowerShellRegion", "__invokePowerShellCapture" });
         if (invocation.RequiresPowerShellRuntimeState)
             callArguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference" });
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));

@@ -177,6 +177,10 @@ internal sealed class PowerShellSemanticAnalyzer
                     }
                     assigned.Add(assignment.Target.StableKey);
                 }
+                else if (statement is PowerShellBoundCommandCaptureStatement capture)
+                {
+                    assigned.Add(capture.Target.StableKey);
+                }
             }
         }
 

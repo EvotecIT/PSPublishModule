@@ -117,12 +117,32 @@ internal sealed class PowerShellSemanticBinder
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
         var locals = DeclareLocals(document, function, symbols);
+        var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
+        var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
+            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames)
+            : -1;
         for (var index = 0; index < authoredStatements.Length; index++)
         {
             var statement = authoredStatements[index];
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                PowerShellHostedStatementBinder.TryBind(
+                    document,
+                    authoredStatements,
+                    function.Body,
+                    localFunctionNames,
+                    symbols,
+                    parametersByName,
+                    runtimeTailStart,
+                    ref index,
+                    out var hosted))
+            {
+                statements.Add(hosted!);
+                continue;
+            }
             var diagnosticCount = diagnostics.Count;
             var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1, targetFramework, capabilities);
             if (bound is null)
@@ -443,7 +463,7 @@ internal sealed class PowerShellSemanticBinder
         {
             if (throwStatement.IsRethrow)
             {
-                if (!HasAncestor<CatchClauseAst>(throwStatement))
+                if (!PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(throwStatement))
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2307", "A bare typed rethrow is valid only inside a catch clause.", PowerShellSourceParser.GetSpan(document, throwStatement.Extent)));
                     return null;
@@ -509,9 +529,9 @@ internal sealed class PowerShellSemanticBinder
             if (tryStatement.Finally is not null && finallyBlock is null) return null;
             return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock);
         }
-        if (statement is BreakStatementAst { Label: null } breakStatement && HasBreakableAncestor(breakStatement))
+        if (statement is BreakStatementAst { Label: null } breakStatement && PowerShellControlFlowBindingPolicy.HasBreakableAncestor(breakStatement))
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
-        if (statement is ContinueStatementAst { Label: null } continueStatement && HasContinuableAncestor(continueStatement))
+        if (statement is ContinueStatementAst { Label: null } continueStatement && PowerShellControlFlowBindingPolicy.HasContinuableAncestor(continueStatement))
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
             streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
@@ -560,24 +580,6 @@ internal sealed class PowerShellSemanticBinder
         }
         return new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, syntax.Extent), statements.ToArray());
     }
-
-    private static bool HasAncestor<TAst>(Ast syntax) where TAst : Ast
-    {
-        for (var parent = syntax.Parent; parent is not null; parent = parent.Parent)
-        {
-            if (parent is TAst) return true;
-            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst) return false;
-        }
-        return false;
-    }
-
-    private static bool HasBreakableAncestor(Ast syntax)
-        => HasAncestor<WhileStatementAst>(syntax) || HasAncestor<ForStatementAst>(syntax) ||
-           HasAncestor<ForEachStatementAst>(syntax) || HasAncestor<SwitchStatementAst>(syntax);
-
-    private static bool HasContinuableAncestor(Ast syntax)
-        => HasAncestor<WhileStatementAst>(syntax) || HasAncestor<ForStatementAst>(syntax) ||
-           HasAncestor<ForEachStatementAst>(syntax) || HasAncestor<SwitchStatementAst>(syntax);
 
     private static PowerShellBoundExpression? BindExpression(
         ParsedSourceDocument document,

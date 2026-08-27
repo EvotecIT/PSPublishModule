@@ -14,11 +14,13 @@ internal sealed class PowerShellTypedLowerer
         var functions = new List<PowerShellLoweredFunction>();
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
+        var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
         var bySymbol = program.Functions.ToDictionary(
             static function => function.Symbol.StableKey,
             function => new LoweringFunctionContext(
                 function,
                 streamBindings.Contains(function.Symbol.StableKey),
+                commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey)),
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
@@ -67,6 +69,15 @@ internal sealed class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1006",
+                    "Hosted command regions require the stream-backed PowerShell target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
 
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
@@ -102,6 +113,7 @@ internal sealed class PowerShellTypedLowerer
                 function.Help,
                 function.DeclaredOutputType,
                 streamBindings.Contains(function.Symbol.StableKey),
+                commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
                 statements.ToArray(),
                 function.Body.Span));
@@ -152,6 +164,26 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundTryStatement tryStatement => ContainsPowerShellStreamWrite(tryStatement.Body) ||
                 tryStatement.Catches.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
                 (tryStatement.FinallyBlock is not null && ContainsPowerShellStreamWrite(tryStatement.FinallyBlock)),
+            _ => false
+        };
+
+    private static bool ContainsPowerShellCommandRegion(PowerShellBoundBlock block)
+        => block.Statements.Any(StatementContainsPowerShellCommandRegion);
+
+    private static bool StatementContainsPowerShellCommandRegion(PowerShellBoundStatement statement)
+        => statement switch
+        {
+            PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement => true,
+            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
+                (conditional.ElseBlock is not null && ContainsPowerShellCommandRegion(conditional.ElseBlock)),
+            PowerShellBoundWhileStatement loop => ContainsPowerShellCommandRegion(loop.Body),
+            PowerShellBoundForStatement loop => ContainsPowerShellCommandRegion(loop.Body),
+            PowerShellBoundForEachStatement loop => ContainsPowerShellCommandRegion(loop.Body),
+            PowerShellBoundSwitchStatement switchStatement => switchStatement.Clauses.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
+                (switchStatement.DefaultBlock is not null && ContainsPowerShellCommandRegion(switchStatement.DefaultBlock)),
+            PowerShellBoundTryStatement tryStatement => ContainsPowerShellCommandRegion(tryStatement.Body) ||
+                tryStatement.Catches.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
+                (tryStatement.FinallyBlock is not null && ContainsPowerShellCommandRegion(tryStatement.FinallyBlock)),
             _ => false
         };
 
@@ -363,6 +395,11 @@ internal sealed class PowerShellTypedLowerer
                 stream.Span,
                 stream.Kind,
                 LowerExpression(stream.Message, functions, names, targetCapabilities)),
+            PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
+                region.Span,
+                region.Source,
+                region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray()),
+            PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
                 conditional.Clauses.Select(clause => new PowerShellLoweredConditionalClause(
@@ -568,6 +605,7 @@ internal sealed class PowerShellTypedLowerer
                         parameter.Contract.DefaultValue is not null ||
                         !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 && targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)),
                     target.RequiresPowerShellStreams,
+                    target.RequiresPowerShellCommandRegions,
                     target.RequiresPowerShellRuntimeState),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
@@ -583,6 +621,18 @@ internal sealed class PowerShellTypedLowerer
             result[parameterIndex] = names.Allocate("pf_local_argument");
         return result;
     }
+
+    private static PowerShellLoweredCommandCaptureStatement LowerCommandCapture(
+        PowerShellBoundCommandCaptureStatement capture,
+        IReadOnlyDictionary<string, Type> localTypes,
+        ISet<string> declared)
+        => new(
+            capture.Span,
+            capture.Target,
+            capture.TargetType,
+            localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
+            capture.Source,
+            capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray());
 
     private sealed class LoweredNameAllocator
     {
@@ -607,15 +657,18 @@ internal sealed class PowerShellTypedLowerer
         internal LoweringFunctionContext(
             PowerShellBoundFunction function,
             bool requiresPowerShellStreams,
+            bool requiresPowerShellCommandRegions,
             bool requiresPowerShellRuntimeState)
         {
             Function = function;
             RequiresPowerShellStreams = requiresPowerShellStreams;
+            RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
             RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         }
 
         internal PowerShellBoundFunction Function { get; }
         internal bool RequiresPowerShellStreams { get; }
+        internal bool RequiresPowerShellCommandRegions { get; }
         internal bool RequiresPowerShellRuntimeState { get; }
     }
 }

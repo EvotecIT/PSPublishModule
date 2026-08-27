@@ -577,6 +577,36 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void CommandRegionsAndTypedCapturesAreOwnedByBoundAndLoweredIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-RegionValue { param([string] $Name) [int] $count = 1; Write-Output $Name; [string] $captured = Write-Output $Name; $count += 1; return $captured }",
+            TestPath("command-region-ir.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net8.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Contains(function.Body.Statements, static statement => statement is PowerShellBoundCommandRegionStatement);
+        var capture = Assert.IsType<PowerShellBoundCommandCaptureStatement>(
+            Assert.Single(function.Body.Statements, static statement => statement is PowerShellBoundCommandCaptureStatement));
+        Assert.Equal("captured", capture.Target.Name);
+        var lowered = Assert.Single(result.Lowered.Functions);
+        Assert.True(lowered.RequiresPowerShellCommandRegions);
+        Assert.Contains(lowered.Statements, static statement => statement is PowerShellLoweredCommandRegionStatement);
+        Assert.Contains(lowered.Statements, static statement => statement is PowerShellLoweredCommandCaptureStatement);
+        var method = Assert.Single(result.Emitted.Methods);
+        Assert.True(method.RequiresPowerShellCommandRegions);
+        Assert.Contains("__invokePowerShellRegion", method.Source, StringComparison.Ordinal);
+        Assert.Contains("__invokePowerShellCapture", method.Source, StringComparison.Ordinal);
+        Assert.Contains("string captured =", method.Source, StringComparison.Ordinal);
+        Assert.Contains("count = checked((int)(count + 1))", method.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RuntimeLanguageConversionRemainsOutsideTheRuntimeFreeBoundPath()
     {
         var document = PowerShellSourceParser.Parse(

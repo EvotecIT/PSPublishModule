@@ -47,6 +47,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         string?[] evaluationTemporaryNames,
         bool requiresBoundParameters,
         bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState)
         : base(span, clrType)
     {
@@ -57,6 +58,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         EvaluationTemporaryNames = evaluationTemporaryNames;
         RequiresBoundParameters = requiresBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
     }
 
@@ -67,6 +69,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal string?[] EvaluationTemporaryNames { get; }
     internal bool RequiresBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
 }
 
@@ -160,6 +163,7 @@ internal sealed class PowerShellLoweredFunction
         PowerShellBoundHelpMetadata? help,
         Type? declaredOutputType,
         bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         PowerShellLoweredStatement[] statements,
         SourceSpan span)
@@ -172,6 +176,7 @@ internal sealed class PowerShellLoweredFunction
         Help = help;
         DeclaredOutputType = declaredOutputType;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         Statements = statements;
         Span = span;
@@ -185,6 +190,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
     internal PowerShellLoweredStatement[] Statements { get; }
     internal SourceSpan Span { get; }
