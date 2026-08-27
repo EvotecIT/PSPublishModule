@@ -72,6 +72,148 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.False(result.Rum.Requested);
     }
 
+    [Fact]
+    public async Task CollectOperations_PartitionsByProbeDurationAndUsesPageLimit()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxPageSize: 7, maxDuration: 3600),
+            2 or 3 => OperationalHttpResponse(),
+            4 or 5 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var options = CreateOperationalOptions(includeAccount: false);
+        options.SiteBaseUrl = "https://officeimo.com/products/powerforge/";
+
+        var result = await CreateCollector(client).CollectOperationsAsync(options);
+
+        Assert.True(result.Success);
+        Assert.Equal(6, result.RequestCount);
+        Assert.Contains("\"limit\":7", handler.Requests[2].Body, StringComparison.Ordinal);
+        Assert.Contains("2026-08-10T09:00:00Z", handler.Requests[2].Body, StringComparison.Ordinal);
+        Assert.Contains("2026-08-10T10:00:00Z", handler.Requests[3].Body, StringComparison.Ordinal);
+        Assert.Contains("clientRequestPath", handler.Requests[4].Body, StringComparison.Ordinal);
+        Assert.Contains("/products/powerforge", handler.Requests[4].Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CollectOperations_FailsClosedWhenProviderPageLimitIsReached()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(maxPageSize: 1),
+            2 => OperationalHttpResponse(HttpOperationRow("2026-08-10T09:00:00Z", "hit", 200, 10, 1000, 1)),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.False(result.Success);
+        Assert.Equal("row-limit-reached", result.Http.ErrorCode);
+        Assert.Empty(result.Hours);
+        Assert.Contains("\"limit\":1", handler.Requests[2].Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CollectOperations_TraversesRumPagesUntilZoneIsFound()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            4 => RumSitesPageResponse(includeMatch: false, totalPages: 2, itemCount: 50),
+            5 => RumSitesPageResponse(includeMatch: true, totalPages: 2, itemCount: 1),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.True(result.Rum.Configured);
+        Assert.Equal(6, result.RequestCount);
+        Assert.Contains("page=1", handler.Requests[4].Uri.Query, StringComparison.Ordinal);
+        Assert.Contains("page=2", handler.Requests[5].Uri.Query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CollectOperations_DiscardsPartialFirewallRowsWhenDatasetIsInvalid()
+    {
+        var invalidRow = new
+        {
+            count = 1UL,
+            avg = new { sampleInterval = 1d },
+            dimensions = new { datetimeHour = "2026-08-10T09:00:00Z", action = (string?)null }
+        };
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(HttpOperationRow("2026-08-10T09:00:00Z", "hit", 200, 10, 1000, 1)),
+            3 => OperationalFirewallResponse(FirewallOperationRow("2026-08-10T09:00:00Z", "block", 4, 1), invalidRow),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.True(result.Success);
+        Assert.False(result.Firewall.Success);
+        Assert.Single(result.Hours);
+        Assert.Equal(0, result.Hours[0].FirewallEvents);
+        Assert.Equal(0, result.Hours[0].FirewallMitigated);
+    }
+
+    [Fact]
+    public async Task CollectOperations_RejectsRowsMissingRequestedCategoryDimensions()
+    {
+        var missingCacheStatus = new
+        {
+            count = 1UL,
+            avg = new { sampleInterval = 1d },
+            sum = new { edgeResponseBytes = 100UL },
+            dimensions = new { datetimeHour = "2026-08-10T09:00:00Z", cacheStatus = (string?)null, edgeResponseStatus = 200 }
+        };
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(missingCacheStatus),
+            3 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.False(result.Success);
+        Assert.Equal("invalid-response", result.Http.ErrorCode);
+        Assert.Empty(result.Hours);
+    }
+
+    [Fact]
+    public async Task CollectOperations_MarksRumNotAttemptedWhenProbeFails()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => new HttpResponseMessage(HttpStatusCode.Forbidden),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.False(result.Success);
+        Assert.True(result.Rum.Requested);
+        Assert.Equal("not-attempted", result.Rum.ErrorCode);
+    }
+
     private static CloudflareOperationalCollectionOptions CreateOperationalOptions(bool includeAccount) => new()
     {
         SiteId = "officeimo",
@@ -115,4 +257,26 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         errors = Array.Empty<object>(),
         result = new[] { new { auto_install = autoInstall, ruleset = new { enabled, zone_tag = ZoneId } } }
     });
+
+    private static HttpResponseMessage RumSitesPageResponse(bool includeMatch, int totalPages, int itemCount)
+    {
+        var rows = Enumerable.Range(0, itemCount)
+            .Select(index => new
+            {
+                auto_install = includeMatch && index == 0,
+                ruleset = new
+                {
+                    enabled = includeMatch && index == 0,
+                    zone_tag = includeMatch && index == 0 ? ZoneId : index.ToString("x32")
+                }
+            })
+            .ToArray();
+        return JsonResponse(new
+        {
+            success = true,
+            errors = Array.Empty<object>(),
+            result = rows,
+            result_info = new { total_pages = totalPages }
+        });
+    }
 }

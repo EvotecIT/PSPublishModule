@@ -24,6 +24,8 @@ public sealed partial class CloudflareAnalyticsCollector
         {
             result.Http = FailedCapability(probe.ErrorCode!, probe.ErrorMessage!);
             result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because zone validation failed.");
+            if (result.Rum.Requested)
+                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because zone validation failed.");
             return result;
         }
 
@@ -34,77 +36,131 @@ public sealed partial class CloudflareAnalyticsCollector
         {
             result.Http = FailedCapability("credential-unavailable", "Cloudflare analytics credential resolution failed.");
             result.Firewall = FailedCapability("credential-unavailable", "Cloudflare analytics credential resolution failed.");
+            if (result.Rum.Requested)
+                result.Rum = FailedRum("credential-unavailable", "Cloudflare RUM credential resolution failed.");
             return result;
         }
 
-        var buckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
-        var httpResponse = await SendAsync<CloudflareOperationalData>(HttpOperationalQuery, new
-        {
-            zoneTag = options.ZoneId.ToLowerInvariant(),
-            filter = BuildTrafficFilter(options.SiteBaseUrl, options.FromUtc.UtcDateTime, options.ThroughUtc.UtcDateTime)
-        }, token, cancellationToken).ConfigureAwait(false);
-        result.RequestCount++;
-        if (!TryGetOperationalZone(httpResponse, out var httpZone, out var httpCode, out var httpMessage))
-            result.Http = FailedCapability(httpCode!, httpMessage!);
-        else
-            result.Http = TryMapHttp(httpZone!.Http, buckets, out var httpError)
-                ? new CloudflareOperationalCapabilityState { Success = true }
-                : FailedCapability("invalid-response", httpError!);
+        var http = await CollectHttpOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
+        result.RequestCount += http.RequestCount;
+        result.Http = http.State;
 
-        var firewallResponse = await SendAsync<CloudflareOperationalData>(FirewallOperationalQuery, new
-        {
-            zoneTag = options.ZoneId.ToLowerInvariant(),
-            filter = new Dictionary<string, object?>
-            {
-                ["datetime_geq"] = FormatUtc(options.FromUtc),
-                ["datetime_lt"] = FormatUtc(options.ThroughUtc),
-                ["clientRequestHTTPHost"] = new Uri(options.SiteBaseUrl).IdnHost.TrimEnd('.').ToLowerInvariant()
-            }
-        }, token, cancellationToken).ConfigureAwait(false);
-        result.RequestCount++;
-        if (!TryGetOperationalZone(firewallResponse, out var firewallZone, out var firewallCode, out var firewallMessage))
-            result.Firewall = FailedCapability(firewallCode!, firewallMessage!);
-        else
-            result.Firewall = TryMapFirewall(firewallZone!.Firewall, buckets, out var firewallError)
-                ? new CloudflareOperationalCapabilityState { Success = true }
-                : FailedCapability("invalid-response", firewallError!);
-        result.Hours = buckets.Values.OrderBy(value => value.HourUtc).ToArray();
+        var firewall = await CollectFirewallOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
+        result.RequestCount += firewall.RequestCount;
+        result.Firewall = firewall.State;
+        result.Hours = CombineBuckets(http.Buckets, firewall.Buckets);
         result.Success = result.Http.Success;
 
         if (!string.IsNullOrWhiteSpace(options.AccountId))
         {
-            result.Rum = await InspectRumSiteAsync(options.AccountId!, options.ZoneId, token, cancellationToken).ConfigureAwait(false);
-            result.RequestCount++;
+            var rum = await InspectRumSiteAsync(options.AccountId!, options.ZoneId, token, cancellationToken).ConfigureAwait(false);
+            result.Rum = rum.State;
+            result.RequestCount += rum.RequestCount;
         }
         return result;
     }
 
-    private async Task<CloudflareRumSiteState> InspectRumSiteAsync(string accountId, string zoneId, string token, CancellationToken cancellationToken)
+    private async Task<OperationalPartitionResult> CollectHttpOperationsAsync(
+        CloudflareOperationalCollectionOptions options,
+        CloudflareAnalyticsCapabilityProbeResult probe,
+        string token,
+        CancellationToken cancellationToken)
     {
+        var buckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
+        var requestCount = 0;
+        foreach (var partition in BuildOperationalPartitions(options, probe))
+        {
+            var response = await SendAsync<CloudflareOperationalData>(HttpOperationalQuery, new
+            {
+                zoneTag = options.ZoneId.ToLowerInvariant(),
+                limit = probe.MaxPageSize,
+                filter = BuildTrafficFilter(options.SiteBaseUrl, partition.FromUtc.UtcDateTime, partition.ThroughUtc.UtcDateTime)
+            }, token, cancellationToken).ConfigureAwait(false);
+            requestCount++;
+            if (!TryGetOperationalZone(response, out var zone, out var code, out var message))
+                return OperationalPartitionResult.Failed(code!, message!, requestCount);
+            if (zone!.Http is not { } rows)
+                return OperationalPartitionResult.Failed("invalid-response", "Cloudflare returned no HTTP operational dataset.", requestCount);
+            if (rows.Length >= probe.MaxPageSize)
+                return OperationalPartitionResult.Failed("row-limit-reached", "Cloudflare reached the HTTP operational row limit, so the requested range cannot be marked complete.", requestCount);
+            var partitionBuckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
+            if (!TryMapHttp(rows, partitionBuckets, out var error))
+                return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
+            if (!TryMergeBuckets(buckets, partitionBuckets, out error))
+                return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
+        }
+        return OperationalPartitionResult.Succeeded(buckets, requestCount);
+    }
+
+    private async Task<OperationalPartitionResult> CollectFirewallOperationsAsync(
+        CloudflareOperationalCollectionOptions options,
+        CloudflareAnalyticsCapabilityProbeResult probe,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        var buckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
+        var requestCount = 0;
+        foreach (var partition in BuildOperationalPartitions(options, probe))
+        {
+            var response = await SendAsync<CloudflareOperationalData>(FirewallOperationalQuery, new
+            {
+                zoneTag = options.ZoneId.ToLowerInvariant(),
+                limit = probe.MaxPageSize,
+                filter = BuildFirewallFilter(options.SiteBaseUrl, partition.FromUtc, partition.ThroughUtc)
+            }, token, cancellationToken).ConfigureAwait(false);
+            requestCount++;
+            if (!TryGetOperationalZone(response, out var zone, out var code, out var message))
+                return OperationalPartitionResult.Failed(code!, message!, requestCount);
+            if (zone!.Firewall is not { } rows)
+                return OperationalPartitionResult.Failed("invalid-response", "Cloudflare returned no firewall dataset.", requestCount);
+            if (rows.Length >= probe.MaxPageSize)
+                return OperationalPartitionResult.Failed("row-limit-reached", "Cloudflare reached the firewall operational row limit, so the requested range cannot be marked complete.", requestCount);
+            var partitionBuckets = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
+            if (!TryMapFirewall(rows, partitionBuckets, out var error))
+                return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
+            if (!TryMergeBuckets(buckets, partitionBuckets, out error))
+                return OperationalPartitionResult.Failed("invalid-response", error!, requestCount);
+        }
+        return OperationalPartitionResult.Succeeded(buckets, requestCount);
+    }
+
+    private async Task<(CloudflareRumSiteState State, int RequestCount)> InspectRumSiteAsync(string accountId, string zoneId, string token, CancellationToken cancellationToken)
+    {
+        var requestCount = 0;
         try
         {
-            var endpoint = new Uri(_endpoint, $"accounts/{accountId.ToLowerInvariant()}/rum/site_info/list?per_page=50");
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                return FailedRum(MapStatus(response.StatusCode), $"Cloudflare RUM site lookup returned HTTP {(int)response.StatusCode}.");
-            var envelope = await response.Content.ReadFromJsonAsync<CloudflareRumSitesEnvelope>(JsonOptions, cancellationToken).ConfigureAwait(false);
-            if (envelope?.Success != true || envelope.Errors.Length > 0)
-                return FailedRum("rum-lookup-error", "Cloudflare RUM site lookup returned errors.");
-            var site = envelope.Result.FirstOrDefault(value => string.Equals(value.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase));
-            return new CloudflareRumSiteState
+            for (var page = 1;; page++)
             {
-                Requested = true,
-                Configured = site is not null,
-                Enabled = site?.Ruleset?.Enabled == true,
-                AutoInstall = site?.AutoInstall == true
-            };
+                var endpoint = new Uri(_endpoint, $"accounts/{accountId.ToLowerInvariant()}/rum/site_info/list?per_page=50&page={page.ToString(CultureInfo.InvariantCulture)}");
+                using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                requestCount++;
+                if (!response.IsSuccessStatusCode)
+                    return (FailedRum(MapStatus(response.StatusCode), $"Cloudflare RUM site lookup returned HTTP {(int)response.StatusCode}."), requestCount);
+                var envelope = await response.Content.ReadFromJsonAsync<CloudflareRumSitesEnvelope>(JsonOptions, cancellationToken).ConfigureAwait(false);
+                if (envelope?.Success != true || envelope.Errors.Length > 0)
+                    return (FailedRum("rum-lookup-error", "Cloudflare RUM site lookup returned errors."), requestCount);
+                var site = envelope.Result.FirstOrDefault(value => string.Equals(value.Ruleset?.ZoneTag, zoneId, StringComparison.OrdinalIgnoreCase));
+                if (site is not null)
+                    return (new CloudflareRumSiteState { Requested = true, Configured = true, Enabled = site.Ruleset?.Enabled == true, AutoInstall = site.AutoInstall == true }, requestCount);
+
+                var totalPages = envelope.ResultInfo?.TotalPages;
+                if (totalPages is > 0)
+                {
+                    if (page >= totalPages.Value)
+                        return (new CloudflareRumSiteState { Requested = true }, requestCount);
+                    continue;
+                }
+                if (envelope.Result.Length < 50)
+                    return (new CloudflareRumSiteState { Requested = true }, requestCount);
+                return (FailedRum("invalid-response", "Cloudflare RUM site lookup omitted pagination metadata for a full page."), requestCount);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (JsonException) { return FailedRum("invalid-response", "Cloudflare RUM site lookup returned invalid JSON."); }
-        catch { return FailedRum("request-failed", "Cloudflare RUM site lookup failed."); }
+        catch (JsonException) { return (FailedRum("invalid-response", "Cloudflare RUM site lookup returned invalid JSON."), requestCount); }
+        catch { return (FailedRum("request-failed", "Cloudflare RUM site lookup failed."), requestCount); }
     }
 
     private static bool TryMapHttp(IEnumerable<CloudflareHttpOperationalGroup?>? rows, IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets, out string? error)
@@ -115,7 +171,8 @@ public sealed partial class CloudflareAnalyticsCollector
         {
             if (row?.Count is null || row.Average?.SampleInterval is null || row.Sum?.EdgeResponseBytes is null ||
                 row.Sum.EdgeResponseBytes.Value > long.MaxValue || row.Dimensions?.HourUtc is null ||
-                row.Dimensions.EdgeResponseStatus is null || !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
+                row.Dimensions.EdgeResponseStatus is null || string.IsNullOrWhiteSpace(row.Dimensions.CacheStatus) ||
+                !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
                 !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count))
             { error = "Cloudflare returned an invalid HTTP operational row."; return false; }
             var hour = NormalizeHour(row.Dimensions.HourUtc.Value);
@@ -144,7 +201,7 @@ public sealed partial class CloudflareAnalyticsCollector
         if (rows is null) { error = "Cloudflare returned no firewall dataset."; return false; }
         foreach (var row in rows)
         {
-            if (row?.Count is null || row.Average?.SampleInterval is null || row.Dimensions?.HourUtc is null ||
+            if (row?.Count is null || row.Average?.SampleInterval is null || row.Dimensions?.HourUtc is null || string.IsNullOrWhiteSpace(row.Dimensions.Action) ||
                 !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
                 !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count))
             { error = "Cloudflare returned an invalid firewall row."; return false; }
@@ -162,6 +219,82 @@ public sealed partial class CloudflareAnalyticsCollector
             }
         }
         return true;
+    }
+
+    private static IEnumerable<(DateTimeOffset FromUtc, DateTimeOffset ThroughUtc)> BuildOperationalPartitions(
+        CloudflareOperationalCollectionOptions options,
+        CloudflareAnalyticsCapabilityProbeResult probe)
+    {
+        var duration = TimeSpan.FromSeconds(probe.MaxDurationSeconds ?? throw new InvalidOperationException("Cloudflare capability probe omitted the maximum duration."));
+        for (var start = options.FromUtc; start < options.ThroughUtc;)
+        {
+            var candidateEnd = start + duration;
+            var end = candidateEnd < options.ThroughUtc ? candidateEnd : options.ThroughUtc;
+            yield return (start, end);
+            start = end;
+        }
+    }
+
+    private static Dictionary<string, object?> BuildFirewallFilter(string siteBaseUrl, DateTimeOffset fromUtc, DateTimeOffset throughUtc)
+    {
+        var siteUri = new Uri(siteBaseUrl, UriKind.Absolute);
+        var sitePath = NormalizeSitePath(siteUri.AbsolutePath);
+        var filter = new Dictionary<string, object?>
+        {
+            ["datetime_geq"] = FormatUtc(fromUtc),
+            ["datetime_lt"] = FormatUtc(throughUtc),
+            ["clientRequestHTTPHost"] = siteUri.IdnHost.TrimEnd('.').ToLowerInvariant()
+        };
+        if (sitePath != "/")
+        {
+            var exactPath = sitePath.TrimEnd('/');
+            filter["OR"] = new object[]
+            {
+                new Dictionary<string, string> { ["clientRequestPath"] = exactPath },
+                new Dictionary<string, string> { ["clientRequestPath_like"] = exactPath + "/%" }
+            };
+        }
+        return filter;
+    }
+
+    private static bool TryMergeBuckets(
+        IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> destination,
+        IReadOnlyDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> source,
+        out string? error)
+    {
+        error = null;
+        try
+        {
+            foreach (var pair in source)
+            {
+                var target = GetBucket(destination, pair.Key);
+                var value = pair.Value;
+                target.Requests = checked(target.Requests + value.Requests);
+                target.CachedRequests = checked(target.CachedRequests + value.CachedRequests);
+                target.ClientErrors = checked(target.ClientErrors + value.ClientErrors);
+                target.ServerErrors = checked(target.ServerErrors + value.ServerErrors);
+                target.EdgeResponseBytes = checked(target.EdgeResponseBytes + value.EdgeResponseBytes);
+                target.FirewallEvents = checked(target.FirewallEvents + value.FirewallEvents);
+                target.FirewallMitigated = checked(target.FirewallMitigated + value.FirewallMitigated);
+                target.MaximumSampleInterval = Math.Max(target.MaximumSampleInterval, value.MaximumSampleInterval);
+            }
+            return true;
+        }
+        catch (OverflowException)
+        {
+            error = "Cloudflare returned operational values outside the supported range.";
+            return false;
+        }
+    }
+
+    private static CloudflareHourlyOperationalObservation[] CombineBuckets(
+        IReadOnlyDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> http,
+        IReadOnlyDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> firewall)
+    {
+        var combined = new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>();
+        _ = TryMergeBuckets(combined, http, out _);
+        _ = TryMergeBuckets(combined, firewall, out _);
+        return combined.Values.OrderBy(value => value.HourUtc).ToArray();
     }
 
     private static CloudflareHourlyOperationalObservation GetBucket(IDictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets, DateTimeOffset hour)
@@ -211,9 +344,9 @@ public sealed partial class CloudflareAnalyticsCollector
     }
 
     private const string HttpOperationalQuery = """
-        query PowerForgeCloudflareHttpOperations($zoneTag: string, $filter: ZoneHttpRequestsAdaptiveGroupsFilter_InputObject) {
+        query PowerForgeCloudflareHttpOperations($zoneTag: string, $filter: ZoneHttpRequestsAdaptiveGroupsFilter_InputObject, $limit: Int) {
           viewer { zones(filter: { zoneTag: $zoneTag }) {
-            http: httpRequestsAdaptiveGroups(filter: $filter, limit: 10000) {
+            http: httpRequestsAdaptiveGroups(filter: $filter, limit: $limit) {
               count avg { sampleInterval } sum { edgeResponseBytes } dimensions { datetimeHour cacheStatus edgeResponseStatus }
             }
           } }
@@ -221,12 +354,35 @@ public sealed partial class CloudflareAnalyticsCollector
         """;
 
     private const string FirewallOperationalQuery = """
-        query PowerForgeCloudflareFirewallOperations($zoneTag: string, $filter: ZoneFirewallEventsAdaptiveGroupsFilter_InputObject) {
+        query PowerForgeCloudflareFirewallOperations($zoneTag: string, $filter: ZoneFirewallEventsAdaptiveGroupsFilter_InputObject, $limit: Int) {
           viewer { zones(filter: { zoneTag: $zoneTag }) {
-            firewall: firewallEventsAdaptiveGroups(filter: $filter, limit: 10000) {
+            firewall: firewallEventsAdaptiveGroups(filter: $filter, limit: $limit) {
               count avg { sampleInterval } dimensions { datetimeHour action }
             }
           } }
         }
         """;
+
+    private sealed class OperationalPartitionResult
+    {
+        private OperationalPartitionResult(
+            CloudflareOperationalCapabilityState state,
+            Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets,
+            int requestCount)
+        {
+            State = state;
+            Buckets = buckets;
+            RequestCount = requestCount;
+        }
+
+        public CloudflareOperationalCapabilityState State { get; }
+        public Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> Buckets { get; }
+        public int RequestCount { get; }
+
+        public static OperationalPartitionResult Succeeded(Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation> buckets, int requestCount) =>
+            new(new CloudflareOperationalCapabilityState { Success = true }, buckets, requestCount);
+
+        public static OperationalPartitionResult Failed(string code, string message, int requestCount) =>
+            new(FailedCapability(code, message), new Dictionary<DateTimeOffset, CloudflareHourlyOperationalObservation>(), requestCount);
+    }
 }

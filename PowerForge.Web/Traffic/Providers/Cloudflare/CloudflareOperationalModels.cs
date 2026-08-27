@@ -127,6 +127,11 @@ internal sealed class CloudflareRumSitesEnvelope
     [JsonPropertyName("success")] public bool? Success { get; set; }
     [JsonPropertyName("result")] public CloudflareRumSiteInfo[] Result { get; set; } = Array.Empty<CloudflareRumSiteInfo>();
     [JsonPropertyName("errors")] public CloudflareApiError[] Errors { get; set; } = Array.Empty<CloudflareApiError>();
+    [JsonPropertyName("result_info")] public CloudflareRumResultInfo? ResultInfo { get; set; }
+}
+internal sealed class CloudflareRumResultInfo
+{
+    [JsonPropertyName("total_pages")] public int? TotalPages { get; set; }
 }
 internal sealed class CloudflareRumSiteInfo
 {
