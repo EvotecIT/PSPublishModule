@@ -167,6 +167,12 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Versioned command semantic providers used by the generated method.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
 
+    /// <summary>Advanced-function lifecycle contract when this generated cmdlet uses a hosted steppable pipeline.</summary>
+    public PowerShellCompilationLifecycleContract? Lifecycle { get; internal set; }
+
+    /// <summary>Authored function source used only by the generated hosted lifecycle implementation.</summary>
+    internal string HostedLifecycleSource { get; set; } = string.Empty;
+
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }
 

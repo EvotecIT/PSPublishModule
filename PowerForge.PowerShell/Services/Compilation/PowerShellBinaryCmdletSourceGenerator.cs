@@ -304,6 +304,13 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine($"    public object[] {RemainingArgumentsMemberName} {{ get; set; }} = global::System.Array.Empty<object>();");
             builder.AppendLine();
         }
+        if (cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
+        {
+            PowerShellHostedLifecycleSourceGenerator.AppendMembers(builder, cmdlet.Method);
+            builder.AppendLine("}");
+            builder.AppendLine();
+            return;
+        }
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
         {
             builder.AppendLine("    private void InvokePowerShellRegion(string script, object?[] arguments)");
@@ -385,6 +392,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine("}");
         builder.AppendLine();
     }
+
 
     private static void AppendInvariantParameterAttribute(StringBuilder builder)
     {

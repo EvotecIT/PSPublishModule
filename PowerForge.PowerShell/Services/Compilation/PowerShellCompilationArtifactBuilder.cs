@@ -141,14 +141,24 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         throw new InvalidOperationException(
                             "Strict binary-module compilation rejects runtime-controlled Export-ModuleMember declarations because their export surface requires PowerShell execution; use Hybrid mode or unconditional literal exports.");
                     }
-                    exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
+                    {
                         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework);
+                        typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework);
+                    }
+                    exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
                     typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework);
                 }
                 if (typed.Methods.Length == 0 &&
                     !(spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid))
                 {
+                    if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
+                        spec.Mode == PowerShellCompilationMode.Strict &&
+                        PowerShellAdvancedFunctionLifecyclePlanner.HasNamedLifecycle(compilationSourcePaths))
+                    {
+                        throw new InvalidOperationException(
+                            "Strict binary-module compilation rejects hosted advanced-function begin/process/end/clean lifecycle blocks; use Hybrid mode until these blocks have a runtime-free typed lifecycle owner.");
+                    }
                     var blockerSummary = DescribeBlockers(typed.Diagnostics);
                     throw new InvalidOperationException(string.IsNullOrWhiteSpace(blockerSummary)
                         ? "No PowerShell functions were eligible for typed CLR compilation."
@@ -163,8 +173,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
                     runtimeRoutedUnits = exportedFunctions is null
-                        ? typed.Methods.Length
-                        : exportedFunctions.Count(name => typed.Methods.Any(method => method.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase)));
+                        ? typed.Methods.Count(static method => method.Lifecycle is null)
+                        : exportedFunctions.Count(name => typed.Methods.Any(method =>
+                            method.Lifecycle is null &&
+                            method.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase)));
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),
@@ -190,8 +202,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
                     (runtimeRoutedUnits != plan.TotalUnits || runtimeManifestHooks.Length > 0);
-                compiledUnits = typed.Methods.Length;
-                compiledMethods = typed.Methods.Length;
+                compiledUnits = typed.Methods.Count(static method => method.Lifecycle is null);
+                compiledMethods = compiledUnits;
                 compiledMethodDetails = typed.Methods;
             }
             else
@@ -365,6 +377,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Select(static group => group.First())
                         .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
                         .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
+                        .ToArray(),
+                    Lifecycles = compiledMethodDetails.Where(static method => method.Lifecycle is not null)
+                        .Select(static method => method.Lifecycle!)
+                        .OrderBy(static lifecycle => lifecycle.SourceSha256, StringComparer.Ordinal)
                         .ToArray(),
                     ResourceSummary = PowerShellCompilationResourceSummary.Create(dependencyPlan),
                     Diagnostics = diagnostics

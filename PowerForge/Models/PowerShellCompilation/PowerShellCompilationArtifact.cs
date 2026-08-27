@@ -305,6 +305,9 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
 
+    /// <summary>Hosted advanced-function lifecycle contracts generated for Hybrid binary cmdlets.</summary>
+    public PowerShellCompilationLifecycleContract[] Lifecycles { get; set; } = Array.Empty<PowerShellCompilationLifecycleContract>();
+
     /// <summary>Resource selection totals for the produced artifact.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; set; } = new();
 
