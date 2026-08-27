@@ -19,6 +19,11 @@ internal static class PowerShellOperatorSemanticBinder
             return BindRegexMatch(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Replace" or "Ireplace" or "Creplace")
             return BindRegexReplace(syntax, span, operation, bindOperand, diagnostics);
+        if (operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike")
+            return BindWildcard(syntax, span, operation, bindOperand, diagnostics);
+        if (operation is "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
+            "Iin" or "Cin" or "Inotin" or "Cnotin")
+            return BindMembership(syntax, span, operation, bindOperand, diagnostics);
 
         var left = bindOperand(syntax.Left);
         var right = bindOperand(syntax.Right);
@@ -191,6 +196,55 @@ internal static class PowerShellOperatorSemanticBinder
             pattern,
             replacement,
             !operation.StartsWith("C", StringComparison.Ordinal));
+    }
+
+    private static PowerShellBoundExpression? BindWildcard(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        string operation,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var input = bindOperand(syntax.Left);
+        var pattern = bindOperand(syntax.Right);
+        if (input is null || pattern is null) return null;
+        if (input.Type.ClrType != typeof(string) || pattern.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2225", $"Operator '-{operation.ToLowerInvariant()}' requires scalar String operands.");
+        return new PowerShellBoundWildcardExpression(
+            span,
+            input,
+            pattern,
+            ignoreCase: operation.StartsWith("I", StringComparison.Ordinal),
+            negate: operation.Contains("not", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PowerShellBoundExpression? BindMembership(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        string operation,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var left = bindOperand(syntax.Left);
+        var right = bindOperand(syntax.Right);
+        if (left is null || right is null) return null;
+        var collectionOnRight = operation.EndsWith("in", StringComparison.OrdinalIgnoreCase);
+        var collection = collectionOnRight ? right : left;
+        var candidate = collectionOnRight ? left : right;
+        var collectionType = collection.Type.ClrType;
+        if (!collectionType.IsArray || collectionType.GetArrayRank() != 1)
+            return Reject(diagnostics, span, "PSB2226", $"Operator '-{operation.ToLowerInvariant()}' requires a statically typed one-dimensional array on its collection side.");
+        var elementType = collectionType.GetElementType()!;
+        if (candidate.Type.ClrType != elementType && !PowerShellClrTypeSemantics.CanAssign(elementType, candidate.Type.ClrType))
+            return Reject(diagnostics, span, "PSB2227", $"Operator '-{operation.ToLowerInvariant()}' requires a candidate assignable to array element type '{elementType.FullName}'.");
+        return new PowerShellBoundMembershipExpression(
+            span,
+            left,
+            right,
+            elementType,
+            collectionOnRight,
+            ignoreCase: operation.StartsWith("I", StringComparison.Ordinal),
+            negate: operation.Contains("not", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ObservesMatchesAutomaticVariable(Ast syntax)

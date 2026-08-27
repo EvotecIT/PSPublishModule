@@ -134,7 +134,7 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
 internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundThrowStatement(SourceSpan span, PowerShellBoundExpression? expression)
-        : base(span, PowerShellSemanticEffect.TerminatingError)
+        : base(span, PowerShellSemanticEffect.TerminatingError | (expression?.Effects ?? PowerShellSemanticEffect.None), expression?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         Expression = expression;
     }

@@ -250,6 +250,8 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
             PowerShellLoweredTypeTestExpression typeTest => EmitTypeTest(typeTest),
             PowerShellLoweredRegexExpression regex => EmitRegex(regex),
+            PowerShellLoweredWildcardExpression wildcard => EmitWildcard(wildcard),
+            PowerShellLoweredMembershipExpression membership => EmitMembership(membership),
             PowerShellLoweredMutationExpression mutation => EmitMutation(
                 mutation.Target,
                 mutation.TargetClrType,
@@ -316,6 +318,25 @@ internal sealed class PowerShellBoundCSharpBackend
         }
         var match = $"global::System.Text.RegularExpressions.Regex.IsMatch(({input} ?? string.Empty), ({pattern} ?? string.Empty), {options})";
         return expression.Operation == PowerShellBoundRegexOperation.NotMatch ? $"!({match})" : match;
+    }
+
+    private static string EmitWildcard(PowerShellLoweredWildcardExpression expression)
+    {
+        var options = expression.IgnoreCase
+            ? "global::System.Management.Automation.WildcardOptions.IgnoreCase"
+            : "global::System.Management.Automation.WildcardOptions.None";
+        var match = $"new global::System.Management.Automation.WildcardPattern(({expression.PatternTemporary} ?? string.Empty), {options}).IsMatch(({expression.InputTemporary} ?? string.Empty))";
+        if (expression.Negate) match = $"!({match})";
+        return $"new global::System.Func<bool>(() => {{ var {expression.InputTemporary} = {EmitExpression(expression.Input)}; var {expression.PatternTemporary} = {EmitExpression(expression.Pattern)}; return {match}; }})()";
+    }
+
+    private static string EmitMembership(PowerShellLoweredMembershipExpression expression)
+    {
+        var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
+        var candidate = expression.CollectionOnRight ? expression.LeftTemporary : expression.RightTemporary;
+        var comparison = $"global::System.Linq.Enumerable.Any(({collection} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(expression.ElementType)}>()), {expression.ItemTemporary} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){expression.ItemTemporary}, (object?)({candidate}), {(expression.IgnoreCase ? "true" : "false")}, global::System.Globalization.CultureInfo.InvariantCulture))";
+        if (expression.Negate) comparison = $"!({comparison})";
+        return $"new global::System.Func<bool>(() => {{ var {expression.LeftTemporary} = {EmitExpression(expression.Left)}; var {expression.RightTemporary} = {EmitExpression(expression.Right)}; return {comparison}; }})()";
     }
 
     private static string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)

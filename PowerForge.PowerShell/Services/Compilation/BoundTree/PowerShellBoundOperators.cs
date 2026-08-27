@@ -120,3 +120,63 @@ internal sealed class PowerShellBoundRegexExpression : PowerShellBoundExpression
     internal PowerShellBoundExpression? Replacement { get; }
     internal bool IgnoreCase { get; }
 }
+
+internal sealed class PowerShellBoundWildcardExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundWildcardExpression(
+        SourceSpan span,
+        PowerShellBoundExpression input,
+        PowerShellBoundExpression pattern,
+        bool ignoreCase,
+        bool negate)
+        : base(
+            span,
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The wildcard operator binds one PowerShell-hosted WildcardPattern operation."),
+            PowerShellValueState.Unknown,
+            input.Effects | pattern.Effects,
+            input.Capabilities | pattern.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators)
+    {
+        Input = input;
+        Pattern = pattern;
+        IgnoreCase = ignoreCase;
+        Negate = negate;
+    }
+
+    internal PowerShellBoundExpression Input { get; }
+    internal PowerShellBoundExpression Pattern { get; }
+    internal bool IgnoreCase { get; }
+    internal bool Negate { get; }
+}
+
+internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundMembershipExpression(
+        SourceSpan span,
+        PowerShellBoundExpression left,
+        PowerShellBoundExpression right,
+        Type elementType,
+        bool collectionOnRight,
+        bool ignoreCase,
+        bool negate)
+        : base(
+            span,
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator binds one invariant PowerShell LanguagePrimitives comparison."),
+            PowerShellValueState.Unknown,
+            left.Effects | right.Effects,
+            left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators)
+    {
+        Left = left;
+        Right = right;
+        ElementType = elementType;
+        CollectionOnRight = collectionOnRight;
+        IgnoreCase = ignoreCase;
+        Negate = negate;
+    }
+
+    internal PowerShellBoundExpression Left { get; }
+    internal PowerShellBoundExpression Right { get; }
+    internal Type ElementType { get; }
+    internal bool CollectionOnRight { get; }
+    internal bool IgnoreCase { get; }
+    internal bool Negate { get; }
+}

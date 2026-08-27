@@ -61,3 +61,68 @@ internal sealed class PowerShellLoweredRegexExpression : PowerShellLoweredExpres
     internal PowerShellLoweredExpression? Replacement { get; }
     internal bool IgnoreCase { get; }
 }
+
+internal sealed class PowerShellLoweredWildcardExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredWildcardExpression(
+        SourceSpan span,
+        PowerShellLoweredExpression input,
+        PowerShellLoweredExpression pattern,
+        bool ignoreCase,
+        bool negate,
+        string inputTemporary,
+        string patternTemporary)
+        : base(span, typeof(bool))
+    {
+        Input = input;
+        Pattern = pattern;
+        IgnoreCase = ignoreCase;
+        Negate = negate;
+        InputTemporary = inputTemporary;
+        PatternTemporary = patternTemporary;
+    }
+
+    internal PowerShellLoweredExpression Input { get; }
+    internal PowerShellLoweredExpression Pattern { get; }
+    internal bool IgnoreCase { get; }
+    internal bool Negate { get; }
+    internal string InputTemporary { get; }
+    internal string PatternTemporary { get; }
+}
+
+internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredMembershipExpression(
+        SourceSpan span,
+        PowerShellLoweredExpression left,
+        PowerShellLoweredExpression right,
+        Type elementType,
+        bool collectionOnRight,
+        bool ignoreCase,
+        bool negate,
+        string leftTemporary,
+        string rightTemporary,
+        string itemTemporary)
+        : base(span, typeof(bool))
+    {
+        Left = left;
+        Right = right;
+        ElementType = elementType;
+        CollectionOnRight = collectionOnRight;
+        IgnoreCase = ignoreCase;
+        Negate = negate;
+        LeftTemporary = leftTemporary;
+        RightTemporary = rightTemporary;
+        ItemTemporary = itemTemporary;
+    }
+
+    internal PowerShellLoweredExpression Left { get; }
+    internal PowerShellLoweredExpression Right { get; }
+    internal Type ElementType { get; }
+    internal bool CollectionOnRight { get; }
+    internal bool IgnoreCase { get; }
+    internal bool Negate { get; }
+    internal string LeftTemporary { get; }
+    internal string RightTemporary { get; }
+    internal string ItemTemporary { get; }
+}

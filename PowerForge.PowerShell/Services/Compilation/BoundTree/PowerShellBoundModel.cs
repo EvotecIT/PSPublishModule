@@ -104,7 +104,8 @@ internal enum PowerShellRequiredCapability
     Network = 8,
     NativeProcess = 16,
     Com = 32,
-    Reflection = 64
+    Reflection = 64,
+    PowerShellLanguageOperators = 128
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -174,8 +175,13 @@ internal abstract class PowerShellBoundStatement : PowerShellBoundNode
 
 internal abstract class PowerShellBoundExpression : PowerShellBoundNode
 {
-    protected PowerShellBoundExpression(SourceSpan span, PowerShellTypeFact type, PowerShellValueState valueState)
-        : base(span, type, valueState, PowerShellOutputCardinality.Scalar, PowerShellSemanticEffect.None, PowerShellRequiredCapability.None, PowerShellExecutionDisposition.Typed)
+    protected PowerShellBoundExpression(
+        SourceSpan span,
+        PowerShellTypeFact type,
+        PowerShellValueState valueState,
+        PowerShellSemanticEffect effects = PowerShellSemanticEffect.None,
+        PowerShellRequiredCapability capabilities = PowerShellRequiredCapability.None)
+        : base(span, type, valueState, PowerShellOutputCardinality.Scalar, effects, capabilities, PowerShellExecutionDisposition.Typed)
     {
     }
 }
@@ -241,7 +247,8 @@ internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
     internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue = true)
         : base(span,
             (expression is null || !emitsValue ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
-            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None))
+            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
+            expression?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         Expression = expression;
         EmitsValue = expression is not null && emitsValue;
@@ -256,7 +263,8 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
     internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput)
         : base(span,
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
-            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None))
+            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
+            expression.Capabilities)
     {
         Expression = expression;
         EmitsOutput = emitsOutput;
@@ -275,7 +283,7 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
         bool checkedIntegral = false)
-        : base(span, PowerShellSemanticEffect.Mutation)
+        : base(span, PowerShellSemanticEffect.Mutation | value.Effects, value.Capabilities)
     {
         Target = target;
         Value = value;

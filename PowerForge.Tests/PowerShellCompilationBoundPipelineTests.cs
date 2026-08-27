@@ -484,6 +484,33 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void HostedWildcardAndMembershipOperatorsCarryCapabilityAndEvaluationPlan()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Test-Wildcard { param([string] $Value) return $Value -like 'A*' } function Test-Membership { param([string] $Value) return $Value -in @('A', 'B') }",
+            TestPath("hosted-language-operators.ps1"));
+
+        var unsupported = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+        Assert.Empty(unsupported.Emitted.Methods);
+        Assert.All(unsupported.Analyzed.Functions, static function =>
+            Assert.True(function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators)));
+        Assert.Contains(unsupported.Emitted.Diagnostics, static diagnostic => diagnostic.Code == "PSL1002");
+
+        var supported = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net8.0",
+            PowerShellCompilationCapability.PowerShellLanguageOperators);
+        Assert.Empty(supported.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var wildcard = Assert.IsType<PowerShellLoweredWildcardExpression>(
+            Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(Assert.Single(supported.Lowered.Functions, static function => function.Symbol.Name == "Test-Wildcard").Statements)).Expression);
+        Assert.NotEqual(wildcard.InputTemporary, wildcard.PatternTemporary);
+        var membership = Assert.IsType<PowerShellLoweredMembershipExpression>(
+            Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(Assert.Single(supported.Lowered.Functions, static function => function.Symbol.Name == "Test-Membership").Statements)).Expression);
+        Assert.True(membership.CollectionOnRight);
+        Assert.Contains("LanguagePrimitives.Equals", Assert.Single(supported.Emitted.Methods, static method => method.GeneratedName == "Test_Membership").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RuntimeLanguageConversionRemainsOutsideTheRuntimeFreeBoundPath()
     {
         var document = PowerShellSourceParser.Parse(

@@ -23,6 +23,15 @@ internal sealed class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageOperators))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1002",
+                    "PowerShell wildcard or membership semantics require the PowerShell language-operator target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
 
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
@@ -331,6 +340,25 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(regex.Pattern, functions, names, targetCapabilities),
                 regex.Replacement is null ? null : LowerExpression(regex.Replacement, functions, names, targetCapabilities),
                 regex.IgnoreCase),
+            PowerShellBoundWildcardExpression wildcard => new PowerShellLoweredWildcardExpression(
+                wildcard.Span,
+                LowerExpression(wildcard.Input, functions, names, targetCapabilities),
+                LowerExpression(wildcard.Pattern, functions, names, targetCapabilities),
+                wildcard.IgnoreCase,
+                wildcard.Negate,
+                names.Allocate("wildcard_left"),
+                names.Allocate("wildcard_right")),
+            PowerShellBoundMembershipExpression membership => new PowerShellLoweredMembershipExpression(
+                membership.Span,
+                LowerExpression(membership.Left, functions, names, targetCapabilities),
+                LowerExpression(membership.Right, functions, names, targetCapabilities),
+                membership.ElementType,
+                membership.CollectionOnRight,
+                membership.IgnoreCase,
+                membership.Negate,
+                names.Allocate("membership_left"),
+                names.Allocate("membership_right"),
+                names.Allocate("membership_item")),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
                 mutation.Type.ClrType,

@@ -522,6 +522,16 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(regex.Replacement))
                 yield return read;
         }
+        if (expression is PowerShellBoundWildcardExpression wildcard)
+        {
+            foreach (var read in EnumerateVariableReads(wildcard.Input)) yield return read;
+            foreach (var read in EnumerateVariableReads(wildcard.Pattern)) yield return read;
+        }
+        if (expression is PowerShellBoundMembershipExpression membership)
+        {
+            foreach (var read in EnumerateVariableReads(membership.Left)) yield return read;
+            foreach (var read in EnumerateVariableReads(membership.Right)) yield return read;
+        }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
             if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
@@ -597,6 +607,16 @@ internal sealed class PowerShellSemanticAnalyzer
             if (regex.Replacement is not null)
             foreach (var nested in EnumerateInvocations(regex.Replacement))
                 yield return nested;
+        }
+        if (expression is PowerShellBoundWildcardExpression wildcard)
+        {
+            foreach (var nested in EnumerateInvocations(wildcard.Input)) yield return nested;
+            foreach (var nested in EnumerateInvocations(wildcard.Pattern)) yield return nested;
+        }
+        if (expression is PowerShellBoundMembershipExpression membership)
+        {
+            foreach (var nested in EnumerateInvocations(membership.Left)) yield return nested;
+            foreach (var nested in EnumerateInvocations(membership.Right)) yield return nested;
         }
         if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
         {
