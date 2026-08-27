@@ -277,6 +277,20 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void MultiTypeCatchReportsReachabilityAtItsOwningClause()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Recovered { param([System.Exception] $Failure) try { throw $Failure } catch [System.Exception], [System.InvalidOperationException] { return 7 } }",
+            TestPath("multi-type-catch.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        var diagnostic = Assert.Single(result.Bound.Diagnostics, item => item.Code == "PSB2312");
+        Assert.Equal(document.DocumentId, diagnostic.Span.DocumentId);
+        Assert.Contains("InvalidOperationException", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublicTranspilerUsesBoundConditionalPlan()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
