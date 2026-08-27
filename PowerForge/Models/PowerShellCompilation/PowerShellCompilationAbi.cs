@@ -14,7 +14,7 @@ public sealed class PowerShellCompilationSemanticProfile
     public const string RuntimeFreeStrictVersion = "1.1";
 
     /// <summary>Current compiler/runtime ABI version.</summary>
-    public const string RuntimeFreeAbiVersion = "3";
+    public const string RuntimeFreeAbiVersion = "4";
 
     /// <summary>Profile name.</summary>
     public string Name { get; set; } = RuntimeFreeStrictName;
@@ -41,7 +41,7 @@ public sealed class PowerShellCompilationSemanticProfile
 public sealed class PowerShellCompilationAbiManifest
 {
     /// <summary>ABI schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
 
     /// <summary>Generated CLR namespace.</summary>
     public string NamespaceName { get; set; } = string.Empty;
@@ -70,6 +70,24 @@ public sealed class PowerShellCompilationAbiMethod
 
     /// <summary>Success-output cardinality contract: None, Scalar, or Collection.</summary>
     public string OutputCardinality { get; set; } = string.Empty;
+
+    /// <summary>Bound value states reachable through success output.</summary>
+    public string[] OutputValueStates { get; set; } = Array.Empty<string>();
+
+    /// <summary>CLR element type for collection output, or empty for non-collection output.</summary>
+    public string CollectionElementType { get; set; } = string.Empty;
+
+    /// <summary>PowerShell scalarization contract applied at the generated host boundary.</summary>
+    public string OutputScalarization { get; set; } = string.Empty;
+
+    /// <summary>Whether the command can complete without writing success output.</summary>
+    public bool CanProduceNoOutput { get; set; }
+
+    /// <summary>Whether a success-output value can be null.</summary>
+    public bool CanProduceNull { get; set; }
+
+    /// <summary>Whether no-output and a null CLR value are represented as distinct semantic states.</summary>
+    public bool NoOutputDistinctFromNull { get; set; } = true;
 
     /// <summary>Whether the method can accept or return null under its authored contract.</summary>
     public bool Nullable { get; set; }

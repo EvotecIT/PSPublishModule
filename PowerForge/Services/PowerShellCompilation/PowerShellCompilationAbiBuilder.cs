@@ -40,6 +40,12 @@ internal static class PowerShellCompilationAbiBuilder
                 method.ClrName,
                 method.ReturnType,
                 method.OutputCardinality,
+                string.Join("\0", method.OutputValueStates.OrderBy(static value => value, StringComparer.Ordinal)),
+                method.CollectionElementType,
+                method.OutputScalarization,
+                Boolean(method.CanProduceNoOutput),
+                Boolean(method.CanProduceNull),
+                Boolean(method.NoOutputDistinctFromNull),
                 Boolean(method.Nullable),
                 method.StreamContract,
                 method.ExceptionContract,
@@ -138,13 +144,29 @@ internal static class PowerShellCompilationAbiBuilder
             SupportsWildcards = parameter.SupportsWildcards
         }).ToList();
         AddCompilerParameters(method, parameters);
+        var outputCardinality = string.IsNullOrWhiteSpace(method.OutputCardinality)
+            ? GetLegacyCardinality(method.ReturnType)
+            : method.OutputCardinality;
+        var outputValueStates = method.OutputValueStates.Length == 0
+            ? GetLegacyValueStates(outputCardinality, method.ReturnType)
+            : method.OutputValueStates.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+        var canProduceNull = outputValueStates.Contains("Null", StringComparer.Ordinal) ||
+                             outputValueStates.Contains("AutomationNull", StringComparer.Ordinal);
         return new PowerShellCompilationAbiMethod
         {
             PowerShellName = method.SourceName,
             ClrName = method.GeneratedName,
             ReturnType = method.ReturnType,
-            OutputCardinality = GetCardinality(method.ReturnType),
-            Nullable = IsNullableTypeName(method.ReturnType),
+            OutputCardinality = outputCardinality,
+            OutputValueStates = outputValueStates,
+            CollectionElementType = method.CollectionElementType,
+            OutputScalarization = string.IsNullOrWhiteSpace(method.OutputScalarization)
+                ? GetLegacyScalarization(outputCardinality)
+                : method.OutputScalarization,
+            CanProduceNoOutput = outputCardinality.Equals("None", StringComparison.Ordinal),
+            CanProduceNull = canProduceNull,
+            NoOutputDistinctFromNull = true,
+            Nullable = canProduceNull || IsNullableTypeName(method.ReturnType),
             StreamContract = method.RequiresPowerShellStreams ? "SuccessAndNonSuccessStreams" : "SuccessOutputOnly",
             ExceptionContract = "ClrDirect",
             Aliases = method.Aliases.ToArray(),
@@ -221,12 +243,27 @@ internal static class PowerShellCompilationAbiBuilder
         return builder.ToString();
     }
 
-    private static string GetCardinality(string typeName)
+    private static string GetLegacyCardinality(string typeName)
     {
         if (typeName.Equals(typeof(void).FullName, StringComparison.Ordinal) ||
             typeName.Equals("void", StringComparison.Ordinal)) return "None";
         return typeName.EndsWith("[]", StringComparison.Ordinal) ? "Collection" : "Scalar";
     }
+
+    private static string[] GetLegacyValueStates(string cardinality, string returnType)
+    {
+        if (cardinality.Equals("None", StringComparison.Ordinal)) return Array.Empty<string>();
+        return IsNullableTypeName(returnType) ? new[] { "Known", "Null" } : new[] { "Unknown" };
+    }
+
+    private static string GetLegacyScalarization(string cardinality)
+        => cardinality switch
+        {
+            "None" => "NoOutput",
+            "Collection" => "EnumerateCollection",
+            "Scalar" => "PreserveScalar",
+            _ => "RuntimeDependent"
+        };
 
     private static bool IsNullableTypeName(string typeName)
         => typeName.EndsWith("?", StringComparison.Ordinal);

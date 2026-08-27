@@ -273,6 +273,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictArtifactDoesNotPublishWhenDeliveredClosureCannotBeCertified()
+    {
+        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        var builder = new PowerShellCompilationArtifactBuilder(_ => new PowerShellCompilationDependencyClosure
+        {
+            Verified = false,
+            Limitations = { "Fixture executable format is opaque." }
+        });
+
+        var result = builder.Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UncertifiedStrictArtifact",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.ArtifactPath);
+        Assert.Null(result.ManifestPath);
+        Assert.Null(result.Manifest);
+        Assert.Contains("fully certified delivered dependency closure", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("opaque", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void Build_SigningFailureDoesNotPublishUnsignedArtifactsOrStaleHashes()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");

@@ -17,6 +17,20 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private const string TypedExecutableProjectTemplate = "PowerForge.PowerShell.Compilation.TypedExecutable.csproj.template";
     private const string BinaryModuleProjectTemplate = "PowerForge.PowerShell.Compilation.BinaryModule.csproj.template";
     private const int MaximumBuildOutputLength = 64 * 1024;
+    private readonly Func<IEnumerable<PowerShellCompilationArtifactFile>, PowerShellCompilationDependencyClosure> _verifyStrictDependencyClosure;
+
+    /// <summary>Creates an artifact builder that uses the built-in delivered-file verifier.</summary>
+    public PowerShellCompilationArtifactBuilder()
+        : this(PowerShellStrictDependencyClosureVerifier.Verify)
+    {
+    }
+
+    internal PowerShellCompilationArtifactBuilder(
+        Func<IEnumerable<PowerShellCompilationArtifactFile>, PowerShellCompilationDependencyClosure> verifyStrictDependencyClosure)
+    {
+        _verifyStrictDependencyClosure = verifyStrictDependencyClosure ?? throw new ArgumentNullException(nameof(verifyStrictDependencyClosure));
+    }
+
     /// <summary>Builds the requested PowerShell artifact.</summary>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
     {
@@ -325,7 +339,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     }
                 }
                 if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime)
-                    dependencyClosure = PowerShellStrictDependencyClosureVerifier.Verify(stagedArtifact.Files);
+                {
+                    dependencyClosure = _verifyStrictDependencyClosure(stagedArtifact.Files);
+                    EnsureStrictDependencyClosureCertified(dependencyClosure);
+                }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
                 var generatedSourcePath = stagedGeneratedSourcePath is null
                     ? null
@@ -421,6 +438,22 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             result.Error = ex.Message;
             return result;
         }
+    }
+
+    private static void EnsureStrictDependencyClosureCertified(PowerShellCompilationDependencyClosure? closure)
+    {
+        if (closure?.Verified == true && closure.Limitations.Count == 0)
+            return;
+
+        var limitations = closure?.Limitations
+            .Where(static limitation => !string.IsNullOrWhiteSpace(limitation))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray() ?? Array.Empty<string>();
+        var detail = limitations.Length == 0
+            ? "The delivered dependency closure did not produce positive certification evidence."
+            : string.Join(" ", limitations);
+        throw new InvalidOperationException(
+            "Strict runtime-free artifact publication requires a fully certified delivered dependency closure. " + detail);
     }
 
     private static void ValidateSpec(PowerShellCompilationBuildSpec spec)

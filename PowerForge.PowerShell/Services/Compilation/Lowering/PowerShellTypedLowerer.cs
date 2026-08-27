@@ -144,6 +144,15 @@ internal sealed partial class PowerShellTypedLowerer
                 streamBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
+                function.OutputCardinality,
+                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+                    .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
+                    .Where(static expression => expression is not null)
+                    .Select(static expression => expression!.ValueState)
+                    .Distinct()
+                    .OrderBy(static state => state)
+                    .ToArray(),
+                ResolveCollectionElementType(function),
                 statements.ToArray(),
                 function.Body.Span));
         }
@@ -155,6 +164,21 @@ internal sealed partial class PowerShellTypedLowerer
                 .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
                 .ToArray(),
             targetCapabilities);
+    }
+
+    private static Type? ResolveCollectionElementType(PowerShellBoundFunction function)
+    {
+        if (function.OutputCardinality != PowerShellOutputCardinality.Collection)
+            return null;
+        var elementTypes = PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
+            .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
+            .Where(static expression => expression is not null)
+            .SelectMany(static expression => expression is PowerShellBoundArrayExpression array
+                ? array.Elements.Select(static element => element.Type.ClrType)
+                : new[] { expression!.Type.ClrType.GetElementType() ?? typeof(object) })
+            .Distinct()
+            .ToArray();
+        return elementTypes.Length == 1 ? elementTypes[0] : typeof(object);
     }
 
     private static HashSet<string> PropagateHostRequirement(

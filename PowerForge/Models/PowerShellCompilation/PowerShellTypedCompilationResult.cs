@@ -111,7 +111,11 @@ public sealed class PowerShellCompiledMethod
         int sourceEndLine = 0,
         int sourceEndColumn = 0,
         PowerShellCompilationSourceMapEntry[]? sourceMap = null,
-        PowerShellCompilationCommandProviderContract[]? commandProviders = null)
+        PowerShellCompilationCommandProviderContract[]? commandProviders = null,
+        string? outputCardinality = null,
+        string[]? outputValueStates = null,
+        string? collectionElementType = null,
+        string? outputScalarization = null)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -123,6 +127,10 @@ public sealed class PowerShellCompiledMethod
         SourceEndColumn = sourceEndColumn > 0 ? sourceEndColumn : sourceColumn;
         SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
         CommandProviders = commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
+        OutputCardinality = outputCardinality ?? string.Empty;
+        OutputValueStates = outputValueStates ?? Array.Empty<string>();
+        CollectionElementType = collectionElementType ?? string.Empty;
+        OutputScalarization = outputScalarization ?? string.Empty;
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
@@ -166,6 +174,18 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Versioned command semantic providers used by the generated method.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
+
+    /// <summary>Bound success-output cardinality, independent of CLR type-name spelling.</summary>
+    public string OutputCardinality { get; }
+
+    /// <summary>Bound value states reachable on the success-output path.</summary>
+    public string[] OutputValueStates { get; }
+
+    /// <summary>Bound collection element CLR type, or an empty string for non-collection output.</summary>
+    public string CollectionElementType { get; }
+
+    /// <summary>PowerShell success-output scalarization applied by the generated host surface.</summary>
+    public string OutputScalarization { get; }
 
     /// <summary>Advanced-function lifecycle contract when this generated cmdlet uses a hosted steppable pipeline.</summary>
     public PowerShellCompilationLifecycleContract? Lifecycle { get; internal set; }

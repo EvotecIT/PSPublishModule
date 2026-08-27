@@ -180,6 +180,9 @@ internal sealed class PowerShellLoweredFunction
         bool requiresPowerShellStreams,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
+        PowerShellOutputCardinality outputCardinality,
+        PowerShellValueState[] outputValueStates,
+        Type? collectionElementType,
         PowerShellLoweredStatement[] statements,
         SourceSpan span)
     {
@@ -196,6 +199,9 @@ internal sealed class PowerShellLoweredFunction
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        OutputCardinality = outputCardinality;
+        OutputValueStates = outputValueStates ?? Array.Empty<PowerShellValueState>();
+        CollectionElementType = collectionElementType;
         Statements = statements;
         Span = span;
     }
@@ -213,6 +219,9 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal PowerShellOutputCardinality OutputCardinality { get; }
+    internal PowerShellImmutableArray<PowerShellValueState> OutputValueStates { get; }
+    internal Type? CollectionElementType { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal SourceSpan Span { get; }
 }

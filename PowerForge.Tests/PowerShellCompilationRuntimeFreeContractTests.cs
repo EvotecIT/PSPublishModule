@@ -46,7 +46,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(64, manifest.GeneratedSourceSha256.Length);
 
         var abi = Assert.IsType<PowerShellCompilationAbiManifest>(manifest.PublicAbi);
-        Assert.Equal(3, abi.SchemaVersion);
+        Assert.Equal(4, abi.SchemaVersion);
         Assert.Equal("PowerForge.Compiled", abi.NamespaceName);
         Assert.Equal("ContractProofMethods", abi.TypeName);
         Assert.Equal(64, abi.Sha256.Length);
@@ -54,6 +54,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("Get-ContractProof", method.PowerShellName);
         Assert.Equal("Get_ContractProof", method.ClrName);
         Assert.Equal("Scalar", method.OutputCardinality);
+        Assert.Equal(new[] { "Unknown" }, method.OutputValueStates);
+        Assert.Equal("PreserveScalar", method.OutputScalarization);
+        Assert.Empty(method.CollectionElementType);
+        Assert.False(method.CanProduceNoOutput);
+        Assert.False(method.CanProduceNull);
+        Assert.True(method.NoOutputDistinctFromNull);
         Assert.Equal("SuccessOutputOnly", method.StreamContract);
         Assert.Equal("ClrDirect", method.ExceptionContract);
         var parameter = Assert.Single(method.Parameters);
@@ -154,6 +160,39 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "Get-Alpha", "Get-Zeta" }, ordered.Methods.Select(static method => method.PowerShellName));
         Assert.Equal("@class", Assert.Single(ordered.Methods[0].Parameters).ClrName);
         Assert.Equal("_9_name", PowerShellClrSymbolMapper.MapIdentifier("9-name"));
+    }
+
+    [Fact]
+    public void AbiUsesBoundOutputFactsForNoOutputCollectionAndNullStates()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Set-Proof { [int] $value = 1 }\n" +
+            "function Get-ProofItems { return @(1, 2) }\n" +
+            "function Get-ProofNull { return [Nullable[int]] $null }");
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        var abi = PowerShellCompilationAbiBuilder.Create(typed.NamespaceName, typed.TypeName, typed.Methods);
+
+        var noOutput = Assert.Single(abi.Methods, static method => method.PowerShellName == "Set-Proof");
+        Assert.Equal("None", noOutput.OutputCardinality);
+        Assert.Equal("NoOutput", noOutput.OutputScalarization);
+        Assert.True(noOutput.CanProduceNoOutput);
+        Assert.False(noOutput.CanProduceNull);
+        Assert.Empty(noOutput.OutputValueStates);
+
+        var collection = Assert.Single(abi.Methods, static method => method.PowerShellName == "Get-ProofItems");
+        Assert.Equal("Collection", collection.OutputCardinality);
+        Assert.Equal("EnumerateCollection", collection.OutputScalarization);
+        Assert.Equal(typeof(int).FullName, collection.CollectionElementType);
+        Assert.Equal(new[] { "Known" }, collection.OutputValueStates);
+
+        var nullable = Assert.Single(abi.Methods, static method => method.PowerShellName == "Get-ProofNull");
+        Assert.Equal("Scalar", nullable.OutputCardinality);
+        Assert.Equal(new[] { "Null" }, nullable.OutputValueStates);
+        Assert.True(nullable.CanProduceNull);
+        Assert.True(nullable.Nullable);
+        Assert.True(nullable.NoOutputDistinctFromNull);
+        Assert.False(nullable.CanProduceNoOutput);
     }
 
     [Fact]

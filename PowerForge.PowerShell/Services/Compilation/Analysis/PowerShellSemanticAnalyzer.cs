@@ -471,7 +471,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             _ => null
         };
 
-    private static PowerShellBoundExpression? GetSuccessOutputExpression(PowerShellBoundStatement statement)
+    internal static PowerShellBoundExpression? GetSuccessOutputExpression(PowerShellBoundStatement statement)
         => statement switch
         {
             PowerShellBoundReturnStatement { EmitsValue: true } returned => returned.Expression,
@@ -479,7 +479,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             _ => null
         };
 
-    private static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
+    internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
     {
         foreach (var statement in block.Statements)
         {

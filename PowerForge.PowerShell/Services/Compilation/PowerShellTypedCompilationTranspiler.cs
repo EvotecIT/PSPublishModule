@@ -360,7 +360,11 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.SourceSpan.EndLine,
             emitted.SourceSpan.EndColumn,
             emitted.SourceMap,
-            emitted.CommandProviders);
+            emitted.CommandProviders,
+            emitted.OutputCardinality,
+            emitted.OutputValueStates,
+            emitted.CollectionElementType,
+            emitted.OutputScalarization);
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -484,7 +488,11 @@ internal sealed class PowerShellCSharpMethodEmission
         string[]? aliases = null,
         PowerShellCompilationCommandBinding? commandBinding = null,
         PowerShellCompilationSourceMapEntry[]? sourceMap = null,
-        PowerShellCompilationCommandProviderContract[]? commandProviders = null)
+        PowerShellCompilationCommandProviderContract[]? commandProviders = null,
+        string? outputCardinality = null,
+        string[]? outputValueStates = null,
+        string? collectionElementType = null,
+        string? outputScalarization = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -500,6 +508,10 @@ internal sealed class PowerShellCSharpMethodEmission
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
         CommandProviders = commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
+        OutputCardinality = outputCardinality ?? string.Empty;
+        OutputValueStates = outputValueStates ?? Array.Empty<string>();
+        CollectionElementType = collectionElementType ?? string.Empty;
+        OutputScalarization = outputScalarization ?? string.Empty;
     }
 
     internal string GeneratedName { get; }
@@ -516,4 +528,8 @@ internal sealed class PowerShellCSharpMethodEmission
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal PowerShellCompilationSourceMapEntry[] SourceMap { get; }
     internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
+    internal string OutputCardinality { get; }
+    internal string[] OutputValueStates { get; }
+    internal string CollectionElementType { get; }
+    internal string OutputScalarization { get; }
 }

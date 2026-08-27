@@ -100,7 +100,19 @@ internal sealed class PowerShellBoundCSharpBackend
             aliases: function.Aliases.ToArray(),
             commandBinding: function.CommandBinding,
             sourceMap: sourceMap.ToArray(),
-            commandProviders: PowerShellLoweredCommandProviderCollector.Collect(function.Statements));
+            commandProviders: PowerShellLoweredCommandProviderCollector.Collect(function.Statements),
+            outputCardinality: function.OutputCardinality.ToString(),
+            outputValueStates: function.OutputValueStates.Select(static state => state.ToString()).ToArray(),
+            collectionElementType: function.OutputCardinality == PowerShellOutputCardinality.Collection
+                ? function.CollectionElementType?.FullName ?? typeof(object).FullName!
+                : string.Empty,
+            outputScalarization: function.OutputCardinality switch
+            {
+                PowerShellOutputCardinality.None => "NoOutput",
+                PowerShellOutputCardinality.Collection => "EnumerateCollection",
+                PowerShellOutputCardinality.Scalar => "PreserveScalar",
+                _ => "RuntimeDependent"
+            });
     }
 
     private static void EmitStatement(
