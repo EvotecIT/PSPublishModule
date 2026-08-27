@@ -37,15 +37,20 @@ public sealed partial class DotNetPublishPipelineRunner
         if (inputs.Length == 0)
             return null;
 
-        Dictionary<string, string> publishProperties = BuildPublishMsBuildProperties(
-            plan,
-            target,
-            effectiveFramework,
-            runtime,
-            style);
-        publishProperties.TryGetValue(
-            "CustomAfterMicrosoftCommonTargets",
-            out string? existingCustomAfterTargets);
+        string[] evaluatedCustomAfterTargets = inputs
+            .Select(input => input.CustomAfterMicrosoftCommonTargets)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        if (evaluatedCustomAfterTargets.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "The no-build publish inputs disagree about the evaluated CustomAfterMicrosoftCommonTargets value.");
+        }
+        string? existingCustomAfterTargets = evaluatedCustomAfterTargets.Length == 1
+            ? evaluatedCustomAfterTargets[0]
+            : null;
         return NoBuildPublishInputSnapshot.Create(inputs, existingCustomAfterTargets);
     }
 
@@ -141,10 +146,20 @@ public sealed partial class DotNetPublishPipelineRunner
             try
             {
                 Directory.CreateDirectory(inputRoot);
-                var mappedInputs = new List<(NoBuildPublishInput Input, string SnapshotPath)>();
+                var mappedInputs = new List<(NoBuildPublishInput[] Inputs, string SnapshotPath)>();
                 int index = 0;
-                foreach (NoBuildPublishInput input in inputs)
+                foreach (IGrouping<string, NoBuildPublishInput> inputGroup in inputs.GroupBy(
+                             input => Path.GetFullPath(input.FullPath),
+                             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
                 {
+                    NoBuildPublishInput[] groupedInputs = inputGroup.ToArray();
+                    NoBuildPublishInput input = groupedInputs[0];
+                    if (groupedInputs.Any(candidate =>
+                            !string.Equals(candidate.Sha256, input.Sha256, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Duplicate no-build publish inputs disagree about the proven hash: {input.FullPath}.");
+                    }
                     string extension = Path.GetExtension(input.FullPath);
                     string snapshotPath = Path.Combine(
                         inputRoot,
@@ -156,7 +171,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             $"A no-build publish input changed after controlled proof: {input.FullPath}.");
                     }
                     expectedHashes[snapshotPath] = actualSha256;
-                    mappedInputs.Add((input, snapshotPath));
+                    mappedInputs.Add((groupedInputs, snapshotPath));
                 }
 
                 string targetsPath = Path.Combine(root, "PowerForge.NoBuildPublishInputs.targets");
@@ -276,7 +291,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private static void WriteSnapshotTargets(
             string targetsPath,
-            IReadOnlyCollection<(NoBuildPublishInput Input, string SnapshotPath)> mappedInputs,
+            IReadOnlyCollection<(NoBuildPublishInput[] Inputs, string SnapshotPath)> mappedInputs,
             string? existingCustomAfterTargets)
         {
             var project = new XElement("Project");
@@ -289,12 +304,15 @@ public sealed partial class DotNetPublishPipelineRunner
 
             var target = new XElement(
                 "Target",
-                new XAttribute("Name", "_PowerForgeBindNoBuildPublishInputs"),
+                new XAttribute(
+                    "Name",
+                    "_PowerForgeBindNoBuildPublishInputs_" + Guid.NewGuid().ToString("N")),
                 new XAttribute("AfterTargets", "ComputeFilesToPublish"));
             var itemGroup = new XElement("ItemGroup");
             int index = 0;
-            foreach ((NoBuildPublishInput input, string snapshotPath) in mappedInputs)
+            foreach ((NoBuildPublishInput[] inputs, string snapshotPath) in mappedInputs)
             {
+                NoBuildPublishInput input = inputs[0];
                 string itemName = "_PowerForgeProvenNoBuildInput" +
                     index++.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 string originalPath = EscapeMsBuildConditionLiteral(input.FullPath);
@@ -319,20 +337,23 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XAttribute(
                         "Condition",
                         $"'%(ResolvedFileToPublish.FullPath)' == '{originalPath}'")));
-                var replacement = new XElement(
-                    "ResolvedFileToPublish",
-                    new XAttribute("Include", snapshotPath));
-                foreach (KeyValuePair<string, string> metadata in input.Metadata)
+                foreach (NoBuildPublishInput replacementInput in inputs)
                 {
-                    if (IntrinsicMetadataNames.Contains(metadata.Key) ||
-                        !TryVerifyXmlName(metadata.Key))
+                    var replacement = new XElement(
+                        "ResolvedFileToPublish",
+                        new XAttribute("Include", snapshotPath));
+                    foreach (KeyValuePair<string, string> metadata in replacementInput.Metadata)
                     {
-                        continue;
+                        if (IntrinsicMetadataNames.Contains(metadata.Key) ||
+                            !TryVerifyXmlName(metadata.Key))
+                        {
+                            continue;
+                        }
+                        replacement.Add(new XElement(metadata.Key, metadata.Value ?? string.Empty));
                     }
-                    replacement.Add(new XElement(metadata.Key, metadata.Value ?? string.Empty));
+                    replacement.SetElementValue("RelativePath", replacementInput.RelativePath);
+                    itemGroup.Add(replacement);
                 }
-                replacement.SetElementValue("RelativePath", input.RelativePath);
-                itemGroup.Add(replacement);
             }
             target.Add(itemGroup);
             project.Add(target);

@@ -777,7 +777,8 @@ public sealed partial class DotNetPublishPipelineRunner
             GeneratedProjectReferenceOutput[] generatedProjectReferenceOutputs,
             EvaluatedPublishInput[] publishInputs,
             VerifiedPackageInputCatalog? verifiedPackages,
-            string[] trustedBuildInfrastructureRoots)
+            string[] trustedBuildInfrastructureRoots,
+            string? customAfterMicrosoftCommonTargets)
         {
             BuildInputs = buildInputs;
             MsBuildInputs = msBuildInputs;
@@ -793,6 +794,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PublishInputs = publishInputs;
             VerifiedPackages = verifiedPackages;
             TrustedBuildInfrastructureRoots = trustedBuildInfrastructureRoots;
+            CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
         }
 
         internal string[] BuildInputs { get; }
@@ -809,6 +811,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal EvaluatedPublishInput[] PublishInputs { get; }
         internal VerifiedPackageInputCatalog? VerifiedPackages { get; }
         internal string[] TrustedBuildInfrastructureRoots { get; }
+        internal string? CustomAfterMicrosoftCommonTargets { get; }
     }
 
     private sealed class EvaluatedProjectReference

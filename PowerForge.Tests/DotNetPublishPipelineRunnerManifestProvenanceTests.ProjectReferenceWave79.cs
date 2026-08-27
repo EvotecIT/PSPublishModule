@@ -125,10 +125,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.True(result.Succeeded, result.ErrorMessage);
             Assert.NotNull(captured);
-            Assert.Equal(
-                Path.GetDirectoryName(DotNetPublishPipelineRunner.ResolveRunDotNetExecutablePath()),
-                captured!.EnvironmentVariables!["PATH"],
-                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string[] pathEntries = captured!.EnvironmentVariables!["PATH"]!
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+            Assert.NotEmpty(pathEntries);
+            Assert.True(PathsEqual(
+                Path.GetDirectoryName(DotNetPublishPipelineRunner.ResolveRunDotNetExecutablePath())!,
+                pathEntries[0]));
         }
         finally
         {

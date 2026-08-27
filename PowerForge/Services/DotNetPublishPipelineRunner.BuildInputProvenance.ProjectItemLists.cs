@@ -57,13 +57,15 @@ public sealed partial class DotNetPublishPipelineRunner
             string fullPath,
             string relativePath,
             IReadOnlyDictionary<string, string> metadata,
-            string sha256)
+            string sha256,
+            string? customAfterMicrosoftCommonTargets = null)
         {
             EvaluationKey = evaluationKey;
             FullPath = fullPath;
             RelativePath = relativePath;
             Metadata = metadata;
             Sha256 = sha256;
+            CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
         }
 
         internal string EvaluationKey { get; }
@@ -75,6 +77,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> Metadata { get; }
 
         internal string Sha256 { get; }
+
+        internal string? CustomAfterMicrosoftCommonTargets { get; }
     }
 
     private sealed class ControlledPublishGraphNode

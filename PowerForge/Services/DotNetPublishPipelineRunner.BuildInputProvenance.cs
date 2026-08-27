@@ -513,7 +513,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         entry.Input.FullPath,
                         entry.Input.RelativePath,
                         entry.Input.Metadata,
-                        entry.Input.ControlledSha256!)));
+                        entry.Input.ControlledSha256!,
+                        evaluationsByEvaluation[evaluationKey].CustomAfterMicrosoftCommonTargets)));
             }
         }
 
@@ -1142,12 +1143,33 @@ public sealed partial class DotNetPublishPipelineRunner
                 generatedProjectReferenceOutputs.ToArray(),
                 publishInputs,
                 verifiedPackages,
-                trustedBuildInfrastructureRoots);
+                trustedBuildInfrastructureRoots,
+                ResolveExistingCustomAfterTargets(
+                    customAfterMicrosoftCommonTargets,
+                    Path.GetDirectoryName(request.ProjectPath)!));
             return true;
         }
         catch
         {
             return false;
+        }
+    }
+
+    private static string? ResolveExistingCustomAfterTargets(string? value, string projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        try
+        {
+            string fullPath = Path.GetFullPath(
+                Path.IsPathRooted(value)
+                    ? value
+                    : Path.Combine(projectDirectory, value));
+            return File.Exists(fullPath) ? fullPath : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 

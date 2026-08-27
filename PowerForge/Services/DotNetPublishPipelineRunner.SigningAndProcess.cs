@@ -784,7 +784,12 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (string name in DisabledUserMsBuildImportEnvironmentVariables)
             values[name] = "false";
         if (ActiveNativeAotPublish.Value)
-            values["PATH"] = Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"));
+        {
+            string dotNetPath = ResolveDotNetChildExecutable("dotnet");
+            values["PATH"] = BuildTrustedNativeAotPath(
+                dotNetPath,
+                Environment.GetEnvironmentVariable("PATH"));
+        }
         return values;
     }
 
