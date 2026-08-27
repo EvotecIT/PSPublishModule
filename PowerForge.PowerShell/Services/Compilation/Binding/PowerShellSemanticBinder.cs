@@ -566,12 +566,12 @@ internal sealed class PowerShellSemanticBinder
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type);
             case ConvertExpressionAst conversion:
-            {
-                var operand = BindExpression(document, conversion.Child, symbols, functions, diagnostics, targetFramework: targetFramework);
-                return operand is null
-                    ? null
-                    : new PowerShellBoundConversionExpression(span, new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects the CLR representation."), operand);
-            }
+                return PowerShellConversionSemanticBinder.Bind(
+                    document,
+                    conversion,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    targetFramework,
+                    diagnostics);
             case BinaryExpressionAst binary:
                 return PowerShellOperatorSemanticBinder.BindBinary(
                     binary,

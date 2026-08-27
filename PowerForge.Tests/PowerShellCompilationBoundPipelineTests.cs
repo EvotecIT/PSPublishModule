@@ -387,6 +387,39 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void AuthoredConversionsBindCompileTimeLiteralsAndClrWideningOnce()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Convert-Value { param([int] $Value) return [long] $Value } function Get-Identifier { return [guid] 'd2719d0d-6f72-4d9b-8c56-ccf150b9f6cf' }",
+            TestPath("conversions.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var conversion = Assert.IsType<PowerShellBoundConversionExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Convert-Value").Body.Statements)).Expression);
+        Assert.Equal(typeof(long), conversion.Type.ClrType);
+        var literal = Assert.IsType<PowerShellBoundLiteralExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Identifier").Body.Statements)).Expression);
+        Assert.IsType<Guid>(literal.Value);
+        Assert.Contains("return (long)(Value);", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Convert_Value").Source, StringComparison.Ordinal);
+        Assert.Contains("new global::System.Guid", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Identifier").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeLanguageConversionRemainsOutsideTheRuntimeFreeBoundPath()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Convert-Value { param([int] $Value) return [string] $Value }",
+            TestPath("runtime-conversion.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2202");
+        Assert.Empty(result.Emitted.Methods);
+    }
+
+    [Fact]
     public void DefiniteAssignmentReportsReadBeforeWriteAtTheReadSpan()
     {
         var document = PowerShellSourceParser.Parse(

@@ -10,6 +10,12 @@ internal static class PowerShellCompilationLiteralPolicy
     internal static bool TryResolve(ExpressionAst expression, Type targetType, out PowerShellCompilationLiteral? literal)
     {
         literal = null;
+        return TryResolveValue(expression, targetType, out var converted) && TryEncode(converted, targetType, out literal);
+    }
+
+    internal static bool TryResolveValue(ExpressionAst expression, Type targetType, out object? converted)
+    {
+        converted = null;
         object? raw;
         try
         {
@@ -20,17 +26,15 @@ internal static class PowerShellCompilationLiteralPolicy
             return false;
         }
 
-        var compiledType = targetType;
-        object? converted;
         try
         {
-            converted = LanguagePrimitives.ConvertTo(raw, compiledType, CultureInfo.InvariantCulture);
+            converted = LanguagePrimitives.ConvertTo(raw, targetType, CultureInfo.InvariantCulture);
+            return true;
         }
         catch (Exception exception) when (exception is PSInvalidCastException or InvalidCastException or ArgumentException or FormatException or OverflowException)
         {
             return false;
         }
-        return TryEncode(converted, compiledType, out literal);
     }
 
     private static bool TryEncode(object? value, Type targetType, out PowerShellCompilationLiteral? literal)
