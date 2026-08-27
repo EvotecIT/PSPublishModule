@@ -189,6 +189,8 @@ public sealed partial class AppStoreConnectClient
             throw new ArgumentNullException(nameof(spec));
         RequireValue(spec.TerritoryId, nameof(spec), "TerritoryId");
         ValidateDate(spec.ReleaseDate, nameof(spec.ReleaseDate));
+        if (spec.PreOrderEnabled == true && string.IsNullOrWhiteSpace(spec.ReleaseDate))
+            throw new ArgumentException("ReleaseDate is required when PreOrderEnabled is true.", nameof(spec));
         var body = new
         {
             data = new
@@ -209,11 +211,12 @@ public sealed partial class AppStoreConnectClient
     {
         var attributes = new Dictionary<string, object?>
         {
-            ["available"] = spec.Available,
-            ["releaseDate"] = Normalize(spec.ReleaseDate)
+            ["available"] = spec.Available
         };
         if (spec.PreOrderEnabled.HasValue)
             attributes["preOrderEnabled"] = spec.PreOrderEnabled.Value;
+        if (spec.PreOrderEnabled == true && Normalize(spec.ReleaseDate) is { } releaseDate)
+            attributes["releaseDate"] = releaseDate;
         return attributes;
     }
 
@@ -445,6 +448,8 @@ public sealed partial class AppStoreConnectClient
                 throw new ArgumentException("Territory entries must not be null.", nameof(territories));
             RequireValue(territory.TerritoryId, nameof(territories), "TerritoryId");
             ValidateDate(territory.ReleaseDate, nameof(territory.ReleaseDate));
+            if (territory.PreOrderEnabled == true && string.IsNullOrWhiteSpace(territory.ReleaseDate))
+                throw new ArgumentException("ReleaseDate is required when PreOrderEnabled is true.", nameof(territories));
         }
     }
 

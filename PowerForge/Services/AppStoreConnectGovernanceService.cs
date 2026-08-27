@@ -368,7 +368,7 @@ public sealed partial class AppStoreConnectGovernanceService
                     $"Territory '{territory.TerritoryId}' is not present in Apple's availability relationship and cannot be added independently by the published API.", current.Id);
             }
             else if (existing.Available != territory.Available ||
-                     !SameDate(existing.ReleaseDate, territory.ReleaseDate) ||
+                     (territory.PreOrderEnabled == true && !SameDate(existing.ReleaseDate, territory.ReleaseDate)) ||
                      (territory.PreOrderEnabled.HasValue && existing.PreOrderEnabled != territory.PreOrderEnabled))
             {
                 Add(changes, "Availability", "TerritoryAvailability", territory.TerritoryId, AppStoreConnectGovernanceChangeAction.Update,
