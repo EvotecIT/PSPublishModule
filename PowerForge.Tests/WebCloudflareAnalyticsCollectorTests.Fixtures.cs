@@ -107,6 +107,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     };
 
     private static HttpResponseMessage CapabilityResponse(
+        bool enabled = true,
         int maxPageSize = 1000,
         int? maxDuration = 86_400,
         int? notOlderThan = 2_678_400) => JsonResponse(new
@@ -122,7 +123,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
                     {
                         settings = new
                         {
-                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan }
+                            httpRequestsAdaptiveGroups = new { enabled, maxPageSize, maxDuration, notOlderThan }
                         }
                     }
                 }
@@ -216,6 +217,19 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private sealed class FakeTokenProvider : ICloudflareAnalyticsTokenProvider
     {
         public Task<string> GetTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult("test-token");
+    }
+
+    private sealed class SingleUseTokenProvider : ICloudflareAnalyticsTokenProvider
+    {
+        public int CallCount { get; private set; }
+
+        public Task<string> GetTokenAsync(CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            if (CallCount > 1)
+                throw new InvalidOperationException("The credential must be resolved only once per collection.");
+            return Task.FromResult("test-token");
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

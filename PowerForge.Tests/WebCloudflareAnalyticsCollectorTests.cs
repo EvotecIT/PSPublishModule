@@ -100,6 +100,26 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task Collect_ResolvesOneCredentialForProbeAndPartitions()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var tokenProvider = new SingleUseTokenProvider();
+        var collector = new CloudflareAnalyticsCollector(client, tokenProvider, timeProvider: new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.True(result.Success);
+        Assert.Equal(1, tokenProvider.CallCount);
+    }
+
+    [Fact]
     public async Task Collect_RejectsRowsFromAnotherUrlScheme()
     {
         var handler = new ScriptedHandler((_, index) => index switch

@@ -13,23 +13,13 @@ public sealed partial class CloudflareAnalyticsCollector
         CancellationToken cancellationToken = default)
     {
         ValidateOperationalOptions(options);
-        var probe = await ProbeAsync(options.ZoneId, options.SiteBaseUrl, cancellationToken).ConfigureAwait(false);
         var result = new CloudflareOperationalCollectionResult
         {
             SiteId = options.SiteId,
             FromUtc = options.FromUtc,
             ThroughUtc = options.ThroughUtc,
-            RequestCount = probe.RequestCount,
             Rum = new CloudflareRumSiteState { Requested = !string.IsNullOrWhiteSpace(options.AccountId) }
         };
-        if (!probe.Success)
-        {
-            result.Http = FailedCapability(probe.ErrorCode!, probe.ErrorMessage!);
-            result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because zone validation failed.");
-            if (result.Rum.Requested)
-                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because zone validation failed.");
-            return CompleteOperationalResult(result);
-        }
 
         string token;
         try { token = await _tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false); }
@@ -43,10 +33,27 @@ public sealed partial class CloudflareAnalyticsCollector
             return CompleteOperationalResult(result);
         }
 
+        var probe = await ProbeWithTokenAsync(
+            options.ZoneId,
+            NormalizeSiteHost(options.SiteBaseUrl),
+            token,
+            cancellationToken).ConfigureAwait(false);
+        result.RequestCount = probe.RequestCount;
+        if (!probe.Success && string.IsNullOrWhiteSpace(probe.ZoneName))
+        {
+            result.Http = FailedCapability(probe.ErrorCode!, probe.ErrorMessage!);
+            result.Firewall = FailedCapability("not-attempted", "Firewall collection was not attempted because zone validation failed.");
+            if (result.Rum.Requested)
+                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because zone validation failed.");
+            return CompleteOperationalResult(result);
+        }
+
         var now = _timeProvider.GetUtcNow();
         var firewallProbe = await ProbeFirewallCapabilityAsync(options.ZoneId, token, cancellationToken).ConfigureAwait(false);
         result.RequestCount += firewallProbe.RequestCount;
-        var http = IsOutsideRetention(options.FromUtc, now, probe.NotOlderThanSeconds)
+        var http = !probe.Success
+            ? OperationalPartitionResult.Failed(probe.ErrorCode!, probe.ErrorMessage!, 0)
+            : IsOutsideRetention(options.FromUtc, now, probe.NotOlderThanSeconds)
             ? OperationalPartitionResult.Failed("retention-boundary", "The requested Cloudflare HTTP operational range starts before the provider-reported retention boundary.", 0)
             : await CollectHttpOperationsAsync(options, probe, token, cancellationToken).ConfigureAwait(false);
         result.RequestCount += http.RequestCount;

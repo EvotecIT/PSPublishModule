@@ -84,6 +84,52 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     }
 
     [Fact]
+    public async Task CollectOperations_PreservesFirewallAndRumWhenHttpDatasetIsUnavailable()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(enabled: false),
+            2 => FirewallCapabilityResponse(),
+            3 => OperationalFirewallResponse(FirewallOperationRow("2026-08-10T09:00:00Z", "block", 2, 1)),
+            4 => RumSitesResponse(enabled: true, autoInstall: true),
+            _ => throw new InvalidOperationException("HTTP collection must not run for an unavailable dataset.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.False(result.Success);
+        Assert.Equal("dataset-unavailable", result.Http.ErrorCode);
+        Assert.True(result.Firewall.Success);
+        Assert.True(result.Rum.Configured);
+        Assert.Equal(2, Assert.Single(result.Hours).FirewallEvents);
+        Assert.Equal(5, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task CollectOperations_ResolvesOneCredentialForProbeAndCollection()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => FirewallCapabilityResponse(),
+            3 => OperationalHttpResponse(),
+            4 => OperationalFirewallResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var tokenProvider = new SingleUseTokenProvider();
+        var collector = new CloudflareAnalyticsCollector(client, tokenProvider, timeProvider: new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectOperationsAsync(CreateOperationalOptions(includeAccount: false));
+
+        Assert.True(result.Success);
+        Assert.Equal(1, tokenProvider.CallCount);
+    }
+
+    [Fact]
     public async Task CollectOperations_PartitionsByProbeDurationAndUsesPageLimit()
     {
         var handler = new ScriptedHandler((_, index) => index switch
