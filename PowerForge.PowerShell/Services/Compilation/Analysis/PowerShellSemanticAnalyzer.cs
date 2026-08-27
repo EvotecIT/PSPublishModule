@@ -320,6 +320,22 @@ internal sealed class PowerShellSemanticAnalyzer
                 if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
                 if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
+                var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
+                if (shouldProcessTarget is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.should-process.command-identity",
+                        $"Local function '{shouldProcessTarget.Symbol.Name}' uses ShouldProcess and must remain on the PowerShell command path so its command identity and ConfirmImpact are preserved."));
+                }
+                var validationTarget = GetValidationCallInsideTypeDiscriminatingTry(function, lookup);
+                if (validationTarget is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.validation.binding-exception",
+                        $"Local function '{validationTarget.Symbol.Name}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity must remain on the PowerShell command path."));
+                }
                 var blocked = GetCallees(function, lookup).FirstOrDefault(static callee => callee.Disposition.Kind != PowerShellExecutionDispositionKind.Typed);
                 return blocked is null
                     ? function
@@ -373,6 +389,58 @@ internal sealed class PowerShellSemanticAnalyzer
             .Select(invocation => functions.TryGetValue(invocation.Target.StableKey, out var callee) ? callee : null)
             .Where(static callee => callee is not null)
             .Cast<PowerShellBoundFunction>();
+
+    private static PowerShellBoundFunction? GetValidationCallInsideTypeDiscriminatingTry(
+        PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+    {
+        foreach (var tryStatement in EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>()
+                     .Where(static statement => statement.Catches.Any(static clause => clause.ExceptionTypes.Length > 0)))
+        {
+            foreach (var invocation in EnumerateStatements(tryStatement.Body)
+                         .SelectMany(EnumerateDirectExpressions)
+                         .SelectMany(EnumerateInvocations))
+            {
+                if (functions.TryGetValue(invocation.Target.StableKey, out var target) &&
+                    target.Parameters.Any(static parameter => parameter.Contract.Validations.Length > 0))
+                    return target;
+            }
+        }
+        return null;
+    }
+
+    private static bool ContainsShouldProcess(PowerShellBoundFunction function)
+        => EnumerateStatements(function.Body)
+            .SelectMany(EnumerateDirectExpressions)
+            .SelectMany(EnumerateExpressions)
+            .OfType<PowerShellBoundRuntimeStateExpression>()
+            .Any(static expression => expression.Kind is PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
+
+    private static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
+    {
+        yield return expression;
+        IEnumerable<PowerShellBoundExpression> children = expression switch
+        {
+            PowerShellBoundConversionExpression conversion => new[] { conversion.Operand },
+            PowerShellBoundInvocationExpression invocation => invocation.Arguments,
+            PowerShellBoundBinaryExpression binary => new[] { binary.Left, binary.Right },
+            PowerShellBoundUnaryExpression unary => new[] { unary.Operand },
+            PowerShellBoundTypeTestExpression typeTest => new[] { typeTest.Operand },
+            PowerShellBoundRegexExpression regex => new[] { regex.Input, regex.Pattern }.Concat(regex.Replacement is null ? Array.Empty<PowerShellBoundExpression>() : new[] { regex.Replacement }),
+            PowerShellBoundWildcardExpression wildcard => new[] { wildcard.Input, wildcard.Pattern },
+            PowerShellBoundMembershipExpression membership => new[] { membership.Left, membership.Right },
+            PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
+            PowerShellBoundArrayExpression array => array.Elements,
+            PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
+            PowerShellBoundIndexExpression index => new[] { index.Target, index.Index },
+            PowerShellBoundClrMemberExpression { Receiver: not null } member => new[] { member.Receiver },
+            PowerShellBoundClrInvocationExpression invocation => (invocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { invocation.Receiver }).Concat(invocation.Arguments),
+            _ => Array.Empty<PowerShellBoundExpression>()
+        };
+        foreach (var child in children)
+        foreach (var nested in EnumerateExpressions(child))
+            yield return nested;
+    }
 
     private static PowerShellTypeFact ResolveType(
         PowerShellBoundExpression expression,
