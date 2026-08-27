@@ -333,6 +333,7 @@ public static partial class WebSiteBuilder
             var hasSourceQuery = TryGetRedirectSourceQuery(redirect.From, out var sourceQuery);
             if (hasSourceQuery)
                 lines.Add($"RewriteCond %{{QUERY_STRING}} ^{Regex.Escape(sourceQuery)}$");
+            WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
 
             var flags = new List<string>
             {

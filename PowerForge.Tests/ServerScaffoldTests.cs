@@ -19,6 +19,8 @@ public sealed class ServerScaffoldTests
         var recoveryValidationWorkflow = files[".github/workflows/server-recovery-ci.yml"];
         var manifest = files["deploy/linux/example.serverrecovery.json"];
         var onboarding = files["deploy/linux/ONBOARDING.md"];
+        var apacheHttp = files["Website/deploy/apache.conf"];
+        var apacheHttps = files["Website/deploy/apache-ssl.conf"];
 
         Assert.DoesNotContain("run: |", workflow, StringComparison.Ordinal);
         Assert.Contains("powerforge-website-deploy.yml@" + EngineRef, workflow, StringComparison.Ordinal);
@@ -42,6 +44,13 @@ public sealed class ServerScaffoldTests
         Assert.Contains("CLOUDFLARE_PURGE_ENABLED=0", files["deploy/linux/example.test.env"], StringComparison.Ordinal);
         Assert.DoesNotContain("www.example.test", files["Website/deploy/apache.conf"], StringComparison.Ordinal);
         Assert.DoesNotContain("www.example.test", files["Website/deploy/apache-ssl.conf"], StringComparison.Ordinal);
+        const string allowedDirectives = "AllowOverrideList ErrorDocument RewriteEngine RewriteCond RewriteRule Header AddType <IfModule <If";
+        Assert.Contains("AllowOverride None", apacheHttp, StringComparison.Ordinal);
+        Assert.Contains("AllowOverride None", apacheHttps, StringComparison.Ordinal);
+        Assert.Contains(allowedDirectives, apacheHttp, StringComparison.Ordinal);
+        Assert.Contains(allowedDirectives, apacheHttps, StringComparison.Ordinal);
+        Assert.DoesNotContain("AllowOverride FileInfo", apacheHttp, StringComparison.Ordinal);
+        Assert.DoesNotContain("AllowOverride FileInfo", apacheHttps, StringComparison.Ordinal);
         Assert.DoesNotContain("www.example.test", manifest, StringComparison.Ordinal);
         Assert.All(files.Where(file => !file.Key.EndsWith(".example", StringComparison.Ordinal)), file =>
         {

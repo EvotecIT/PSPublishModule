@@ -574,6 +574,11 @@ public sealed class WebLinkServiceTests
             Assert.Equal(3, result.RuleCount);
             var apache = File.ReadAllText(outPath);
             Assert.Contains("ErrorDocument 404 /404.html", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{REQUEST_URI} !^/(?:\\.well-known/acme-challenge(?:/|$)|_powerforge/deployment\\.json$) [NC]", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^ - [END]", apache, StringComparison.Ordinal);
+            Assert.Equal(
+                apache.Split("RewriteCond %{REQUEST_URI} !", StringSplitOptions.None).Length - 1,
+                apache.Split('\n').Count(static line => line.StartsWith("RewriteRule ", StringComparison.Ordinal)));
             Assert.Contains("RewriteCond %{HTTP_HOST} ^(www\\.)?evotec\\.pl$ [NC]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^/?stary/?$ /nowy/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{QUERY_STRING} (^|&)p=123(&|$)", apache, StringComparison.Ordinal);
