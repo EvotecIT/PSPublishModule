@@ -53,30 +53,6 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (topLevelStatements.Length > 0 || ast.ParamBlock is not null || HasUnsupportedNamedBlocks(ast))
         {
             var scriptUnit = AnalyzeUnit("<script>", PowerShellCompilationUnitKind.Script, ast, file, topLevelStatements, targetFramework, capabilities, localFunctionNames);
-            if (scriptUnit.IsCompilable && !RequiresArtifactGraphEmission(topLevelStatements, capabilities, localFunctionNames))
-            {
-                try
-                {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, ast, "<script>", "Invoke", topLevelStatements, targetFramework, capabilities, parameterMetadata: scriptUnit.Parameters).Emit();
-                    scriptUnit = ReplaceUnit(scriptUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
-                }
-                catch (PowerShellCSharpEmissionException ex)
-                {
-                    scriptUnit = ReplaceUnit(
-                        scriptUnit,
-                        typeof(object),
-                        new[]
-                        {
-                            new PowerShellCompilationDiagnostic(
-                                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                                ex.Message,
-                                file,
-                                ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber,
-                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
-                        });
-                }
-            }
             units.Add(scriptUnit);
         }
 
@@ -111,37 +87,12 @@ public sealed partial class PowerShellCompilationAnalyzer
                             PowerShellCompilationFeatureIds.FilterFunction)
                     });
             }
-            var functionStatements = GetEndStatements(function.Body, excludeFunctionDefinitions: false, excludeModuleExports: false);
-            if (functionUnit.IsCompilable && !RequiresArtifactGraphEmission(functionStatements, capabilities, localFunctionNames))
-            {
-                try
-                {
-                    var emitted = new PowerShellCSharpMethodEmitter(file, function, targetFramework, capabilities, parameterMetadata: functionUnit.Parameters).Emit();
-                    functionUnit = ReplaceUnit(functionUnit, emitted.ReturnType, Array.Empty<PowerShellCompilationDiagnostic>());
-                }
-                catch (PowerShellCSharpEmissionException ex)
-                {
-                    functionUnit = ReplaceUnit(
-                        functionUnit,
-                        typeof(object),
-                        new[]
-                        {
-                            new PowerShellCompilationDiagnostic(
-                                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                                ex.Message,
-                                file,
-                                ex.Node.Extent.StartLineNumber,
-                                ex.Node.Extent.StartColumnNumber,
-                                PowerShellCompilationFeatureIds.ForSyntax(ex.Node.GetType().Name))
-                        });
-                }
-            }
             units.Add(functionUnit);
         }
 
         var collidingMethodNames = units
             .Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function)
-            .GroupBy(static unit => PowerShellCSharpMethodEmitter.SanitizeIdentifier(unit.Name), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(static unit => PowerShellClrSymbolMapper.MapIdentifier(unit.Name), StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -150,7 +101,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             for (var index = 0; index < units.Count; index++)
             {
                 var unit = units[index];
-                var generatedName = PowerShellCSharpMethodEmitter.SanitizeIdentifier(unit.Name);
+                var generatedName = PowerShellClrSymbolMapper.MapIdentifier(unit.Name);
                 if (unit.Kind != PowerShellCompilationUnitKind.Function || !collidingMethodNames.Contains(generatedName))
                     continue;
                 var function = functions.First(candidate => candidate.Name == unit.Name && candidate.Body.Extent.StartLineNumber == unit.StartLine);

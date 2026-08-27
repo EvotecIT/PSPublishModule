@@ -172,7 +172,7 @@ internal sealed class PowerShellSemanticAnalyzer
                     {
                         diagnostics.Add(new PowerShellSemanticDiagnostic(
                             "PSD1001",
-                            $"Local variable '${assignment.Target.Name}' is read before its first definite assignment.",
+                            $"Local variable '${assignment.Target.Name}' may remain unassigned before this compound mutation.",
                             assignment.Span));
                     }
                     assigned.Add(assignment.Target.StableKey);
@@ -195,7 +195,7 @@ internal sealed class PowerShellSemanticAnalyzer
                 if (assigned.Contains(read.Symbol.StableKey)) continue;
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSD1001",
-                    $"Local variable '${read.Symbol.Name}' is read before its first definite assignment.",
+                    $"Local variable '${read.Symbol.Name}' may remain unassigned on at least one reachable path.",
                     read.Span));
             }
         }
@@ -253,7 +253,10 @@ internal sealed class PowerShellSemanticAnalyzer
                 {
                     var current = functions[key];
                     var next = AnalyzeReturnType(current, functions);
-                    if (next.ReturnType.ClrType != current.ReturnType.ClrType || next.ReturnType.Provenance != current.ReturnType.Provenance)
+                    if (next.ReturnType.ClrType != current.ReturnType.ClrType ||
+                        next.ReturnType.Provenance != current.ReturnType.Provenance ||
+                        next.Disposition.Kind != current.Disposition.Kind ||
+                        !next.Disposition.ReasonCode.Equals(current.Disposition.ReasonCode, StringComparison.Ordinal))
                     {
                         functions[key] = next;
                         changed = true;
@@ -281,7 +284,10 @@ internal sealed class PowerShellSemanticAnalyzer
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(first.ClrType, PowerShellTypeFactProvenance.Inferred, "All reachable success outputs have the same CLR type after call-graph propagation."));
             return function.WithAnalysis(
                 returnType: PowerShellTypeFact.Unknown,
-                disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.heterogeneous", "Reachable success outputs do not share one CLR type."));
+                disposition: new PowerShellExecutionDisposition(
+                    PowerShellExecutionDispositionKind.Fallback,
+                    "type.return.heterogeneous",
+                    "Reachable success outputs have branch-specific runtime types and do not share one CLR representation."));
         }
     }
 
@@ -320,6 +326,25 @@ internal sealed class PowerShellSemanticAnalyzer
             RunFixedPoint(functions, (function, lookup) =>
             {
                 if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
+                var blockingDiagnostic = program.Diagnostics.FirstOrDefault(diagnostic =>
+                    diagnostic.Span.DocumentId.Equals(function.Symbol.DocumentId, StringComparison.Ordinal) &&
+                    diagnostic.Span.StartOffset >= function.Symbol.Declaration.StartOffset &&
+                    diagnostic.Span.StartOffset <= function.Symbol.Declaration.EndOffset);
+                if (blockingDiagnostic is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        blockingDiagnostic.Code,
+                        blockingDiagnostic.Message));
+                }
+                if (function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
+                    function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"),
+                        "Typed dictionaries are lookup-only locals and cannot escape through the current public CLR return contract."));
+                }
                 if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
                     return function.WithAnalysis(disposition: IsRecursive(function.Symbol, program.CallGraph)
                         ? new PowerShellExecutionDisposition(
@@ -327,6 +352,13 @@ internal sealed class PowerShellSemanticAnalyzer
                             PowerShellCompilationFeatureIds.FunctionGraph,
                             $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract.")
                         : new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
+                if (function.ReturnType.ClrType != typeof(void) && !BlockReturnsValue(function.Body))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.return.fallthrough",
+                        $"Typed non-void unit '{function.Symbol.Name}' must end with an explicit return statement on every reachable path."));
+                }
                 var unresolvedCall = EnumerateStatements(function.Body)
                     .SelectMany(EnumerateDirectExpressions)
                     .SelectMany(EnumerateInvocations)
@@ -372,6 +404,24 @@ internal sealed class PowerShellSemanticAnalyzer
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
         }
+
+        private static bool BlockReturnsValue(PowerShellBoundBlock block)
+            => block.Statements.LastOrDefault() switch
+            {
+                PowerShellBoundReturnStatement { EmitsValue: true } => true,
+                PowerShellBoundExpressionStatement { EmitsOutput: true } => true,
+                PowerShellBoundThrowStatement => true,
+                PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
+                    conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
+                    BlockReturnsValue(conditional.ElseBlock),
+                PowerShellBoundSwitchStatement switchStatement => switchStatement.DefaultBlock is not null &&
+                    switchStatement.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
+                    BlockReturnsValue(switchStatement.DefaultBlock),
+                PowerShellBoundTryStatement tryStatement =>
+                    BlockReturnsValue(tryStatement.Body) &&
+                    tryStatement.Catches.All(static clause => BlockReturnsValue(clause.Body)),
+                _ => false
+            };
 
         private static bool IsRecursive(PowerShellSymbolId start, IReadOnlyList<PowerShellCallGraphEdge> edges)
         {

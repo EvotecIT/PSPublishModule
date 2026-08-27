@@ -48,6 +48,11 @@ internal static class PowerShellMutationSemanticBinder
         var targetType = target.Type.ClrType;
         var value = bindExpression(syntax.Right, target.Type.Provenance == PowerShellTypeFactProvenance.Unknown ? null : targetType);
         if (value is null) return null;
+        if (value.Type.ClrType == typeof(void))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2406", "A void CLR invocation or output-free mutation cannot be assigned to a PowerShell value.", PowerShellSourceParser.GetSpan(document, syntax.Right.Extent)));
+            return null;
+        }
         if (operation == PowerShellBoundMutationOperator.Assign)
         {
             target.Refine(
@@ -100,6 +105,11 @@ internal static class PowerShellMutationSemanticBinder
             _ => (PowerShellBoundMutationOperator?)null
         };
         if (operation is null) return false;
+        if (!IsStandaloneStatement(syntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2407", "Value-producing increment and decrement contexts require PowerShell expression-result semantics.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return true;
+        }
         var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
         if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
         if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) || target.Type.Provenance != PowerShellTypeFactProvenance.Explicit)
@@ -124,5 +134,14 @@ internal static class PowerShellMutationSemanticBinder
         while (syntax is CommandExpressionAst command) syntax = command.Expression;
         while (syntax is ParenExpressionAst parenthesized) syntax = parenthesized.Pipeline;
         return syntax;
+    }
+
+    private static bool IsStandaloneStatement(Ast syntax)
+    {
+        Ast current = syntax;
+        while (current.Parent is CommandExpressionAst or PipelineAst) current = current.Parent;
+        return current.Parent is NamedBlockAst or StatementBlockAst ||
+               current.Parent is ForStatementAst loop &&
+               (ReferenceEquals(loop.Initializer, current) || ReferenceEquals(loop.Iterator, current));
     }
 }

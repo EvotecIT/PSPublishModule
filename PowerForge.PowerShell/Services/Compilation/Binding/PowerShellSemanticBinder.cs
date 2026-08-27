@@ -126,6 +126,14 @@ internal sealed class PowerShellSemanticBinder
         var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
+        if (FindForInitializerScopeLeak(function.Body) is { } scopeLeak)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB1202",
+                $"Local '${scopeLeak.VariablePath.UserPath}' is declared in a for initializer and then used outside the loop scope; it must be declared at function scope before typed compilation.",
+                PowerShellSourceParser.GetSpan(document, scopeLeak.Extent)));
+            return null;
+        }
         var locals = DeclareLocals(document, function, symbols);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -283,9 +291,14 @@ internal sealed class PowerShellSemanticBinder
 
     private static PowerShellTypeFact ResolveAssignmentType(AssignmentStatementAst assignment)
     {
+        var expression = UnwrapExpression(assignment.Right);
+        if (assignment.Left is ConvertExpressionAst typedDictionary &&
+            expression is HashtableAst &&
+            (typedDictionary.StaticType == typeof(System.Collections.Hashtable) ||
+             typedDictionary.StaticType == typeof(System.Collections.IDictionary)))
+            return new PowerShellTypeFact(typeof(Dictionary<string, string>), PowerShellTypeFactProvenance.Explicit, "A typed hashtable literal selects the compiler's homogeneous String dictionary representation.");
         if (assignment.Left is ConvertExpressionAst typedLeft)
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
-        var expression = UnwrapExpression(assignment.Right);
         if (expression is HashtableAst)
             return new PowerShellTypeFact(typeof(Dictionary<string, string>), PowerShellTypeFactProvenance.Inferred, "A homogeneous hashtable literal selects the compiler's string dictionary representation.");
         if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
@@ -295,6 +308,26 @@ internal sealed class PowerShellSemanticBinder
         if (expression is ExpressionAst typedExpression && typedExpression.StaticType != typeof(object))
             return new PowerShellTypeFact(typedExpression.StaticType, PowerShellTypeFactProvenance.Inferred, "The first assignment provides a static CLR type.");
         return PowerShellTypeFact.Unknown;
+    }
+
+    private static VariableExpressionAst? FindForInitializerScopeLeak(ScriptBlockAst body)
+    {
+        foreach (var loop in body.FindAll(static node => node is ForStatementAst, searchNestedScriptBlocks: false).OfType<ForStatementAst>())
+        {
+            if (loop.Initializer is not AssignmentStatementAst initializer ||
+                PowerShellAssignmentTargetPolicy.FindDirectVariable(initializer.Left) is not { } declared)
+                continue;
+            var leak = body.FindAll(node =>
+                    node is VariableExpressionAst variable &&
+                    variable.Extent.StartOffset > loop.Extent.EndOffset &&
+                    variable.VariablePath.UserPath.Equals(declared.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) &&
+                    !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
+                    searchNestedScriptBlocks: false)
+                .OfType<VariableExpressionAst>()
+                .FirstOrDefault();
+            if (leak is not null) return leak;
+        }
+        return null;
     }
 
     private static PowerShellBoundStatement? BindStatement(
@@ -380,7 +413,10 @@ internal sealed class PowerShellSemanticBinder
                 if (condition is null) return null;
                 if (condition.Type.ClrType != typeof(bool))
                 {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
+                    var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation
+                        ? $"Local variable '${mutation.Target.Name}' may remain unassigned because its assignment occurs only while evaluating a dynamic-truthiness condition."
+                        : "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.";
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", message, condition.Span));
                     return null;
                 }
                 var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework, capabilities);
@@ -567,6 +603,38 @@ internal sealed class PowerShellSemanticBinder
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is ContinueStatementAst { Label: null } continueStatement && PowerShellControlFlowBindingPolicy.HasContinuableAncestor(continueStatement))
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
+        if (statement is BreakStatementAst labeledBreak && labeledBreak.Label is not null)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2313",
+                "Labeled break is not supported by the typed compiler.",
+                PowerShellSourceParser.GetSpan(document, labeledBreak.Extent)));
+            return null;
+        }
+        if (statement is BreakStatementAst invalidBreak)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2314",
+                "break must be inside a supported loop or scalar switch.",
+                PowerShellSourceParser.GetSpan(document, invalidBreak.Extent)));
+            return null;
+        }
+        if (statement is ContinueStatementAst labeledContinue && labeledContinue.Label is not null)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2315",
+                "Labeled continue is not supported by the typed compiler.",
+                PowerShellSourceParser.GetSpan(document, labeledContinue.Extent)));
+            return null;
+        }
+        if (statement is ContinueStatementAst invalidContinue)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2316",
+                "continue must be inside a supported loop.",
+                PowerShellSourceParser.GetSpan(document, invalidContinue.Extent)));
+            return null;
+        }
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
             streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&

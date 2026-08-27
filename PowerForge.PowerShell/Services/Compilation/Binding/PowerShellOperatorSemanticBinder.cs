@@ -140,7 +140,7 @@ internal static class PowerShellOperatorSemanticBinder
         if (syntax.Right is not TypeExpressionAst typeExpression ||
             typeExpression.TypeName.GetReflectionType() is not { } targetType ||
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
-            return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable target-compatible CLR type.");
+            return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
         var operand = bindOperand(syntax.Left);
         return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate);
     }

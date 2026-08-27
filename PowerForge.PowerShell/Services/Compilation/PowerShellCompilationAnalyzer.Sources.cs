@@ -125,10 +125,11 @@ public sealed partial class PowerShellCompilationAnalyzer
         var localFunctionNames = capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls)
             ? PowerShellLocalFunctionDiscovery.DiscoverNames(files)
             : null;
-        return new PowerShellCompilationPlan(
-            mode,
-            files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray(),
-            targetFramework);
+        var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
+        var analyzed = mode == PowerShellCompilationMode.Package
+            ? structural
+            : ApplySemanticEvidence(structural, files, analysisTargetFramework, capabilities);
+        return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 
     private static string[] DiscoverFiles(PowerShellCompilationSpec spec)
