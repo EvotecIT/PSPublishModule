@@ -14,6 +14,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("global::System.Action<string> __writeDebug");
             parameters.Add("global::System.Action<string> __writeWarning");
             parameters.Add("global::System.Action<string> __writeInformation");
+            parameters.Add("global::System.Action<string> __writeHost");
             parameters.Add("global::System.Action<string> __writeError");
         }
         if (function.RequiresPowerShellCommandRegions)
@@ -27,6 +28,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("global::System.Func<string, string, bool> __shouldProcessAction");
             parameters.Add("object __psVersion");
             parameters.Add("bool __whatIfPreference");
+            parameters.Add("global::System.Collections.Generic.IReadOnlyDictionary<string, object?> __runtimeState");
         }
         if (requiresBoundParameters)
             parameters.Add("global::System.Collections.Generic.ISet<string> __boundParameters");

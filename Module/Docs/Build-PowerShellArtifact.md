@@ -21,19 +21,19 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 
 ### EXAMPLE 1
 ```powershell
-Build-PowerShellArtifact -Path .\MyModule -EmitSource
+$lock = (powerforge powershell analyze .\MyModule --output json | ConvertFrom-Json).result.dependencyGraph; Build-PowerShellArtifact -Path .\MyModule -EmitSource -DependencyLock $lock
 ```
 
 
 ### EXAMPLE 2
 ```powershell
-Build-PowerShellArtifact -Path .\tool.ps1
+Build-PowerShellArtifact -Path .\tool.ps1 -AllowUnreviewedDependencies
 ```
 
 
 ### EXAMPLE 3
 ```powershell
-Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule
+Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule -AllowUnreviewedDependencies
 ```
 
 

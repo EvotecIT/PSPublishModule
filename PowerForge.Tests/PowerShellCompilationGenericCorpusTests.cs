@@ -28,11 +28,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             $"{regression.Product}: {regression.Metric} {regression.Baseline} -> {regression.Current}")));
         Assert.Empty(result.SourceDrifts);
         Assert.True(result.PostEmissionEvaluated);
-        Assert.Equal(6, result.TotalFunctions);
-        Assert.Equal(5, result.EmittedFunctions);
+        Assert.Equal(8, result.TotalFunctions);
+        Assert.Equal(8, result.EmittedFunctions);
         Assert.Equal(0, result.DroppedEligibleFunctions);
-        Assert.Equal(1, result.RuntimeFallbackUnits);
-        Assert.Contains(result.FunctionFrontier, static impact => impact.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+        Assert.Equal(0, result.RuntimeFallbackUnits);
+        Assert.Empty(result.FunctionFrontier);
     }
 
     [Fact]
@@ -62,13 +62,14 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             });
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(5, result.Manifest!.CompiledMethods);
-            Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-            Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+            Assert.Equal(8, result.Manifest!.CompiledMethods);
+            Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+            Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
             const string proof =
                 "$env:POWERFORGE_COMPILER_CORPUS = 'runtime'; " +
                 "Measure-TextScore -Text Ada; Get-CountdownValue -Number 4; Get-RuntimeState -WhatIf; " +
-                "Get-CommandText -Text Ada; Test-TokenPattern -Token alpha; Get-EnvironmentBoundary";
+                "Get-CommandText -Text Ada; Test-TokenPattern -Token alpha; Get-EnvironmentBoundary; " +
+                "(Get-ObjectShape) -join '|'; (Get-CollectionShape) -join '|'";
             var original = RunCorpusModule(manifest, proof);
             var compiled = RunCorpusModule(result.ArtifactPath!, proof);
 
@@ -76,7 +77,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.Equal((0, string.Empty), (compiled.ExitCode, compiled.StandardError.Trim()));
             Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
             Assert.Equal(
-                new[] { "8", "0", "whatif", "ADA", "True", "runtime" },
+                new[] { "8", "0", "whatif", "ADA", "True", "runtime", "Grace|Ready|2", "alpha|omega|2" },
                 compiled.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
             var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
             Assert.Contains("__invokePowerShellCapture", generated, StringComparison.Ordinal);

@@ -7,6 +7,7 @@ internal enum PowerShellClrReceiverBehavior
     NormalizeNullArrayLength,
     PropagateNull,
     PowerShellAdapter,
+    PowerShellAdapterAddNoteProperty,
     PowerShellRuntimeException
 }
 

@@ -30,6 +30,75 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.False(result.Manifest!.RequiresPowerShellRuntime);
     }
 
+    [Fact]
+    public void Build_StrictExecutableReadsOneBoundedEnvironmentValueWithoutPowerShellRuntime()
+    {
+        const string variable = "POWERFORGE_RUNTIME_STATE_PROOF";
+        var previous = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, "bounded-environment");
+            using var fixture = ArtifactFixture.Create("return $env:POWERFORGE_RUNTIME_STATE_PROOF");
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath,
+                fixture.OutputPath,
+                "PowerForge.EnvironmentStateExecutable",
+                PowerShellCompilationArtifactKind.Executable,
+                PowerShellCompilationMode.Strict,
+                allowUnreviewedDependencyResolution: true)
+            {
+                TargetFramework = "net10.0"
+            });
+
+            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+            var run = Run(result.ArtifactPath!, Array.Empty<string>());
+            Assert.Equal((0, "bounded-environment", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+            Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [Theory]
+    [InlineData("net8.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_BinaryModuleSnapshotsSupportedPreferencesAndErrorCollection(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        using var fixture = ArtifactFixture.Create(
+            "function Get-BoundedRuntimeState { [CmdletBinding(SupportsShouldProcess = $true)] param() " +
+            "return @($VerbosePreference.ToString(), $DebugPreference.ToString(), $WarningPreference.ToString(), $InformationPreference.ToString(), $ErrorActionPreference.ToString(), $ProgressPreference.ToString(), $ConfirmPreference.ToString(), $Error.Count) }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BoundedRuntimeStateModule",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var setup = "$VerbosePreference='SilentlyContinue'; $DebugPreference='SilentlyContinue'; $WarningPreference='Continue'; $InformationPreference='SilentlyContinue'; $ErrorActionPreference='Continue'; $ProgressPreference='Continue'; $ConfirmPreference='High'; $global:Error.Clear();";
+        var invocation = targetFramework == "net472"
+            ? "Get-BoundedRuntimeState -Verbose -Debug -WarningAction Stop -InformationAction Ignore -ErrorAction Stop -Confirm:$false"
+            : "Get-BoundedRuntimeState -Verbose -Debug -WarningAction Stop -InformationAction Ignore -ErrorAction Stop -ProgressAction Ignore -Confirm:$false";
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {setup} {invocation}");
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {setup} {invocation}");
+
+        Assert.Equal(0, original.ExitCode);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);
+        Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+    }
+
     [Theory]
     [InlineData("net8.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
@@ -237,5 +306,38 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         Assert.False(function.IsCompilable);
         Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+    }
+
+    [Theory]
+    [InlineData("$env:POWERFORGE_RUNTIME_STATE_PROOF = 'changed'; return $env:POWERFORGE_RUNTIME_STATE_PROOF")]
+    [InlineData("$script:Cache = @{ Name = 'changed' }; return $script:Cache")]
+    [InlineData("$global:Preference = 'changed'; return $global:Preference")]
+    public void Analyze_RuntimeOwnedScopeMutationFailsClosed(string body)
+    {
+        using var fixture = ArtifactFixture.Create($"function Set-RuntimeOwnedState {{ {body} }}", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var function = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+    }
+
+    [Fact]
+    public void Analyze_ErrorSnapshotMutationFailsClosed()
+    {
+        using var fixture = ArtifactFixture.Create("function Clear-Errors { $Error.Clear(); return $Error.Count }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var function = Assert.Single(Assert.Single(plan.Files).Units);
+
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.Message.Contains("read-only invocation snapshot", StringComparison.Ordinal));
     }
 }

@@ -9,16 +9,16 @@ namespace PSPublishModule;
 /// Builds a packaged executable, typed CLR library, or importable binary/hybrid module from PowerShell source.
 /// </summary>
 /// <example>
-/// <summary>Build a module directly from its conventional folder layout</summary>
-/// <code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</code>
+/// <summary>Build a module from a separately reviewed dependency graph</summary>
+/// <code>$lock = (powerforge powershell analyze .\MyModule --output json | ConvertFrom-Json).result.dependencyGraph; Build-PowerShellArtifact -Path .\MyModule -EmitSource -DependencyLock $lock</code>
 /// </example>
 /// <example>
 /// <summary>Package a standalone script as a single-file executable</summary>
-/// <code>Build-PowerShellArtifact -Path .\tool.ps1</code>
+/// <code>Build-PowerShellArtifact -Path .\tool.ps1 -AllowUnreviewedDependencies</code>
 /// </example>
 /// <example>
 /// <summary>Compile several loose scripts into one typed cmdlet module</summary>
-/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule</code>
+/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule -AllowUnreviewedDependencies</code>
 /// </example>
 [Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
 [OutputType(typeof(PowerShellCompilationBuildResult))]

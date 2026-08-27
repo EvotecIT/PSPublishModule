@@ -208,10 +208,39 @@ public sealed class PowerShellCompilationDependencyGraphTests
             node.Identity.Source.Replace('\\', '/').EndsWith("Foo/2.0.0/Foo.psd1", StringComparison.OrdinalIgnoreCase));
         Assert.True(module.Exists);
         Assert.Equal("Foo", module.Identity.Name);
+        Assert.Equal("2.0.0", module.Identity.Version);
         Assert.Equal("1.0.0", module.Identity.MinimumVersion);
         Assert.Equal("2.5.0", module.Identity.MaximumVersion);
         Assert.Equal("2.0.0", ModuleManifestValueReader.ReadTopLevelString(selected, "ModuleVersion"));
         Assert.EndsWith("Foo/2.0.0/Foo.psd1", module.Identity.Source.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_ConflictsOnDifferentSelectedVersionsOfTheSameLocalModule()
+    {
+        using var fixture = new GraphFixture();
+        fixture.Write("Demo.psm1", "function Get-Demo { return 1 }");
+        fixture.Write("Demo.psd1", "@{ RootModule='Demo.psm1'; ModuleVersion='1.0.0'; RequiredModules=@(@{ModuleName='Shared';RequiredVersion='1.0.0'},@{ModuleName='Shared';RequiredVersion='2.0.0'}) }");
+        fixture.Write("Shared/1.0.0/Shared.psd1", "@{ ModuleVersion='1.0.0' }");
+        fixture.Write("Shared/2.0.0/Shared.psd1", "@{ ModuleVersion='2.0.0' }");
+
+        var input = new PowerShellCompilationInputResolver().Resolve(
+            Path.Combine(fixture.Root, "Demo.psd1"),
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+        var graph = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, PowerShellCompilationMode.Hybrid);
+
+        Assert.Contains(graph.Nodes, static node => node.Identity.Name == "Shared" && node.Identity.Version == "1.0.0");
+        Assert.Contains(graph.Nodes, static node => node.Identity.Name == "Shared" && node.Identity.Version == "2.0.0");
+        Assert.Contains(graph.Conflicts, static conflict => conflict.Contains("Shared", StringComparison.OrdinalIgnoreCase) && conflict.Contains("1.0.0", StringComparison.Ordinal) && conflict.Contains("2.0.0", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DependencyLockHashUsesOneFixedLineFeedOnEveryOperatingSystem()
+    {
+        var graph = new PowerShellCompilationDependencyGraph { Conflicts = new[] { "x" } };
+
+        Assert.Equal("3836789b71b5d9c7c6850b201328a35c7be8ebaa7f30fa964c0173fc15b9ccc2", PowerShellCompilationDependencyLockHasher.ComputeSha256(graph));
     }
 
     [Fact]
@@ -273,6 +302,40 @@ public sealed class PowerShellCompilationDependencyGraphTests
     }
 
     [Fact]
+    public async Task GraphLocksAdjacentManagedReferencesAndManagedWrapperNativeImportsTransitively()
+    {
+        using var fixture = new GraphFixture();
+        var dependency = Path.Combine(fixture.Root, "Dependency");
+        var wrapper = Path.Combine(fixture.Root, "Wrapper");
+        var output = Path.Combine(fixture.Root, "out");
+        Directory.CreateDirectory(dependency);
+        Directory.CreateDirectory(wrapper);
+        fixture.Write("Dependency/Dependency.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>Managed.Child</AssemblyName></PropertyGroup></Project>");
+        fixture.Write("Dependency/Value.cs", "namespace Managed.Child; public static class Value { public static int Get() => 1; }");
+        fixture.Write("Wrapper/Wrapper.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>Managed.Wrapper</AssemblyName></PropertyGroup><ItemGroup><ProjectReference Include=\"../Dependency/Dependency.csproj\" /></ItemGroup></Project>");
+        fixture.Write("Wrapper/Value.cs", "using System.Runtime.InteropServices; public static class WrapperValue { [DllImport(\"nativeproof\")] private static extern int Native(); public static int Get() => Managed.Child.Value.Get(); }");
+        var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+            "dotnet", fixture.Root, new[] { "build", Path.Combine(wrapper, "Wrapper.csproj"), "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+        Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
+        var script = fixture.Write("Demo.ps1", "using assembly './out/Managed.Wrapper.dll'\nfunction Get-Demo { return 1 }");
+        var input = new PowerShellCompilationInputResolver().Resolve(script, PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
+
+        var graph = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
+            input,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net10.0",
+            runtimeIdentifier: "win-x64");
+
+        var wrapperNode = Assert.Single(graph.Nodes, static node => node.Identity.Name == "Managed.Wrapper");
+        var childNode = Assert.Single(graph.Nodes, static node => node.Identity.Name == "Managed.Child");
+        var nativeNode = Assert.Single(graph.Nodes, static node => node.Kind == PowerShellCompilationDependencyNodeKind.NativeLibrary && node.Identity.Name == "nativeproof");
+        Assert.Equal(PowerShellCompilationDependencyGraphDisposition.External, nativeNode.Disposition);
+        Assert.Equal("win-x64", nativeNode.Identity.RuntimeIdentifier);
+        Assert.Contains(graph.Edges, edge => edge.FromId == wrapperNode.Id && edge.ToId == childNode.Id && edge.Kind == PowerShellCompilationDependencyEdgeKind.ManagedReference);
+        Assert.Contains(graph.Edges, edge => edge.FromId == wrapperNode.Id && edge.ToId == nativeNode.Id && edge.Kind == PowerShellCompilationDependencyEdgeKind.NativeLoad);
+    }
+
+    [Fact]
     public void InteropMatrixLocksRidErrorsCancellationCleanupAndComApartmentWithoutActivation()
     {
         using var fixture = new GraphFixture();
@@ -291,7 +354,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var hybrid = Resolve(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
         var strict = Resolve(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
 
-        Assert.Equal(3, strict.SchemaVersion);
+        Assert.Equal(4, strict.SchemaVersion);
         Assert.All(new[] { package, hybrid }, graph => Assert.All(
             graph.Nodes.Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject),
             static node =>

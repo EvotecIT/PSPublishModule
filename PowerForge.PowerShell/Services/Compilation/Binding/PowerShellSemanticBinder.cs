@@ -59,6 +59,20 @@ internal sealed partial class PowerShellSemanticBinder
         for (var index = 0; index < authoredStatements.Length; index++)
         {
             var statement = authoredStatements[index];
+            if (PowerShellObjectSemanticBinder.TryBindAddMember(
+                    document,
+                    statement,
+                    symbols,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
+                    _commandRegistry,
+                    diagnostics,
+                    out var objectMutation))
+            {
+                if (objectMutation is null) bodyIsValid = false;
+                else statements.Add(objectMutation);
+                continue;
+            }
             if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 PowerShellHostedStatementBinder.TryBind(
                     document,
@@ -296,6 +310,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
             return new PowerShellTypeFact(typeof(System.Collections.Specialized.OrderedDictionary), PowerShellTypeFactProvenance.Explicit, "An [ordered] literal selects OrderedDictionary representation.");
+        if (expression is ConvertExpressionAst powerShellObject && PowerShellObjectConstructionPolicy.IsLiteral(powerShellObject))
+            return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
             return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment value has an authored conversion.");
         if (expression is ExpressionAst typedExpression && typedExpression.StaticType != typeof(object))
@@ -315,6 +331,15 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } scopedTarget &&
+                IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.RuntimeScope,
+                    $"Assignment to runtime-owned scope '${scopedTarget.VariablePath.UserPath}' is outside the bounded read-only runtime-state contract.",
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent)));
+                return null;
+            }
             if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } automatic &&
                 PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(automatic.VariablePath.UserPath))
             {
@@ -677,6 +702,13 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static PowerShellTypeFact LiteralType(Type type, string explanation)
         => new(type, PowerShellTypeFactProvenance.Literal, explanation);
+
+    private static bool IsRuntimeOwnedScope(string name)
+        => name.StartsWith("env:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("script:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("global:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("private:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("variable:", StringComparison.OrdinalIgnoreCase);
 
     private static PowerShellBoundExpression? BindConditionTruthiness(
         PowerShellBoundExpression condition,

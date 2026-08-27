@@ -344,6 +344,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Where(static part => part.Expression is not null).Select(static part => part.Expression!),
             PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
             PowerShellBoundArrayExpression array => array.Elements,
+            PowerShellBoundArrayConcatenationExpression concatenation => new[] { concatenation.Left, concatenation.Right },
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
             PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Select(static property => property.Value),
             PowerShellBoundIndexExpression index => new[] { index.Target, index.Index },
@@ -557,6 +558,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
         }
+        if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
+        {
+            foreach (var read in EnumerateVariableReads(concatenation.Left)) yield return read;
+            foreach (var read in EnumerateVariableReads(concatenation.Right)) yield return read;
+        }
         if (expression is PowerShellBoundDictionaryExpression dictionary)
         {
             foreach (var entry in dictionary.Entries)
@@ -660,6 +666,11 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var element in array.Elements)
             foreach (var nested in EnumerateInvocations(element))
                 yield return nested;
+        }
+        if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
+        {
+            foreach (var nested in EnumerateInvocations(concatenation.Left)) yield return nested;
+            foreach (var nested in EnumerateInvocations(concatenation.Right)) yield return nested;
         }
         if (expression is PowerShellBoundDictionaryExpression dictionary)
         {

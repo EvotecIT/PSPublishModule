@@ -28,6 +28,30 @@ internal sealed class PowerShellBoundArrayExpression : PowerShellBoundExpression
     internal PowerShellImmutableArray<PowerShellBoundExpression> Elements { get; }
 }
 
+internal sealed class PowerShellBoundArrayConcatenationExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundArrayConcatenationExpression(
+        SourceSpan span,
+        PowerShellBoundExpression left,
+        PowerShellBoundExpression right,
+        bool enumerateRight)
+        : base(
+            span,
+            new PowerShellTypeFact(typeof(object[]), PowerShellTypeFactProvenance.Inferred, "PowerShell array concatenation materializes one Object array."),
+            PowerShellValueState.Known,
+            left.Effects | right.Effects,
+            left.Capabilities | right.Capabilities)
+    {
+        Left = left;
+        Right = right;
+        EnumerateRight = enumerateRight;
+    }
+
+    internal PowerShellBoundExpression Left { get; }
+    internal PowerShellBoundExpression Right { get; }
+    internal bool EnumerateRight { get; }
+}
+
 internal enum PowerShellBoundDictionaryKind
 {
     StringDictionary,
@@ -74,6 +98,7 @@ internal enum PowerShellBoundIndexKind
 {
     String,
     Array,
+    List,
     StringDictionary,
     OrderedStringDictionary,
     ObjectDictionary

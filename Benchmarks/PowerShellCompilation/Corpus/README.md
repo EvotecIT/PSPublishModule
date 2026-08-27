@@ -2,7 +2,7 @@
 
 This checked-in corpus is the portable, product-neutral acceptance surface for PowerForge PowerShell compilation. It does not encode module names, command names, paths, or special cases from an external repository.
 
-- `HybridModule` exercises parameter metadata and literal defaults, typed operators, direct self-recursion, safe runtime-state intrinsics, command-result capture, and one intentional runtime-scope fallback.
+- `HybridModule` exercises parameter metadata and literal defaults, typed operators, direct self-recursion, safe runtime-state intrinsics, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its current net10 baseline emits all 8 functions without fallback.
 - `StrictProgram` is a multi-file script graph that must build as a PowerShell-free typed executable.
 - `census-baseline.net10.json` records post-emission module coverage and a source fingerprint. Its relative product path remains comparable from another checkout root.
 

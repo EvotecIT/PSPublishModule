@@ -159,7 +159,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void RuntimeFreeStreamFamiliesLowerToCompleteClrSinkContracts()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-AllStreams { Write-Output 42; Write-Verbose 'verbose'; Write-Debug 'debug'; Write-Warning 'warning'; Write-Information 'information'; Write-Error 'error' }",
+            "function Write-AllStreams { Write-Output 42; Write-Verbose 'verbose'; Write-Debug 'debug'; Write-Warning 'warning'; Write-Information 'information'; Write-Host 'host'; Write-Error 'error' }",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "streams.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -170,11 +170,52 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var streams = Assert.Single(result.Analyzed.Functions).Body.Statements.Cast<PowerShellBoundStreamWriteStatement>().ToArray();
         Assert.Equal(
-            new[] { PowerShellStreamCommandKind.Success, PowerShellStreamCommandKind.Verbose, PowerShellStreamCommandKind.Debug, PowerShellStreamCommandKind.Warning, PowerShellStreamCommandKind.Information, PowerShellStreamCommandKind.Error },
+            new[] { PowerShellStreamCommandKind.Success, PowerShellStreamCommandKind.Verbose, PowerShellStreamCommandKind.Debug, PowerShellStreamCommandKind.Warning, PowerShellStreamCommandKind.Information, PowerShellStreamCommandKind.Host, PowerShellStreamCommandKind.Error },
             streams.Select(static stream => stream.Kind));
         var source = Assert.Single(result.Emitted.Methods).Source;
-        foreach (var sink in new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeError" })
+        foreach (var sink in new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" })
             Assert.Contains(sink, source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Write-Output -InputObject 42", "InputObject")]
+    [InlineData("Write-Verbose -Message 'verbose'", "Message")]
+    [InlineData("Write-Debug -Message 'debug'", "Message")]
+    [InlineData("Write-Warning -Message 'warning'", "Message")]
+    [InlineData("Write-Information -MessageData 'information'", "MessageData")]
+    [InlineData("Write-Host -Object 'host'", "Object")]
+    [InlineData("Write-Error -Message 'error'", "Message")]
+    public void RuntimeFreeStreamProvidersOwnTheirNamedParameterShape(string invocation, string expectedParameter)
+    {
+        var commandName = invocation.Substring(0, invocation.IndexOf(' '));
+        var provider = PowerShellCommandSemanticRegistry.Default.Resolve(commandName).Contract!;
+        var parameter = Assert.Single(provider.Parameters);
+        Assert.Equal(expectedParameter, parameter.Name);
+
+        var document = PowerShellSourceParser.Parse(
+            $"function Write-Proof {{ {invocation} }}",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", commandName + ".ps1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.IsType<PowerShellBoundStreamWriteStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
+    }
+
+    [Fact]
+    public void RuntimeFreeStreamProviderRejectsAnotherCommandsNamedParameterShape()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Write-Proof { Write-Output -Message 42 }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "wrong-parameter.ps1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.IsNotType<PowerShellBoundStreamWriteStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
     }
 
     private static PowerShellCompilationCommandProviderContract Contract(string providerId, string commandName, string moduleName)
@@ -205,6 +246,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
             FeatureId = "tests.command.write-notice",
             Family = PowerShellCompilationCommandFamily.Stream,
             CommandName = "Write-Notice",
+            Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Message", Position = 0 } },
             Output = PowerShellCompilationCommandOutput.None,
             Cardinality = PowerShellCompilationCommandCardinality.None,
             Stream = "Information",

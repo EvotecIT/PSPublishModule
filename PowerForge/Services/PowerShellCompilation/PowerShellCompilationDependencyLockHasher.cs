@@ -18,7 +18,7 @@ public static class PowerShellCompilationDependencyLockHasher
                 node.Identity.RequiredVersion, node.Identity.MaximumVersion, node.Identity.Guid,
                 node.Identity.Sha256, node.Identity.Source,
                 node.Identity.Edition, node.Identity.TargetFramework, node.Identity.RuntimeIdentifier,
-                node.Identity.Architecture, node.Identity.Provenance, node.Identity.InteropAdapter,
+                node.Identity.Architecture, node.Identity.PublicKeyToken, node.Identity.Provenance, node.Identity.InteropAdapter,
                 node.Identity.ApartmentState, node.Policy.Redistribution,
                 node.Policy.Publisher, node.Policy.Signature, node.Policy.Servicing, node.Policy.License,
                 node.Interop.Owner, node.Interop.Platform, node.Interop.Errors, node.Interop.Cancellation,
@@ -39,7 +39,7 @@ public static class PowerShellCompilationDependencyLockHasher
                 var text = value?.ToString() ?? string.Empty;
                 builder.Append(text.Length).Append(':').Append(text);
             }
-            builder.AppendLine();
+            builder.Append('\n');
         }
     }
 

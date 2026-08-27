@@ -350,7 +350,13 @@ public sealed class PowerShellCompilationArtifactManifest
 public sealed class PowerShellCompilationDependencyClosure
 {
     /// <summary>Closure evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+
+    /// <summary>Target framework whose reference pack supplied trusted runtime identities.</summary>
+    public string TargetFramework { get; set; } = string.Empty;
+
+    /// <summary>Runtime identifier whose managed/native delivery requirements were verified.</summary>
+    public string RuntimeIdentifier { get; set; } = string.Empty;
 
     /// <summary>Whether every executable dependency format was understood and passed inspection.</summary>
     public bool Verified { get; set; }
@@ -363,6 +369,9 @@ public sealed class PowerShellCompilationDependencyClosure
 
     /// <summary>Number of managed assemblies whose CLR metadata was inspected.</summary>
     public int ManagedAssemblies { get; set; }
+
+    /// <summary>Number of delivered native libraries whose presence was inspected.</summary>
+    public int NativeLibraries { get; set; }
 
     /// <summary>Number of entries read from a .NET single-file manifest.</summary>
     public int BundledEntries { get; set; }

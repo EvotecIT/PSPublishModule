@@ -17,7 +17,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private const string TypedExecutableProjectTemplate = "PowerForge.PowerShell.Compilation.TypedExecutable.csproj.template";
     private const string BinaryModuleProjectTemplate = "PowerForge.PowerShell.Compilation.BinaryModule.csproj.template";
     private const int MaximumBuildOutputLength = 64 * 1024;
-    private readonly Func<IEnumerable<PowerShellCompilationArtifactFile>, PowerShellCompilationDependencyClosure> _verifyStrictDependencyClosure;
+    private readonly Func<PowerShellStrictDependencyClosureRequest, PowerShellCompilationDependencyClosure> _verifyStrictDependencyClosure;
 
     /// <summary>Creates an artifact builder that uses the built-in delivered-file verifier.</summary>
     public PowerShellCompilationArtifactBuilder()
@@ -26,7 +26,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     internal PowerShellCompilationArtifactBuilder(
-        Func<IEnumerable<PowerShellCompilationArtifactFile>, PowerShellCompilationDependencyClosure> verifyStrictDependencyClosure)
+        Func<PowerShellStrictDependencyClosureRequest, PowerShellCompilationDependencyClosure> verifyStrictDependencyClosure)
     {
         _verifyStrictDependencyClosure = verifyStrictDependencyClosure ?? throw new ArgumentNullException(nameof(verifyStrictDependencyClosure));
     }
@@ -342,7 +342,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 }
                 if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime)
                 {
-                    dependencyClosure = _verifyStrictDependencyClosure(stagedArtifact.Files);
+                    dependencyClosure = _verifyStrictDependencyClosure(new PowerShellStrictDependencyClosureRequest(
+                        stagedArtifact.Files,
+                        spec.TargetFramework,
+                        runtimeIdentifier,
+                        dependencyGraph));
                     EnsureStrictDependencyClosureCertified(dependencyClosure);
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);

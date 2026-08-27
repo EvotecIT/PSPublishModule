@@ -44,6 +44,15 @@ internal static class PowerShellOperatorSemanticBinder
         var leftType = left.Type.ClrType;
         var rightType = right.Type.ClrType;
 
+        if (operation == "Plus" && leftType.IsArray)
+        {
+            if (leftType.GetArrayRank() != 1 || rightType.IsArray && rightType.GetArrayRank() != 1)
+                return Reject(diagnostics, span, "PSB2218", "Typed array concatenation supports one-dimensional arrays only.");
+            if (rightType == typeof(void))
+                return Reject(diagnostics, span, "PSB2219", "A void expression cannot participate in typed array concatenation.");
+            return new PowerShellBoundArrayConcatenationExpression(span, left, right, rightType.IsArray);
+        }
+
         if (operation is "And" or "Or")
         {
             left = BindTruthiness(left, capabilities, diagnostics, span, "PSB2201", $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");

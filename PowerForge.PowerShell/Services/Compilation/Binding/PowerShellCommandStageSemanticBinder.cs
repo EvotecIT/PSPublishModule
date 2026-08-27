@@ -91,19 +91,23 @@ internal static class PowerShellStreamCommandSemanticBinder
             case "Debug": kind = PowerShellStreamCommandKind.Debug; break;
             case "Warning": kind = PowerShellStreamCommandKind.Warning; break;
             case "Information": kind = PowerShellStreamCommandKind.Information; break;
+            case "Host": kind = PowerShellStreamCommandKind.Host; break;
             case "Error": kind = PowerShellStreamCommandKind.Error; break;
             default: return false;
         }
 
         var arguments = command.CommandElements.Skip(1).ToArray();
-        if (arguments.Length == 1 && arguments[0] is ExpressionAst positional)
+        var valueParameter = provider.Parameters.SingleOrDefault();
+        if (valueParameter is null)
+            return false;
+        if (arguments.Length == 1 && valueParameter.Position == 0 && arguments[0] is ExpressionAst positional)
         {
             message = positional;
             return kind == PowerShellStreamCommandKind.Success ? IsRuntimeFreeSuccessValue(message) : IsProvablyNonEmptyMessage(message);
         }
         if (arguments.Length == 2 &&
             arguments[0] is CommandParameterAst parameter &&
-            parameter.ParameterName.Equals("Message", StringComparison.OrdinalIgnoreCase) &&
+            IsAcceptedParameter(parameter.ParameterName, valueParameter) &&
             arguments[1] is ExpressionAst named)
         {
             message = named;
@@ -111,6 +115,12 @@ internal static class PowerShellStreamCommandSemanticBinder
         }
         return false;
     }
+
+    private static bool IsAcceptedParameter(
+        string parameterName,
+        PowerShellCompilationCommandParameterContract contract)
+        => parameterName.Equals(contract.Name, StringComparison.OrdinalIgnoreCase) ||
+           contract.Aliases.Any(alias => parameterName.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsProvablyNonEmptyMessage(ExpressionAst message)
         => message is StringConstantExpressionAst { Value.Length: > 0 };

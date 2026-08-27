@@ -15,6 +15,34 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         "CapturePowerShellRegion",
         "NormalizeCapturedPowerShellValue"
     };
+    private static readonly HashSet<string> HostedLifecycleMemberNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "__PowerForgeInputObject",
+        "__powerForgePipeline",
+        "__powerForgeLifecycleGate",
+        "__powerForgeCleaned",
+        "__powerForgeStopRequested",
+        "__powerForgeStopCompletionStarted",
+        "__powerForgeCleanupTask",
+        "__powerForgeCleanupCompletion",
+        "__powerForgeRunspace",
+        "__powerForgeAvailabilityChanged",
+        "__powerForgeRunspaceStateChanged",
+        "__powerForgePipelineInputExplicitlyBound",
+        "GetLifecyclePipeline",
+        "StopLifecycle",
+        "CompleteStoppedLifecycle",
+        "DetachStoppedLifecycleHandlers",
+        "DisposeStoppedLifecycle",
+        "InvokeLifecycleClean",
+        "WriteLifecycleOutput",
+        "CleanLifecycle",
+        "Dispose"
+    };
+    private static readonly HashSet<string> RuntimeStateMemberNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CaptureRuntimeState"
+    };
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
@@ -174,7 +202,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             return ReservedMemberNames.Contains(memberName) ||
                    (!cmdlet.Method.IsAdvancedFunction && memberName.Equals(RemainingArgumentsMemberName, StringComparison.OrdinalIgnoreCase)) ||
                    memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
-                   cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName);
+                   cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName) ||
+                   cmdlet.Method.RequiresPowerShellRuntimeState && RuntimeStateMemberNames.Contains(memberName) ||
+                   cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && HostedLifecycleMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
             throw new InvalidOperationException($"Function '{cmdlet.Method.SourceName}' parameter '${reservedParameter.Name}' collides with generated or inherited binary-cmdlet member '{PowerShellCSharpSymbolRenderer.Identifier(reservedParameter.Name)}'.");
@@ -268,7 +298,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             : cmdlet.Method.DeclaredOutputType;
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
-        builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet");
+        builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet{(cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline ? ", global::System.IDisposable" : string.Empty)}");
         builder.AppendLine("{");
         for (var index = 0; index < cmdlet.Method.Parameters.Length; index++)
         {
@@ -366,6 +396,27 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("    }");
             builder.AppendLine();
         }
+        if (cmdlet.Method.RequiresPowerShellRuntimeState)
+        {
+            builder.AppendLine("    private global::System.Collections.Generic.IReadOnlyDictionary<string, object?> CaptureRuntimeState()");
+            builder.AppendLine("    {");
+            builder.AppendLine("        var values = new global::System.Collections.Generic.Dictionary<string, object?>(global::System.StringComparer.OrdinalIgnoreCase);");
+            foreach (var preference in new[] { "VerbosePreference", "DebugPreference", "WarningPreference", "InformationPreference", "ErrorActionPreference", "ProgressPreference", "ConfirmPreference" })
+                builder.AppendLine($"        values[{PowerShellCSharpLiteral.QuoteString(preference)}] = SessionState.PSVariable.GetValue({PowerShellCSharpLiteral.QuoteString(preference)});");
+            builder.AppendLine("        if (MyInvocation.BoundParameters.TryGetValue(\"Verbose\", out var verbose)) values[\"VerbosePreference\"] = global::System.Management.Automation.LanguagePrimitives.IsTrue(verbose) ? global::System.Management.Automation.ActionPreference.Continue : global::System.Management.Automation.ActionPreference.SilentlyContinue;");
+            builder.AppendLine("        if (MyInvocation.BoundParameters.TryGetValue(\"Debug\", out var debug)) values[\"DebugPreference\"] = global::System.Management.Automation.LanguagePrimitives.IsTrue(debug) ? (typeof(global::System.Management.Automation.PSObject).Assembly.GetName().Version?.Major >= 7 ? global::System.Management.Automation.ActionPreference.Continue : global::System.Management.Automation.ActionPreference.Inquire) : global::System.Management.Automation.ActionPreference.SilentlyContinue;");
+            foreach (var pair in new[] { ("WarningAction", "WarningPreference"), ("InformationAction", "InformationPreference"), ("ErrorAction", "ErrorActionPreference"), ("ProgressAction", "ProgressPreference") })
+            {
+                var localName = char.ToLowerInvariant(pair.Item1[0]) + pair.Item1.Substring(1);
+                builder.AppendLine($"        if (MyInvocation.BoundParameters.TryGetValue({PowerShellCSharpLiteral.QuoteString(pair.Item1)}, out var {localName})) values[{PowerShellCSharpLiteral.QuoteString(pair.Item2)}] = {localName};");
+            }
+            builder.AppendLine("        if (MyInvocation.BoundParameters.TryGetValue(\"Confirm\", out var confirm)) values[\"ConfirmPreference\"] = global::System.Management.Automation.LanguagePrimitives.IsTrue(confirm) ? global::System.Management.Automation.ConfirmImpact.Low : global::System.Management.Automation.ConfirmImpact.None;");
+            builder.AppendLine("        var errors = SessionState.PSVariable.GetValue(\"Error\") as global::System.Collections.ICollection;");
+            builder.AppendLine("        values[\"Error\"] = new global::System.Collections.ArrayList(errors ?? global::System.Array.Empty<object>());");
+            builder.AppendLine("        return values;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
         var lifecycleMethod = cmdlet.Method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)
             ? "EndProcessing"
             : "ProcessRecord";
@@ -381,6 +432,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "WriteDebug",
                 "WriteWarning",
                 "message => WriteInformation(new global::System.Management.Automation.InformationRecord(message, \"PowerForge.Compiled\"))",
+                "message => { var hostMessage = new global::System.Management.Automation.HostInformationMessage { Message = message, NoNewLine = false }; var record = new global::System.Management.Automation.InformationRecord(hostMessage, \"Write-Host\"); record.Tags.Add(\"PSHOST\"); WriteInformation(record); }",
                 "message => WriteError(new global::System.Management.Automation.ErrorRecord(new global::System.InvalidOperationException(message), \"PowerForge.CompiledCommandError\", global::System.Management.Automation.ErrorCategory.NotSpecified, null))"
             });
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
@@ -392,7 +444,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "target => ShouldProcess(target)",
                 "(target, action) => ShouldProcess(target, action)",
                 "((global::System.Collections.IDictionary)SessionState.PSVariable.GetValue(\"PSVersionTable\"))[\"PSVersion\"]!",
-                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") ? global::System.Management.Automation.LanguagePrimitives.IsTrue(MyInvocation.BoundParameters[\"WhatIf\"]) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))"
+                "MyInvocation.BoundParameters.ContainsKey(\"WhatIf\") ? global::System.Management.Automation.LanguagePrimitives.IsTrue(MyInvocation.BoundParameters[\"WhatIf\"]) : global::System.Management.Automation.LanguagePrimitives.IsTrue(SessionState.PSVariable.GetValue(\"WhatIfPreference\"))",
+                "CaptureRuntimeState()"
             });
         }
         if (cmdlet.Method.RequiresPowerShellBoundParameters)

@@ -134,6 +134,8 @@ public sealed class PowerShellCompilationDependencyIdentity
     public string RuntimeIdentifier { get; set; } = string.Empty;
     /// <summary>Processor architecture.</summary>
     public string Architecture { get; set; } = string.Empty;
+    /// <summary>Exact managed assembly public-key token, or empty for unsigned assemblies.</summary>
+    public string PublicKeyToken { get; set; } = string.Empty;
     /// <summary>Provenance statement.</summary>
     public string Provenance { get; set; } = string.Empty;
     /// <summary>Interop adapter that owns activation or invocation.</summary>
@@ -218,7 +220,7 @@ public sealed class PowerShellCompilationDependencyEdge
 public sealed class PowerShellCompilationDependencyGraph
 {
     /// <summary>Graph schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
     /// <summary>Root input node identity.</summary>
     public string RootNodeId { get; set; } = string.Empty;
     /// <summary>Stable graph nodes.</summary>

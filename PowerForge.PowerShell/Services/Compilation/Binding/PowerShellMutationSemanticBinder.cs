@@ -20,6 +20,9 @@ internal sealed class PowerShellSemanticSymbolBinding
         if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
         ValueState = valueState;
     }
+
+    internal void AddKnownProperty(string name, PowerShellTypeFact type)
+        => Type = Type.WithKnownProperty(name, type);
 }
 
 /// <summary>Owns local and parameter mutation semantics.</summary>
@@ -56,7 +59,11 @@ internal static class PowerShellMutationSemanticBinder
         if (operation == PowerShellBoundMutationOperator.Assign)
         {
             target.Refine(
-                new PowerShellTypeFact(value.Type.ClrType, PowerShellTypeFactProvenance.Inferred, $"The first bound assignment to '${target.Symbol.Name}' provides a stable CLR representation."),
+                new PowerShellTypeFact(
+                    value.Type.ClrType,
+                    PowerShellTypeFactProvenance.Inferred,
+                    $"The first bound assignment to '${target.Symbol.Name}' provides a stable CLR representation.",
+                    value.Type.KnownProperties),
                 value.ValueState);
             targetType = target.Type.ClrType;
         }

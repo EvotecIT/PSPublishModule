@@ -28,6 +28,14 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics,
                 out var runtimeState))
             return runtimeState;
+        if (syntax is MemberExpressionAst knownPropertyAccess &&
+            PowerShellObjectSemanticBinder.TryBindKnownPropertiesValue(
+                document,
+                knownPropertyAccess,
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                capabilities,
+                out var knownProperty))
+            return knownProperty;
         switch (syntax)
         {
             case ExpandableStringExpressionAst expandable:

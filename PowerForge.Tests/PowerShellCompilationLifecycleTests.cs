@@ -70,10 +70,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             Environment.NewLine,
             Directory.EnumerateFiles(result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories)
                 .Select(File.ReadAllText));
-        Assert.Contains("Interlocked.Exchange(ref __powerForgeCleaned, 1)", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.CompareExchange(ref __powerForgeCleaned, 1, 0)", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("runspace.AvailabilityChanged += __powerForgeAvailabilityChanged;", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("CompleteStoppedLifecycle(runspace, terminalHost: false, completion);", generatedLifecycleSource, StringComparison.Ordinal);
         Assert.Contains("lock (__powerForgeLifecycleGate)", generatedLifecycleSource, StringComparison.Ordinal);
-        Assert.Contains("var pipeline = __powerForgePipeline;", generatedLifecycleSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (__powerForgePipeline is null) return;", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("var pipeline = GetLifecyclePipeline();", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("WriteLifecycleOutput(pipeline.Process", generatedLifecycleSource, StringComparison.Ordinal);
 
         var escapedCleanup = cleanup.Replace("'", "''", StringComparison.Ordinal);
         var proof = RunModuleProof(
@@ -111,6 +113,49 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             $"try {{ 99 | Invoke-Lifecycle -CleanupPath '{escapedCleanup}' -Confirm:$false }} catch {{ 'caught:' + $_.Exception.Message }}; Test-Path '{escapedCleanup}'");
         Assert.Contains("terminating:99", terminating, StringComparison.OrdinalIgnoreCase);
         Assert.EndsWith("True", terminating, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_HybridLifecycleStopInterruptsRunningProcessWithoutWaitingForTheLifecycleGate()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-SlowLifecycle { [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Number,[string] $StartedPath,[string] $CleanupPath) " +
+            "begin { $total = 0 } process { $total += $Number; [IO.File]::WriteAllText($StartedPath,'started'); while ($true) { Start-Sleep -Milliseconds 100 } } " +
+            "end { $total } clean { [IO.File]::WriteAllText($CleanupPath,'cleaned') } }; Export-ModuleMember -Function Invoke-SlowLifecycle",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Lifecycle.ConcurrentStop",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = "net10.0"
+        });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Single(result.Manifest!.Lifecycles);
+        var started = Path.Combine(fixture.RootPath, "started.txt");
+        var cleaned = Path.Combine(fixture.RootPath, "cleaned.txt");
+        var command =
+            "$ps=[powershell]::Create(); " +
+            $"[void]$ps.AddScript(\"Import-Module -Name '{EscapePowerShell(result.ArtifactPath!)}' -Force; 1 | Invoke-SlowLifecycle -StartedPath '{EscapePowerShell(started)}' -CleanupPath '{EscapePowerShell(cleaned)}'\"); " +
+            "$async=$ps.BeginInvoke(); $deadline=[DateTime]::UtcNow.AddSeconds(5); " +
+            $"while (!(Test-Path '{EscapePowerShell(started)}') -and [DateTime]::UtcNow -lt $deadline) {{ Start-Sleep -Milliseconds 20 }}; " +
+            $"if (!(Test-Path '{EscapePowerShell(started)}')) {{ throw 'Lifecycle process did not start.' }}; " +
+            "$watch=[Diagnostics.Stopwatch]::StartNew(); $ps.Stop(); $watch.Stop(); " +
+            "try { $ps.EndInvoke($async) } catch { }; " +
+            "$ps.Dispose(); " +
+            $"$cleanupDeadline=[DateTime]::UtcNow.AddSeconds(2); while (!(Test-Path '{EscapePowerShell(cleaned)}') -and [DateTime]::UtcNow -lt $cleanupDeadline) {{ Start-Sleep -Milliseconds 20 }}; " +
+            $"$proof=\"$($watch.ElapsedMilliseconds)|$(Test-Path '{EscapePowerShell(cleaned)}')\"; $proof";
+
+        var proof = RunPowerShellWithTimeout(command, 15_000);
+
+        Assert.Equal(0, proof.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(proof.StandardError), proof.StandardError);
+        var parts = proof.StandardOutput.Trim().Split('|');
+        Assert.InRange(long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), 0, 5_000);
+        Assert.True(bool.Parse(parts[1]), "The authored clean block did not run after PowerShell.Stop().");
     }
 
     [Fact]
@@ -257,5 +302,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, process.ExitCode);
         Assert.True(string.IsNullOrWhiteSpace(error), error);
         return string.Join(Environment.NewLine, output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunPowerShellWithTimeout(string command, int timeoutMilliseconds)
+    {
+        using var process = new System.Diagnostics.Process
+        {
+            StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }
+        };
+        process.StartInfo.ArgumentList.Add("-NoProfile");
+        process.StartInfo.ArgumentList.Add("-NonInteractive");
+        process.StartInfo.ArgumentList.Add("-Command");
+        process.StartInfo.ArgumentList.Add(command);
+        process.Start();
+        if (!process.WaitForExit(timeoutMilliseconds))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"PowerShell lifecycle stop proof did not exit within {timeoutMilliseconds} milliseconds.");
+        }
+        return (process.ExitCode, process.StandardOutput.ReadToEnd(), process.StandardError.ReadToEnd());
     }
 }

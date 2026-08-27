@@ -49,16 +49,41 @@ internal enum PowerShellTypeFactProvenance
 
 internal sealed class PowerShellTypeFact
 {
-    internal PowerShellTypeFact(Type clrType, PowerShellTypeFactProvenance provenance, string explanation)
+    internal PowerShellTypeFact(
+        Type clrType,
+        PowerShellTypeFactProvenance provenance,
+        string explanation,
+        IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
         Explanation = explanation ?? string.Empty;
+        KnownProperties = CopyKnownProperties(knownProperties);
     }
 
     internal Type ClrType { get; }
     internal PowerShellTypeFactProvenance Provenance { get; }
     internal string Explanation { get; }
+    internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
+
+    internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
+        => KnownProperties.TryGetValue(name, out property!);
+
+    internal PowerShellTypeFact WithKnownProperty(string name, PowerShellTypeFact property)
+    {
+        var properties = CopyKnownProperties(KnownProperties);
+        properties[name] = property;
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties);
+    }
+
+    private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(
+        IEnumerable<KeyValuePair<string, PowerShellTypeFact>>? properties)
+    {
+        var copy = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
+        if (properties is null) return copy;
+        foreach (var property in properties) copy[property.Key] = property.Value;
+        return copy;
+    }
 
     internal static PowerShellTypeFact Unknown { get; } = new(typeof(object), PowerShellTypeFactProvenance.Unknown, "No static type fact is available.");
 }

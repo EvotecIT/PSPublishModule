@@ -218,6 +218,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Any(part => part.Expression is not null && ExpressionContainsBoundParameterPresence(part.Expression)),
             PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionContainsBoundParameterPresence(mutation.Value),
             PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionContainsBoundParameterPresence),
+            PowerShellBoundArrayConcatenationExpression concatenation => ExpressionContainsBoundParameterPresence(concatenation.Left) || ExpressionContainsBoundParameterPresence(concatenation.Right),
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry => ExpressionContainsBoundParameterPresence(entry.Key) || ExpressionContainsBoundParameterPresence(entry.Value)),
             PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionContainsBoundParameterPresence(property.Value)),
             PowerShellBoundIndexExpression index => ExpressionContainsBoundParameterPresence(index.Target) || ExpressionContainsBoundParameterPresence(index.Index),
@@ -281,6 +282,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundMembershipExpression membership => ExpressionRequiresRuntimeStateHostBinding(membership.Left) || ExpressionRequiresRuntimeStateHostBinding(membership.Right),
             PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionRequiresRuntimeStateHostBinding(mutation.Value),
             PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionRequiresRuntimeStateHostBinding),
+            PowerShellBoundArrayConcatenationExpression concatenation => ExpressionRequiresRuntimeStateHostBinding(concatenation.Left) || ExpressionRequiresRuntimeStateHostBinding(concatenation.Right),
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry =>
                 ExpressionRequiresRuntimeStateHostBinding(entry.Key) || ExpressionRequiresRuntimeStateHostBinding(entry.Value)),
             PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionRequiresRuntimeStateHostBinding(property.Value)),
@@ -639,6 +641,11 @@ internal sealed partial class PowerShellTypedLowerer
                 array.Type.ClrType,
                 array.Kind,
                 array.Elements.Select(element => LowerExpression(element, functions, names, targetCapabilities)).ToArray()),
+            PowerShellBoundArrayConcatenationExpression concatenation => new PowerShellLoweredArrayConcatenationExpression(
+                concatenation.Span,
+                LowerExpression(concatenation.Left, functions, names, targetCapabilities),
+                LowerExpression(concatenation.Right, functions, names, targetCapabilities),
+                concatenation.EnumerateRight),
             PowerShellBoundDictionaryExpression dictionary => new PowerShellLoweredDictionaryExpression(
                 dictionary.Span,
                 dictionary.Type.ClrType,

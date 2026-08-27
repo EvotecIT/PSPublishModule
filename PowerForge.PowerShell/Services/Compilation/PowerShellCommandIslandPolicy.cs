@@ -9,6 +9,7 @@ internal enum PowerShellStreamCommandKind
     Debug,
     Warning,
     Information,
+    Host,
     Error
 }
 

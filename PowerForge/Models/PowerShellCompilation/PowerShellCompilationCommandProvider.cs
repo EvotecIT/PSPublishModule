@@ -15,6 +15,8 @@ public enum PowerShellCompilationCommandFamily
     Mapping,
     /// <summary>Pipeline item ordering.</summary>
     Sorting,
+    /// <summary>Bounded mutation of a statically known PowerShell object shape.</summary>
+    ObjectMutation,
     /// <summary>A bounded command region executed by the PowerShell host.</summary>
     HostedRegion
 }
@@ -83,6 +85,19 @@ public sealed class PowerShellCompilationCommandAdapterContract
     public string[] Dependencies { get; set; } = Array.Empty<string>();
 }
 
+/// <summary>One parameter shape accepted by a compile-time command provider.</summary>
+public sealed class PowerShellCompilationCommandParameterContract
+{
+    /// <summary>Canonical PowerShell parameter name without the leading dash.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Accepted parameter aliases without leading dashes.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
+
+    /// <summary>Zero-based positional binding slot, or -1 when positional binding is forbidden.</summary>
+    public int Position { get; set; } = -1;
+}
+
 /// <summary>
 /// Versioned deterministic metadata for one compile-time-only command semantic provider.
 /// Providers describe commands without importing or executing source modules.
@@ -112,6 +127,9 @@ public sealed class PowerShellCompilationCommandProviderContract
 
     /// <summary>Accepted aliases.</summary>
     public string[] Aliases { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact parameter shapes accepted by this provider.</summary>
+    public PowerShellCompilationCommandParameterContract[] Parameters { get; set; } = Array.Empty<PowerShellCompilationCommandParameterContract>();
 
     /// <summary>Success-output shape.</summary>
     public PowerShellCompilationCommandOutput Output { get; set; }

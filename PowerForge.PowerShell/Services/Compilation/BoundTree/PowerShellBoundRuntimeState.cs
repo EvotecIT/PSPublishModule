@@ -32,13 +32,21 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
     private static bool KindRequiresHostBinding(PowerShellRuntimeStateIntrinsicKind kind)
         => kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
+            PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+            PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+            PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction;
 
     private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellRuntimeStateIntrinsicKind kind)
         => PowerShellRequiredCapability.RuntimeStateIntrinsics |
-           (kind == PowerShellRuntimeStateIntrinsicKind.PSVersion ? PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None) |
+           (kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or PowerShellRuntimeStateIntrinsicKind.ActionPreference or PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or PowerShellRuntimeStateIntrinsicKind.ErrorCollection
+               ? PowerShellRequiredCapability.PowerShellHostTypes
+               : PowerShellRequiredCapability.None) |
            (kind is PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
+               PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+               PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+               PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
                PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction
                ? PowerShellRequiredCapability.PowerShellStreams

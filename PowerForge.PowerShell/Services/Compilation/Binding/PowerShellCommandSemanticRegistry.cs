@@ -110,13 +110,36 @@ internal sealed class PowerShellCommandSemanticRegistry
 
     private static IEnumerable<PowerShellCompilationCommandProviderContract> CreateBuiltIns()
     {
-        yield return Stream("output", "Write-Output", "Success", PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection, PowerShellCompilationCommandErrors.None);
-        yield return Stream("verbose", "Write-Verbose", "Verbose");
-        yield return Stream("debug", "Write-Debug", "Debug");
-        yield return Stream("warning", "Write-Warning", "Warning");
-        yield return Stream("information", "Write-Information", "Information");
-        yield return Stream("host", "Write-Host", "Information");
-        yield return Stream("error", "Write-Error", "Error", PowerShellCompilationCommandOutput.None, PowerShellCompilationCommandCardinality.None, PowerShellCompilationCommandErrors.NonTerminating);
+        yield return Stream("output", "Write-Output", "InputObject", "Success", PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection, PowerShellCompilationCommandErrors.None);
+        yield return Stream("verbose", "Write-Verbose", "Message", "Verbose");
+        yield return Stream("debug", "Write-Debug", "Message", "Debug");
+        yield return Stream("warning", "Write-Warning", "Message", "Warning");
+        yield return Stream("information", "Write-Information", "MessageData", "Information");
+        yield return Stream("host", "Write-Host", "Object", "Host");
+        yield return Stream("error", "Write-Error", "Message", "Error", PowerShellCompilationCommandOutput.None, PowerShellCompilationCommandCardinality.None, PowerShellCompilationCommandErrors.NonTerminating);
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.object-mutation.add-member",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Add-Member"),
+            Family = PowerShellCompilationCommandFamily.ObjectMutation,
+            CommandName = "Add-Member",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "NotePropertyName", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "NotePropertyValue", Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "None",
+            Errors = PowerShellCompilationCommandErrors.PowerShellHost,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
         yield return Contract(
             "powerforge.command.projection.select-object",
             PowerShellCompilationCommandFamily.Projection,
@@ -162,6 +185,7 @@ internal sealed class PowerShellCommandSemanticRegistry
     private static PowerShellCompilationCommandProviderContract Stream(
         string id,
         string commandName,
+        string valueParameter,
         string stream,
         PowerShellCompilationCommandOutput output = PowerShellCompilationCommandOutput.None,
         PowerShellCompilationCommandCardinality cardinality = PowerShellCompilationCommandCardinality.None,
@@ -174,6 +198,10 @@ internal sealed class PowerShellCommandSemanticRegistry
             Family = PowerShellCompilationCommandFamily.Stream,
             CommandName = commandName,
             ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = valueParameter, Position = 0 }
+            },
             Output = output,
             Cardinality = cardinality,
             Stream = stream,
@@ -234,10 +262,16 @@ internal sealed class PowerShellCommandSemanticRegistry
                 throw new InvalidOperationException("Command semantic providers require schema 1 plus non-empty provider, version, and command identities.");
             if (!contract.CompileTimeOnly || contract.MayImportSourceModules || contract.MayExecuteSource)
                 throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' violates the compile-time-only execution boundary.");
+            var parameterNames = contract.Parameters
+                .SelectMany(static parameter => new[] { parameter.Name }.Concat(parameter.Aliases ?? Array.Empty<string>()))
+                .ToArray();
+            if (contract.Parameters.Any(static parameter => string.IsNullOrWhiteSpace(parameter.Name) || parameter.Position < -1) ||
+                parameterNames.GroupBy(static value => value, StringComparer.OrdinalIgnoreCase).Any(static group => group.Count() > 1))
+                throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' declares an invalid or duplicate parameter shape.");
             if (contract.Adapter.RuntimeFree)
             {
                 if (contract.Family != PowerShellCompilationCommandFamily.Stream ||
-                    contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Error"))
+                    contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Host" or "Error"))
                     throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must use one supported stream adapter contract.");
                 var expectedProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion;
                 if (!contract.Adapter.SemanticProfile.Equals(expectedProfile, StringComparison.Ordinal))
@@ -249,6 +283,8 @@ internal sealed class PowerShellCommandSemanticRegistry
                     throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' operation '{contract.Adapter.Operation}' does not match stream '{contract.Stream}' operation '{expectedOperation}'.");
                 if (contract.Adapter.Dependencies.Length > 0)
                     throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' declares adapter dependencies that cannot yet be locked and certified. Dependency-bearing providers require the Milestone 16 provider package contract.");
+                if (contract.Parameters.Length != 1)
+                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must declare exactly one value parameter shape.");
             }
             else if (contract.Adapter.Dependencies.Any(static dependency =>
                          !dependency.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase)))
@@ -293,6 +329,14 @@ internal sealed class PowerShellCommandSemanticRegistry
             CommandName = source.CommandName ?? string.Empty,
             ModuleNames = (source.ModuleNames ?? Array.Empty<string>()).ToArray(),
             Aliases = (source.Aliases ?? Array.Empty<string>()).ToArray(),
+            Parameters = (source.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>())
+                .Select(static parameter => new PowerShellCompilationCommandParameterContract
+                {
+                    Name = parameter.Name ?? string.Empty,
+                    Aliases = parameter.Aliases?.ToArray() ?? Array.Empty<string>(),
+                    Position = parameter.Position
+                })
+                .ToArray(),
             Output = source.Output,
             Cardinality = source.Cardinality,
             Stream = source.Stream ?? string.Empty,

@@ -169,6 +169,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     PowerShellStreamCommandKind.Debug => "__writeDebug",
                     PowerShellStreamCommandKind.Warning => "__writeWarning",
                     PowerShellStreamCommandKind.Information => "__writeInformation",
+                    PowerShellStreamCommandKind.Host => "__writeHost",
                     PowerShellStreamCommandKind.Error => "__writeError",
                     _ => throw new InvalidOperationException($"Stream kind '{stream.Kind}' has no C# host binding.")
                 };
@@ -367,6 +368,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
             PowerShellLoweredPowerShellObjectExpression powerShellObject => EmitPowerShellObject(powerShellObject),
             PowerShellLoweredIndexExpression index => EmitIndex(index),
@@ -382,6 +384,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return $"__shouldProcessTarget({EmitExpression(expression.Arguments[0])})";
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction)
             return $"__shouldProcessAction({EmitExpression(expression.Arguments[0])}, {EmitExpression(expression.Arguments[1])})";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable)
+            return $"global::System.Environment.GetEnvironmentVariable({EmitExpression(expression.Arguments[0])})";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ActionPreference)
+            return $"(global::System.Management.Automation.ActionPreference)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__runtimeState[{EmitExpression(expression.Arguments[0])}], typeof(global::System.Management.Automation.ActionPreference), global::System.Globalization.CultureInfo.InvariantCulture)!";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ConfirmPreference)
+            return $"(global::System.Management.Automation.ConfirmImpact)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__runtimeState[{EmitExpression(expression.Arguments[0])}], typeof(global::System.Management.Automation.ConfirmImpact), global::System.Globalization.CultureInfo.InvariantCulture)!";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ErrorCollection)
+            return $"(global::System.Collections.ArrayList)__runtimeState[{EmitExpression(expression.Arguments[0])}]";
         return PowerShellRuntimeStateIntrinsicPolicy.EmitStatic(expression.Kind, expression.TargetFramework);
     }
 
@@ -498,6 +508,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return $"({target} is null ? null : {target}.Contains({key}) ? (string?){target}[{key}] : null)";
         if (index.Kind == PowerShellBoundIndexKind.ObjectDictionary)
             return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";
+        if (index.Kind == PowerShellBoundIndexKind.List)
+        {
+            var checkedList = index.UsePowerShellRuntimeErrors
+                ? $"((global::System.Collections.IList?)({target}) ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
+                : $"((global::System.Collections.IList?)({target}) ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+            var listIndex = $"(({key}) < 0 ? {checkedList}.Count + ({key}) : ({key}))";
+            return $"({listIndex} < 0 || {listIndex} >= {checkedList}.Count ? null : {checkedList}[{listIndex}])";
+        }
         if (index.Kind == PowerShellBoundIndexKind.String) target = $"({target} ?? string.Empty)";
         else target = index.UsePowerShellRuntimeErrors
             ? $"({target} ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
@@ -511,6 +529,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var target = EmitExpression(assignment.Target);
         var index = EmitExpression(assignment.Index);
         var value = EmitExpression(assignment.Value);
+        if (assignment.Kind == PowerShellBoundIndexKind.List)
+        {
+            var checkedList = assignment.UsePowerShellRuntimeErrors
+                ? $"((global::System.Collections.IList?)({target}) ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
+                : $"((global::System.Collections.IList?)({target}) ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+            var normalizedListIndex = $"(({index}) < 0 ? {checkedList}.Count + ({index}) : ({index}))";
+            var listIndexException = assignment.UsePowerShellRuntimeErrors
+                ? "new global::System.Management.Automation.RuntimeException(\"Index was outside the bounds of the array.\")"
+                : "new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\")";
+            return $"{checkedList}[({normalizedListIndex} >= 0 && {normalizedListIndex} < {checkedList}.Count ? {normalizedListIndex} : throw {listIndexException})] = {value}";
+        }
         if (assignment.Kind != PowerShellBoundIndexKind.Array)
             return $"{target}[{index}] = {value}";
         var checkedTarget = assignment.UsePowerShellRuntimeErrors
@@ -527,11 +556,23 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
         var receiver = EmitExpression(assignment.Receiver);
+        if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapterAddNoteProperty)
+        {
+            var name = PowerShellCSharpLiteral.QuoteString(assignment.MemberName);
+            return $"global::System.Management.Automation.PSObject.AsPSObject((object?)({receiver}) ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot add a member to a null value.\")).Properties.Add(new global::System.Management.Automation.PSNoteProperty({name}, {EmitExpression(assignment.Value)}))";
+        }
         if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapter &&
             typeof(global::System.Collections.IDictionary).IsAssignableFrom(assignment.DeclaringType))
         {
             var name = PowerShellCSharpLiteral.QuoteString(assignment.MemberName);
             return $"((global::System.Collections.IDictionary)({receiver}))[{name}] = {EmitExpression(assignment.Value)}";
+        }
+        if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapter &&
+            assignment.DeclaringType == typeof(global::System.Management.Automation.PSObject))
+        {
+            var name = PowerShellCSharpLiteral.QuoteString(assignment.MemberName);
+            var message = PowerShellCSharpLiteral.QuoteString($"The property '{assignment.MemberName}' cannot be found on this object. Verify that the property exists and can be set.");
+            return $"(global::System.Management.Automation.PSObject.AsPSObject((object?)({receiver}) ?? throw new global::System.Management.Automation.RuntimeException({message})).Properties[{name}] ?? throw new global::System.Management.Automation.RuntimeException({message})).Value = {EmitExpression(assignment.Value)}";
         }
         if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
         {
@@ -580,13 +621,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         else
             receiver = $"({receiver})";
         return $"{receiver}.{invocation.MemberName}({arguments})";
-    }
-
-    private static string EmitArray(PowerShellLoweredArrayExpression array)
-    {
-        var elementType = array.ClrType.GetElementType()!;
-        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(elementType)}>()";
-        return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 
     private static string EmitMutation(

@@ -2567,22 +2567,22 @@
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Build a module directly from its conventional folder layout</maml:title>
-        <dev:code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</dev:code>
+        <maml:title>Build a module from a separately reviewed dependency graph</maml:title>
+        <dev:code>$lock = (powerforge powershell analyze .\MyModule --output json | ConvertFrom-Json).result.dependencyGraph; Build-PowerShellArtifact -Path .\MyModule -EmitSource -DependencyLock $lock</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Package a standalone script as a single-file executable</maml:title>
-        <dev:code>Build-PowerShellArtifact -Path .\tool.ps1</dev:code>
+        <dev:code>Build-PowerShellArtifact -Path .\tool.ps1 -AllowUnreviewedDependencies</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Compile several loose scripts into one typed cmdlet module</maml:title>
-        <dev:code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule</dev:code>
+        <dev:code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule -AllowUnreviewedDependencies</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

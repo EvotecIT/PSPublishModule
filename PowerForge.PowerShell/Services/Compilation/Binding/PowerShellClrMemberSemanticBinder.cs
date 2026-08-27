@@ -26,6 +26,29 @@ internal static class PowerShellClrMemberSemanticBinder
         }
         if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)
             return null;
+        if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
+        if (target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
+        {
+            var propertyValue = bindExpression(syntax.Right, knownProperty.ClrType == typeof(object) ? null : knownProperty.ClrType);
+            if (propertyValue is null ||
+                knownProperty.ClrType != typeof(object) && !PowerShellClrTypeSemantics.CanAssign(knownProperty.ClrType, propertyValue.Type.ClrType))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2618", $"Known note-property assignment value is not assignable to '{knownProperty.ClrType.FullName}'.", propertyValue?.Span ?? span));
+                return null;
+            }
+            return new PowerShellBoundClrMemberAssignmentStatement(
+                span,
+                target.Receiver,
+                target.Type,
+                name,
+                PowerShellClrReceiverBehavior.PowerShellAdapter,
+                propertyValue);
+        }
+        if (target.Type == typeof(PSObject))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2612", "PSCustomObject mutation is compiled only for a statically known note-property shape; other members require preservation of adapted-object identity.", span));
+            return null;
+        }
         var receiverBehavior = PowerShellClrReceiverBehavior.None;
         if (!target.Type.IsValueType && !target.IsKnownNonNull && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
             receiverBehavior = PowerShellClrReceiverBehavior.PowerShellRuntimeException;
@@ -34,7 +57,6 @@ internal static class PowerShellClrMemberSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime-error identity.", span));
             return null;
         }
-        if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
         var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
             .Where(member => IsSupportedMember(member, targetFramework))
             .Where(static member => member switch
@@ -91,6 +113,19 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
+        {
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                name,
+                false,
+                target.Receiver,
+                PowerShellClrReceiverBehavior.PowerShellAdapter,
+                knownProperty);
+        }
+        if (!target.IsStatic && target.Type == typeof(PSObject))
+            return Reject(diagnostics, "PSB2612", "PSCustomObject reads are compiled only for a statically known note-property shape; other members require preservation of adapted-object identity.", span);
         if (!target.IsStatic && target.Type.IsArray && !name.Equals("Length", StringComparison.OrdinalIgnoreCase))
             return Reject(diagnostics, "PSB2601", $"CLR array member '{name}' does not preserve PowerShell null-member semantics; only Length is eligible.", span);
 
@@ -170,6 +205,10 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (target.Receiver is PowerShellBoundRuntimeStateExpression { Kind: PowerShellRuntimeStateIntrinsicKind.ErrorCollection })
+            return Reject(diagnostics, "PSB2620", "The bounded $Error collection is a read-only invocation snapshot; method invocation remains on the PowerShell runtime path.", span);
+        if (!target.IsStatic && target.Type == typeof(PSObject))
+            return Reject(diagnostics, "PSB2612", "PSCustomObject method invocation requires preservation of adapted-object identity and remains on the PowerShell runtime path.", span);
 
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
         var arguments = new PowerShellBoundExpression[argumentSyntax.Length];
@@ -321,7 +360,9 @@ internal static class PowerShellClrMemberSemanticBinder
         var receiver = bindExpression(syntax, null);
         if (receiver is null) { target = default; return false; }
         var receiverType = receiver.Type.ClrType;
-        if (Nullable.GetUnderlyingType(receiverType) is not null || receiverType == typeof(PSObject) || receiverType == typeof(PSCustomObject) ||
+        if (Nullable.GetUnderlyingType(receiverType) is not null ||
+            receiverType == typeof(PSObject) && receiver.Type.KnownProperties.Count == 0 ||
+            receiverType == typeof(PSCustomObject) ||
             receiver.Type.Explanation.Contains("SwitchParameter", StringComparison.Ordinal))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2612", $"Receiver type '{receiverType.FullName}' requires PowerShell boxing semantics or preservation of adapted-object identity, including SwitchParameter identity.", receiver.Span));

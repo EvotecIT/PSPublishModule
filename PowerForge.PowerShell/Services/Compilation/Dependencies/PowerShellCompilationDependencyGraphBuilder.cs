@@ -112,6 +112,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
             DiscoverManifestEdges(Path.GetFullPath(manifestPath!), rootId, targetFramework, runtimeIdentifier, new HashSet<string>(PowerShellCompilationPathSafety.PathComparer));
 
+        DiscoverManagedDependencyClosure(targetFramework, runtimeIdentifier);
+
         var nodes = _nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
         var edges = _edges
             .GroupBy(static edge => edge.FromId + "\0" + edge.ToId + "\0" + edge.Kind, StringComparer.Ordinal)
@@ -430,6 +432,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             var assembly = AssemblyName.GetAssemblyName(path);
             identity.Name = assembly.Name ?? identity.Name;
             identity.Version = assembly.Version?.ToString() ?? string.Empty;
+            identity.PublicKeyToken = string.Concat((assembly.GetPublicKeyToken() ?? Array.Empty<byte>())
+                .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
             identity.Architecture = ReadPortableExecutableArchitecture(path);
             identity.Provenance = "ManagedMetadataReadOnly";
         }

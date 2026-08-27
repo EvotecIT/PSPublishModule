@@ -57,7 +57,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                         "RequiredModules resolved transitively from a local read-only manifest.",
                         targetFramework,
                         runtimeIdentifier);
-                ApplyModuleIdentity(_nodes[nodeId].Identity, module);
+                ApplyModuleIdentity(_nodes[nodeId].Identity, module, localManifest);
                 AddEdge(manifestId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiredModule, module.ModuleName);
                 if (localManifest is not null)
                     DiscoverManifestEdges(localManifest, nodeId, targetFramework, runtimeIdentifier, visited);
@@ -128,10 +128,13 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
 
     private static void ApplyModuleIdentity(
         PowerShellCompilationDependencyIdentity identity,
-        RequiredModuleReference module)
+        RequiredModuleReference module,
+        string? resolvedManifestPath)
     {
         identity.Name = module.ModuleName;
-        identity.Version = module.RequiredVersion ?? module.ModuleVersion ?? module.MaximumVersion ?? string.Empty;
+        identity.Version = resolvedManifestPath is null
+            ? module.RequiredVersion ?? string.Empty
+            : ModuleManifestValueReader.ReadTopLevelString(resolvedManifestPath, "ModuleVersion") ?? string.Empty;
         identity.MinimumVersion = module.ModuleVersion ?? string.Empty;
         identity.RequiredVersion = module.RequiredVersion ?? string.Empty;
         identity.MaximumVersion = module.MaximumVersion ?? string.Empty;
@@ -273,6 +276,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
     private static string[] FindConflicts(IEnumerable<PowerShellCompilationDependencyNode> nodes)
         => nodes
             .Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ExternalModule or
+                PowerShellCompilationDependencyNodeKind.ModuleManifest or
                 PowerShellCompilationDependencyNodeKind.ManagedLibrary or
                 PowerShellCompilationDependencyNodeKind.BinaryModule)
             .GroupBy(static node => node.Identity.Name, StringComparer.OrdinalIgnoreCase)

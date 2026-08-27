@@ -75,7 +75,7 @@ internal static class PowerShellDictionarySemanticBinder
         var target = bindExpression(syntax.Target, null);
         if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out var resultType))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2704", "Typed indexing supports strings, one-dimensional arrays, homogeneous string dictionaries, and IDictionary values.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2704", "Typed indexing supports strings, one-dimensional arrays, IList values, homogeneous string dictionaries, and IDictionary values.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
             return null;
         }
         if (target.Type.ClrType.IsArray && target.Type.ClrType.GetArrayRank() != 1)
@@ -95,8 +95,8 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2706", $"Typed indexing requires one scalar {indexType.Name} index for this target.", index.Span));
             return null;
         }
-        var usePowerShellRuntimeErrors = kind == PowerShellBoundIndexKind.Array && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
-        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
+        var usePowerShellRuntimeErrors = (kind is PowerShellBoundIndexKind.Array or PowerShellBoundIndexKind.List) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+        if ((kind is PowerShellBoundIndexKind.Array or PowerShellBoundIndexKind.List) && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2708", "Array indexing inside a typed try/catch cannot preserve PowerShell runtime-error identity without a PowerShell host.", target.Span));
             return null;
@@ -125,9 +125,14 @@ internal static class PowerShellDictionarySemanticBinder
             return null;
         }
         var target = bindExpression(indexSyntax.Target, null);
+        if (target is PowerShellBoundRuntimeStateExpression { Kind: PowerShellRuntimeStateIntrinsicKind.ErrorCollection })
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2713", "The bounded $Error collection is a read-only invocation snapshot and cannot be mutated.", target.Span));
+            return null;
+        }
         if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out _) || kind == PowerShellBoundIndexKind.String)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
             return null;
         }
         if (target.Type.ClrType.IsArray && target.Type.ClrType.GetArrayRank() != 1)
@@ -148,6 +153,7 @@ internal static class PowerShellDictionarySemanticBinder
         }
         var valueType = kind == PowerShellBoundIndexKind.Array
             ? target.Type.ClrType.GetElementType()!
+            : kind == PowerShellBoundIndexKind.List ? typeof(object)
             : kind is PowerShellBoundIndexKind.StringDictionary or PowerShellBoundIndexKind.OrderedStringDictionary ? typeof(string) : typeof(object);
         var value = bindExpression(syntax.Right, valueType);
         if (value is null || valueType != typeof(object) && !PowerShellClrTypeSemantics.CanAssign(valueType, value.Type.ClrType))
@@ -155,8 +161,8 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2712", $"Indexed assignment value must be assignable to '{valueType.FullName}'.", value?.Span ?? span));
             return null;
         }
-        var usePowerShellRuntimeErrors = kind == PowerShellBoundIndexKind.Array && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
-        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
+        var usePowerShellRuntimeErrors = (kind is PowerShellBoundIndexKind.Array or PowerShellBoundIndexKind.List) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+        if ((kind is PowerShellBoundIndexKind.Array or PowerShellBoundIndexKind.List) && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2708", "Array mutation inside a typed try/catch cannot preserve PowerShell runtime-error identity without a PowerShell host.", target.Span));
             return null;
@@ -192,6 +198,10 @@ internal static class PowerShellDictionarySemanticBinder
         {
             kind = PowerShellBoundIndexKind.Array; indexType = typeof(int); resultType = typeof(object); return true;
         }
+        if (typeof(IList).IsAssignableFrom(type))
+        {
+            kind = PowerShellBoundIndexKind.List; indexType = typeof(int); resultType = typeof(object); return true;
+        }
         if (type == typeof(Dictionary<string, string>))
         {
             kind = PowerShellBoundIndexKind.StringDictionary; indexType = typeof(string); resultType = typeof(string); return true;
@@ -223,7 +233,7 @@ internal static class PowerShellDictionarySemanticBinder
     private static bool IsDirectReturnValue(IndexExpressionAst index)
     {
         Ast current = index;
-        while (current.Parent is CommandExpressionAst or ParenExpressionAst or PipelineAst) current = current.Parent;
+        while (current.Parent is CommandExpressionAst or ParenExpressionAst or PipelineAst or ArrayLiteralAst or ArrayExpressionAst or StatementBlockAst) current = current.Parent;
         return current.Parent is ReturnStatementAst or AssignmentStatementAst;
     }
 

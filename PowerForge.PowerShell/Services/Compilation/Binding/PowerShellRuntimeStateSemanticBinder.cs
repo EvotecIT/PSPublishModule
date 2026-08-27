@@ -19,9 +19,27 @@ internal static class PowerShellRuntimeStateSemanticBinder
             return false;
 
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        var arguments = syntax is InvokeMemberExpressionAst invocation
-            ? invocation.Arguments.Select(argument => bindExpression(argument, typeof(string))).ToArray()
-            : Array.Empty<PowerShellBoundExpression?>();
+        PowerShellBoundExpression?[] arguments;
+        if (syntax is InvokeMemberExpressionAst invocation)
+            arguments = invocation.Arguments.Select(argument => bindExpression(argument, typeof(string))).ToArray();
+        else if (syntax is VariableExpressionAst variable && kind is
+                     PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or
+                     PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+                     PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+                     PowerShellRuntimeStateIntrinsicKind.ErrorCollection)
+        {
+            var name = variable.VariablePath.UserPath;
+            if (kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable) name = name.Substring(4);
+            arguments = new PowerShellBoundExpression?[]
+            {
+                new PowerShellBoundLiteralExpression(
+                    span,
+                    name,
+                    new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "The runtime-state slot name is syntax-owned and immutable."),
+                    PowerShellValueState.Known)
+            };
+        }
+        else arguments = Array.Empty<PowerShellBoundExpression?>();
         if (arguments.Any(static argument => argument is null) ||
             arguments.Any(static argument => argument!.Type.ClrType != typeof(string)))
         {

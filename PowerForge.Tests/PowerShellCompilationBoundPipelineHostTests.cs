@@ -27,7 +27,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(loweredOuter.Statements)).Expression);
         Assert.True(call.RequiresPowerShellStreams);
         var outerSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Write_Outer").Source;
-        Assert.Contains("Write_Inner(__writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeError);", outerSource, StringComparison.Ordinal);
+        Assert.Contains("Write_Inner(__writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeHost, __writeError);", outerSource, StringComparison.Ordinal);
     }
 
     [Fact]

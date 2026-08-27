@@ -12,6 +12,10 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     IsMacOS,
     PSVersion,
     WhatIfPreference,
+    ActionPreference,
+    ConfirmPreference,
+    ErrorCollection,
+    EnvironmentVariable,
     ShouldProcessTarget,
     ShouldProcessAction
 }
@@ -32,7 +36,15 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         if (ast is VariableExpressionAst variable)
         {
             var name = variable.VariablePath.UserPath;
-            if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
+            if (name.StartsWith("env:", StringComparison.OrdinalIgnoreCase) && name.Length > 4)
+                kind = PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable;
+            else if (IsActionPreference(name) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+                kind = PowerShellRuntimeStateIntrinsicKind.ActionPreference;
+            else if (name.Equals("ConfirmPreference", StringComparison.OrdinalIgnoreCase) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+                kind = PowerShellRuntimeStateIntrinsicKind.ConfirmPreference;
+            else if (name.Equals("Error", StringComparison.OrdinalIgnoreCase) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+                kind = PowerShellRuntimeStateIntrinsicKind.ErrorCollection;
+            else if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
             else if (IsCoreTarget(targetFramework) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsCoreClr;
@@ -98,6 +110,9 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             .Any(node => TryClassify(node, body, targetFramework, capabilities, out var kind) &&
                          kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or
                              PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+                             PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
 
@@ -117,6 +132,10 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         {
             PowerShellRuntimeStateIntrinsicKind.PSEdition => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.PSVersion => typeof(object),
+            PowerShellRuntimeStateIntrinsicKind.ActionPreference => typeof(System.Management.Automation.ActionPreference),
+            PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
+            PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
+            PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr or
             PowerShellRuntimeStateIntrinsicKind.IsWindows or
             PowerShellRuntimeStateIntrinsicKind.IsLinux or
@@ -191,4 +210,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     private static bool IsCoreTarget(string? targetFramework)
         => targetFramework?.Equals("net8.0", StringComparison.OrdinalIgnoreCase) == true ||
            targetFramework?.Equals("net10.0", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool IsActionPreference(string name)
+        => name.Equals("VerbosePreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("DebugPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("WarningPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("InformationPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ErrorActionPreference", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("ProgressPreference", StringComparison.OrdinalIgnoreCase);
 }

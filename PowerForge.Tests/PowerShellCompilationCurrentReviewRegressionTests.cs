@@ -105,6 +105,57 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(simpleFixture.OutputPath));
     }
 
+    [Theory]
+    [InlineData("__PowerForgeInputObject")]
+    [InlineData("__powerForgePipeline")]
+    [InlineData("__powerForgeLifecycleGate")]
+    [InlineData("__powerForgeCleaned")]
+    [InlineData("__powerForgeStopRequested")]
+    [InlineData("__powerForgeStopCompletionStarted")]
+    [InlineData("__powerForgeCleanupTask")]
+    [InlineData("__powerForgeCleanupCompletion")]
+    [InlineData("__powerForgeRunspace")]
+    [InlineData("__powerForgeAvailabilityChanged")]
+    [InlineData("__powerForgeRunspaceStateChanged")]
+    [InlineData("__powerForgePipelineInputExplicitlyBound")]
+    [InlineData("GetLifecyclePipeline")]
+    [InlineData("StopLifecycle")]
+    [InlineData("CompleteStoppedLifecycle")]
+    [InlineData("DetachStoppedLifecycleHandlers")]
+    [InlineData("DisposeStoppedLifecycle")]
+    [InlineData("InvokeLifecycleClean")]
+    [InlineData("WriteLifecycleOutput")]
+    [InlineData("CleanLifecycle")]
+    [InlineData("Dispose")]
+    public void Build_HybridLifecycleRejectsGeneratedMemberNameCollisions(string parameterName)
+    {
+        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([string] ${parameterName}) process {{ ${parameterName} }} }}";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var path = fixture.ScriptPath;
+        var document = PowerShellSourceParser.Parse(
+            source,
+            path);
+        var lifecycleSources = PowerShellLifecycleSourceBinder.Bind(document, "net10.0");
+        var empty = new PowerShellTypedCompilationResult(
+            path,
+            "PowerForge.Compiled",
+            "LifecycleCollisionMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { path },
+            lifecycleSources);
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+
+        var validated = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(planned, new[] { "Invoke-Lifecycle" }, "net10.0");
+
+        Assert.Empty(validated.Methods);
+        var diagnostic = Assert.Single(validated.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == "binary-module.cmdlet-shape");
+        Assert.Contains("generated or inherited", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(parameterName, diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
     {

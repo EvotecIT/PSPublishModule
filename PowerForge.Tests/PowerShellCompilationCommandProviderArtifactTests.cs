@@ -49,6 +49,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             FeatureId = "tests.command.write-notice",
             Family = PowerShellCompilationCommandFamily.Stream,
             CommandName = "Write-Notice",
+            Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Message", Position = 0 } },
             Output = PowerShellCompilationCommandOutput.None,
             Cardinality = PowerShellCompilationCommandCardinality.None,
             Stream = "Information",
@@ -89,9 +90,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             (Action<string>)(_ => { }),
             (Action<string>)(_ => { }),
             (Action<string>)(information.Add),
+            (Action<string>)(_ => { }),
             (Action<string>)(_ => { })
         });
         Assert.Equal(new[] { "injected" }, information);
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesWriteHostInformationRecordIdentity()
+    {
+        using var fixture = ArtifactFixture.Create("function Write-HostProof { [CmdletBinding()] param() Write-Host -Object 'host-proof' }", ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "WriteHostProof",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var proof = RunModuleProof(
+            result.ArtifactPath!,
+            "$record = Write-HostProof 6>&1; \"$($record.Source)|$($record.Tags -join ',')|$($record.MessageData.GetType().FullName)|$($record.MessageData.Message)\"");
+
+        Assert.Equal("Write-Host|PSHOST|System.Management.Automation.HostInformationMessage|host-proof", proof);
     }
 
     [Fact]

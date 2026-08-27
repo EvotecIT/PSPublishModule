@@ -17,7 +17,11 @@ internal sealed class PowerShellBoundPowerShellObjectExpression : PowerShellBoun
     internal PowerShellBoundPowerShellObjectExpression(SourceSpan span, PowerShellBoundNoteProperty[] properties)
         : base(
             span,
-            new PowerShellTypeFact(typeof(System.Management.Automation.PSObject), PowerShellTypeFactProvenance.Inferred, "A [pscustomobject] literal binds to one PSObject with literal note properties."),
+            new PowerShellTypeFact(
+                typeof(System.Management.Automation.PSObject),
+                PowerShellTypeFactProvenance.Inferred,
+                "A [pscustomobject] literal binds to one PSObject with literal note properties.",
+                properties.ToDictionary(static property => property.Name, static property => property.Value.Type, StringComparer.OrdinalIgnoreCase)),
             PowerShellValueState.Known,
             properties.Aggregate(PowerShellSemanticEffect.None, static (effects, property) => effects | property.Value.Effects),
             properties.Aggregate(PowerShellRequiredCapability.PowerShellHostTypes, static (capabilities, property) => capabilities | property.Value.Capabilities))

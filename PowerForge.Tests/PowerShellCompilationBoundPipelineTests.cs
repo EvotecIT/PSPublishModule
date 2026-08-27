@@ -511,7 +511,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     public void HostedBinderRebindsCallsToSemanticallyRejectedLocalFunctionsAsCommandRegions()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Invoke-Fallback { return $env:POWERFORGE_VALUE } function Get-Value { $output = Invoke-Fallback; $output }",
+            "function Invoke-Fallback { return $global:POWERFORGE_VALUE } function Get-Value { $output = Invoke-Fallback; $output }",
             TestPath("retained-local-command-region.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(

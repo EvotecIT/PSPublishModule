@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Runtime.InteropServices;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -28,7 +29,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [Fact]
     public void StrictClosureVerifierRejectsManagedProcessStartReferences()
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => PowerShellStrictDependencyClosureVerifier.Verify(new[]
+        var exception = Assert.Throws<InvalidOperationException>(() => Verify(new[]
         {
             new PowerShellCompilationArtifactFile { Path = typeof(ProcessRunner).Assembly.Location, Role = "Fixture" }
         }));
@@ -65,7 +66,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
 
             var consumerAssembly = Path.Combine(output, "Consumer.dll");
-            var exception = Assert.Throws<InvalidOperationException>(() => PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            var exception = Assert.Throws<InvalidOperationException>(() => Verify(new[]
             {
                 new PowerShellCompilationArtifactFile { Path = consumerAssembly, Role = "Primary" }
             }));
@@ -113,7 +114,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
                 TimeSpan.FromSeconds(60)));
             Assert.True(wrongBuild.Succeeded, wrongBuild.StdErr + Environment.NewLine + wrongBuild.StdOut);
 
-            var exception = Assert.Throws<InvalidOperationException>(() => PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            var exception = Assert.Throws<InvalidOperationException>(() => Verify(new[]
             {
                 new PowerShellCompilationArtifactFile { Path = Path.Combine(consumerOutput, "Consumer.dll"), Role = "Primary" },
                 new PowerShellCompilationArtifactFile { Path = Path.Combine(wrongOutput, "Versioned.Dependency.dll"), Role = "RuntimeDependency" }
@@ -138,7 +139,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             var path = Path.Combine(root, "unknown.exe");
             File.WriteAllBytes(path, new byte[] { 1, 2, 3, 4 });
 
-            var result = PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            var result = Verify(new[]
             {
                 new PowerShellCompilationArtifactFile { Path = path, Role = "Primary", SizeBytes = 4 }
             });
@@ -151,6 +152,110 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task StrictClosureVerifierUsesTheArtifactTargetReferencePackInsteadOfTheBuildHost()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "TargetRuntimeClosure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var project = Path.Combine(root, "TargetProof.csproj");
+            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Proof.cs"), "public static class Proof { public static int Value => 1; }");
+            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", Path.Combine(root, "out"), "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
+            var assembly = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(root, "out", "TargetProof.dll"), Role = "Primary" } };
+
+            var accepted = Verify(assembly, "net10.0");
+            var mismatch = Assert.Throws<InvalidOperationException>(() => Verify(assembly, "net8.0"));
+
+            Assert.True(accepted.Verified);
+            Assert.Equal("net10.0", accepted.TargetFramework);
+            Assert.Contains("missing managed assembly", mismatch.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StrictClosureVerifierRejectsManagedPInvokeUntilTargetHostNativeProofExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "NativeClosure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var project = Path.Combine(root, "NativeProof.csproj");
+            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Proof.cs"), "using System.Runtime.InteropServices; public static class Proof { [DllImport(\"nativeproof\")] public static extern int Invoke(); }");
+            var output = Path.Combine(root, "out");
+            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
+            var files = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(output, "NativeProof.dll"), Role = "Primary" } };
+
+            var missing = Assert.Throws<InvalidOperationException>(() => Verify(files, runtimeIdentifier: "win-x64"));
+            var graph = new PowerShellCompilationDependencyGraph
+            {
+                Nodes = new[]
+                {
+                    new PowerShellCompilationDependencyNode
+                    {
+                        Kind = PowerShellCompilationDependencyNodeKind.NativeLibrary,
+                        Disposition = PowerShellCompilationDependencyGraphDisposition.External,
+                        Identity = new PowerShellCompilationDependencyIdentity { Name = "nativeproof", RuntimeIdentifier = "win-x64" }
+                    }
+                }
+            };
+            var declared = Assert.Throws<InvalidOperationException>(() => Verify(files, runtimeIdentifier: "win-x64", graph: graph));
+
+            Assert.Contains("certification remains fail-closed", missing.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("certification remains fail-closed", declared.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StrictClosureVerifierRejectsOpaqueNativeLibraryUntilTargetHostProofExists()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "OpaqueNativeClosure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "opaque-native.dll");
+            File.Copy(Environment.ProcessPath!, path);
+
+            var result = Verify(
+                new[] { new PowerShellCompilationArtifactFile { Path = path, Role = "RuntimeDependency" } },
+                runtimeIdentifier: "win-x64");
+
+            Assert.False(result.Verified);
+            Assert.Equal(1, result.NativeLibraries);
+            Assert.Contains(result.Limitations, static value => value.Contains("certification remains fail-closed", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static PowerShellCompilationDependencyClosure Verify(
+        IEnumerable<PowerShellCompilationArtifactFile> files,
+        string targetFramework = "net10.0",
+        string? runtimeIdentifier = null,
+        PowerShellCompilationDependencyGraph? graph = null)
+        => PowerShellStrictDependencyClosureVerifier.Verify(new PowerShellStrictDependencyClosureRequest(
+            files,
+            targetFramework,
+            runtimeIdentifier,
+            graph ?? new PowerShellCompilationDependencyGraph()));
 
     [Fact]
     public void ArrayAndForHeaderNodesPropagateNestedProcessEffects()

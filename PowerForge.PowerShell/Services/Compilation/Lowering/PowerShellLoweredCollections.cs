@@ -13,6 +13,25 @@ internal sealed class PowerShellLoweredArrayExpression : PowerShellLoweredExpres
     internal PowerShellImmutableArray<PowerShellLoweredExpression> Elements { get; }
 }
 
+internal sealed class PowerShellLoweredArrayConcatenationExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredArrayConcatenationExpression(
+        SourceSpan span,
+        PowerShellLoweredExpression left,
+        PowerShellLoweredExpression right,
+        bool enumerateRight)
+        : base(span, typeof(object[]))
+    {
+        Left = left;
+        Right = right;
+        EnumerateRight = enumerateRight;
+    }
+
+    internal PowerShellLoweredExpression Left { get; }
+    internal PowerShellLoweredExpression Right { get; }
+    internal bool EnumerateRight { get; }
+}
+
 internal sealed class PowerShellLoweredDictionaryEntry
 {
     internal PowerShellLoweredDictionaryEntry(PowerShellLoweredExpression key, PowerShellLoweredExpression value)

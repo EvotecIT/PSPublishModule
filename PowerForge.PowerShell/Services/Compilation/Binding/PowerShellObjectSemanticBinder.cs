@@ -4,6 +4,30 @@ namespace PowerForge;
 
 internal static class PowerShellObjectSemanticBinder
 {
+    internal static PowerShellTypeFact InferLiteralType(ConvertExpressionAst conversion)
+    {
+        var properties = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
+        if (conversion.Child is HashtableAst hashtable)
+        {
+            foreach (var pair in hashtable.KeyValuePairs)
+            {
+                if (pair.Item1 is not StringConstantExpressionAst key ||
+                    pair.Item2 is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                    pipeline.PipelineElements[0] is not CommandExpressionAst command)
+                    continue;
+                var type = command.Expression.StaticType == typeof(object)
+                    ? PowerShellTypeFact.Unknown
+                    : new PowerShellTypeFact(command.Expression.StaticType, PowerShellTypeFactProvenance.Inferred, "The literal note-property expression provides a bounded property type.");
+                properties[key.Value] = type;
+            }
+        }
+        return new PowerShellTypeFact(
+            typeof(System.Management.Automation.PSObject),
+            PowerShellTypeFactProvenance.Inferred,
+            "A [pscustomobject] literal provides one statically known note-property shape.",
+            properties);
+    }
+
     internal static PowerShellBoundExpression? Bind(
         ParsedSourceDocument document,
         ConvertExpressionAst conversion,
@@ -35,5 +59,134 @@ internal static class PowerShellObjectSemanticBinder
             properties.Add(new PowerShellBoundNoteProperty(key.Value, value));
         }
         return new PowerShellBoundPowerShellObjectExpression(span, properties.ToArray());
+    }
+
+    internal static bool TryBindKnownPropertiesValue(
+        ParsedSourceDocument document,
+        MemberExpressionAst syntax,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellBoundExpression? bound)
+    {
+        bound = null;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) ||
+            syntax.Member is not StringConstantExpressionAst { Value: var terminal } ||
+            !terminal.Equals("Value", StringComparison.OrdinalIgnoreCase) ||
+            syntax.Expression is not IndexExpressionAst
+            {
+                Target: MemberExpressionAst
+                {
+                    Expression: MemberExpressionAst
+                    {
+                        Expression: var receiverSyntax,
+                        Member: StringConstantExpressionAst { Value: var psObjectMember }
+                    },
+                    Member: StringConstantExpressionAst { Value: var propertiesMember }
+                },
+                Index: StringConstantExpressionAst { Value: var propertyName }
+            } ||
+            !psObjectMember.Equals("PSObject", StringComparison.OrdinalIgnoreCase) ||
+            !propertiesMember.Equals("Properties", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var receiver = bindExpression(receiverSyntax, null);
+        if (receiver is null || !receiver.Type.TryGetKnownProperty(propertyName, out var propertyType))
+            return false;
+        bound = new PowerShellBoundClrMemberExpression(
+            PowerShellSourceParser.GetSpan(document, syntax.Extent),
+            receiver.Type.ClrType,
+            propertyName,
+            isStatic: false,
+            receiver,
+            PowerShellClrReceiverBehavior.PowerShellAdapter,
+            propertyType);
+        return true;
+    }
+
+    internal static bool TryBindAddMember(
+        ParsedSourceDocument document,
+        StatementAst statement,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticRegistry commandRegistry,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        out PowerShellBoundStatement? bound)
+    {
+        bound = null;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) ||
+            statement is not PipelineAst { PipelineElements.Count: 2 } pipeline ||
+            pipeline.PipelineElements[0] is not CommandExpressionAst { Expression: VariableExpressionAst receiverSyntax } ||
+            pipeline.PipelineElements[1] is not CommandAst command)
+            return false;
+
+        var resolution = commandRegistry.Resolve(command.GetCommandName());
+        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved ||
+            resolution.Contract!.Family != PowerShellCompilationCommandFamily.ObjectMutation)
+            return false;
+
+        if (!symbols.TryGetValue(receiverSyntax.VariablePath.UserPath, out var receiverBinding) ||
+            receiverBinding.Type.ClrType != typeof(System.Management.Automation.PSObject))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2910", "Bounded Add-Member requires a local [pscustomobject] value with a statically known shape.", PowerShellSourceParser.GetSpan(document, pipeline.Extent)));
+            return true;
+        }
+
+        var provider = resolution.Contract;
+        if (!TryGetExactNamedArguments(command, provider.Parameters, out var arguments) ||
+            !arguments.TryGetValue("NotePropertyName", out var nameSyntax) ||
+            nameSyntax is not StringConstantExpressionAst { Value: var propertyName } ||
+            string.IsNullOrWhiteSpace(propertyName) ||
+            !arguments.TryGetValue("NotePropertyValue", out var valueSyntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2911", "Bounded Add-Member supports literal -NotePropertyName and one -NotePropertyValue expression without PassThru or force semantics.", PowerShellSourceParser.GetSpan(document, command.Extent)));
+            return true;
+        }
+
+        var receiver = bindExpression(receiverSyntax, null);
+        var value = bindExpression(valueSyntax, null);
+        if (receiver is null || value is null) return true;
+        receiverBinding.AddKnownProperty(propertyName, value.Type);
+        bound = new PowerShellBoundClrMemberAssignmentStatement(
+            PowerShellSourceParser.GetSpan(document, pipeline.Extent),
+            receiver,
+            receiver.Type.ClrType,
+            propertyName,
+            PowerShellClrReceiverBehavior.PowerShellAdapterAddNoteProperty,
+            value);
+        return true;
+    }
+
+    private static bool TryGetExactNamedArguments(
+        CommandAst command,
+        IReadOnlyList<PowerShellCompilationCommandParameterContract> contracts,
+        out IReadOnlyDictionary<string, CommandElementAst> arguments)
+    {
+        var elements = command.CommandElements;
+        var values = new Dictionary<string, CommandElementAst>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 1; index < elements.Count; index++)
+        {
+            if (elements[index] is not CommandParameterAst parameter)
+                return Fail(out arguments);
+            var contract = contracts.SingleOrDefault(candidate =>
+                parameter.ParameterName.Equals(candidate.Name, StringComparison.OrdinalIgnoreCase) ||
+                candidate.Aliases.Any(alias => parameter.ParameterName.Equals(alias, StringComparison.OrdinalIgnoreCase)));
+            if (contract is null || values.ContainsKey(contract.Name))
+                return Fail(out arguments);
+            CommandElementAst? argument = parameter.Argument;
+            if (argument is null && ++index < elements.Count && elements[index] is not CommandParameterAst)
+                argument = elements[index];
+            if (argument is null)
+                return Fail(out arguments);
+            values.Add(contract.Name, argument);
+        }
+        arguments = values;
+        return values.Count == contracts.Count;
+
+        static bool Fail(out IReadOnlyDictionary<string, CommandElementAst> result)
+        {
+            result = null!;
+            return false;
+        }
     }
 }
