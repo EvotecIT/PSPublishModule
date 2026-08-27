@@ -37,7 +37,7 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Equal(typeof(double).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
         Assert.Contains("public static double Get_AllowedAverageMs(double BaselineMs, double RelativeTolerance, double AbsoluteToleranceMs)", result.SourceCode, StringComparison.Ordinal);
-        Assert.Contains("double relativeCap = (BaselineMs * ((1D + RelativeTolerance)));", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("double relativeCap = (BaselineMs * (1d + RelativeTolerance));", result.SourceCode, StringComparison.Ordinal);
         Assert.Contains("if ((relativeCap > absoluteCap))", result.SourceCode, StringComparison.Ordinal);
     }
 
