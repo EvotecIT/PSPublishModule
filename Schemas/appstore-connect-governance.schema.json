@@ -24,7 +24,8 @@
     }
   },
   "definitions": {
-    "date": { "type": [ "string", "null" ], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "date": { "type": [ "string", "null" ], "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "requiredDate": { "type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
     "pricing": {
       "type": "object",
       "additionalProperties": false,
@@ -59,6 +60,18 @@
             "type": "object",
             "additionalProperties": false,
             "required": [ "territoryId", "available" ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "preOrderEnabled": { "const": true } },
+                  "required": [ "preOrderEnabled" ]
+                },
+                "then": {
+                  "required": [ "releaseDate" ],
+                  "properties": { "releaseDate": { "$ref": "#/definitions/requiredDate" } }
+                }
+              }
+            ],
             "properties": {
               "territoryId": { "type": "string", "minLength": 1 },
               "available": { "type": "boolean" },

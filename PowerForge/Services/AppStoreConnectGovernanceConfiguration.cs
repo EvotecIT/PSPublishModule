@@ -121,6 +121,8 @@ public sealed class AppStoreConnectGovernanceConfiguration
             if (item is null) { Error(findings, "Governance.Availability.Null", path, "Territory entry must not be null."); continue; }
             Required(findings, item.TerritoryId, path + ".territoryId", "Governance.Availability.Territory", "Territory id is required.");
             Date(findings, item.ReleaseDate, path + ".releaseDate");
+            if (item.PreOrderEnabled == true && string.IsNullOrWhiteSpace(item.ReleaseDate))
+                Error(findings, "Governance.Availability.PreOrderReleaseDate", path + ".releaseDate", "Preorder availability requires a release date.");
         }
     }
 

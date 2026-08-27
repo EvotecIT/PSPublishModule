@@ -83,9 +83,59 @@ public sealed partial class AppStoreConnectClientTests
         var territory = Assert.Single(body.RootElement.GetProperty("included").EnumerateArray());
         var attributes = territory.GetProperty("attributes");
         Assert.True(attributes.GetProperty("available").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, attributes.GetProperty("releaseDate").ValueKind);
+        Assert.False(attributes.TryGetProperty("releaseDate", out _));
         Assert.False(attributes.TryGetProperty("preOrderEnabled", out _));
         Assert.Equal("POL", territory.GetProperty("relationships").GetProperty("territory").GetProperty("data").GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task CreateAppAvailabilityAsync_IncludesReviewedPreorderDate()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.Created,
+            """{ "data": { "type": "appAvailabilities", "id": "availability-1", "attributes": { "availableInNewTerritories": false } } }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        _ = await client.CreateAppAvailabilityAsync("app-1", new AppStoreConnectAppAvailabilitySpec
+        {
+            AvailableInNewTerritories = false,
+            Territories =
+            [
+                new AppStoreConnectTerritoryAvailabilitySpec
+                {
+                    TerritoryId = "POL",
+                    Available = true,
+                    ReleaseDate = "2026-09-15",
+                    PreOrderEnabled = true
+                }
+            ]
+        });
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var attributes = Assert.Single(body.RootElement.GetProperty("included").EnumerateArray()).GetProperty("attributes");
+        Assert.True(attributes.GetProperty("preOrderEnabled").GetBoolean());
+        Assert.Equal("2026-09-15", attributes.GetProperty("releaseDate").GetString());
+    }
+
+    [Fact]
+    public async Task TerritoryAvailabilityMutations_RejectPreorderWithoutReleaseDate()
+    {
+        var handler = new SequenceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var territory = new AppStoreConnectTerritoryAvailabilitySpec
+        {
+            TerritoryId = "POL",
+            Available = true,
+            PreOrderEnabled = true
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppAvailabilityAsync("app-1", new AppStoreConnectAppAvailabilitySpec
+        {
+            Territories = [territory]
+        }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateTerritoryAvailabilityAsync("territory-1", territory));
+        Assert.Empty(handler.RequestUris);
     }
 
     [Fact]
@@ -128,7 +178,7 @@ public sealed partial class AppStoreConnectClientTests
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
         Assert.False(attributes.GetProperty("available").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, attributes.GetProperty("releaseDate").ValueKind);
+        Assert.False(attributes.TryGetProperty("releaseDate", out _));
         Assert.False(attributes.TryGetProperty("preOrderEnabled", out _));
     }
 
@@ -146,11 +196,107 @@ public sealed partial class AppStoreConnectClientTests
             {
                 TerritoryId = "POL",
                 Available = true,
+                ReleaseDate = "2026-07-03",
                 PreOrderEnabled = false
             });
 
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
-        Assert.False(body.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("preOrderEnabled").GetBoolean());
+        var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.False(attributes.GetProperty("preOrderEnabled").GetBoolean());
+        Assert.False(attributes.TryGetProperty("releaseDate", out _));
+    }
+
+    [Fact]
+    public async Task UpdateTerritoryAvailabilityAsync_IncludesReleaseDateForPreorder()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            """{ "data": { "type": "territoryAvailabilities", "id": "territory-1", "attributes": { "available": true, "releaseDate": "2026-09-15", "preOrderEnabled": true }, "relationships": { "territory": { "data": { "type": "territories", "id": "POL" } } } } }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        _ = await client.UpdateTerritoryAvailabilityAsync(
+            "territory-1",
+            new AppStoreConnectTerritoryAvailabilitySpec
+            {
+                TerritoryId = "POL",
+                Available = true,
+                ReleaseDate = "2026-09-15",
+                PreOrderEnabled = true
+            });
+
+        using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.True(attributes.GetProperty("preOrderEnabled").GetBoolean());
+        Assert.Equal("2026-09-15", attributes.GetProperty("releaseDate").GetString());
+    }
+
+    [Fact]
+    public async Task GovernancePlan_IgnoresHistoricalReleaseDateOutsidePreorder()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": { "type": "appAvailabilities", "id": "availability-1", "attributes": { "availableInNewTerritories": true } } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [ { "type": "territoryAvailabilities", "id": "territory-1", "attributes": { "available": true, "releaseDate": "2026-01-01", "preOrderEnabled": false }, "relationships": { "territory": { "data": { "type": "territories", "id": "POL" } } } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            Availability = new AppStoreConnectAppAvailabilitySpec
+            {
+                AvailableInNewTerritories = true,
+                Territories =
+                [
+                    new AppStoreConnectTerritoryAvailabilitySpec
+                    {
+                        TerritoryId = "POL",
+                        Available = true,
+                        ReleaseDate = "2026-02-01",
+                        PreOrderEnabled = false
+                    }
+                ]
+            }
+        });
+
+        Assert.True(plan.IsConverged);
+        Assert.Empty(plan.Changes);
+    }
+
+    [Fact]
+    public async Task GovernancePlan_DetectsReleaseDateDriftDuringPreorder()
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": { "type": "appAvailabilities", "id": "availability-1", "attributes": { "availableInNewTerritories": true } } }"""),
+            new SequenceResponse(HttpStatusCode.OK,
+                """{ "data": [ { "type": "territoryAvailabilities", "id": "territory-1", "attributes": { "available": true, "releaseDate": "2026-09-15", "preOrderEnabled": true }, "relationships": { "territory": { "data": { "type": "territories", "id": "POL" } } } } ] }"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var plan = await new AppStoreConnectGovernanceService(client).PlanAsync(new AppStoreConnectGovernanceSpec
+        {
+            AppId = "app-1",
+            Availability = new AppStoreConnectAppAvailabilitySpec
+            {
+                AvailableInNewTerritories = true,
+                Territories =
+                [
+                    new AppStoreConnectTerritoryAvailabilitySpec
+                    {
+                        TerritoryId = "POL",
+                        Available = true,
+                        ReleaseDate = "2026-09-22",
+                        PreOrderEnabled = true
+                    }
+                ]
+            }
+        });
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(AppStoreConnectGovernanceChangeAction.Update, change.Action);
+        Assert.Equal("TerritoryAvailability", change.ResourceType);
     }
 
     [Fact]
@@ -278,6 +424,18 @@ public sealed partial class AppStoreConnectClientTests
         var findings = new AppStoreConnectGovernanceConfiguration().Validate(new AppStoreConnectGovernanceSpec
         {
             AppId = "app-1",
+            Availability = new AppStoreConnectAppAvailabilitySpec
+            {
+                Territories =
+                [
+                    new AppStoreConnectTerritoryAvailabilitySpec
+                    {
+                        TerritoryId = "POL",
+                        Available = true,
+                        PreOrderEnabled = true
+                    }
+                ]
+            },
             Accessibility =
             [
                 new AppStoreConnectAccessibilityDeclarationSpec { DeviceFamily = "CARPLAY" }
@@ -297,6 +455,7 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.Contains(findings, finding => finding.Code == "Governance.Accessibility.DeviceFamily");
         Assert.Contains(findings, finding => finding.Code == "Governance.Accessibility.Empty");
+        Assert.Contains(findings, finding => finding.Code == "Governance.Availability.PreOrderReleaseDate");
         Assert.Contains(findings, finding => finding.Code == "Governance.Subscriptions.Period");
     }
 
