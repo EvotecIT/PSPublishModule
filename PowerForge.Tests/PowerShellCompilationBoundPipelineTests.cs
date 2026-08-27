@@ -105,6 +105,28 @@ public sealed class PowerShellCompilationBoundPipelineTests
         Assert.Null(parserTypeLeak);
     }
 
+    [Fact]
+    public void PublicTranspilerUsesTheMigratedLiteralFunctionContract()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "literal.ps1");
+        try
+        {
+            File.WriteAllText(path, "function Get-Answer { return 42 }");
+
+            var result = new PowerShellTypedCompilationTranspiler().Transpile(path);
+
+            Assert.True(result.Success);
+            Assert.Contains("public static int Get_Answer()", result.SourceCode, StringComparison.Ordinal);
+            Assert.Contains("return 42;", result.SourceCode, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string TestPath(string fileName)
         => Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", fileName);
 

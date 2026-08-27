@@ -91,10 +91,11 @@ public sealed class PowerShellTypedCompilationTranspiler
             ParseError[] parseErrors;
             var ast = Parser.ParseFile(fullPath, out tokens, out parseErrors);
             if (parseErrors.Length == 0)
-                parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan));
+                parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath)));
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
+        var boundEmissions = CreateBoundEmissionIndex(parsedFiles);
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -179,7 +180,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
                 if (!source.Unit.IsCompilable || duplicateFunctions.Contains(duplicateKey) || collidingFunctions.Contains(key) || excludedMethods?.Contains(key) == true)
                     continue;
-                TryEmitIndependent(source, targetFramework, capabilities, methods, methodSources, diagnostics);
+                TryEmitIndependent(source, targetFramework, capabilities, boundEmissions, methods, methodSources, diagnostics);
             }
         }
 
@@ -402,18 +403,20 @@ public sealed class PowerShellTypedCompilationTranspiler
         FunctionSource source,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
+        IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions,
         List<PowerShellCompiledMethod> methods,
         List<string> methodSources,
         List<PowerShellCompilationDiagnostic> diagnostics)
     {
         try
         {
-            var emitted = new PowerShellCSharpMethodEmitter(
-                source.Parsed.Path,
-                source.Function,
-                targetFramework,
-                capabilities,
-                parameterMetadata: source.Unit.Parameters).Emit();
+            var emitted = TryEmitBoundIndependent(source, boundEmissions) ??
+                          new PowerShellCSharpMethodEmitter(
+                              source.Parsed.Path,
+                              source.Function,
+                              targetFramework,
+                              capabilities,
+                              parameterMetadata: source.Unit.Parameters).Emit();
             EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
@@ -423,6 +426,40 @@ public sealed class PowerShellTypedCompilationTranspiler
             diagnostics.Add(CreateDiagnostic(source, ex.Node, ex.Message));
         }
     }
+
+    private static PowerShellCSharpMethodEmission? TryEmitBoundIndependent(
+        FunctionSource source,
+        IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions)
+    {
+        if (source.Unit.Parameters.Length != 0 ||
+            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
+            GetFunctionAliases(source.Function).Length != 0)
+            return null;
+
+        return boundEmissions.TryGetValue(
+            GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
+            out var emitted)
+            ? emitted
+            : null;
+    }
+
+    private static IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> CreateBoundEmissionIndex(
+        IReadOnlyList<ParsedSource> sources)
+    {
+        var result = new PowerShellSemanticCompilationPipeline().Compile(sources.Select(static source => source.Document));
+        var paths = sources.ToDictionary(static source => source.Document.DocumentId, static source => source.Path, StringComparer.Ordinal);
+        var emissions = new Dictionary<string, PowerShellCSharpMethodEmission>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < result.Lowered.Functions.Length && index < result.Emitted.Methods.Length; index++)
+        {
+            var function = result.Lowered.Functions[index];
+            if (!paths.TryGetValue(function.Symbol.DocumentId, out var path)) continue;
+            emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
+        }
+        return emissions;
+    }
+
+    private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
+        => path + "\0" + name + "\0" + definitionStartLine;
 
     private static void EnsureBasicFunctionBinarySurfacePreserved(
         FunctionSource source,
@@ -626,16 +663,18 @@ public sealed class PowerShellTypedCompilationTranspiler
 
     private sealed class ParsedSource
     {
-        internal ParsedSource(string path, ScriptBlockAst ast, PowerShellCompilationFilePlan plan)
+        internal ParsedSource(string path, ScriptBlockAst ast, PowerShellCompilationFilePlan plan, ParsedSourceDocument document)
         {
             Path = path;
             Ast = ast;
             Plan = plan;
+            Document = document;
         }
 
         internal string Path { get; }
         internal ScriptBlockAst Ast { get; }
         internal PowerShellCompilationFilePlan Plan { get; }
+        internal ParsedSourceDocument Document { get; }
     }
 }
 

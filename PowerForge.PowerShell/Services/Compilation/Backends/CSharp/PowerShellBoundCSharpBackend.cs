@@ -65,6 +65,10 @@ internal sealed class PowerShellBoundCSharpBackend
         if (literal.Value is long longValue) return longValue.ToString(CultureInfo.InvariantCulture) + "L";
         if (literal.Value is ulong unsignedLong) return unsignedLong.ToString(CultureInfo.InvariantCulture) + "UL";
         if (literal.Value is uint unsignedInteger) return unsignedInteger.ToString(CultureInfo.InvariantCulture) + "U";
+        if (literal.Value is System.Numerics.BigInteger bigInteger)
+        {
+            return $"global::System.Numerics.BigInteger.Parse({PowerShellCSharpLiteral.QuoteString(bigInteger.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)";
+        }
         return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
     }
 }
