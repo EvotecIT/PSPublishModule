@@ -363,6 +363,25 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
+    public void EmitSource_EscapesLiteralUrlQueryBracketsButPreservesInstallerProperties()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open filtered dashboard",
+            Target = "https://example.test/[TENANT]/search?filter[status]=[STATUS]"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "https://example.test/[TENANT]/search?filter[\\[]status[\\]]=[STATUS]");
+    }
+
+    [Fact]
     public void EmitSource_ModelsDeferredExecutableActions()
     {
         var definition = CreateMonitoringInstaller();

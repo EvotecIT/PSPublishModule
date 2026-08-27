@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -340,29 +341,62 @@ public sealed class PowerForgeWixInstallerSourceEmitter
 
     private static string FormatExitLaunchTarget(string target)
     {
-        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) || uri.HostNameType != UriHostNameType.IPv6)
+        if (!Uri.TryCreate(target, UriKind.Absolute, out _))
         {
             return target;
         }
 
-        var openingBracket = target.IndexOf("://[", StringComparison.Ordinal);
-        if (openingBracket < 0)
+        var formatted = new StringBuilder(target.Length);
+        for (var index = 0; index < target.Length; index++)
         {
-            return target;
+            if (target[index] != '[')
+            {
+                formatted.Append(target[index]);
+                continue;
+            }
+
+            var closingBracket = target.IndexOf(']', index + 1);
+            if (closingBracket < 0)
+            {
+                formatted.Append(target[index]);
+                continue;
+            }
+
+            if (IsInstallerPropertyReference(target, index, closingBracket))
+            {
+                formatted.Append(target, index, closingBracket - index + 1);
+            }
+            else
+            {
+                formatted.Append("[\\[]");
+                formatted.Append(target, index + 1, closingBracket - index - 1);
+                formatted.Append("[\\]]");
+            }
+
+            index = closingBracket;
         }
 
-        openingBracket += 3;
-        var closingBracket = target.IndexOf(']', openingBracket + 1);
-        if (closingBracket < 0)
+        return formatted.ToString();
+    }
+
+    private static bool IsInstallerPropertyReference(string target, int openingBracket, int closingBracket)
+    {
+        if (closingBracket == openingBracket + 1
+            || (openingBracket > 0 && (char.IsLetterOrDigit(target[openingBracket - 1]) || target[openingBracket - 1] == '_')))
         {
-            return target;
+            return false;
         }
 
-        return target[..openingBracket]
-               + "[\\[]"
-               + target[(openingBracket + 1)..closingBracket]
-               + "[\\]]"
-               + target[(closingBracket + 1)..];
+        for (var index = openingBracket + 1; index < closingBracket; index++)
+        {
+            var character = target[index];
+            if (!char.IsLetterOrDigit(character) && character != '_' && character != '.')
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string BuildRequiredInputDialogId(int index)
