@@ -641,6 +641,12 @@ internal sealed class PowerShellSemanticBinder
             return runtimeState;
         switch (syntax)
         {
+            case ExpandableStringExpressionAst expandable:
+                return PowerShellStringSemanticBinder.BindInterpolated(
+                    document,
+                    expandable,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    diagnostics);
             case StringConstantExpressionAst text:
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);
             case ConstantExpressionAst constant:

@@ -199,6 +199,7 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundMembershipExpression membership => ExpressionContainsBoundParameterPresence(membership.Left) || ExpressionContainsBoundParameterPresence(membership.Right),
             PowerShellBoundStringSplitExpression split => ExpressionContainsBoundParameterPresence(split.Input) || ExpressionContainsBoundParameterPresence(split.Pattern),
             PowerShellBoundStringJoinExpression join => ExpressionContainsBoundParameterPresence(join.Values) || ExpressionContainsBoundParameterPresence(join.Separator),
+            PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Any(part => part.Expression is not null && ExpressionContainsBoundParameterPresence(part.Expression)),
             PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionContainsBoundParameterPresence(mutation.Value),
             PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionContainsBoundParameterPresence),
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry => ExpressionContainsBoundParameterPresence(entry.Key) || ExpressionContainsBoundParameterPresence(entry.Value)),
@@ -450,13 +451,11 @@ internal sealed class PowerShellTypedLowerer
                 returned.Span,
                 returned.Expression is null ? null : LowerExpression(returned.Expression, functions, names, targetCapabilities),
                 returned.EmitsValue),
-            PowerShellBoundExpressionStatement { EmitsOutput: true } expression => new PowerShellLoweredReturnStatement(
-                expression.Span,
-                LowerExpression(expression.Expression, functions, names, targetCapabilities),
-                emitsValue: true),
-            PowerShellBoundExpressionStatement expression => new PowerShellLoweredExpressionStatement(
-                expression.Span,
-                LowerExpression(expression.Expression, functions, names, targetCapabilities)),
+            PowerShellBoundExpressionStatement expression => LowerExpressionStatement(
+                expression,
+                functions,
+                names,
+                targetCapabilities),
             PowerShellBoundStreamWriteStatement stream => new PowerShellLoweredStreamWriteStatement(
                 stream.Span,
                 stream.Kind,
@@ -500,6 +499,18 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
         };
+
+    private static PowerShellLoweredStatement LowerExpressionStatement(
+        PowerShellBoundExpressionStatement statement,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
+        LoweredNameAllocator names,
+        PowerShellCompilationCapability targetCapabilities)
+    {
+        var expression = LowerExpression(statement.Expression, functions, names, targetCapabilities);
+        return statement.EmitsOutput && expression.ClrType != typeof(void)
+            ? new PowerShellLoweredReturnStatement(statement.Span, expression, emitsValue: true)
+            : new PowerShellLoweredExpressionStatement(statement.Span, expression);
+    }
 
     private static PowerShellLoweredForStatement LowerFor(
         PowerShellBoundForStatement loop,
@@ -626,6 +637,11 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(join.Separator, functions, names, targetCapabilities),
                 names.Allocate("pf_join_left"),
                 names.Allocate("pf_join_right")),
+            PowerShellBoundInterpolatedStringExpression interpolated => new PowerShellLoweredInterpolatedStringExpression(
+                interpolated.Span,
+                interpolated.Parts.Select(part => new PowerShellLoweredInterpolatedStringPart(
+                    part.Text,
+                    part.Expression is null ? null : LowerExpression(part.Expression, functions, names, targetCapabilities))).ToArray()),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
                 mutation.Type.ClrType,

@@ -272,7 +272,9 @@ internal sealed class PowerShellSemanticAnalyzer
             if (expressions.Length == 0)
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "The function has no success output."));
             var facts = expressions.Select(expression => ResolveType(expression, functions)).ToArray();
-            var known = facts.Where(static fact => fact.Provenance != PowerShellTypeFactProvenance.Unknown).ToArray();
+            var known = facts.Where(static fact =>
+                fact.Provenance != PowerShellTypeFactProvenance.Unknown &&
+                fact.ClrType != typeof(void)).ToArray();
             if (known.Length == 0) return function;
             var first = known[0];
             if (known.All(fact => fact.ClrType == first.ClrType))
@@ -500,6 +502,7 @@ internal sealed class PowerShellSemanticAnalyzer
             PowerShellBoundMembershipExpression membership => new[] { membership.Left, membership.Right },
             PowerShellBoundStringSplitExpression split => new[] { split.Input, split.Pattern },
             PowerShellBoundStringJoinExpression join => new[] { join.Values, join.Separator },
+            PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Where(static part => part.Expression is not null).Select(static part => part.Expression!),
             PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
             PowerShellBoundArrayExpression array => array.Elements,
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
@@ -686,6 +689,12 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(join.Values)) yield return read;
             foreach (var read in EnumerateVariableReads(join.Separator)) yield return read;
         }
+        if (expression is PowerShellBoundInterpolatedStringExpression interpolated)
+        {
+            foreach (var part in interpolated.Parts.Where(static part => part.Expression is not null))
+            foreach (var read in EnumerateVariableReads(part.Expression!))
+                yield return read;
+        }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
             if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
@@ -787,6 +796,12 @@ internal sealed class PowerShellSemanticAnalyzer
         {
             foreach (var nested in EnumerateInvocations(join.Values)) yield return nested;
             foreach (var nested in EnumerateInvocations(join.Separator)) yield return nested;
+        }
+        if (expression is PowerShellBoundInterpolatedStringExpression interpolated)
+        {
+            foreach (var part in interpolated.Parts.Where(static part => part.Expression is not null))
+            foreach (var nested in EnumerateInvocations(part.Expression!))
+                yield return nested;
         }
         if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
         {

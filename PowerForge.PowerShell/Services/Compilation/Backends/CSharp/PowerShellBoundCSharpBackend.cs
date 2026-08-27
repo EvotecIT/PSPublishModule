@@ -315,6 +315,7 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredMembershipExpression membership => EmitMembership(membership),
             PowerShellLoweredStringSplitExpression split => EmitStringSplit(split),
             PowerShellLoweredStringJoinExpression join => EmitStringJoin(join),
+            PowerShellLoweredInterpolatedStringExpression interpolated => EmitInterpolatedString(interpolated),
             PowerShellLoweredMutationExpression mutation => EmitMutation(
                 mutation.Target,
                 mutation.TargetClrType,
@@ -457,13 +458,28 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
         => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
 
+    private static string EmitInterpolatedString(PowerShellLoweredInterpolatedStringExpression interpolated)
+    {
+        var parts = interpolated.Parts.Select(part => part.Expression is null
+            ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
+            : $"({EmitExpression(part.Expression)} ?? string.Empty)").ToArray();
+        return parts.Length switch
+        {
+            0 => "string.Empty",
+            1 => parts[0],
+            _ => $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})"
+        };
+    }
+
     private static string EmitIndex(PowerShellLoweredIndexExpression index)
     {
         var target = EmitExpression(index.Target);
         var key = EmitExpression(index.Index);
         if (index.Kind == PowerShellBoundIndexKind.StringDictionary)
             return $"({target} is null ? null : {target}.ContainsKey({key}) ? {target}[{key}] : null)";
-        if (index.Kind is PowerShellBoundIndexKind.OrderedStringDictionary or PowerShellBoundIndexKind.ObjectDictionary)
+        if (index.Kind == PowerShellBoundIndexKind.OrderedStringDictionary)
+            return $"({target} is null ? null : {target}.Contains({key}) ? (string?){target}[{key}] : null)";
+        if (index.Kind == PowerShellBoundIndexKind.ObjectDictionary)
             return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";
         if (index.Kind == PowerShellBoundIndexKind.String) target = $"({target} ?? string.Empty)";
         else target = index.UsePowerShellRuntimeErrors
