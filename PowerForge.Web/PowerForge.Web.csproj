@@ -15,11 +15,14 @@
     <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
     <PackageTags>website;static-site;docs;automation;powerforge</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
@@ -29,7 +32,7 @@
     <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
     <PackageReference Include="HtmlTinkerX" Version="3.0.0" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.3" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.4" />
     <PackageReference Include="Scriban" Version="7.2.6" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
