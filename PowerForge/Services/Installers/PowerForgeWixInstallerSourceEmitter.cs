@@ -324,7 +324,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Dialog", "ExitDialog"),
                 new XAttribute("Control", "Finish"),
                 new XAttribute("Property", "WixShellExecTarget"),
-                new XAttribute("Value", exitLaunch.Target),
+                new XAttribute("Value", FormatExitLaunchTarget(exitLaunch.Target)),
                 new XAttribute("Order", "1"),
                 new XAttribute("Condition", exitLaunch.Condition)),
             new XElement(
@@ -336,6 +336,33 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Order", "2"),
                 new XAttribute("Condition", exitLaunch.Condition))
         };
+    }
+
+    private static string FormatExitLaunchTarget(string target)
+    {
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) || uri.HostNameType != UriHostNameType.IPv6)
+        {
+            return target;
+        }
+
+        var openingBracket = target.IndexOf("://[", StringComparison.Ordinal);
+        if (openingBracket < 0)
+        {
+            return target;
+        }
+
+        openingBracket += 3;
+        var closingBracket = target.IndexOf(']', openingBracket + 1);
+        if (closingBracket < 0)
+        {
+            return target;
+        }
+
+        return target[..openingBracket]
+               + "[\\[]"
+               + target[(openingBracket + 1)..closingBracket]
+               + "[\\]]"
+               + target[(closingBracket + 1)..];
     }
 
     private static string BuildRequiredInputDialogId(int index)
