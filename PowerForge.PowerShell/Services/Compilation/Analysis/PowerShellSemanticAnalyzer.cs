@@ -30,7 +30,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
     private static IEnumerable<IPowerShellSemanticPass> CreateDefaultPasses()
     {
-        yield return new DefiniteAssignmentPass();
+        yield return new PowerShellDefiniteAssignmentPass();
         yield return new LocalTypePass();
         yield return new CallGraphPass();
         yield return new ReturnTypePass();
@@ -38,168 +38,6 @@ internal sealed partial class PowerShellSemanticAnalyzer
         yield return new EffectPass();
         yield return new CapabilityPass();
         yield return new FallbackPass();
-    }
-
-    private sealed class DefiniteAssignmentPass : IPowerShellSemanticPass
-    {
-        public string Id => "10-definite-assignment";
-
-        public PowerShellBoundProgram Run(PowerShellBoundProgram program)
-        {
-            var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
-            foreach (var function in program.Functions)
-            {
-                var assigned = function.Parameters.Select(static parameter => parameter.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
-                var locals = function.Locals.Select(static local => local.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
-                AnalyzeDefiniteAssignment(function.Body, assigned, locals, diagnostics);
-            }
-            return program.WithDiagnostics(OrderDiagnostics(diagnostics));
-        }
-
-        private static void AnalyzeDefiniteAssignment(
-            PowerShellBoundBlock block,
-            ISet<string> assigned,
-            ISet<string> locals,
-            ICollection<PowerShellSemanticDiagnostic> diagnostics)
-        {
-            foreach (var statement in block.Statements)
-            {
-                if (statement is PowerShellBoundIfStatement conditional)
-                {
-                    foreach (var clause in conditional.Clauses) ReportReads(clause.Condition, assigned, locals, diagnostics);
-                    var branchStates = conditional.Clauses.Select(clause =>
-                    {
-                        var state = assigned.ToHashSet(StringComparer.Ordinal);
-                        AnalyzeDefiniteAssignment(clause.Body, state, locals, diagnostics);
-                        return state;
-                    }).ToList();
-                    if (conditional.ElseBlock is null)
-                        branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
-                    else
-                    {
-                        var elseState = assigned.ToHashSet(StringComparer.Ordinal);
-                        AnalyzeDefiniteAssignment(conditional.ElseBlock, elseState, locals, diagnostics);
-                        branchStates.Add(elseState);
-                    }
-                    if (branchStates.Count > 0)
-                    {
-                        var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
-                        assigned.Clear();
-                        assigned.UnionWith(definitelyAssigned);
-                    }
-                    continue;
-                }
-                if (statement is PowerShellBoundWhileStatement loop)
-                {
-                    ReportReads(loop.Condition, assigned, locals, diagnostics);
-                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
-                    AnalyzeDefiniteAssignment(loop.Body, loopState, locals, diagnostics);
-                    continue;
-                }
-                if (statement is PowerShellBoundForStatement forLoop)
-                {
-                    if (forLoop.Initializer is not null)
-                    {
-                        ReportReads(forLoop.Initializer, assigned, locals, diagnostics);
-                        if (forLoop.Initializer.Operation == PowerShellBoundMutationOperator.Assign)
-                            assigned.Add(forLoop.Initializer.Target.StableKey);
-                    }
-                    if (forLoop.Condition is not null) ReportReads(forLoop.Condition, assigned, locals, diagnostics);
-                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
-                    AnalyzeDefiniteAssignment(forLoop.Body, loopState, locals, diagnostics);
-                    if (forLoop.Iterator is not null) ReportReads(forLoop.Iterator, loopState, locals, diagnostics);
-                    continue;
-                }
-                if (statement is PowerShellBoundForEachStatement forEachLoop)
-                {
-                    ReportReads(forEachLoop.Collection, assigned, locals, diagnostics);
-                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
-                    loopState.Add(forEachLoop.Variable.StableKey);
-                    AnalyzeDefiniteAssignment(forEachLoop.Body, loopState, locals, diagnostics);
-                    continue;
-                }
-                if (statement is PowerShellBoundSwitchStatement switchStatement)
-                {
-                    ReportReads(switchStatement.Value, assigned, locals, diagnostics);
-                    foreach (var clause in switchStatement.Clauses) ReportReads(clause.Value, assigned, locals, diagnostics);
-                    var branchStates = switchStatement.Clauses.Select(clause =>
-                    {
-                        var state = assigned.ToHashSet(StringComparer.Ordinal);
-                        AnalyzeDefiniteAssignment(clause.Body, state, locals, diagnostics);
-                        return state;
-                    }).ToList();
-                    if (switchStatement.DefaultBlock is null)
-                        branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
-                    else
-                    {
-                        var defaultState = assigned.ToHashSet(StringComparer.Ordinal);
-                        AnalyzeDefiniteAssignment(switchStatement.DefaultBlock, defaultState, locals, diagnostics);
-                        branchStates.Add(defaultState);
-                    }
-                    if (branchStates.Count > 0)
-                    {
-                        var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
-                        assigned.Clear();
-                        assigned.UnionWith(definitelyAssigned);
-                    }
-                    continue;
-                }
-                if (statement is PowerShellBoundTryStatement tryStatement)
-                {
-                    var branchStates = new List<HashSet<string>>();
-                    var tryState = assigned.ToHashSet(StringComparer.Ordinal);
-                    AnalyzeDefiniteAssignment(tryStatement.Body, tryState, locals, diagnostics);
-                    branchStates.Add(tryState);
-                    foreach (var clause in tryStatement.Catches)
-                    {
-                        var catchState = assigned.ToHashSet(StringComparer.Ordinal);
-                        AnalyzeDefiniteAssignment(clause.Body, catchState, locals, diagnostics);
-                        branchStates.Add(catchState);
-                    }
-                    var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
-                    if (tryStatement.FinallyBlock is not null)
-                        AnalyzeDefiniteAssignment(tryStatement.FinallyBlock, definitelyAssigned, locals, diagnostics);
-                    assigned.Clear();
-                    assigned.UnionWith(definitelyAssigned);
-                    continue;
-                }
-                var expression = GetExpression(statement);
-                if (expression is not null) ReportReads(expression, assigned, locals, diagnostics);
-                if (statement is PowerShellBoundAssignmentStatement assignment)
-                {
-                    if (assignment.Operation != PowerShellBoundMutationOperator.Assign &&
-                        locals.Contains(assignment.Target.StableKey) &&
-                        !assigned.Contains(assignment.Target.StableKey))
-                    {
-                        diagnostics.Add(new PowerShellSemanticDiagnostic(
-                            "PSD1001",
-                            $"Local variable '${assignment.Target.Name}' may remain unassigned before this compound mutation.",
-                            assignment.Span));
-                    }
-                    assigned.Add(assignment.Target.StableKey);
-                }
-                else if (statement is PowerShellBoundCommandCaptureStatement capture)
-                {
-                    assigned.Add(capture.Target.StableKey);
-                }
-            }
-        }
-
-        private static void ReportReads(
-            PowerShellBoundExpression expression,
-            ISet<string> assigned,
-            ISet<string> locals,
-            ICollection<PowerShellSemanticDiagnostic> diagnostics)
-        {
-            foreach (var read in EnumerateVariableReads(expression).Where(read => locals.Contains(read.Symbol.StableKey)))
-            {
-                if (assigned.Contains(read.Symbol.StableKey)) continue;
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    "PSD1001",
-                    $"Local variable '${read.Symbol.Name}' is read before it is definitely assigned and may remain unassigned on at least one reachable path.",
-                    read.Span));
-            }
-        }
     }
 
     private sealed class LocalTypePass : IPowerShellSemanticPass
@@ -624,7 +462,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             _ => expression.Type
         };
 
-    private static PowerShellBoundExpression? GetExpression(PowerShellBoundStatement statement)
+    internal static PowerShellBoundExpression? GetExpression(PowerShellBoundStatement statement)
         => statement switch
         {
             PowerShellBoundAssignmentStatement assignment => assignment.Value,
@@ -733,7 +571,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
     }
 
-    private static IEnumerable<PowerShellBoundVariableExpression> EnumerateVariableReads(PowerShellBoundExpression expression)
+    internal static IEnumerable<PowerShellBoundVariableExpression> EnumerateVariableReads(PowerShellBoundExpression expression)
     {
         if (expression is PowerShellBoundVariableExpression variable) yield return variable;
         if (expression is PowerShellBoundConversionExpression conversion)
@@ -945,7 +783,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
     }
 
-    private static PowerShellSemanticDiagnostic[] OrderDiagnostics(IEnumerable<PowerShellSemanticDiagnostic> diagnostics)
+    internal static PowerShellSemanticDiagnostic[] OrderDiagnostics(IEnumerable<PowerShellSemanticDiagnostic> diagnostics)
         => diagnostics.OrderBy(static diagnostic => diagnostic.Span.DocumentId, StringComparer.Ordinal)
             .ThenBy(static diagnostic => diagnostic.Span.StartOffset)
             .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)

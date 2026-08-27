@@ -109,9 +109,9 @@ internal sealed class PowerShellBoundCSharpBackend
         Func<string, string> getTemporaryIdentifier,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
-        var start = GetPosition(builder);
+        var start = PowerShellGeneratedSourcePosition.Get(builder);
         EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, sourceMap);
-        var end = GetPosition(builder);
+        var end = PowerShellGeneratedSourcePosition.Get(builder);
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
             statement.Span.StartLine,
             statement.Span.StartColumn,
@@ -340,37 +340,6 @@ internal sealed class PowerShellBoundCSharpBackend
         }
         builder.Append(prefix).AppendLine("}");
         builder.Append(prefix).AppendLine("while (false);");
-    }
-
-    private static GeneratedPosition GetPosition(StringBuilder builder)
-    {
-        var line = 1;
-        var column = 1;
-        for (var index = 0; index < builder.Length; index++)
-        {
-            if (builder[index] == '\n')
-            {
-                line++;
-                column = 1;
-            }
-            else if (builder[index] != '\r')
-            {
-                column++;
-            }
-        }
-        return new GeneratedPosition(line, column);
-    }
-
-    private readonly struct GeneratedPosition
-    {
-        internal GeneratedPosition(int line, int column)
-        {
-            Line = line;
-            Column = column;
-        }
-
-        internal int Line { get; }
-        internal int Column { get; }
     }
 
     private static string EmitExpression(PowerShellLoweredExpression expression)
