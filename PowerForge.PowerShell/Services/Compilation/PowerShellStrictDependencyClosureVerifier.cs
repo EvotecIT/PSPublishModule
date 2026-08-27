@@ -145,6 +145,11 @@ internal static class PowerShellStrictDependencyClosureVerifier
         var headerOffset = FindBundleHeaderOffset(stream);
         if (headerOffset is null)
             return false;
+        if (headerOffset == 0)
+        {
+            result.ArtifactFormat = "DotNetAppHost";
+            return true;
+        }
         var manifest = ReadBundleManifest(stream, headerOffset.Value, path);
         result.ArtifactFormat = $"DotNetSingleFile/{manifest.MajorVersion}.{manifest.MinorVersion}";
         result.BundledEntries += manifest.Entries.Count;
@@ -159,6 +164,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
         var buffer = new byte[blockSize + BundleSignature.Length - 1];
         var retained = 0;
         long absoluteStart = 0;
+        var foundSignature = false;
         while (true)
         {
             var read = stream.Read(buffer, retained, blockSize);
@@ -167,22 +173,46 @@ internal static class PowerShellStrictDependencyClosureVerifier
             for (var index = 0; index <= available - BundleSignature.Length; index++)
             {
                 if (!Matches(buffer, index, BundleSignature)) continue;
+                foundSignature = true;
                 var signatureOffset = absoluteStart - retained + index;
-                if (signatureOffset < sizeof(long))
-                    throw new InvalidDataException("The .NET bundle signature does not have a preceding header pointer.");
+                if (signatureOffset < sizeof(long)) continue;
                 var returnPosition = stream.Position;
                 stream.Position = signatureOffset - sizeof(long);
                 using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
                 var headerOffset = reader.ReadInt64();
                 stream.Position = returnPosition;
-                return headerOffset;
+                if (headerOffset == 0)
+                    return 0;
+                if (IsBundleHeaderCandidate(stream, headerOffset, returnPosition))
+                    return headerOffset;
             }
 
             retained = Math.Min(BundleSignature.Length - 1, available);
             Buffer.BlockCopy(buffer, available - retained, buffer, 0, retained);
             absoluteStart += read;
         }
+        if (foundSignature)
+            throw new InvalidDataException("The .NET bundle signature did not reference a valid manifest header.");
         return null;
+    }
+
+    private static bool IsBundleHeaderCandidate(Stream stream, long headerOffset, long returnPosition)
+    {
+        if (headerOffset <= 0 || headerOffset > stream.Length - 12)
+            return false;
+        try
+        {
+            stream.Position = headerOffset;
+            using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+            var major = reader.ReadUInt32();
+            _ = reader.ReadUInt32();
+            var count = reader.ReadInt32();
+            return major is >= 1 and <= 6 && count is >= 0 and <= 100_000;
+        }
+        finally
+        {
+            stream.Position = returnPosition;
+        }
     }
 
     private static DotNetBundleManifest ReadBundleManifest(Stream stream, long headerOffset, string path)

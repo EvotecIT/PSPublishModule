@@ -89,6 +89,18 @@ internal sealed partial class PowerShellSemanticBinder
                 return new PowerShellBoundLiteralExpression(span, null, LiteralType(typeof(object), "$null has no narrower CLR representation."), PowerShellValueState.Null);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type, symbol.ValueState);
+            case VariableExpressionAst variable:
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.RuntimeScope,
+                    $"Variable '${variable.VariablePath.UserPath}' requires dynamic PowerShell scope or runtime-owned automatic state.",
+                    span));
+                return null;
+            case ScriptBlockExpressionAst:
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.ScriptBlock,
+                    "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
+                    span));
+                return null;
             case ConvertExpressionAst conversion when PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion):
                 return PowerShellDictionarySemanticBinder.BindLiteral(
                     document,

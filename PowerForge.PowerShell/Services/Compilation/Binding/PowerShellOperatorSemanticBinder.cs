@@ -29,6 +29,14 @@ internal static class PowerShellOperatorSemanticBinder
             return BindStringSplit(syntax, span, operation, bindOperand, diagnostics);
         if (operation == "Join")
             return BindStringJoin(syntax, span, bindOperand, diagnostics);
+        if (operation is "As" or "Ias")
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.ForOperator("as"),
+                "Operator '-as' requires PowerShell language-conversion runtime semantics and is not supported by the typed compiler.",
+                span));
+            return null;
+        }
 
         var left = bindOperand(syntax.Left);
         var right = bindOperand(syntax.Right);
@@ -126,6 +134,13 @@ internal static class PowerShellOperatorSemanticBinder
             return Binary(span, bound, left, right, typeof(bool));
         }
 
+        var featureName = operation.StartsWith("I", StringComparison.Ordinal) && operation.Length > 1
+            ? operation.Substring(1)
+            : operation;
+        diagnostics.Add(new PowerShellSemanticDiagnostic(
+            PowerShellCompilationFeatureIds.ForOperator(featureName),
+            $"Operator '-{featureName.ToLowerInvariant()}' has no typed semantic binder for this target.",
+            span));
         return null;
     }
 

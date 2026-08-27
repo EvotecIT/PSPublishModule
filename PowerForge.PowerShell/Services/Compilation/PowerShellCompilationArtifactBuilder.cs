@@ -204,7 +204,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     (runtimeRoutedUnits != plan.TotalUnits || runtimeManifestHooks.Length > 0);
                 compiledUnits = typed.Methods.Count(static method => method.Lifecycle is null);
                 compiledMethods = compiledUnits;
-                compiledMethodDetails = typed.Methods;
+                compiledMethodDetails = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && exportedFunctions is not null
+                    ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
+                    : typed.Methods;
             }
             else
             {

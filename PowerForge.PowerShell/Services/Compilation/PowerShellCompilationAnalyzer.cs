@@ -90,36 +90,6 @@ public sealed partial class PowerShellCompilationAnalyzer
             units.Add(functionUnit);
         }
 
-        var collidingMethodNames = units
-            .Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function)
-            .GroupBy(static unit => PowerShellClrSymbolMapper.MapIdentifier(unit.Name), StringComparer.OrdinalIgnoreCase)
-            .Where(static group => group.Count() > 1)
-            .Select(static group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (collidingMethodNames.Count > 0)
-        {
-            for (var index = 0; index < units.Count; index++)
-            {
-                var unit = units[index];
-                var generatedName = PowerShellClrSymbolMapper.MapIdentifier(unit.Name);
-                if (unit.Kind != PowerShellCompilationUnitKind.Function || !collidingMethodNames.Contains(generatedName))
-                    continue;
-                var function = functions.First(candidate => candidate.Name == unit.Name && candidate.Body.Extent.StartLineNumber == unit.StartLine);
-                units[index] = ReplaceUnit(
-                    unit,
-                    typeof(object),
-                    new[]
-                    {
-                        CreateDiagnostic(
-                            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                            $"Function '{unit.Name}' collides with another function after CLR identifier normalization to '{generatedName}'.",
-                            file,
-                            function.Extent,
-                            PowerShellCompilationFeatureIds.FunctionNameCollision)
-                    });
-            }
-        }
-
         var fileWideDiagnostics = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
             .OfType<UsingStatementAst>()
             .Where(static statement => statement.UsingStatementKind != UsingStatementKind.Namespace)

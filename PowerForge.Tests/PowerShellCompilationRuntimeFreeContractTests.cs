@@ -70,7 +70,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(abi.Sha256, File.ReadAllText(contractSource), StringComparison.Ordinal);
         var generatedProject = Assert.Single(Directory.EnumerateFiles(result.GeneratedSourcePath!, "*.csproj"));
         var generatedProjectText = File.ReadAllText(generatedProject);
-        Assert.Contains("<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", generatedProjectText, StringComparison.Ordinal);
+        Assert.Contains("<ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>", generatedProjectText, StringComparison.Ordinal);
+        Assert.Contains("<TreatWarningsAsErrors Condition=\"'$(PublishTrimmed)' == 'true' or '$(PublishAot)' == 'true'\">true</TreatWarningsAsErrors>", generatedProjectText, StringComparison.Ordinal);
         Assert.DoesNotContain("IL2026", generatedProjectText, StringComparison.Ordinal);
 
         using var assemblyStream = File.OpenRead(result.ArtifactPath!);

@@ -109,6 +109,7 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("conversion", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("Typed local declaration", StringComparison.OrdinalIgnoreCase) >= 0) return Conversion;
         if (message.IndexOf("Expandable string", StringComparison.OrdinalIgnoreCase) >= 0) return ExpandableString;
+        if (message.IndexOf("member mutation", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
         if (message.IndexOf("assignment target", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
         if (message.IndexOf("read-only automatic variable", StringComparison.OrdinalIgnoreCase) >= 0) return AutomaticVariableAssignment;
         if (message.IndexOf("Switch flags", StringComparison.OrdinalIgnoreCase) >= 0) return SwitchFlags;
@@ -136,7 +137,10 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("Increment or decrement", StringComparison.OrdinalIgnoreCase) >= 0) return ForOperator("increment");
         if (message.IndexOf("cmdlet", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("common parameters", StringComparison.OrdinalIgnoreCase) >= 0) return BinaryCmdletShape;
+        if (TryExtractQuotedValue(message, "Operator '-", out var operatorName)) return ForOperator(operatorName);
         if (TryExtractQuotedValue(message, "Syntax node '", out var syntax)) return ForSyntax(syntax);
+        if (TryExtractQuotedValue(message, "Expression '", out syntax)) return ForSyntax(syntax);
+        if (TryExtractQuotedValue(message, "Statement '", out syntax)) return ForSyntax(syntax);
         return "syntax.unsupported";
     }
 

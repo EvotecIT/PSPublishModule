@@ -365,6 +365,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 : PowerShellCompilationDependencyNodeKind.TypeData;
         if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase))
         {
+            if (!File.Exists(path))
+                return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? PowerShellCompilationDependencyNodeKind.ExternalProcess
+                    : PowerShellCompilationDependencyNodeKind.ManagedLibrary;
             try
             {
                 _ = AssemblyName.GetAssemblyName(path);
@@ -372,7 +376,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                     ? PowerShellCompilationDependencyNodeKind.ManagedLibrary
                     : PowerShellCompilationDependencyNodeKind.ManagedLibrary;
             }
-            catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or FileNotFoundException)
+            catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or FileNotFoundException or DirectoryNotFoundException)
             {
                 return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
                     ? PowerShellCompilationDependencyNodeKind.ExternalProcess

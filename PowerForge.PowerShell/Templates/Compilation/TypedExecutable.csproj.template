@@ -16,6 +16,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+    <TreatWarningsAsErrors Condition="'$(PublishTrimmed)' == 'true' or '$(PublishAot)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

@@ -47,6 +47,18 @@ internal sealed partial class PowerShellSemanticBinder
                     declaration.Symbol.Declaration));
             }
         }
+        foreach (var collision in declarations
+                     .GroupBy(static declaration => PowerShellClrSymbolMapper.MapIdentifier(declaration.Syntax.Name), StringComparer.Ordinal)
+                     .Where(static group => group.Select(declaration => declaration.Syntax.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1))
+        {
+            foreach (var declaration in collision)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.FunctionNameCollision,
+                    $"Function '{declaration.Syntax.Name}' collides with another function on generated CLR method signature '{collision.Key}' after identifier normalization.",
+                    declaration.Symbol.Declaration));
+            }
+        }
         return declarations.ToArray();
     }
 
@@ -59,6 +71,7 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities)
     {
+        var functionDiagnosticStart = diagnostics.Count;
         if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
                 function.Body,
                 targetFramework,
@@ -86,6 +99,7 @@ internal sealed partial class PowerShellSemanticBinder
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
+        var bodyIsValid = true;
         for (var index = 0; index < authoredStatements.Length; index++)
         {
             var statement = authoredStatements[index];
@@ -115,10 +129,12 @@ internal sealed partial class PowerShellSemanticBinder
                         $"Statement '{statement.GetType().Name}' is not yet represented by the bound pipeline.",
                         PowerShellSourceParser.GetSpan(document, statement.Extent)));
                 }
-                return null;
+                bodyIsValid = false;
+                continue;
             }
             statements.Add(bound);
         }
+        if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart) return null;
 
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
         locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
@@ -182,7 +198,7 @@ internal sealed partial class PowerShellSemanticBinder
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.ParameterMetadata,
-                    $"Parameter '${name}' declares pipeline binding metadata that requires a pipeline-capable generated command host.",
+                    $"Parameter '${name}' declares pipeline binding metadata through syntax node 'AttributeAst' that requires a pipeline-capable generated command host.",
                     span));
                 invalid = true;
             }
@@ -221,7 +237,16 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, function.Extent)));
             invalid = true;
         }
-        return invalid ? null : parameters.ToArray();
+        if (!PowerShellParameterSemanticValidator.Validate(
+                document,
+                function,
+                parameters.Select(static parameter => parameter.Contract).ToArray(),
+                targetFramework,
+                capabilities,
+                diagnostics))
+            invalid = true;
+        _ = invalid;
+        return parameters.ToArray();
     }
 
     private static PowerShellBoundLocal[] DeclareLocals(
@@ -333,6 +358,15 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } automatic &&
+                PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(automatic.VariablePath.UserPath))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.AutomaticVariableAssignment,
+                    $"Assignment to read-only automatic variable '${automatic.VariablePath.UserPath}' cannot be preserved by a typed artifact.",
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent)));
+                return null;
+            }
             if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } discarded &&
                 discarded.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
             {

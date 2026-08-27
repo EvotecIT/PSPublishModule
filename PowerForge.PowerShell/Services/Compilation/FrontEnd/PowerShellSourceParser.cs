@@ -41,6 +41,15 @@ internal static class PowerShellSourceParser
             extent.EndLineNumber,
             extent.EndColumnNumber);
 
+    internal static string GetParameterBlockSource(ParamBlockAst? parameterBlock)
+    {
+        if (parameterBlock is null) return string.Empty;
+        return string.Join(
+            Environment.NewLine,
+            parameterBlock.Attributes.Select(static attribute => attribute.Extent.Text)
+                .Append(parameterBlock.Extent.Text));
+    }
+
     internal static string CreateDocumentId(string path, string? identityRoot, StringComparison? pathComparison = null)
     {
         var fullPath = Path.GetFullPath(path);

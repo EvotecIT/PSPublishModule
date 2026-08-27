@@ -123,7 +123,7 @@ internal static class PowerShellTypedExecutableCompiler
 
     private static ParsedSourceDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
     {
-        var parameterBlock = entrySource.Ast.ParamBlock?.Extent.Text ?? string.Empty;
+        var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
         var body = string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var source = $"function Invoke {{{Environment.NewLine}{parameterBlock}{Environment.NewLine}{body}{Environment.NewLine}}}";
         return PowerShellSourceParser.Parse(source, entrySource.Path + ".powerforge-entry.ps1", identityRoot);

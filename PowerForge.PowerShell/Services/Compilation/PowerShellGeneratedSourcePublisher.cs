@@ -73,7 +73,7 @@ internal static class PowerShellGeneratedSourcePublisher
             .ToArray();
         var mappedMethods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method =>
         {
-            var generated = FindGeneratedMethod(sourceDirectory, method.GeneratedName);
+            var generated = FindGeneratedLocation(sourceDirectory, method);
             return new
             {
                 powershellName = method.SourceName,
@@ -151,6 +151,30 @@ internal static class PowerShellGeneratedSourcePublisher
             }
         }
         return match ?? throw new InvalidOperationException($"Generated method '{generatedName}' was not found while publishing source maps.");
+    }
+
+    private static GeneratedMethodLocation FindGeneratedLocation(string sourceDirectory, PowerShellCompiledMethod method)
+    {
+        if (method.Lifecycle is null)
+            return FindGeneratedMethod(sourceDirectory, method.GeneratedName);
+        var separator = method.SourceName.IndexOf('-');
+        if (separator < 1 || separator == method.SourceName.Length - 1)
+            throw new InvalidOperationException($"Hosted lifecycle command '{method.SourceName}' does not have a Verb-Noun identity for source-map publication.");
+        var className = PowerShellCSharpSymbolRenderer.Identifier(
+            method.SourceName.Substring(0, separator) + method.SourceName.Substring(separator + 1) + "Command");
+        var pattern = @"^\s*public\s+sealed\s+class\s+" +
+                      System.Text.RegularExpressions.Regex.Escape(className) + @"\s*:\s*PSCmdlet";
+        foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var lines = File.ReadAllLines(path);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    return new GeneratedMethodLocation(Path.GetFileName(path), index + 1);
+            }
+        }
+        throw new InvalidOperationException($"Generated lifecycle cmdlet class '{className}' was not found while publishing source maps.");
     }
 
     private sealed class GeneratedMethodLocation

@@ -21,7 +21,7 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (syntax.Operator.ToString() != "Equals" || memberSyntax.Expression is not VariableExpressionAst)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2614", "Typed CLR member mutation requires simple '=' assignment to a local or parameter receiver.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2614", "Typed CLR member mutation requires direct local-variable assignment with simple '='; static members and non-local receivers remain on the PowerShell runtime path.", span));
             return null;
         }
         if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)

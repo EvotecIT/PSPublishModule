@@ -13,6 +13,10 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)).ToArray();
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
+        var sourceDiagnosticsByPath = documents.ToDictionary(
+            static document => document.Path,
+            PowerShellSourceSemanticValidator.Validate,
+            PowerShellCompilationPathSafety.PathComparer);
         var targets = new List<SemanticUnitTarget>();
         var compilationDocuments = new List<ParsedSourceDocument>(documents);
 
@@ -55,7 +59,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 .Where(static statement => !IsTopLevelDotSource(statement))
                 .ToArray();
             var symbolName = "__PowerForgeScript_" + document.DocumentId.Substring(0, 16);
-            var parameterBlock = document.SyntaxRoot.ParamBlock?.Extent.Text ?? string.Empty;
+            var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(document.SyntaxRoot.ParamBlock);
             var body = string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
             var synthetic = PowerShellSourceParser.Parse(
                 $"function {symbolName} {{{Environment.NewLine}{parameterBlock}{Environment.NewLine}{body}{Environment.NewLine}}}",
@@ -77,7 +81,14 @@ public sealed partial class PowerShellCompilationAnalyzer
         return structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,
-            file.Units.Select(unit => ApplySemanticUnitEvidence(file.FullPath, unit, targets, semantic)).ToArray(),
+            file.Units.Select(unit => ApplySemanticUnitEvidence(
+                file.FullPath,
+                unit,
+                targets,
+                semantic,
+                sourceDiagnosticsByPath.TryGetValue(Path.GetFullPath(file.FullPath), out var sourceDiagnostics)
+                    ? sourceDiagnostics
+                    : Array.Empty<PowerShellSemanticDiagnostic>())).ToArray(),
             file.Diagnostics)).ToArray();
     }
 
@@ -85,8 +96,19 @@ public sealed partial class PowerShellCompilationAnalyzer
         string filePath,
         PowerShellCompilationUnitPlan unit,
         IReadOnlyList<SemanticUnitTarget> targets,
-        PowerShellSemanticCompilationResult semantic)
+        PowerShellSemanticCompilationResult semantic,
+        IReadOnlyList<PowerShellSemanticDiagnostic> sourceDiagnostics)
     {
+        if (sourceDiagnostics.Count > 0)
+        {
+            return new PowerShellCompilationUnitPlan(
+                unit.Name,
+                unit.Kind,
+                unit.StartLine,
+                typeof(object).FullName!,
+                unit.Parameters,
+                sourceDiagnostics.Select(diagnostic => CreatePublicSemanticDiagnostic(unit, filePath, null, diagnostic)).ToArray());
+        }
         var target = targets.FirstOrDefault(candidate =>
             PowerShellCompilationPathSafety.PathEquals(candidate.FilePath, filePath) &&
             ReferenceEquals(candidate.Unit, unit));
@@ -124,13 +146,16 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (analyzedFallback is not null)
         {
             var fallbackFeatureId = analyzedFallback.ReasonCode ?? PowerShellCompilationFeatureIds.FunctionGraph;
-            blockers.Add(new PowerShellCompilationDiagnostic(
-                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-                analyzedFallback.Explanation,
-                filePath,
-                unit.StartLine,
-                1,
-                fallbackFeatureId));
+            if (!blockers.Any(diagnostic => diagnostic.FeatureId.Equals(fallbackFeatureId, StringComparison.Ordinal)))
+            {
+                blockers.Add(new PowerShellCompilationDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                    analyzedFallback.Explanation,
+                    filePath,
+                    unit.StartLine,
+                    1,
+                    fallbackFeatureId));
+            }
         }
         var retained = blockers
             .GroupBy(static item => item.FeatureId + "\0" + item.Line + "\0" + item.Column, StringComparer.Ordinal)
@@ -148,27 +173,37 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static PowerShellCompilationDiagnostic CreatePublicSemanticDiagnostic(
         PowerShellCompilationUnitPlan unit,
         string filePath,
-        SemanticUnitTarget target,
+        SemanticUnitTarget? target,
         PowerShellSemanticDiagnostic semanticDiagnostic)
     {
-        var code = GetPublicDiagnosticCode(semanticDiagnostic);
+        var featureId = GetPublicFeatureId(semanticDiagnostic);
+        var code = GetPublicDiagnosticCode(featureId, semanticDiagnostic);
         return new PowerShellCompilationDiagnostic(
             code,
             semanticDiagnostic.Message,
             filePath,
-            target.Synthetic ? unit.StartLine : semanticDiagnostic.Span.StartLine,
-            target.Synthetic ? 1 : semanticDiagnostic.Span.StartColumn,
-            semanticDiagnostic.Code);
+            target?.Synthetic == true ? unit.StartLine : semanticDiagnostic.Span.StartLine,
+            target?.Synthetic == true ? 1 : semanticDiagnostic.Span.StartColumn,
+            featureId);
     }
 
-    private static PowerShellCompilationDiagnosticCode GetPublicDiagnosticCode(PowerShellSemanticDiagnostic diagnostic)
+    private static string GetPublicFeatureId(PowerShellSemanticDiagnostic diagnostic)
+        => diagnostic.Code.StartsWith("PSB", StringComparison.Ordinal)
+            ? PowerShellCompilationFeatureIds.Resolve(PowerShellCompilationDiagnosticCode.UnsupportedSyntax, diagnostic.Message, null)
+            : diagnostic.Code;
+
+    private static PowerShellCompilationDiagnosticCode GetPublicDiagnosticCode(string featureId, PowerShellSemanticDiagnostic diagnostic)
     {
-        if (diagnostic.Code.Equals(PowerShellCompilationFeatureIds.ParameterType, StringComparison.Ordinal))
+        if (featureId.Equals(PowerShellCompilationFeatureIds.ParameterType, StringComparison.Ordinal))
             return PowerShellCompilationDiagnosticCode.UnsupportedParameterType;
-        if (diagnostic.Code.Equals(PowerShellCompilationFeatureIds.DynamicCommand, StringComparison.Ordinal))
+        if (featureId.Equals(PowerShellCompilationFeatureIds.DynamicCommand, StringComparison.Ordinal))
             return PowerShellCompilationDiagnosticCode.DynamicCommandInvocation;
-        if (diagnostic.Code.StartsWith("command.", StringComparison.Ordinal))
+        if (featureId.StartsWith("command.", StringComparison.Ordinal))
             return PowerShellCompilationDiagnosticCode.CommandInvocation;
+        if (featureId.Equals(PowerShellCompilationFeatureIds.ScriptBlock, StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.ScriptBlock;
+        if (featureId.Equals(PowerShellCompilationFeatureIds.RuntimeScope, StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.RuntimeScope;
         if (diagnostic.Code.Equals("PSB0001", StringComparison.Ordinal))
             return PowerShellCompilationDiagnosticCode.ParseError;
         return PowerShellCompilationDiagnosticCode.UnsupportedSyntax;
