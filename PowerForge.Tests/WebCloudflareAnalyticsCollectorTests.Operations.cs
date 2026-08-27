@@ -14,10 +14,12 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             1 => CapabilityResponse(),
             2 => OperationalHttpResponse(
                 HttpOperationRow("2026-08-10T09:00:00Z", "hit", 200, 10, 1000, 2),
+                HttpOperationRow("2026-08-10T09:00:00Z", "stale", 200, 2, 200, 1),
                 HttpOperationRow("2026-08-10T09:00:00Z", "miss", 404, 3, 300, 1),
                 HttpOperationRow("2026-08-10T10:00:00Z", "dynamic", 503, 2, 200, 1)),
             3 => OperationalFirewallResponse(
                 FirewallOperationRow("2026-08-10T09:00:00Z", "block", 4, 2),
+                FirewallOperationRow("2026-08-10T09:00:00Z", "managedChallenge", 3, 1),
                 FirewallOperationRow("2026-08-10T09:00:00Z", "log", 1, 1)),
             4 => RumSitesResponse(enabled: true, autoInstall: true),
             _ => throw new InvalidOperationException("Unexpected request.")
@@ -36,13 +38,13 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.True(result.Rum.AutoInstall);
         Assert.Equal(2, result.Hours.Length);
         var first = result.Hours[0];
-        Assert.Equal(23, first.Requests);
-        Assert.Equal(20, first.CachedRequests);
+        Assert.Equal(25, first.Requests);
+        Assert.Equal(22, first.CachedRequests);
         Assert.Equal(3, first.ClientErrors);
-        Assert.Equal(9, first.FirewallEvents);
-        Assert.Equal(8, first.FirewallMitigated);
+        Assert.Equal(12, first.FirewallEvents);
+        Assert.Equal(11, first.FirewallMitigated);
         Assert.Equal(2, first.MaximumSampleInterval);
-        Assert.Equal(20d * 100d / 23d, first.CacheHitPercent, precision: 6);
+        Assert.Equal(22d * 100d / 25d, first.CacheHitPercent, precision: 6);
         Assert.Contains("clientRequestHTTPHost", handler.Requests[2].Body, StringComparison.Ordinal);
         Assert.Contains("firewallEventsAdaptiveGroups", handler.Requests[3].Body, StringComparison.Ordinal);
         Assert.Equal(HttpMethod.Get, handler.Requests[4].Method);
@@ -200,6 +202,26 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.True(result.Rum.Configured);
         Assert.True(result.Rum.Enabled);
         Assert.True(result.Rum.AutoInstall);
+    }
+
+    [Fact]
+    public async Task CollectOperations_CountsFailedRumTransportAttempt()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => OperationalHttpResponse(),
+            3 => OperationalFirewallResponse(),
+            4 => throw new HttpRequestException("Synthetic RUM transport failure."),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+
+        var result = await CreateCollector(client).CollectOperationsAsync(CreateOperationalOptions(includeAccount: true));
+
+        Assert.Equal("request-failed", result.Rum.ErrorCode);
+        Assert.Equal(5, result.RequestCount);
     }
 
     [Fact]

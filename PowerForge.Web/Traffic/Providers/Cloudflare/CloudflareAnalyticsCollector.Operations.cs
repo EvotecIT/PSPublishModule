@@ -155,8 +155,8 @@ public sealed partial class CloudflareAnalyticsCollector
                 using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 requestCount++;
+                using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                     return (FailedRum(MapStatus(response.StatusCode), $"Cloudflare RUM site lookup returned HTTP {(int)response.StatusCode}."), requestCount);
                 var envelope = await response.Content.ReadFromJsonAsync<CloudflareRumSitesEnvelope>(JsonOptions, cancellationToken).ConfigureAwait(false);
@@ -329,8 +329,8 @@ public sealed partial class CloudflareAnalyticsCollector
         return bucket;
     }
 
-    private static bool IsCached(string? status) => status?.Trim().ToLowerInvariant() is "hit" or "revalidated" or "updating";
-    private static bool IsMitigated(string? action) => action?.Trim().ToLowerInvariant() is "block" or "challenge" or "jschallenge" or "managed_challenge";
+    private static bool IsCached(string? status) => status?.Trim().ToLowerInvariant() is "hit" or "revalidated" or "stale" or "updating";
+    private static bool IsMitigated(string? action) => action?.Trim().ToLowerInvariant() is "block" or "challenge" or "jschallenge" or "managedchallenge" or "managed_challenge";
     private static bool IsValidSampleInterval(double value) => double.IsFinite(value) && value >= 1d;
     private static DateTimeOffset NormalizeHour(DateTimeOffset value) => new(value.UtcDateTime.Year, value.UtcDateTime.Month, value.UtcDateTime.Day, value.UtcDateTime.Hour, 0, 0, TimeSpan.Zero);
     private static string FormatUtc(DateTimeOffset value) => value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
