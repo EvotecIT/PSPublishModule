@@ -44,6 +44,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         PowerShellLoweredExpression[] arguments,
         int[] authoredEvaluationOrder,
         string[] boundParameterNames,
+        string?[] evaluationTemporaryNames,
         bool requiresBoundParameters)
         : base(span, clrType)
     {
@@ -51,6 +52,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         Arguments = arguments;
         AuthoredEvaluationOrder = authoredEvaluationOrder;
         BoundParameterNames = boundParameterNames;
+        EvaluationTemporaryNames = evaluationTemporaryNames;
         RequiresBoundParameters = requiresBoundParameters;
     }
 
@@ -58,6 +60,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal PowerShellLoweredExpression[] Arguments { get; }
     internal int[] AuthoredEvaluationOrder { get; }
     internal string[] BoundParameterNames { get; }
+    internal string?[] EvaluationTemporaryNames { get; }
     internal bool RequiresBoundParameters { get; }
 }
 

@@ -269,7 +269,8 @@ internal sealed class PowerShellBoundCSharpBackend
         if (reordered)
         {
             foreach (var parameterIndex in authored)
-                temporaries[parameterIndex] = $"__pf_local_argument_{invocation.Span.StartOffset.ToString(CultureInfo.InvariantCulture)}_{parameterIndex.ToString(CultureInfo.InvariantCulture)}";
+                temporaries[parameterIndex] = invocation.EvaluationTemporaryNames[parameterIndex]
+                    ?? throw new InvalidOperationException("Lowered local-call evaluation order is missing its collision-free temporary name.");
             foreach (var pair in temporaries) arguments[pair.Key] = pair.Value;
         }
         var callArguments = arguments.ToList();

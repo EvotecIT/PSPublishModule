@@ -571,6 +571,22 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void LocalCallEvaluationTemporariesCannotCollideWithAuthoredSymbols()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Join-Value { param([string] $First, [string] $Second) return $First + $Second } function Get-Joined { [string] $__pf_local_argument_0 = 'authored'; return Join-Value -Second 'B' -First 'A' }",
+            TestPath("local-call-temporary-collision.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Joined").Source;
+        Assert.Contains("string __pf_local_argument_0", source, StringComparison.Ordinal);
+        Assert.Contains("string __pf_local_argument_1 = \"B\";", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("string __pf_local_argument_0 = \"B\";", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReversingDeclarationsPreservesSemanticAndGeneratedOrder()
     {
         var path = TestPath("declaration-order.ps1");

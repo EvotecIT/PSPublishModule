@@ -29,6 +29,8 @@ internal sealed class PowerShellTypedLowerer
             var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
+            var names = new LoweredNameAllocator(function.Parameters.Select(static parameter => parameter.Symbol.Name)
+                .Concat(function.Locals.Select(static local => local.Symbol.Name)));
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
                 .Select(static assignment => assignment.Target.StableKey)
                 .ToHashSet(StringComparer.Ordinal);
@@ -45,7 +47,7 @@ internal sealed class PowerShellTypedLowerer
                 declared.Add(key);
             }
             foreach (var statement in function.Body.Statements)
-                statements.Add(LowerStatement(statement, bySymbol, symbolTypes, localTypes, declared, targetCapabilities));
+                statements.Add(LowerStatement(statement, bySymbol, symbolTypes, localTypes, declared, names, targetCapabilities));
 
             functions.Add(new PowerShellLoweredFunction(
                 function.Symbol,
@@ -171,6 +173,7 @@ internal sealed class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
+        LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
         => statement switch
         {
@@ -178,59 +181,59 @@ internal sealed class PowerShellTypedLowerer
                 assignment.Span,
                 assignment.Target,
                 symbolTypes[assignment.Target.StableKey],
-                LowerExpression(assignment.Value, functions, targetCapabilities),
+                LowerExpression(assignment.Value, functions, names, targetCapabilities),
                 localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey),
                 assignment.Operation,
                 assignment.NormalizeNullString,
                 assignment.CheckedIntegral),
             PowerShellBoundIndexAssignmentStatement assignment => new PowerShellLoweredIndexAssignmentStatement(
                 assignment.Span,
-                LowerExpression(assignment.Target, functions, targetCapabilities),
-                LowerExpression(assignment.Index, functions, targetCapabilities),
-                LowerExpression(assignment.Value, functions, targetCapabilities),
+                LowerExpression(assignment.Target, functions, names, targetCapabilities),
+                LowerExpression(assignment.Index, functions, names, targetCapabilities),
+                LowerExpression(assignment.Value, functions, names, targetCapabilities),
                 assignment.Kind),
             PowerShellBoundClrMemberAssignmentStatement assignment => new PowerShellLoweredClrMemberAssignmentStatement(
                 assignment.Span,
-                LowerExpression(assignment.Receiver, functions, targetCapabilities),
+                LowerExpression(assignment.Receiver, functions, names, targetCapabilities),
                 assignment.DeclaringType,
                 assignment.MemberName,
-                LowerExpression(assignment.Value, functions, targetCapabilities)),
+                LowerExpression(assignment.Value, functions, names, targetCapabilities)),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
-                returned.Expression is null ? null : LowerExpression(returned.Expression, functions, targetCapabilities)),
+                returned.Expression is null ? null : LowerExpression(returned.Expression, functions, names, targetCapabilities)),
             PowerShellBoundExpressionStatement expression => new PowerShellLoweredReturnStatement(
                 expression.Span,
-                LowerExpression(expression.Expression, functions, targetCapabilities)),
+                LowerExpression(expression.Expression, functions, names, targetCapabilities)),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
                 conditional.Clauses.Select(clause => new PowerShellLoweredConditionalClause(
-                    LowerExpression(clause.Condition, functions, targetCapabilities),
-                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, targetCapabilities))).ToArray(),
-                conditional.ElseBlock is null ? null : LowerStatements(conditional.ElseBlock, functions, symbolTypes, localTypes, declared, targetCapabilities)),
+                    LowerExpression(clause.Condition, functions, names, targetCapabilities),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
+                conditional.ElseBlock is null ? null : LowerStatements(conditional.ElseBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundWhileStatement loop => new PowerShellLoweredWhileStatement(
                 loop.Span,
-                LowerExpression(loop.Condition, functions, targetCapabilities),
-                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, targetCapabilities)),
-            PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared, targetCapabilities),
-            PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared, targetCapabilities),
+                LowerExpression(loop.Condition, functions, names, targetCapabilities),
+                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
+            PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
+            PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             PowerShellBoundSwitchStatement switchStatement => new PowerShellLoweredSwitchStatement(
                 switchStatement.Span,
-                LowerExpression(switchStatement.Value, functions, targetCapabilities),
+                LowerExpression(switchStatement.Value, functions, names, targetCapabilities),
                 switchStatement.Clauses.Select(clause => new PowerShellLoweredSwitchClause(
-                    LowerExpression(clause.Value, functions, targetCapabilities),
-                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, targetCapabilities))).ToArray(),
-                switchStatement.DefaultBlock is null ? null : LowerStatements(switchStatement.DefaultBlock, functions, symbolTypes, localTypes, declared, targetCapabilities),
+                    LowerExpression(clause.Value, functions, names, targetCapabilities),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
+                switchStatement.DefaultBlock is null ? null : LowerStatements(switchStatement.DefaultBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 switchStatement.CaseSensitive),
             PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
                 thrown.Span,
-                thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, targetCapabilities)),
+                thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities)),
             PowerShellBoundTryStatement tryStatement => new PowerShellLoweredTryStatement(
                 tryStatement.Span,
-                LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared, targetCapabilities),
+                LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 tryStatement.Catches.Select(clause => new PowerShellLoweredCatchClause(
                     clause.ExceptionTypes,
-                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, targetCapabilities))).ToArray(),
-                tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, targetCapabilities)),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
+                tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
@@ -242,6 +245,7 @@ internal sealed class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
+        LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
     {
         var declareInitializer = loop.Initializer is not null &&
@@ -249,10 +253,10 @@ internal sealed class PowerShellTypedLowerer
                                  declared.Add(loop.Initializer.Target.StableKey);
         return new PowerShellLoweredForStatement(
             loop.Span,
-            loop.Initializer is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Initializer, functions, targetCapabilities),
-            loop.Condition is null ? null : LowerExpression(loop.Condition, functions, targetCapabilities),
-            loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions, targetCapabilities),
-            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, targetCapabilities),
+            loop.Initializer is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Initializer, functions, names, targetCapabilities),
+            loop.Condition is null ? null : LowerExpression(loop.Condition, functions, names, targetCapabilities),
+            loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions, names, targetCapabilities),
+            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             declareInitializer);
     }
 
@@ -262,6 +266,7 @@ internal sealed class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
+        LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
     {
         declared.Add(loop.Variable.StableKey);
@@ -269,9 +274,9 @@ internal sealed class PowerShellTypedLowerer
             loop.Span,
             loop.Variable,
             loop.ElementType,
-            LowerExpression(loop.Collection, functions, targetCapabilities),
+            LowerExpression(loop.Collection, functions, names, targetCapabilities),
             loop.ScalarString,
-            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, targetCapabilities));
+            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities));
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(
@@ -280,12 +285,14 @@ internal sealed class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
+        LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
-        => block.Statements.Select(statement => LowerStatement(statement, functions, symbolTypes, localTypes, declared, targetCapabilities)).ToArray();
+        => block.Statements.Select(statement => LowerStatement(statement, functions, symbolTypes, localTypes, declared, names, targetCapabilities)).ToArray();
 
     private static PowerShellLoweredExpression LowerExpression(
         PowerShellBoundExpression expression,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
         => expression switch
         {
@@ -294,30 +301,30 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(
                 conversion.Span,
                 conversion.Type.ClrType,
-                LowerExpression(conversion.Operand, functions, targetCapabilities)),
+                LowerExpression(conversion.Operand, functions, names, targetCapabilities)),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
                 binary.Operation,
-                LowerExpression(binary.Left, functions, targetCapabilities),
-                LowerExpression(binary.Right, functions, targetCapabilities)),
+                LowerExpression(binary.Left, functions, names, targetCapabilities),
+                LowerExpression(binary.Right, functions, names, targetCapabilities)),
             PowerShellBoundUnaryExpression unary => new PowerShellLoweredUnaryExpression(
                 unary.Span,
                 unary.Type.ClrType,
                 unary.Operation,
-                LowerExpression(unary.Operand, functions, targetCapabilities)),
+                LowerExpression(unary.Operand, functions, names, targetCapabilities)),
             PowerShellBoundTypeTestExpression typeTest => new PowerShellLoweredTypeTestExpression(
                 typeTest.Span,
-                LowerExpression(typeTest.Operand, functions, targetCapabilities),
+                LowerExpression(typeTest.Operand, functions, names, targetCapabilities),
                 typeTest.TargetType,
                 typeTest.Negate),
             PowerShellBoundRegexExpression regex => new PowerShellLoweredRegexExpression(
                 regex.Span,
                 regex.Type.ClrType,
                 regex.Operation,
-                LowerExpression(regex.Input, functions, targetCapabilities),
-                LowerExpression(regex.Pattern, functions, targetCapabilities),
-                regex.Replacement is null ? null : LowerExpression(regex.Replacement, functions, targetCapabilities),
+                LowerExpression(regex.Input, functions, names, targetCapabilities),
+                LowerExpression(regex.Pattern, functions, names, targetCapabilities),
+                regex.Replacement is null ? null : LowerExpression(regex.Replacement, functions, names, targetCapabilities),
                 regex.IgnoreCase),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
@@ -325,26 +332,26 @@ internal sealed class PowerShellTypedLowerer
                 mutation.Target,
                 mutation.TargetClrType,
                 mutation.Operation,
-                mutation.Value is null ? null : LowerExpression(mutation.Value, functions, targetCapabilities),
+                mutation.Value is null ? null : LowerExpression(mutation.Value, functions, names, targetCapabilities),
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
             PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
                 array.Span,
                 array.Type.ClrType,
                 array.Kind,
-                array.Elements.Select(element => LowerExpression(element, functions, targetCapabilities)).ToArray()),
+                array.Elements.Select(element => LowerExpression(element, functions, names, targetCapabilities)).ToArray()),
             PowerShellBoundDictionaryExpression dictionary => new PowerShellLoweredDictionaryExpression(
                 dictionary.Span,
                 dictionary.Type.ClrType,
                 dictionary.Kind,
                 dictionary.Entries.Select(entry => new PowerShellLoweredDictionaryEntry(
-                    LowerExpression(entry.Key, functions, targetCapabilities),
-                    LowerExpression(entry.Value, functions, targetCapabilities))).ToArray()),
+                    LowerExpression(entry.Key, functions, names, targetCapabilities),
+                    LowerExpression(entry.Value, functions, names, targetCapabilities))).ToArray()),
             PowerShellBoundIndexExpression index => new PowerShellLoweredIndexExpression(
                 index.Span,
                 index.Type.ClrType,
-                LowerExpression(index.Target, functions, targetCapabilities),
-                LowerExpression(index.Index, functions, targetCapabilities),
+                LowerExpression(index.Target, functions, names, targetCapabilities),
+                LowerExpression(index.Index, functions, names, targetCapabilities),
                 index.Kind),
             PowerShellBoundClrMemberExpression member => new PowerShellLoweredClrMemberExpression(
                 member.Span,
@@ -352,7 +359,7 @@ internal sealed class PowerShellTypedLowerer
                 member.DeclaringType,
                 member.MemberName,
                 member.IsStatic,
-                member.Receiver is null ? null : LowerExpression(member.Receiver, functions, targetCapabilities),
+                member.Receiver is null ? null : LowerExpression(member.Receiver, functions, names, targetCapabilities),
                 member.ReceiverBehavior),
             PowerShellBoundClrInvocationExpression invocation => new PowerShellLoweredClrInvocationExpression(
                 invocation.Span,
@@ -360,21 +367,52 @@ internal sealed class PowerShellTypedLowerer
                 invocation.DeclaringType,
                 invocation.MemberName,
                 invocation.InvocationKind,
-                invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions, targetCapabilities),
+                invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions, names, targetCapabilities),
                 invocation.ReceiverBehavior,
-                invocation.Arguments.Select(argument => LowerExpression(argument, functions, targetCapabilities)).ToArray(),
+                invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                 invocation.ParameterTypes),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
                     target.ReturnType.ClrType,
                     invocation.Target,
-                    invocation.Arguments.Select(argument => LowerExpression(argument, functions, targetCapabilities)).ToArray(),
+                    invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                     invocation.AuthoredEvaluationOrder,
                     invocation.BoundParameterNames,
+                    CreateEvaluationTemporaryNames(invocation, names),
                     target.Parameters.Any(parameter =>
                         parameter.Contract.DefaultValue is not null ||
                         !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 && targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters))),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
+
+    private static string?[] CreateEvaluationTemporaryNames(
+        PowerShellBoundInvocationExpression invocation,
+        LoweredNameAllocator names)
+    {
+        var result = new string?[invocation.Arguments.Length];
+        if (invocation.AuthoredEvaluationOrder.SequenceEqual(invocation.AuthoredEvaluationOrder.OrderBy(static index => index)))
+            return result;
+        foreach (var parameterIndex in invocation.AuthoredEvaluationOrder)
+            result[parameterIndex] = names.Allocate("pf_local_argument");
+        return result;
+    }
+
+    private sealed class LoweredNameAllocator
+    {
+        private readonly HashSet<string> _used;
+        private int _index;
+
+        internal LoweredNameAllocator(IEnumerable<string> authoredNames)
+        {
+            _used = authoredNames.Select(PowerShellClrSymbolMapper.MapIdentifier).ToHashSet(StringComparer.Ordinal);
+        }
+
+        internal string Allocate(string prefix)
+        {
+            string candidate;
+            do { candidate = $"__{prefix}_{_index++}"; } while (!_used.Add(candidate));
+            return candidate;
+        }
+    }
 }
