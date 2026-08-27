@@ -15,14 +15,13 @@ internal enum PowerShellSymbolKind
 /// </summary>
 internal sealed class PowerShellSymbolId : IEquatable<PowerShellSymbolId>
 {
-    internal PowerShellSymbolId(PowerShellSymbolKind kind, string documentId, string name, SourceSpan declaration)
+    internal PowerShellSymbolId(PowerShellSymbolKind kind, string documentId, string name, SourceSpan declaration, string? identityPath = null)
     {
         Kind = kind;
         DocumentId = documentId ?? string.Empty;
         Name = name ?? string.Empty;
         Declaration = declaration;
-        StableKey = string.Concat(
-            kind.ToString(), ":", DocumentId, ":", declaration.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture), ":", Name.ToUpperInvariant());
+        StableKey = string.Concat(kind.ToString(), ":", DocumentId, ":", (identityPath ?? Name).ToUpperInvariant());
     }
 
     internal PowerShellSymbolKind Kind { get; }
@@ -198,6 +197,34 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
     internal PowerShellSymbolId Symbol { get; }
 }
 
+internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundConversionExpression(SourceSpan span, PowerShellTypeFact targetType, PowerShellBoundExpression operand)
+        : base(span, targetType, operand.ValueState)
+    {
+        Operand = operand;
+    }
+
+    internal PowerShellBoundExpression Operand { get; }
+}
+
+internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundInvocationExpression(
+        SourceSpan span,
+        PowerShellSymbolId target,
+        PowerShellBoundExpression[] arguments,
+        PowerShellTypeFact returnType)
+        : base(span, returnType, PowerShellValueState.Unknown)
+    {
+        Target = target;
+        Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
+    }
+
+    internal PowerShellSymbolId Target { get; }
+    internal PowerShellBoundExpression[] Arguments { get; }
+}
+
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression)
@@ -220,6 +247,19 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
     internal PowerShellBoundExpression Expression { get; }
 }
 
+internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundAssignmentStatement(SourceSpan span, PowerShellSymbolId target, PowerShellBoundExpression value)
+        : base(span, PowerShellSemanticEffect.Mutation)
+    {
+        Target = target;
+        Value = value;
+    }
+
+    internal PowerShellSymbolId Target { get; }
+    internal PowerShellBoundExpression Value { get; }
+}
+
 internal sealed class PowerShellBoundParameter
 {
     internal PowerShellBoundParameter(PowerShellSymbolId symbol, PowerShellTypeFact type)
@@ -230,6 +270,30 @@ internal sealed class PowerShellBoundParameter
 
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellTypeFact Type { get; }
+}
+
+internal sealed class PowerShellBoundLocal
+{
+    internal PowerShellBoundLocal(PowerShellSymbolId symbol, PowerShellTypeFact type)
+    {
+        Symbol = symbol;
+        Type = type;
+    }
+
+    internal PowerShellSymbolId Symbol { get; }
+    internal PowerShellTypeFact Type { get; }
+}
+
+internal sealed class PowerShellLexicalScope
+{
+    internal PowerShellLexicalScope(PowerShellSymbolId owner, PowerShellSymbolId[] symbols)
+    {
+        Owner = owner;
+        Symbols = symbols ?? Array.Empty<PowerShellSymbolId>();
+    }
+
+    internal PowerShellSymbolId Owner { get; }
+    internal PowerShellSymbolId[] Symbols { get; }
 }
 
 internal sealed class PowerShellBoundBlock
@@ -249,6 +313,8 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellBoundFunction(
         PowerShellSymbolId symbol,
         PowerShellBoundParameter[] parameters,
+        PowerShellBoundLocal[] locals,
+        PowerShellLexicalScope scope,
         PowerShellBoundBlock body,
         PowerShellTypeFact returnType,
         PowerShellSemanticEffect effects,
@@ -257,6 +323,8 @@ internal sealed class PowerShellBoundFunction
     {
         Symbol = symbol;
         Parameters = parameters ?? Array.Empty<PowerShellBoundParameter>();
+        Locals = locals ?? Array.Empty<PowerShellBoundLocal>();
+        Scope = scope;
         Body = body;
         ReturnType = returnType;
         Effects = effects;
@@ -266,6 +334,8 @@ internal sealed class PowerShellBoundFunction
 
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellBoundParameter[] Parameters { get; }
+    internal PowerShellBoundLocal[] Locals { get; }
+    internal PowerShellLexicalScope Scope { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
     internal PowerShellSemanticEffect Effects { get; }
@@ -277,20 +347,63 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters, Locals, Scope, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+}
+
+internal sealed class PowerShellBoundSourceDocument
+{
+    internal PowerShellBoundSourceDocument(string documentId, string path, SourceSpan span, PowerShellSymbolId[] functions)
+    {
+        DocumentId = documentId;
+        Path = path;
+        Span = span;
+        Functions = functions ?? Array.Empty<PowerShellSymbolId>();
+    }
+
+    internal string DocumentId { get; }
+    internal string Path { get; }
+    internal SourceSpan Span { get; }
+    internal PowerShellSymbolId[] Functions { get; }
 }
 
 internal sealed class PowerShellBoundProgram
 {
-    internal PowerShellBoundProgram(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
+    internal PowerShellBoundProgram(
+        PowerShellBoundSourceDocument[] documents,
+        PowerShellBoundFunction[] functions,
+        PowerShellSemanticDiagnostic[] diagnostics,
+        PowerShellCallGraphEdge[]? callGraph = null)
     {
+        Documents = documents ?? Array.Empty<PowerShellBoundSourceDocument>();
         Functions = functions ?? Array.Empty<PowerShellBoundFunction>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellSemanticDiagnostic>();
+        CallGraph = callGraph ?? Array.Empty<PowerShellCallGraphEdge>();
     }
 
+    internal PowerShellBoundSourceDocument[] Documents { get; }
     internal PowerShellBoundFunction[] Functions { get; }
     internal PowerShellSemanticDiagnostic[] Diagnostics { get; }
-    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(functions, Diagnostics);
+    internal PowerShellCallGraphEdge[] CallGraph { get; }
+    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents, functions, Diagnostics, CallGraph);
+    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents, Functions, diagnostics, CallGraph);
+    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents, Functions, Diagnostics, callGraph);
+    internal PowerShellBoundProgram WithAnalysis(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
+        => new(Documents, functions, diagnostics, CallGraph);
+}
+
+internal sealed class PowerShellCallGraphEdge
+{
+    internal PowerShellCallGraphEdge(PowerShellSymbolId caller, PowerShellSymbolId callee, SourceSpan invocation)
+    {
+        Caller = caller;
+        Callee = callee;
+        Invocation = invocation;
+    }
+
+    internal PowerShellSymbolId Caller { get; }
+    internal PowerShellSymbolId Callee { get; }
+    internal SourceSpan Invocation { get; }
+    internal string StableKey => Caller.StableKey + "->" + Callee.StableKey + ":" + Invocation.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
 internal sealed class PowerShellSemanticDiagnostic

@@ -33,12 +33,28 @@ internal sealed class PowerShellBoundCSharpBackend
 
         foreach (var statement in function.Statements)
         {
-            if (statement is not PowerShellLoweredReturnStatement returned)
-                throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
-            if (returned.Expression is null)
-                builder.AppendLine("            return;");
-            else
-                builder.Append("            return ").Append(EmitExpression(returned.Expression)).AppendLine(";");
+            switch (statement)
+            {
+                case PowerShellLoweredAssignmentStatement assignment:
+                    builder.Append("            ");
+                    if (assignment.Declare)
+                    {
+                        builder.Append(PowerShellCSharpMethodEmitter.GetTypeName(assignment.ClrType)).Append(' ');
+                    }
+                    builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(assignment.Target.Name))
+                        .Append(" = ")
+                        .Append(EmitExpression(assignment.Value))
+                        .AppendLine(";");
+                    break;
+                case PowerShellLoweredReturnStatement { Expression: null }:
+                    builder.AppendLine("            return;");
+                    break;
+                case PowerShellLoweredReturnStatement returned:
+                    builder.Append("            return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
+                    break;
+                default:
+                    throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
+            }
         }
 
         builder.AppendLine("        }").Append("    }");
@@ -50,6 +66,10 @@ internal sealed class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpMethodEmitter.SanitizeIdentifier(variable.Symbol.Name),
+            PowerShellLoweredConversionExpression conversion =>
+                $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
+            PowerShellLoweredInvocationExpression invocation =>
+                $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
 

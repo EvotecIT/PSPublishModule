@@ -27,7 +27,7 @@ public sealed class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
 
-        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var function = Assert.Single(result.Analyzed.Functions);
         Assert.Equal(expectedType, function.ReturnType.ClrType);
         Assert.Equal(PowerShellTypeFactProvenance.Inferred, function.ReturnType.Provenance);
@@ -57,6 +57,77 @@ public sealed class PowerShellCompilationBoundPipelineTests
 
         var forward = pipeline.Compile(new[] { first, second });
         var reverse = pipeline.Compile(new[] { second, first });
+
+        Assert.Equal(
+            forward.Analyzed.Functions.Select(static function => function.Symbol.StableKey),
+            reverse.Analyzed.Functions.Select(static function => function.Symbol.StableKey));
+        Assert.Equal(
+            forward.Emitted.Methods.Select(static method => method.Source),
+            reverse.Emitted.Methods.Select(static method => method.Source));
+    }
+
+    [Fact]
+    public void AssignmentAndAuthoredConversionFlowThroughBoundLocals()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Value { [long] $value = 42; return $value }",
+            TestPath("assignment.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        var local = Assert.Single(function.Locals);
+        Assert.Equal(typeof(long), local.Type.ClrType);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("long value = 42;", source, StringComparison.Ordinal);
+        Assert.Contains("return value;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefiniteAssignmentReportsReadBeforeWriteAtTheReadSpan()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Value { return $value; $value = 42 }",
+            TestPath("read-before-write.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        var diagnostic = Assert.Single(result.Analyzed.Diagnostics, static diagnostic => diagnostic.Code == "PSD1001");
+        Assert.Contains("read before", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(diagnostic.Span.StartOffset > 0);
+    }
+
+    [Fact]
+    public void LocalCallGraphPropagatesReturnTypeAndEffects()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Root { return Get-Leaf } function Get-Leaf { $value = 7; return $value }",
+            TestPath("calls.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        var root = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Root");
+        Assert.Equal(typeof(int), root.ReturnType.ClrType);
+        Assert.True(root.Effects.HasFlag(PowerShellSemanticEffect.Mutation));
+        var edge = Assert.Single(result.Analyzed.CallGraph);
+        Assert.Equal("Get-Root", edge.Caller.Name);
+        Assert.Equal("Get-Leaf", edge.Callee.Name);
+        Assert.Contains("return Get_Leaf();", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Root").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReversingDeclarationsPreservesSemanticAndGeneratedOrder()
+    {
+        var path = TestPath("declaration-order.ps1");
+        var forward = new PowerShellSemanticCompilationPipeline().Compile(new[]
+        {
+            PowerShellSourceParser.Parse("function Get-Zulu { return 2 } function Get-Alpha { return 1 }", path)
+        });
+        var reverse = new PowerShellSemanticCompilationPipeline().Compile(new[]
+        {
+            PowerShellSourceParser.Parse("function Get-Alpha { return 1 } function Get-Zulu { return 2 }", path)
+        });
 
         Assert.Equal(
             forward.Analyzed.Functions.Select(static function => function.Symbol.StableKey),
