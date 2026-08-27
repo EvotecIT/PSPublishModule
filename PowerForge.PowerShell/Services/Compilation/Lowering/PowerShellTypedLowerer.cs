@@ -181,6 +181,12 @@ internal sealed class PowerShellTypedLowerer
                 assignment.Operation,
                 assignment.NormalizeNullString,
                 assignment.CheckedIntegral),
+            PowerShellBoundIndexAssignmentStatement assignment => new PowerShellLoweredIndexAssignmentStatement(
+                assignment.Span,
+                LowerExpression(assignment.Target, functions),
+                LowerExpression(assignment.Index, functions),
+                LowerExpression(assignment.Value, functions),
+                assignment.Kind),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
                 returned.Expression is null ? null : LowerExpression(returned.Expression, functions)),
@@ -302,6 +308,19 @@ internal sealed class PowerShellTypedLowerer
                 array.Type.ClrType,
                 array.Kind,
                 array.Elements.Select(element => LowerExpression(element, functions)).ToArray()),
+            PowerShellBoundDictionaryExpression dictionary => new PowerShellLoweredDictionaryExpression(
+                dictionary.Span,
+                dictionary.Type.ClrType,
+                dictionary.Kind,
+                dictionary.Entries.Select(entry => new PowerShellLoweredDictionaryEntry(
+                    LowerExpression(entry.Key, functions),
+                    LowerExpression(entry.Value, functions))).ToArray()),
+            PowerShellBoundIndexExpression index => new PowerShellLoweredIndexExpression(
+                index.Span,
+                index.Type.ClrType,
+                LowerExpression(index.Target, functions),
+                LowerExpression(index.Index, functions),
+                index.Kind),
             PowerShellBoundClrMemberExpression member => new PowerShellLoweredClrMemberExpression(
                 member.Span,
                 member.Type.ClrType,

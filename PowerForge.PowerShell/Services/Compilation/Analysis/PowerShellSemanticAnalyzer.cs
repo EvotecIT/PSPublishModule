@@ -448,7 +448,13 @@ internal sealed class PowerShellSemanticAnalyzer
     {
         var expression = GetExpression(statement);
         if (expression is not null) yield return expression;
-        if (statement is PowerShellBoundIfStatement conditional)
+        if (statement is PowerShellBoundIndexAssignmentStatement indexAssignment)
+        {
+            yield return indexAssignment.Target;
+            yield return indexAssignment.Index;
+            yield return indexAssignment.Value;
+        }
+        else if (statement is PowerShellBoundIfStatement conditional)
         {
             foreach (var clause in conditional.Clauses) yield return clause.Condition;
         }
@@ -513,6 +519,19 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
         }
+        if (expression is PowerShellBoundDictionaryExpression dictionary)
+        {
+            foreach (var entry in dictionary.Entries)
+            {
+                foreach (var read in EnumerateVariableReads(entry.Key)) yield return read;
+                foreach (var read in EnumerateVariableReads(entry.Value)) yield return read;
+            }
+        }
+        if (expression is PowerShellBoundIndexExpression index)
+        {
+            foreach (var read in EnumerateVariableReads(index.Target)) yield return read;
+            foreach (var read in EnumerateVariableReads(index.Index)) yield return read;
+        }
         if (expression is PowerShellBoundClrMemberExpression { Receiver: not null } member)
         {
             foreach (var read in EnumerateVariableReads(member.Receiver)) yield return read;
@@ -559,6 +578,19 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var element in array.Elements)
             foreach (var nested in EnumerateInvocations(element))
                 yield return nested;
+        }
+        if (expression is PowerShellBoundDictionaryExpression dictionary)
+        {
+            foreach (var entry in dictionary.Entries)
+            {
+                foreach (var nested in EnumerateInvocations(entry.Key)) yield return nested;
+                foreach (var nested in EnumerateInvocations(entry.Value)) yield return nested;
+            }
+        }
+        if (expression is PowerShellBoundIndexExpression index)
+        {
+            foreach (var nested in EnumerateInvocations(index.Target)) yield return nested;
+            foreach (var nested in EnumerateInvocations(index.Index)) yield return nested;
         }
         if (expression is PowerShellBoundClrMemberExpression { Receiver: not null } member)
         {

@@ -95,6 +95,9 @@ internal sealed class PowerShellBoundCSharpBackend
                     assignment.NormalizeNullString,
                     assignment.CheckedIntegral)).AppendLine(";");
                 return;
+            case PowerShellLoweredIndexAssignmentStatement assignment:
+                builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");
+                return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
                 return;
@@ -241,12 +244,49 @@ internal sealed class PowerShellBoundCSharpBackend
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
+            PowerShellLoweredIndexExpression index => EmitIndex(index),
             PowerShellLoweredClrMemberExpression member => EmitClrMember(member),
             PowerShellLoweredClrInvocationExpression invocation => EmitClrInvocation(invocation),
             PowerShellLoweredInvocationExpression invocation =>
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
+    {
+        var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
+        return dictionary.Kind == PowerShellBoundDictionaryKind.OrderedStringDictionary
+            ? $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
+            : $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}";
+    }
+
+    private static string EmitIndex(PowerShellLoweredIndexExpression index)
+    {
+        var target = EmitExpression(index.Target);
+        var key = EmitExpression(index.Index);
+        if (index.Kind == PowerShellBoundIndexKind.StringDictionary)
+            return $"({target} is null ? null : {target}.ContainsKey({key}) ? {target}[{key}] : null)";
+        if (index.Kind is PowerShellBoundIndexKind.OrderedStringDictionary or PowerShellBoundIndexKind.ObjectDictionary)
+            return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";
+        if (index.Kind == PowerShellBoundIndexKind.String) target = $"({target} ?? string.Empty)";
+        else target = $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        var normalized = $"(({key}) < 0 ? {target}.Length + ({key}) : ({key}))";
+        return $"({normalized} < 0 || {normalized} >= {target}.Length ? null : (object){target}[{normalized}])";
+    }
+
+    private static string EmitIndexAssignment(PowerShellLoweredIndexAssignmentStatement assignment)
+    {
+        var target = EmitExpression(assignment.Target);
+        var index = EmitExpression(assignment.Index);
+        var value = EmitExpression(assignment.Value);
+        if (assignment.Kind != PowerShellBoundIndexKind.Array)
+            return $"{target}[{index}] = {value}";
+        var checkedTarget = $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        var normalized = $"(({index}) < 0 ? {checkedTarget}.Length + ({index}) : ({index}))";
+        var checkedIndex = $"({normalized} >= 0 && {normalized} < {checkedTarget}.Length ? {normalized} : throw new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\"))";
+        return $"{checkedTarget}[{checkedIndex}] = {value}";
+    }
 
     private static string EmitClrMember(PowerShellLoweredClrMemberExpression member)
     {

@@ -1,0 +1,113 @@
+using System.Management.Automation.Language;
+
+namespace PowerForge;
+
+internal sealed class PowerShellSemanticSymbolBinding
+{
+    internal PowerShellSemanticSymbolBinding(PowerShellSymbolId symbol, PowerShellTypeFact type)
+    {
+        Symbol = symbol;
+        Type = type;
+    }
+
+    internal PowerShellSymbolId Symbol { get; }
+    internal PowerShellTypeFact Type { get; }
+}
+
+/// <summary>Owns local and parameter mutation semantics.</summary>
+internal static class PowerShellMutationSemanticBinder
+{
+    internal static PowerShellBoundMutationExpression? BindAssignment(
+        ParsedSourceDocument document,
+        AssignmentStatementAst syntax,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
+        if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
+        var operation = syntax.Operator.ToString() switch
+        {
+            "Equals" => PowerShellBoundMutationOperator.Assign,
+            "PlusEquals" => PowerShellBoundMutationOperator.Add,
+            "MinusEquals" => PowerShellBoundMutationOperator.Subtract,
+            "MultiplyEquals" => PowerShellBoundMutationOperator.Multiply,
+            "DivideEquals" => PowerShellBoundMutationOperator.Divide,
+            "RemEquals" => PowerShellBoundMutationOperator.Remainder,
+            _ => (PowerShellBoundMutationOperator?)null
+        };
+        if (operation is null) return null;
+        var targetType = target.Type.ClrType;
+        var value = bindExpression(syntax.Right, targetType);
+        if (value is null) return null;
+        if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2401", $"Assignment requires PowerShell conversion from '{value.Type.ClrType.FullName}' to '{targetType.FullName}', which is not an implicit CLR conversion.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
+        if (operation != PowerShellBoundMutationOperator.Assign &&
+            !PowerShellCSharpOperatorPolicy.SupportsCompoundAssignment(syntax.Operator.ToString(), targetType, value.Type.ClrType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2402", $"Compound assignment '{syntax.Operator}' is not defined for CLR types '{targetType.FullName}' and '{value.Type.ClrType.FullName}' on the conservative compilation path.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
+        var explicitType = target.Type.Provenance == PowerShellTypeFactProvenance.Explicit;
+        if (operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType) && !explicitType)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2403", $"Integral compound assignment to untyped local '${target.Symbol.Name}' can promote dynamically in PowerShell and is not eligible for typed compilation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
+        return new PowerShellBoundMutationExpression(
+            PowerShellSourceParser.GetSpan(document, syntax.Extent),
+            target.Symbol,
+            targetType,
+            operation.Value,
+            value,
+            target.Type,
+            operation == PowerShellBoundMutationOperator.Assign && explicitType && targetType == typeof(string),
+            operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType));
+    }
+
+    internal static bool TryBindIncrement(
+        ParsedSourceDocument document,
+        UnaryExpressionAst syntax,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        out PowerShellBoundMutationExpression? mutation,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        mutation = null;
+        var operation = syntax.TokenKind.ToString() switch
+        {
+            "PlusPlus" => PowerShellBoundMutationOperator.Increment,
+            "MinusMinus" => PowerShellBoundMutationOperator.Decrement,
+            "PostfixPlusPlus" => PowerShellBoundMutationOperator.PostIncrement,
+            "PostfixMinusMinus" => PowerShellBoundMutationOperator.PostDecrement,
+            _ => (PowerShellBoundMutationOperator?)null
+        };
+        if (operation is null) return false;
+        var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
+        if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
+        if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) || target.Type.Provenance != PowerShellTypeFactProvenance.Explicit)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return true;
+        }
+        mutation = new PowerShellBoundMutationExpression(
+            PowerShellSourceParser.GetSpan(document, syntax.Extent),
+            target.Symbol,
+            target.Type.ClrType,
+            operation.Value,
+            null,
+            new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Increment and decrement are statement-valued on the conservative path."),
+            false,
+            PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType));
+        return true;
+    }
+
+    private static Ast UnwrapExpression(Ast syntax)
+    {
+        while (syntax is CommandExpressionAst command) syntax = command.Expression;
+        while (syntax is ParenExpressionAst parenthesized) syntax = parenthesized.Pipeline;
+        return syntax;
+    }
+}

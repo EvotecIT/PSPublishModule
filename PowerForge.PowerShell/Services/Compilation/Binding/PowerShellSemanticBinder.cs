@@ -92,7 +92,7 @@ internal sealed class PowerShellSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework)
     {
-        var symbols = new Dictionary<string, SymbolBinding>(StringComparer.OrdinalIgnoreCase);
+        var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
         var locals = DeclareLocals(document, function, symbols);
@@ -139,7 +139,7 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundParameter[]? BindParameters(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
-        IDictionary<string, SymbolBinding> symbols,
+        IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework)
     {
@@ -163,7 +163,7 @@ internal sealed class PowerShellSemanticBinder
                 : new PowerShellTypeFact(clrType, PowerShellTypeFactProvenance.Explicit, $"Parameter '${name}' has an authored type constraint.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
             var bound = new PowerShellBoundParameter(symbol, type, contract);
-            symbols.Add(name, new SymbolBinding(symbol, type));
+            symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
         }
         return parameters.ToArray();
@@ -172,7 +172,7 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundLocal[] DeclareLocals(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
-        IDictionary<string, SymbolBinding> symbols)
+        IDictionary<string, PowerShellSemanticSymbolBinding> symbols)
     {
         var locals = new List<PowerShellBoundLocal>();
         var assignments = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
@@ -189,7 +189,7 @@ internal sealed class PowerShellSemanticBinder
             var type = ResolveAssignmentType(assignment);
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
             var local = new PowerShellBoundLocal(symbol, type);
-            symbols.Add(name, new SymbolBinding(symbol, type));
+            symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(local);
         }
         var loops = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
@@ -214,7 +214,7 @@ internal sealed class PowerShellSemanticBinder
             var span = PowerShellSourceParser.GetSpan(document, loop.Variable.Extent);
             var type = new PowerShellTypeFact(elementType, PowerShellTypeFactProvenance.Inferred, "The foreach collection provides one stable CLR element type.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);
-            symbols.Add(name, new SymbolBinding(symbol, type));
+            symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(new PowerShellBoundLocal(symbol, type));
         }
         return locals.ToArray();
@@ -225,6 +225,10 @@ internal sealed class PowerShellSemanticBinder
         if (assignment.Left is ConvertExpressionAst typedLeft && typedLeft.StaticType != typeof(object))
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
         var expression = UnwrapExpression(assignment.Right);
+        if (expression is HashtableAst)
+            return new PowerShellTypeFact(typeof(Dictionary<string, string>), PowerShellTypeFactProvenance.Inferred, "A homogeneous hashtable literal selects the compiler's string dictionary representation.");
+        if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
+            return new PowerShellTypeFact(typeof(System.Collections.Specialized.OrderedDictionary), PowerShellTypeFactProvenance.Explicit, "An [ordered] literal selects OrderedDictionary representation.");
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
             return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment value has an authored conversion.");
         if (expression is ExpressionAst typedExpression && typedExpression.StaticType != typeof(object))
@@ -235,7 +239,7 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundStatement? BindStatement(
         ParsedSourceDocument document,
         StatementAst statement,
-        IReadOnlyDictionary<string, SymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         bool isTerminal,
@@ -243,7 +247,21 @@ internal sealed class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
-            var mutation = BindAssignment(document, assignment, symbols, functions, diagnostics, targetFramework);
+            if (assignment.Left is IndexExpressionAst index)
+            {
+                return PowerShellDictionarySemanticBinder.BindAssignment(
+                    document,
+                    assignment,
+                    index,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
+            }
+            var mutation = PowerShellMutationSemanticBinder.BindAssignment(
+                document,
+                assignment,
+                symbols,
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                diagnostics);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(
@@ -469,7 +487,7 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundBlock? BindBlock(
         ParsedSourceDocument document,
         StatementBlockAst syntax,
-        IReadOnlyDictionary<string, SymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework)
@@ -511,7 +529,7 @@ internal sealed class PowerShellSemanticBinder
     private static PowerShellBoundExpression? BindExpression(
         ParsedSourceDocument document,
         Ast syntax,
-        IReadOnlyDictionary<string, SymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         Type? contextualType = null,
@@ -557,6 +575,13 @@ internal sealed class PowerShellSemanticBinder
                     (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework),
                     diagnostics);
             }
+            case HashtableAst hashtable:
+                return PowerShellDictionarySemanticBinder.BindLiteral(
+                    document,
+                    hashtable,
+                    ordered: false,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, true, LiteralType(typeof(bool), "$true is a Boolean literal."), PowerShellValueState.Known);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase):
@@ -565,6 +590,13 @@ internal sealed class PowerShellSemanticBinder
                 return new PowerShellBoundLiteralExpression(span, null, LiteralType(typeof(object), "$null has no narrower CLR representation."), PowerShellValueState.Null);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type);
+            case ConvertExpressionAst conversion when PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion):
+                return PowerShellDictionarySemanticBinder.BindLiteral(
+                    document,
+                    (HashtableAst)conversion.Child,
+                    ordered: true,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
             case ConvertExpressionAst conversion:
                 return PowerShellConversionSemanticBinder.Bind(
                     document,
@@ -579,14 +611,25 @@ internal sealed class PowerShellSemanticBinder
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework),
                     diagnostics);
             case UnaryExpressionAst unary:
-                if (TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
+                if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(
                     unary,
                     span,
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework),
                     diagnostics);
             case AssignmentStatementAst assignment:
-                return BindAssignment(document, assignment, symbols, functions, diagnostics, targetFramework);
+                return PowerShellMutationSemanticBinder.BindAssignment(
+                    document,
+                    assignment,
+                    symbols,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
+            case IndexExpressionAst index:
+                return PowerShellDictionarySemanticBinder.BindIndex(
+                    document,
+                    index,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
             case InvokeMemberExpressionAst invocation:
                 return PowerShellClrMemberSemanticBinder.BindInvocation(
                     document,
@@ -616,94 +659,6 @@ internal sealed class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", $"Expression '{syntax.GetType().Name}' is not yet represented by the bound pipeline.", span));
                 return null;
         }
-    }
-
-    private static PowerShellBoundMutationExpression? BindAssignment(
-        ParsedSourceDocument document,
-        AssignmentStatementAst syntax,
-        IReadOnlyDictionary<string, SymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework)
-    {
-        var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
-        if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
-        var operation = syntax.Operator.ToString() switch
-        {
-            "Equals" => PowerShellBoundMutationOperator.Assign,
-            "PlusEquals" => PowerShellBoundMutationOperator.Add,
-            "MinusEquals" => PowerShellBoundMutationOperator.Subtract,
-            "MultiplyEquals" => PowerShellBoundMutationOperator.Multiply,
-            "DivideEquals" => PowerShellBoundMutationOperator.Divide,
-            "RemEquals" => PowerShellBoundMutationOperator.Remainder,
-            _ => (PowerShellBoundMutationOperator?)null
-        };
-        if (operation is null) return null;
-        var targetType = target.Type.ClrType;
-        var value = BindExpression(document, syntax.Right, symbols, functions, diagnostics, targetType, targetFramework);
-        if (value is null) return null;
-        if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2401", $"Assignment requires PowerShell conversion from '{value.Type.ClrType.FullName}' to '{targetType.FullName}', which is not an implicit CLR conversion.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
-            return null;
-        }
-        if (operation != PowerShellBoundMutationOperator.Assign &&
-            !PowerShellCSharpOperatorPolicy.SupportsCompoundAssignment(syntax.Operator.ToString(), targetType, value.Type.ClrType))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2402", $"Compound assignment '{syntax.Operator}' is not defined for CLR types '{targetType.FullName}' and '{value.Type.ClrType.FullName}' on the conservative compilation path.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
-            return null;
-        }
-        var explicitType = target.Type.Provenance == PowerShellTypeFactProvenance.Explicit;
-        if (operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType) && !explicitType)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2403", $"Integral compound assignment to untyped local '${target.Symbol.Name}' can promote dynamically in PowerShell and is not eligible for typed compilation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
-            return null;
-        }
-        return new PowerShellBoundMutationExpression(
-            PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            target.Symbol,
-            targetType,
-            operation.Value,
-            value,
-            target.Type,
-            operation == PowerShellBoundMutationOperator.Assign && explicitType && targetType == typeof(string),
-            operation != PowerShellBoundMutationOperator.Assign && PowerShellClrTypeSemantics.IsIntegral(targetType));
-    }
-
-    private static bool TryBindIncrement(
-        ParsedSourceDocument document,
-        UnaryExpressionAst syntax,
-        IReadOnlyDictionary<string, SymbolBinding> symbols,
-        out PowerShellBoundMutationExpression? mutation,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
-    {
-        mutation = null;
-        var operation = syntax.TokenKind.ToString() switch
-        {
-            "PlusPlus" => PowerShellBoundMutationOperator.Increment,
-            "MinusMinus" => PowerShellBoundMutationOperator.Decrement,
-            "PostfixPlusPlus" => PowerShellBoundMutationOperator.PostIncrement,
-            "PostfixMinusMinus" => PowerShellBoundMutationOperator.PostDecrement,
-            _ => (PowerShellBoundMutationOperator?)null
-        };
-        if (operation is null) return false;
-        var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
-        if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
-        if (!PowerShellCSharpOperatorPolicy.SupportsIncrement(target.Type.ClrType) || target.Type.Provenance != PowerShellTypeFactProvenance.Explicit)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2404", $"Increment or decrement of '${target.Symbol.Name}' requires one explicitly typed supported CLR representation.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
-            return true;
-        }
-        mutation = new PowerShellBoundMutationExpression(
-            PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            target.Symbol,
-            target.Type.ClrType,
-            operation.Value,
-            null,
-            new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Increment and decrement are statement-valued on the conservative path."),
-            false,
-            PowerShellClrTypeSemantics.IsIntegral(target.Type.ClrType));
-        return true;
     }
 
     private static bool IsLocalFunctionPipeline(PipelineAst pipeline, IReadOnlyDictionary<string, PowerShellSymbolId> functions)
@@ -763,15 +718,4 @@ internal sealed class PowerShellSemanticBinder
         internal PowerShellSymbolId Symbol { get; }
     }
 
-    private sealed class SymbolBinding
-    {
-        internal SymbolBinding(PowerShellSymbolId symbol, PowerShellTypeFact type)
-        {
-            Symbol = symbol;
-            Type = type;
-        }
-
-        internal PowerShellSymbolId Symbol { get; }
-        internal PowerShellTypeFact Type { get; }
-    }
 }

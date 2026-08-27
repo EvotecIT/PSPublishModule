@@ -327,6 +327,44 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void IndexedReadsAndMutationsFlowThroughCollectionIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Last { param([int[]] $Values) return $Values[-1] } function Get-MapValue { $map = @{ One = '1' }; $map['Two'] = '2'; return $map['two'] }",
+            TestPath("indexing.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var last = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Last");
+        Assert.IsType<PowerShellBoundIndexExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(last.Body.Statements)).Expression);
+        var map = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-MapValue");
+        Assert.IsType<PowerShellBoundDictionaryExpression>(Assert.IsType<PowerShellBoundAssignmentStatement>(map.Body.Statements[0]).Value);
+        Assert.IsType<PowerShellBoundIndexAssignmentStatement>(map.Body.Statements[1]);
+        Assert.IsType<PowerShellLoweredIndexAssignmentStatement>(Assert.Single(result.Lowered.Functions, static function => function.Symbol.Name == "Get-MapValue").Statements[1]);
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_MapValue").Source;
+        Assert.Contains("Dictionary<string, string>", source, StringComparison.Ordinal);
+        Assert.Contains("map[\"Two\"] = \"2\";", source, StringComparison.Ordinal);
+        Assert.Contains("map.ContainsKey(\"two\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OrderedStringDictionaryKeepsOrderedRepresentationInIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-OrderedValue { $map = [ordered] @{ One = '1'; Two = '2' }; return $map['two'] }",
+            TestPath("ordered-dictionary.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var assignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[0]);
+        var dictionary = Assert.IsType<PowerShellBoundDictionaryExpression>(assignment.Value);
+        Assert.Equal(PowerShellBoundDictionaryKind.OrderedStringDictionary, dictionary.Kind);
+        Assert.Contains("OrderedDictionary", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublicTranspilerUsesBoundConditionalPlan()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
