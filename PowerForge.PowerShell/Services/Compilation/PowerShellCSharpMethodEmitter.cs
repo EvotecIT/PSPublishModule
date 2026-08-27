@@ -702,7 +702,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     }
 
     private static bool IsNonNullableValueType(Type type)
-        => type.IsValueType && Nullable.GetUnderlyingType(type) is null;
+        => PowerShellClrTypeSemantics.IsNonNullableValueType(type);
 
     private Type InferExpressionType(Ast ast)
     {
@@ -780,16 +780,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private static Type UnifyTypes(Type left, Type right, Ast node)
     {
-        if (left == right) return left;
-        if (CanAssign(left, right)) return left;
-        if (CanAssign(right, left)) return right;
-        if (IsNumeric(left) && IsNumeric(right))
-        {
-            foreach (var candidate in new[] { typeof(int), typeof(uint), typeof(long), typeof(ulong), typeof(decimal), typeof(float), typeof(double) })
-            {
-                if (CanAssign(candidate, left) && CanAssign(candidate, right)) return candidate;
-            }
-        }
+        if (PowerShellClrTypeSemantics.TryUnify(left, right, out var result)) return result;
         throw new PowerShellCSharpEmissionException(node, $"Types '{left.FullName}' and '{right.FullName}' cannot be unified without dynamic PowerShell coercion.");
     }
 

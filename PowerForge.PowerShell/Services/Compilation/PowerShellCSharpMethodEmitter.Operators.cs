@@ -209,13 +209,10 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     }
 
     private static bool IsNumeric(Type type)
-        => type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
-           type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong) ||
-           type == typeof(float) || type == typeof(double) || type == typeof(decimal);
+        => PowerShellClrTypeSemantics.IsNumeric(type);
 
     private static bool IsIntegral(Type type)
-        => type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
-           type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong);
+        => PowerShellClrTypeSemantics.IsIntegral(type);
 
     private Type InferBitwiseUnaryType(UnaryExpressionAst unary)
         => PromoteIntegralOperatorType(InferExpressionType(unary.Child), unary);
@@ -224,8 +221,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     {
         if (!IsIntegral(type))
             throw Error(node, $"Bitwise operators require an integral operand, not '{type.FullName}'.");
-        return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort)
-            ? typeof(int)
-            : type;
+        return PowerShellClrTypeSemantics.PromoteIntegral(type);
     }
 }

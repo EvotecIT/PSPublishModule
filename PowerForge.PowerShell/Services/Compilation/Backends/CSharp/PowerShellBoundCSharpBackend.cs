@@ -105,10 +105,69 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredVariableExpression variable => PowerShellCSharpMethodEmitter.SanitizeIdentifier(variable.Symbol.Name),
             PowerShellLoweredConversionExpression conversion =>
                 $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
+            PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
+            PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
             PowerShellLoweredInvocationExpression invocation =>
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitBinary(PowerShellLoweredBinaryExpression expression)
+    {
+        var left = EmitExpression(expression.Left);
+        var right = EmitExpression(expression.Right);
+        if (expression.Operation is PowerShellBoundBinaryOperator.EqualIgnoreCase or PowerShellBoundBinaryOperator.NotEqualIgnoreCase or
+            PowerShellBoundBinaryOperator.EqualCaseSensitive or PowerShellBoundBinaryOperator.NotEqualCaseSensitive)
+        {
+            var comparisonMode = expression.Operation is PowerShellBoundBinaryOperator.EqualIgnoreCase or PowerShellBoundBinaryOperator.NotEqualIgnoreCase
+                ? "global::System.StringComparison.InvariantCultureIgnoreCase"
+                : "global::System.StringComparison.InvariantCulture";
+            var comparison = $"global::System.String.Equals({left}, {right}, {comparisonMode})";
+            return expression.Operation is PowerShellBoundBinaryOperator.NotEqualIgnoreCase or PowerShellBoundBinaryOperator.NotEqualCaseSensitive
+                ? $"!({comparison})"
+                : comparison;
+        }
+        var symbol = expression.Operation switch
+        {
+            PowerShellBoundBinaryOperator.Add => "+",
+            PowerShellBoundBinaryOperator.Subtract => "-",
+            PowerShellBoundBinaryOperator.Multiply => "*",
+            PowerShellBoundBinaryOperator.Divide => "/",
+            PowerShellBoundBinaryOperator.Remainder => "%",
+            PowerShellBoundBinaryOperator.Equal => "==",
+            PowerShellBoundBinaryOperator.NotEqual => "!=",
+            PowerShellBoundBinaryOperator.LessThan => "<",
+            PowerShellBoundBinaryOperator.LessThanOrEqual => "<=",
+            PowerShellBoundBinaryOperator.GreaterThan => ">",
+            PowerShellBoundBinaryOperator.GreaterThanOrEqual => ">=",
+            PowerShellBoundBinaryOperator.LogicalAnd => "&&",
+            PowerShellBoundBinaryOperator.LogicalOr => "||",
+            PowerShellBoundBinaryOperator.BitwiseAnd => "&",
+            PowerShellBoundBinaryOperator.BitwiseOr => "|",
+            PowerShellBoundBinaryOperator.BitwiseExclusiveOr => "^",
+            PowerShellBoundBinaryOperator.ShiftLeft => "<<",
+            PowerShellBoundBinaryOperator.ShiftRight => ">>",
+            _ => throw new InvalidOperationException($"Lowered binary operator '{expression.Operation}' has no C# rendering owner.")
+        };
+        if (expression.Operation is PowerShellBoundBinaryOperator.Divide or PowerShellBoundBinaryOperator.Remainder && expression.ClrType == typeof(double))
+            return $"(((double)({left})) {symbol} ((double)({right})))";
+        if (expression.Operation is PowerShellBoundBinaryOperator.ShiftLeft or PowerShellBoundBinaryOperator.ShiftRight)
+            right = $"(int)({right})";
+        return $"({left} {symbol} {right})";
+    }
+
+    private static string EmitUnary(PowerShellLoweredUnaryExpression expression)
+    {
+        var symbol = expression.Operation switch
+        {
+            PowerShellBoundUnaryOperator.Identity => "+",
+            PowerShellBoundUnaryOperator.Negate => "-",
+            PowerShellBoundUnaryOperator.LogicalNot => "!",
+            PowerShellBoundUnaryOperator.BitwiseNot => "~",
+            _ => throw new InvalidOperationException($"Lowered unary operator '{expression.Operation}' has no C# rendering owner.")
+        };
+        return $"({symbol}{EmitExpression(expression.Operand)})";
+    }
 
     private static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
     {

@@ -274,6 +274,18 @@ internal sealed class PowerShellSemanticBinder
                     ? null
                     : new PowerShellBoundConversionExpression(span, new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects the CLR representation."), operand);
             }
+            case BinaryExpressionAst binary:
+                return PowerShellOperatorSemanticBinder.BindBinary(
+                    binary,
+                    span,
+                    operand => BindExpression(document, operand, symbols, functions, diagnostics),
+                    diagnostics);
+            case UnaryExpressionAst unary:
+                return PowerShellOperatorSemanticBinder.BindUnary(
+                    unary,
+                    span,
+                    operand => BindExpression(document, operand, symbols, functions, diagnostics),
+                    diagnostics);
             case CommandAst command when TryGetLocalFunction(command, functions, out var target):
             {
                 var arguments = new List<PowerShellBoundExpression>();

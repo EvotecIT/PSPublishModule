@@ -83,6 +83,17 @@ internal sealed class PowerShellTypedLowerer
                 conversion.Span,
                 conversion.Type.ClrType,
                 LowerExpression(conversion.Operand, functions)),
+            PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
+                binary.Span,
+                binary.Type.ClrType,
+                binary.Operation,
+                LowerExpression(binary.Left, functions),
+                LowerExpression(binary.Right, functions)),
+            PowerShellBoundUnaryExpression unary => new PowerShellLoweredUnaryExpression(
+                unary.Span,
+                unary.Type.ClrType,
+                unary.Operation,
+                LowerExpression(unary.Operand, functions)),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,

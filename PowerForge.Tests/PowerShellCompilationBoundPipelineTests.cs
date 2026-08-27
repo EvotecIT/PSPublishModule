@@ -92,6 +92,48 @@ public sealed class PowerShellCompilationBoundPipelineTests
         }
     }
 
+    [Theory]
+    [InlineData("param([double] $Left, [double] $Right) return $Left + $Right", typeof(double), "return (Left + Right);")]
+    [InlineData("param([bool] $Left, [bool] $Right) return $Left -and $Right", typeof(bool), "return (Left && Right);")]
+    [InlineData("param([string] $Left, [string] $Right) return $Left -eq $Right", typeof(bool), "StringComparison.InvariantCultureIgnoreCase")]
+    [InlineData("param([string] $Left, [string] $Right) return $Left -ceq $Right", typeof(bool), "StringComparison.InvariantCulture)")]
+    [InlineData("param([int] $Value, [int] $Count) return $Value -shl $Count", typeof(int), "return (Value << (int)(Count));")]
+    public void OperatorsCarryResolvedSemanticsThroughBoundAndLoweredNodes(string body, Type returnType, string expectedSource)
+    {
+        var document = PowerShellSourceParser.Parse($"function Get-Value {{ {body} }}", TestPath("operators.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Equal(returnType, function.ReturnType.ClrType);
+        Assert.IsType<PowerShellBoundBinaryExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(function.Body.Statements)).Expression);
+        Assert.IsType<PowerShellLoweredBinaryExpression>(Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements)).Expression);
+        Assert.Contains(expectedSource, Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicTranspilerUsesBoundOperatorPlan()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "operator.ps1");
+        try
+        {
+            File.WriteAllText(path, "function Add-Value { param([double] $Left, [double] $Right) return $Left + $Right }");
+
+            var result = new PowerShellTypedCompilationTranspiler().Transpile(path);
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+            Assert.Contains("public static double Add_Value(double Left, double Right)", result.SourceCode, StringComparison.Ordinal);
+            Assert.Contains("return (Left + Right);", result.SourceCode, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void FileAndDeclarationOrderDoNotChangeSemanticOrEmissionOrder()
     {
@@ -184,7 +226,7 @@ public sealed class PowerShellCompilationBoundPipelineTests
     [Fact]
     public void UnsupportedSyntaxProducesStableBindingDiagnosticWithoutReachingBackend()
     {
-        var document = PowerShellSourceParser.Parse("function Get-Value { return (1 + 2) }", TestPath("unsupported.ps1"));
+        var document = PowerShellSourceParser.Parse("function Get-Value { return \"value: $([datetime]::UtcNow)\" }", TestPath("unsupported.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
 

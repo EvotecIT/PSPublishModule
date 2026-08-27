@@ -46,19 +46,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         => HasLoopAncestor(node) || HasAncestor<SwitchStatementAst>(node);
 
     private static bool CanAssign(Type target, Type source)
-    {
-        if (target == source || target.IsAssignableFrom(source)) return true;
-        if (!IsNumeric(target) || !IsNumeric(source)) return false;
-        return source == typeof(sbyte) && (target == typeof(short) || target == typeof(int) || target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(byte) && (target == typeof(short) || target == typeof(ushort) || target == typeof(int) || target == typeof(uint) || target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(short) && (target == typeof(int) || target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(ushort) && (target == typeof(int) || target == typeof(uint) || target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(int) && (target == typeof(long) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(uint) && (target == typeof(long) || target == typeof(ulong) || target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(long) && (target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(ulong) && (target == typeof(float) || target == typeof(double) || target == typeof(decimal)) ||
-               source == typeof(float) && target == typeof(double);
-    }
+        => PowerShellClrTypeSemantics.CanAssign(target, source);
 
     internal static string SanitizeIdentifier(string value)
         => PowerShellClrSymbolMapper.MapIdentifier(value);
