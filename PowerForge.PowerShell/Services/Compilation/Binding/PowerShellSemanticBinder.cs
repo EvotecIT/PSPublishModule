@@ -243,7 +243,7 @@ internal sealed class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
-            var mutation = BindAssignment(document, assignment, symbols, functions, diagnostics);
+            var mutation = BindAssignment(document, assignment, symbols, functions, diagnostics, targetFramework);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(
@@ -258,7 +258,7 @@ internal sealed class PowerShellSemanticBinder
         {
             var expression = returnStatement.Pipeline is null
                 ? null
-                : BindExpression(document, returnStatement.Pipeline, symbols, functions, diagnostics);
+                : BindExpression(document, returnStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework);
             return returnStatement.Pipeline is null || expression is not null
                 ? new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, returnStatement.Extent), expression)
                 : null;
@@ -268,7 +268,7 @@ internal sealed class PowerShellSemanticBinder
             var clauses = new List<PowerShellBoundConditionalClause>();
             foreach (var clause in ifStatement.Clauses)
             {
-                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics);
+                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics, targetFramework: targetFramework);
                 if (condition is null) return null;
                 if (condition.Type.ClrType != typeof(bool))
                 {
@@ -287,7 +287,7 @@ internal sealed class PowerShellSemanticBinder
         }
         if (statement is WhileStatementAst whileStatement)
         {
-            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics);
+            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework);
             if (condition is null) return null;
             if (condition.Type.ClrType != typeof(bool))
             {
@@ -301,11 +301,11 @@ internal sealed class PowerShellSemanticBinder
         {
             var initializer = forStatement.Initializer is null
                 ? null
-                : BindExpression(document, forStatement.Initializer, symbols, functions, diagnostics) as PowerShellBoundMutationExpression;
+                : BindExpression(document, forStatement.Initializer, symbols, functions, diagnostics, targetFramework: targetFramework) as PowerShellBoundMutationExpression;
             if (forStatement.Initializer is not null && initializer is null) return null;
             var condition = forStatement.Condition is null
                 ? null
-                : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics);
+                : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework);
             if (condition is not null && condition.Type.ClrType != typeof(bool))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
@@ -313,7 +313,7 @@ internal sealed class PowerShellSemanticBinder
             }
             var iterator = forStatement.Iterator is null
                 ? null
-                : BindExpression(document, forStatement.Iterator, symbols, functions, diagnostics) as PowerShellBoundMutationExpression;
+                : BindExpression(document, forStatement.Iterator, symbols, functions, diagnostics, targetFramework: targetFramework) as PowerShellBoundMutationExpression;
             if (forStatement.Iterator is not null && iterator is null) return null;
             var body = BindBlock(document, forStatement.Body, symbols, functions, diagnostics, targetFramework);
             return body is null ? null : new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
@@ -327,7 +327,7 @@ internal sealed class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${forEachStatement.Variable.VariablePath.UserPath}' cannot reuse another function-scope variable on the conservative compilation path.", variableSpan));
                 return null;
             }
-            var collection = BindExpression(document, forEachStatement.Condition, symbols, functions, diagnostics);
+            var collection = BindExpression(document, forEachStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework);
             if (collection is null) return null;
             var collectionType = collection.Type.ClrType;
             var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
@@ -349,7 +349,7 @@ internal sealed class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304", $"Switch flags '{switchStatement.Flags}' require PowerShell runtime matching semantics.", PowerShellSourceParser.GetSpan(document, switchStatement.Extent)));
                 return null;
             }
-            var value = BindExpression(document, switchStatement.Condition, symbols, functions, diagnostics);
+            var value = BindExpression(document, switchStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework);
             if (value is null) return null;
             var valueType = value.Type.ClrType;
             if (valueType != typeof(bool) && valueType != typeof(char) && valueType != typeof(string) && !PowerShellClrTypeSemantics.IsNumeric(valueType))
@@ -360,7 +360,7 @@ internal sealed class PowerShellSemanticBinder
             var clauses = new List<PowerShellBoundSwitchClause>();
             foreach (var clause in switchStatement.Clauses)
             {
-                var clauseValue = BindExpression(document, clause.Item1, symbols, functions, diagnostics, valueType);
+                var clauseValue = BindExpression(document, clause.Item1, symbols, functions, diagnostics, valueType, targetFramework);
                 if (clauseValue is null) return null;
                 if (clauseValue.Type.ClrType != valueType)
                 {
@@ -394,7 +394,7 @@ internal sealed class PowerShellSemanticBinder
                 return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), null);
             }
             if (throwStatement.Pipeline is null) return null;
-            var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics);
+            var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework);
             if (expression is null) return null;
             if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType))
             {
@@ -458,7 +458,7 @@ internal sealed class PowerShellSemanticBinder
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is PipelineAst pipeline && (isTerminal || IsLocalFunctionPipeline(pipeline, functions)))
         {
-            var expression = BindExpression(document, pipeline, symbols, functions, diagnostics);
+            var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework);
             return expression is null
                 ? null
                 : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression);
@@ -514,7 +514,8 @@ internal sealed class PowerShellSemanticBinder
         IReadOnlyDictionary<string, SymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        Type? contextualType = null)
+        Type? contextualType = null,
+        string? targetFramework = null)
     {
         syntax = UnwrapExpression(syntax);
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -531,7 +532,7 @@ internal sealed class PowerShellSemanticBinder
                     array.Elements,
                     PowerShellBoundArrayKind.Literal,
                     contextualType,
-                    (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType),
+                    (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework),
                     diagnostics);
             case ArrayExpressionAst array:
             {
@@ -553,7 +554,7 @@ internal sealed class PowerShellSemanticBinder
                     elements,
                     PowerShellBoundArrayKind.CollectedExpression,
                     contextualType,
-                    (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType),
+                    (item, elementType) => BindExpression(document, item, symbols, functions, diagnostics, elementType, targetFramework),
                     diagnostics);
             }
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase):
@@ -566,7 +567,7 @@ internal sealed class PowerShellSemanticBinder
                 return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type);
             case ConvertExpressionAst conversion:
             {
-                var operand = BindExpression(document, conversion.Child, symbols, functions, diagnostics);
+                var operand = BindExpression(document, conversion.Child, symbols, functions, diagnostics, targetFramework: targetFramework);
                 return operand is null
                     ? null
                     : new PowerShellBoundConversionExpression(span, new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects the CLR representation."), operand);
@@ -575,23 +576,37 @@ internal sealed class PowerShellSemanticBinder
                 return PowerShellOperatorSemanticBinder.BindBinary(
                     binary,
                     span,
-                    operand => BindExpression(document, operand, symbols, functions, diagnostics),
+                    operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework),
                     diagnostics);
             case UnaryExpressionAst unary:
                 if (TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(
                     unary,
                     span,
-                    operand => BindExpression(document, operand, symbols, functions, diagnostics),
+                    operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework),
                     diagnostics);
             case AssignmentStatementAst assignment:
-                return BindAssignment(document, assignment, symbols, functions, diagnostics);
+                return BindAssignment(document, assignment, symbols, functions, diagnostics, targetFramework);
+            case InvokeMemberExpressionAst invocation:
+                return PowerShellClrMemberSemanticBinder.BindInvocation(
+                    document,
+                    invocation,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    targetFramework,
+                    diagnostics);
+            case MemberExpressionAst member:
+                return PowerShellClrMemberSemanticBinder.BindMember(
+                    document,
+                    member,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    targetFramework,
+                    diagnostics);
             case CommandAst command when TryGetLocalFunction(command, functions, out var target):
             {
                 var arguments = new List<PowerShellBoundExpression>();
                 foreach (var argument in command.CommandElements.Skip(1).OfType<ExpressionAst>())
                 {
-                    var bound = BindExpression(document, argument, symbols, functions, diagnostics);
+                    var bound = BindExpression(document, argument, symbols, functions, diagnostics, targetFramework: targetFramework);
                     if (bound is null) return null;
                     arguments.Add(bound);
                 }
@@ -608,7 +623,8 @@ internal sealed class PowerShellSemanticBinder
         AssignmentStatementAst syntax,
         IReadOnlyDictionary<string, SymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework)
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
@@ -624,7 +640,7 @@ internal sealed class PowerShellSemanticBinder
         };
         if (operation is null) return null;
         var targetType = target.Type.ClrType;
-        var value = BindExpression(document, syntax.Right, symbols, functions, diagnostics, targetType);
+        var value = BindExpression(document, syntax.Right, symbols, functions, diagnostics, targetType, targetFramework);
         if (value is null) return null;
         if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
         {

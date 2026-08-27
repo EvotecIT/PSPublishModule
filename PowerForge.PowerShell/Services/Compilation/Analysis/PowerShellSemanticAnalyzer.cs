@@ -513,6 +513,19 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
         }
+        if (expression is PowerShellBoundClrMemberExpression { Receiver: not null } member)
+        {
+            foreach (var read in EnumerateVariableReads(member.Receiver)) yield return read;
+        }
+        if (expression is PowerShellBoundClrInvocationExpression clrInvocation)
+        {
+            if (clrInvocation.Receiver is not null)
+            foreach (var read in EnumerateVariableReads(clrInvocation.Receiver))
+                yield return read;
+            foreach (var argument in clrInvocation.Arguments)
+            foreach (var read in EnumerateVariableReads(argument))
+                yield return read;
+        }
     }
 
     private static IEnumerable<PowerShellBoundInvocationExpression> EnumerateInvocations(PowerShellBoundExpression expression)
@@ -545,6 +558,19 @@ internal sealed class PowerShellSemanticAnalyzer
         {
             foreach (var element in array.Elements)
             foreach (var nested in EnumerateInvocations(element))
+                yield return nested;
+        }
+        if (expression is PowerShellBoundClrMemberExpression { Receiver: not null } member)
+        {
+            foreach (var nested in EnumerateInvocations(member.Receiver)) yield return nested;
+        }
+        if (expression is PowerShellBoundClrInvocationExpression clrInvocation)
+        {
+            if (clrInvocation.Receiver is not null)
+            foreach (var nested in EnumerateInvocations(clrInvocation.Receiver))
+                yield return nested;
+            foreach (var argument in clrInvocation.Arguments)
+            foreach (var nested in EnumerateInvocations(argument))
                 yield return nested;
         }
     }

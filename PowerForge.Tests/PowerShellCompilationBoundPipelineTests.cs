@@ -291,6 +291,42 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ClrMembersAndExactOverloadsFlowThroughNeutralInteropNodes()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Length { param([string] $Value) return $Value.Length } function Get-Upper { param([string] $Value) return $Value.ToUpperInvariant() } function Get-Absolute { param([double] $Value) return [System.Math]::Abs($Value) }",
+            TestPath("clr-interop.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var length = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Length");
+        Assert.IsType<PowerShellBoundClrMemberExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(length.Body.Statements)).Expression);
+        var upper = Assert.Single(result.Lowered.Functions, static function => function.Symbol.Name == "Get-Upper");
+        Assert.IsType<PowerShellLoweredClrInvocationExpression>(Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(upper.Statements)).Expression);
+        Assert.Contains("(Value ?? string.Empty).Length", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Length").Source, StringComparison.Ordinal);
+        Assert.Contains("(Value ?? string.Empty).ToUpperInvariant()", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Upper").Source, StringComparison.Ordinal);
+        Assert.Contains("global::System.Math.Abs(Value)", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Absolute").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClrConstructorAndEnumLiteralAreResolvedBeforeEmission()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Date { return [System.DateTime]::new(2026, 8, 27, 0, 0, 0, 'Utc') }",
+            TestPath("clr-constructor.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var invocation = Assert.IsType<PowerShellBoundClrInvocationExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        Assert.Equal(PowerShellClrInvocationKind.Constructor, invocation.InvocationKind);
+        Assert.Equal(typeof(DateTimeKind), invocation.ParameterTypes[^1]);
+        Assert.Contains("(global::System.DateTimeKind)1L", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublicTranspilerUsesBoundConditionalPlan()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));

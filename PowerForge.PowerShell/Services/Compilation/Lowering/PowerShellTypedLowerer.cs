@@ -302,6 +302,24 @@ internal sealed class PowerShellTypedLowerer
                 array.Type.ClrType,
                 array.Kind,
                 array.Elements.Select(element => LowerExpression(element, functions)).ToArray()),
+            PowerShellBoundClrMemberExpression member => new PowerShellLoweredClrMemberExpression(
+                member.Span,
+                member.Type.ClrType,
+                member.DeclaringType,
+                member.MemberName,
+                member.IsStatic,
+                member.Receiver is null ? null : LowerExpression(member.Receiver, functions),
+                member.ReceiverBehavior),
+            PowerShellBoundClrInvocationExpression invocation => new PowerShellLoweredClrInvocationExpression(
+                invocation.Span,
+                invocation.Type.ClrType,
+                invocation.DeclaringType,
+                invocation.MemberName,
+                invocation.InvocationKind,
+                invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions),
+                invocation.ReceiverBehavior,
+                invocation.Arguments.Select(argument => LowerExpression(argument, functions)).ToArray(),
+                invocation.ParameterTypes),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,

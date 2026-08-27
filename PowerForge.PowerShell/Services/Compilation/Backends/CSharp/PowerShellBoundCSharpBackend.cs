@@ -241,10 +241,44 @@ internal sealed class PowerShellBoundCSharpBackend
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredClrMemberExpression member => EmitClrMember(member),
+            PowerShellLoweredClrInvocationExpression invocation => EmitClrInvocation(invocation),
             PowerShellLoweredInvocationExpression invocation =>
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitClrMember(PowerShellLoweredClrMemberExpression member)
+    {
+        if (member.IsStatic)
+            return $"{PowerShellCSharpMethodEmitter.GetTypeName(member.DeclaringType)}.{member.MemberName}";
+        if (member.Receiver is null) throw new InvalidOperationException("Instance CLR member has no lowered receiver.");
+        var receiver = EmitExpression(member.Receiver);
+        return member.ReceiverBehavior switch
+        {
+            PowerShellClrReceiverBehavior.NormalizeNullString => $"({receiver} ?? string.Empty).{member.MemberName}",
+            PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
+                $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
+            PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
+            _ => $"({receiver}).{member.MemberName}"
+        };
+    }
+
+    private static string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)
+    {
+        var arguments = string.Join(", ", invocation.Arguments.Select(EmitExpression));
+        if (invocation.InvocationKind == PowerShellClrInvocationKind.Constructor)
+            return $"new {PowerShellCSharpMethodEmitter.GetTypeName(invocation.DeclaringType)}({arguments})";
+        if (invocation.InvocationKind == PowerShellClrInvocationKind.StaticMethod)
+            return $"{PowerShellCSharpMethodEmitter.GetTypeName(invocation.DeclaringType)}.{invocation.MemberName}({arguments})";
+        if (invocation.Receiver is null) throw new InvalidOperationException("Instance CLR invocation has no lowered receiver.");
+        var receiver = EmitExpression(invocation.Receiver);
+        if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullString)
+            receiver = $"({receiver} ?? string.Empty)";
+        else
+            receiver = $"({receiver})";
+        return $"{receiver}.{invocation.MemberName}({arguments})";
+    }
 
     private static string EmitArray(PowerShellLoweredArrayExpression array)
     {
@@ -348,6 +382,14 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
     {
         if (literal.Value is null) return "null";
+        if (literal.ClrType.IsEnum)
+        {
+            var underlying = Enum.GetUnderlyingType(literal.ClrType);
+            var value = Type.GetTypeCode(underlying) is TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64
+                ? Convert.ToUInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "UL"
+                : Convert.ToInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "L";
+            return $"({PowerShellCSharpMethodEmitter.GetTypeName(literal.ClrType)}){value}";
+        }
         if (literal.Value is string text) return PowerShellCSharpLiteral.QuoteString(text);
         if (literal.Value is bool boolean) return boolean ? "true" : "false";
         if (literal.Value is char character) return $"'{character.ToString().Replace("'", "\\'")}'";
