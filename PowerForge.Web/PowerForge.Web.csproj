@@ -15,13 +15,14 @@
     <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
     <PackageTags>website;static-site;docs;automation;powerforge</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.MD</PackageReadmeFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\README.MD" Pack="true" PackagePath="\" />
+    <None Remove="README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
