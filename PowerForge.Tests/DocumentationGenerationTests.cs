@@ -326,6 +326,29 @@ EXAMPLES
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("(All)")]
+    [InlineData("__AllParameterSets")]
+    public void ParameterRequiredResolver_PreservesExplicitOptionalSetsWhenMembershipIsUnavailable(string? membership)
+    {
+        var parameter = new DocumentationParameterHelp
+        {
+            Name = "FilePath",
+            Type = "String",
+            Required = true,
+            ParameterSetRequired =
+            {
+                ["ApiFromFile"] = true,
+                ["JFrog"] = false
+            }
+        };
+        if (membership is not null)
+            parameter.ParameterSets.Add(membership);
+
+        Assert.False(DocumentationParameterRequiredResolver.IsAlwaysRequired(parameter));
+    }
+
     [Fact]
     public void MamlHelpWriter_TreatsAllParameterSetsRequiredMetadataAsShared()
     {

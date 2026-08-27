@@ -16,6 +16,12 @@ internal static class DocumentationParameterRequiredResolver
         if (requiredBySet is null || requiredBySet.Count == 0)
             return parameter.Required;
 
+        // The extractor can preserve per-set requiredness even when it cannot
+        // recover concrete command-level membership and reports only (All).
+        // An explicit optional set is authoritative for aggregate help.
+        if (requiredBySet.Values.Any(required => !required))
+            return false;
+
         var parameterSets = (parameter.ParameterSets ?? new List<string>())
             .Where(name => !string.IsNullOrEmpty(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
