@@ -1,0 +1,34 @@
+namespace PowerForge;
+
+internal sealed partial class PowerShellBoundCSharpBackend
+{
+    private static void AddHostParameters(
+        ICollection<string> parameters,
+        PowerShellLoweredFunction function,
+        bool requiresBoundParameters)
+    {
+        if (function.RequiresPowerShellStreams)
+        {
+            parameters.Add("global::System.Action<object?> __writeOutput");
+            parameters.Add("global::System.Action<string> __writeVerbose");
+            parameters.Add("global::System.Action<string> __writeDebug");
+            parameters.Add("global::System.Action<string> __writeWarning");
+            parameters.Add("global::System.Action<string> __writeInformation");
+            parameters.Add("global::System.Action<string> __writeError");
+        }
+        if (function.RequiresPowerShellCommandRegions)
+        {
+            parameters.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
+            parameters.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
+        }
+        if (function.RequiresPowerShellRuntimeState)
+        {
+            parameters.Add("global::System.Func<string, bool> __shouldProcessTarget");
+            parameters.Add("global::System.Func<string, string, bool> __shouldProcessAction");
+            parameters.Add("object __psVersion");
+            parameters.Add("bool __whatIfPreference");
+        }
+        if (requiresBoundParameters)
+            parameters.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
+    }
+}

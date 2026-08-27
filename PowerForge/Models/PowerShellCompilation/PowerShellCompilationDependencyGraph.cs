@@ -157,6 +157,23 @@ public sealed class PowerShellCompilationDependencyPolicy
     public string License { get; set; } = string.Empty;
 }
 
+/// <summary>Non-executing interop boundary contract required for native, process, and COM dependencies.</summary>
+public sealed class PowerShellCompilationInteropBoundaryContract
+{
+    /// <summary>Runtime adapter or host that owns the boundary.</summary>
+    public string Owner { get; set; } = string.Empty;
+    /// <summary>Required platform or runtime-identifier family.</summary>
+    public string Platform { get; set; } = string.Empty;
+    /// <summary>Error and exit-status translation contract.</summary>
+    public string Errors { get; set; } = string.Empty;
+    /// <summary>Cancellation, timeout, or stop contract.</summary>
+    public string Cancellation { get; set; } = string.Empty;
+    /// <summary>Resource, child-process, handle, RCW, or unload cleanup contract.</summary>
+    public string Cleanup { get; set; } = string.Empty;
+    /// <summary>Thread, apartment, or concurrency contract.</summary>
+    public string Threading { get; set; } = string.Empty;
+}
+
 /// <summary>One stable node shared by semantic, dependency, and deployment graph views.</summary>
 public sealed class PowerShellCompilationDependencyNode
 {
@@ -176,6 +193,8 @@ public sealed class PowerShellCompilationDependencyNode
     public string Note { get; set; } = string.Empty;
     /// <summary>Delivery and legal policy, separate from technical resolution.</summary>
     public PowerShellCompilationDependencyPolicy Policy { get; set; } = new();
+    /// <summary>Interop ownership and lifetime requirements when this node crosses a native, process, or COM boundary.</summary>
+    public PowerShellCompilationInteropBoundaryContract Interop { get; set; } = new();
 }
 
 /// <summary>One ordered static edge in the locked dependency graph.</summary>
@@ -199,7 +218,7 @@ public sealed class PowerShellCompilationDependencyEdge
 public sealed class PowerShellCompilationDependencyGraph
 {
     /// <summary>Graph schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     /// <summary>Root input node identity.</summary>
     public string RootNodeId { get; set; } = string.Empty;
     /// <summary>Stable graph nodes.</summary>

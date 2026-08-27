@@ -374,7 +374,15 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         var arguments = cmdlet.Method.Parameters.Select(parameter =>
             PowerShellCSharpSymbolRenderer.Identifier(parameter.Name) + (parameter.IsSwitch ? ".IsPresent" : string.Empty));
         if (cmdlet.Method.RequiresPowerShellStreams)
-            arguments = arguments.Concat(new[] { "WriteVerbose", "WriteDebug", "WriteWarning" });
+            arguments = arguments.Concat(new[]
+            {
+                "value => WriteObject(value, enumerateCollection: true)",
+                "WriteVerbose",
+                "WriteDebug",
+                "WriteWarning",
+                "message => WriteInformation(new global::System.Management.Automation.InformationRecord(message, \"PowerForge.Compiled\"))",
+                "message => WriteError(new global::System.Management.Automation.ErrorRecord(new global::System.InvalidOperationException(message), \"PowerForge.CompiledCommandError\", global::System.Management.Automation.ErrorCategory.NotSpecified, null))"
+            });
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
             arguments = arguments.Concat(new[] { "InvokePowerShellRegion", "CapturePowerShellRegion" });
         if (cmdlet.Method.RequiresPowerShellRuntimeState)

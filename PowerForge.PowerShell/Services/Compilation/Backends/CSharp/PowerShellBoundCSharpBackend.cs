@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Renders already-lowered CLR operations as deterministic readable C#.
 /// </summary>
-internal sealed class PowerShellBoundCSharpBackend
+internal sealed partial class PowerShellBoundCSharpBackend
 {
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
@@ -27,26 +27,7 @@ internal sealed class PowerShellBoundCSharpBackend
             parameter.Contract.DefaultValue is not null ||
             !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
             targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
-        if (function.RequiresPowerShellStreams)
-        {
-            parameterParts.Add("global::System.Action<string> __writeVerbose");
-            parameterParts.Add("global::System.Action<string> __writeDebug");
-            parameterParts.Add("global::System.Action<string> __writeWarning");
-        }
-        if (function.RequiresPowerShellCommandRegions)
-        {
-            parameterParts.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
-            parameterParts.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
-        }
-        if (function.RequiresPowerShellRuntimeState)
-        {
-            parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
-            parameterParts.Add("global::System.Func<string, string, bool> __shouldProcessAction");
-            parameterParts.Add("object __psVersion");
-            parameterParts.Add("bool __whatIfPreference");
-        }
-        if (requiresBoundParameters)
-            parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
+        AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
         builder.Append("    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
@@ -183,19 +164,25 @@ internal sealed class PowerShellBoundCSharpBackend
             case PowerShellLoweredStreamWriteStatement stream:
                 var sink = stream.Kind switch
                 {
+                    PowerShellStreamCommandKind.Success => "__writeOutput",
                     PowerShellStreamCommandKind.Verbose => "__writeVerbose",
                     PowerShellStreamCommandKind.Debug => "__writeDebug",
                     PowerShellStreamCommandKind.Warning => "__writeWarning",
+                    PowerShellStreamCommandKind.Information => "__writeInformation",
+                    PowerShellStreamCommandKind.Error => "__writeError",
                     _ => throw new InvalidOperationException($"Stream kind '{stream.Kind}' has no C# host binding.")
                 };
-                builder.Append(prefix).Append(sink)
-                    .Append("(global::System.Convert.ToString(")
-                    .Append(EmitExpression(stream.Message))
-                    .AppendLine(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty);");
+                builder.Append(prefix).Append(sink).Append('(');
+                if (stream.Kind == PowerShellStreamCommandKind.Success)
+                    builder.Append("(object?)").Append(EmitExpression(stream.Message));
+                else
+                    builder.Append("global::System.Convert.ToString(").Append(EmitExpression(stream.Message))
+                        .Append(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty");
+                builder.AppendLine(");");
                 return;
             case PowerShellLoweredCommandRegionStatement region:
                 builder.Append(prefix).Append("__invokePowerShellRegion(")
-                    .Append(PowerShellCSharpLiteral.QuoteString(region.Source))
+                    .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource))
                     .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
                 return;
             case PowerShellLoweredCommandCaptureStatement capture:
@@ -297,7 +284,7 @@ internal sealed class PowerShellBoundCSharpBackend
         string prefix)
     {
         var targetType = PowerShellCSharpSymbolRenderer.TypeName(capture.TargetType);
-        var invocation = $"__invokePowerShellCapture({PowerShellCSharpLiteral.QuoteString(capture.Source)}, {EmitCommandRegionArguments(capture.Arguments)})";
+        var invocation = $"__invokePowerShellCapture({PowerShellCSharpLiteral.QuoteString(capture.HostedFallbackSource)}, {EmitCommandRegionArguments(capture.Arguments)})";
         var converted = $"({targetType})global::System.Management.Automation.LanguagePrimitives.ConvertTo({invocation}, typeof({targetType}), global::System.Globalization.CultureInfo.InvariantCulture)!";
         if (capture.TargetType == typeof(string)) converted = $"({converted} ?? string.Empty)";
         builder.Append(prefix);
@@ -424,7 +411,7 @@ internal sealed class PowerShellBoundCSharpBackend
         }
         var callArguments = arguments.ToList();
         if (invocation.RequiresPowerShellStreams)
-            callArguments.AddRange(new[] { "__writeVerbose", "__writeDebug", "__writeWarning" });
+            callArguments.AddRange(new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeError" });
         if (invocation.RequiresPowerShellCommandRegions)
             callArguments.AddRange(new[] { "__invokePowerShellRegion", "__invokePowerShellCapture" });
         if (invocation.RequiresPowerShellRuntimeState)

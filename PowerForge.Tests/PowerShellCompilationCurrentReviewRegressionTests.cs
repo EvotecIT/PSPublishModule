@@ -282,7 +282,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     public void Build_HybridBinaryModulePreservesConsumedCommandRegionOutputByRoutingCallerToFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-RegionHelper { [CmdletBinding()] param(); Write-Output 'region'; return 7 } " +
+            "function Get-RegionHelper { [CmdletBinding()] param(); Get-Date -Date '2000-01-01T00:00:00Z'; return 7 } " +
             "function Get-RegionConsumer { [CmdletBinding()] param(); $value = Get-RegionHelper; return $value.Count } " +
             "Export-ModuleMember -Function Get-RegionHelper, Get-RegionConsumer",
             ".psm1");

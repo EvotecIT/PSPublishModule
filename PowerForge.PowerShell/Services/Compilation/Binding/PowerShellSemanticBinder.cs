@@ -8,6 +8,16 @@ namespace PowerForge;
 /// </summary>
 internal sealed partial class PowerShellSemanticBinder
 {
+    private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+
+    internal PowerShellSemanticBinder()
+        : this(PowerShellCommandSemanticRegistry.Default)
+    {
+    }
+
+    internal PowerShellSemanticBinder(PowerShellCommandSemanticRegistry commandRegistry)
+        => _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+
     private static FunctionDeclaration[] DeclareFunctions(
         IEnumerable<ParsedSourceDocument> documents,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
@@ -62,7 +72,7 @@ internal sealed partial class PowerShellSemanticBinder
         return declarations.ToArray();
     }
 
-    private static PowerShellBoundFunction? BindFunction(
+    private PowerShellBoundFunction? BindFunction(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         PowerShellSymbolId functionSymbol,
@@ -92,7 +102,7 @@ internal sealed partial class PowerShellSemanticBinder
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
-            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames)
+            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, _commandRegistry)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
         var locals = DeclareLocals(document, function, symbols, capabilities, runtimeTailOffset);
@@ -112,6 +122,7 @@ internal sealed partial class PowerShellSemanticBinder
                     symbols,
                     parametersByName,
                     runtimeTailStart,
+                    _commandRegistry,
                     ref index,
                     out var hosted))
             {
@@ -346,7 +357,7 @@ internal sealed partial class PowerShellSemanticBinder
         return PowerShellTypeFact.Unknown;
     }
 
-    private static PowerShellBoundStatement? BindStatement(
+    private PowerShellBoundStatement? BindStatement(
         ParsedSourceDocument document,
         StatementAst statement,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
@@ -650,12 +661,13 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
             streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            PowerShellCommandIslandPolicy.TryGetStreamCommand(streamCommand, out var streamKind, out var messageSyntax))
+            PowerShellCommandIslandPolicy.TryGetStreamCommand(streamCommand, out var streamKind, out var messageSyntax, out var streamProvider, _commandRegistry))
         {
-            var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, typeof(string), targetFramework, capabilities);
+            var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
+            var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
             return message is null
                 ? null
-                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, message);
+                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, streamProvider!, message);
         }
         if (statement is PipelineAst pipeline)
         {
@@ -672,7 +684,7 @@ internal sealed partial class PowerShellSemanticBinder
         return null;
     }
 
-    private static PowerShellBoundBlock? BindBlock(
+    private PowerShellBoundBlock? BindBlock(
         ParsedSourceDocument document,
         StatementBlockAst syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,

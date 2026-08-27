@@ -230,7 +230,18 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             {
                 Redistribution = disposition == PowerShellCompilationDependencyGraphDisposition.Bundled ? "Unverified" : "NotApplicable",
                 Servicing = disposition == PowerShellCompilationDependencyGraphDisposition.External ? "TargetEnvironment" : "ArtifactOwner"
-            }
+            },
+            Interop = kind == PowerShellCompilationDependencyNodeKind.NativeLibrary
+                ? new PowerShellCompilationInteropBoundaryContract
+                {
+                    Owner = disposition == PowerShellCompilationDependencyGraphDisposition.Rejected ? "TypedNativeAdapterRequired" : "PowerShellHostedNative",
+                    Platform = runtimeIdentifier ?? "TargetEnvironment",
+                    Errors = disposition == PowerShellCompilationDependencyGraphDisposition.Rejected ? "RejectedBeforePublication" : "NativeErrorToPowerShellError",
+                    Cancellation = disposition == PowerShellCompilationDependencyGraphDisposition.Rejected ? "ExplicitAdapterRequired" : "HostStop",
+                    Cleanup = disposition == PowerShellCompilationDependencyGraphDisposition.Rejected ? "ExplicitHandleAndUnloadRequired" : "PowerShellHostLifetime",
+                    Threading = "AdapterDeclared"
+                }
+                : new PowerShellCompilationInteropBoundaryContract()
         });
         _pathNodes.Add(path, id);
         return id;

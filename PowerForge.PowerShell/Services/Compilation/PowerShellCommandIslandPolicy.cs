@@ -4,9 +4,12 @@ namespace PowerForge;
 
 internal enum PowerShellStreamCommandKind
 {
+    Success,
     Verbose,
     Debug,
-    Warning
+    Warning,
+    Information,
+    Error
 }
 
 internal static class PowerShellCommandIslandPolicy
@@ -14,7 +17,8 @@ internal static class PowerShellCommandIslandPolicy
     internal static int FindRuntimeTailStart(
         IReadOnlyList<StatementAst> statements,
         ScriptBlockAst body,
-        ISet<string>? localFunctionNames = null)
+        ISet<string>? localFunctionNames = null,
+        PowerShellCommandSemanticRegistry? commandRegistry = null)
     {
         var parameters = body.ParamBlock?.Parameters
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
@@ -102,7 +106,8 @@ internal static class PowerShellCommandIslandPolicy
         StatementAst statement,
         ScriptBlockAst body,
         ISet<string>? localFunctionNames = null,
-        ISet<string>? allowedVariables = null)
+        ISet<string>? allowedVariables = null,
+        PowerShellCommandSemanticRegistry? commandRegistry = null)
     {
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
@@ -117,7 +122,7 @@ internal static class PowerShellCommandIslandPolicy
             return false;
         if (statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
             pipeline.PipelineElements[0] is CommandAst stream &&
-            IsStreamCommand(stream))
+            IsStreamCommand(stream, commandRegistry))
             return false;
         if (statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any() ||
             statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
@@ -376,11 +381,29 @@ internal static class PowerShellCommandIslandPolicy
     internal static bool TryGetStreamCommand(
         CommandAst command,
         out PowerShellStreamCommandKind kind,
-        out ExpressionAst message)
-        => PowerShellStreamCommandSemanticBinder.TryBind(command, out kind, out message);
+        out ExpressionAst message,
+        PowerShellCommandSemanticRegistry? registry = null)
+        => TryGetStreamCommand(command, out kind, out message, out _, registry);
 
-    private static bool IsStreamCommand(CommandAst command)
-        => PowerShellCommandSemanticRegistry.Default.Resolve(command.GetCommandName()).Contract?.Family ==
-           PowerShellCompilationCommandFamily.Stream;
+    internal static bool TryGetStreamCommand(
+        CommandAst command,
+        out PowerShellStreamCommandKind kind,
+        out ExpressionAst message,
+        out PowerShellCompilationCommandProviderContract? provider,
+        PowerShellCommandSemanticRegistry? registry = null)
+    {
+        kind = default;
+        message = null!;
+        provider = null;
+        var resolution = (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName());
+        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved || resolution.Contract is null ||
+            !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message))
+            return false;
+        provider = resolution.Contract;
+        return true;
+    }
+
+    private static bool IsStreamCommand(CommandAst command, PowerShellCommandSemanticRegistry? registry = null)
+        => TryGetStreamCommand(command, out _, out _, registry);
 
 }

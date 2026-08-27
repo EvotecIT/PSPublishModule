@@ -7,6 +7,7 @@ public static class PowerShellCompilationCapabilities
 {
     /// <summary>Target-backed runtime facts available without a PowerShell host.</summary>
     public const PowerShellCompilationCapability StaticRuntimeFacts =
+        PowerShellCompilationCapability.PowerShellStreams |
         PowerShellCompilationCapability.RuntimeStateIntrinsics;
 
     /// <summary>Capabilities supplied by generated binary cmdlets.</summary>

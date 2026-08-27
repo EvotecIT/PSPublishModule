@@ -10,6 +10,15 @@ public sealed partial class PowerShellCompilationAnalyzer
         string identityRoot,
         string? targetFramework,
         PowerShellCompilationCapability capabilities)
+        => ApplySemanticEvidence(structural, sourcePaths, identityRoot, targetFramework, capabilities, PowerShellCommandSemanticRegistry.Default);
+
+    private static PowerShellCompilationFilePlan[] ApplySemanticEvidence(
+        PowerShellCompilationFilePlan[] structural,
+        string[] sourcePaths,
+        string identityRoot,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticRegistry commandRegistry)
     {
         var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)).ToArray();
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
@@ -77,7 +86,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 synthetic: true));
         }
 
-        var semantic = new PowerShellSemanticCompilationPipeline().Compile(compilationDocuments, targetFramework, capabilities);
+        var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry).Compile(compilationDocuments, targetFramework, capabilities);
         return structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,

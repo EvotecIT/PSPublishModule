@@ -68,6 +68,7 @@ internal static class PowerShellCompilationAbiBuilder
                     provider.Cardinality.ToString(),
                     provider.Stream,
                     provider.Errors.ToString(),
+                    provider.Adapter.Operation,
                     provider.Adapter.SemanticProfile,
                     Boolean(provider.Adapter.RuntimeFree),
                     Boolean(provider.Adapter.AotCompatible),
@@ -186,9 +187,12 @@ internal static class PowerShellCompilationAbiBuilder
     {
         if (method.RequiresPowerShellStreams)
         {
+            AddCompilerParameter(parameters, "__writeOutput", "System.Action<System.Object>", "SuccessStream");
             AddCompilerParameter(parameters, "__writeVerbose", "System.Action<System.String>", "VerboseStream");
             AddCompilerParameter(parameters, "__writeDebug", "System.Action<System.String>", "DebugStream");
             AddCompilerParameter(parameters, "__writeWarning", "System.Action<System.String>", "WarningStream");
+            AddCompilerParameter(parameters, "__writeInformation", "System.Action<System.String>", "InformationStream");
+            AddCompilerParameter(parameters, "__writeError", "System.Action<System.String>", "ErrorStream");
         }
         if (method.RequiresPowerShellCommandRegions)
         {

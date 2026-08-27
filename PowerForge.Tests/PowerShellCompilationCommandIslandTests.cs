@@ -162,7 +162,7 @@ public sealed class PowerShellCompilationCommandIslandTests
             var unit = Assert.Single(Assert.Single(plan.Files).Units);
             Assert.False(unit.IsCompilable);
             Assert.Contains(unit.Diagnostics, diagnostic =>
-                diagnostic.Code == PowerShellCompilationDiagnosticCode.CommandInvocation);
+                diagnostic.Code == PowerShellCompilationDiagnosticCode.RuntimeScope);
         }
         finally
         {

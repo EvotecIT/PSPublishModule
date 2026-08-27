@@ -20,7 +20,9 @@ public static class PowerShellCompilationDependencyLockHasher
                 node.Identity.Edition, node.Identity.TargetFramework, node.Identity.RuntimeIdentifier,
                 node.Identity.Architecture, node.Identity.Provenance, node.Identity.InteropAdapter,
                 node.Identity.ApartmentState, node.Policy.Redistribution,
-                node.Policy.Publisher, node.Policy.Signature, node.Policy.Servicing, node.Policy.License);
+                node.Policy.Publisher, node.Policy.Signature, node.Policy.Servicing, node.Policy.License,
+                node.Interop.Owner, node.Interop.Platform, node.Interop.Errors, node.Interop.Cancellation,
+                node.Interop.Cleanup, node.Interop.Threading);
         }
         foreach (var edge in graph.Edges.OrderBy(static item => item.FromId, StringComparer.Ordinal).ThenBy(static item => item.Order))
             Append("edge", edge.FromId, edge.ToId, edge.Kind, edge.Evidence);

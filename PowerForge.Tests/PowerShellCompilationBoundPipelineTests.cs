@@ -447,14 +447,14 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(loweredOuter.Statements)).Expression);
         Assert.True(call.RequiresPowerShellStreams);
         var outerSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Write_Outer").Source;
-        Assert.Contains("Write_Inner(__writeVerbose, __writeDebug, __writeWarning);", outerSource, StringComparison.Ordinal);
+        Assert.Contains("Write_Inner(__writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeError);", outerSource, StringComparison.Ordinal);
     }
 
     [Fact]
     public void CommandRegionsAndTypedCapturesAreOwnedByBoundAndLoweredIr()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Get-RegionValue { param([string] $Name) [int] $count = 1; Write-Output $Name; [string] $captured = Write-Output $Name; $count += 1; return $captured }",
+            "function Get-RegionValue { param([string] $Name) [int] $count = 1; Get-Date -Format o; [string] $captured = Get-Date -Format o; $count += 1; return $captured }",
             TestPath("command-region-ir.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(

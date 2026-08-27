@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-internal sealed class PowerShellLoweredCommandStage
+internal abstract class PowerShellLoweredCommandStage
 {
     internal PowerShellLoweredCommandStage(
         SourceSpan span,
@@ -15,6 +15,31 @@ internal sealed class PowerShellLoweredCommandStage
     internal SourceSpan Span { get; }
     internal PowerShellCompilationCommandProviderContract Provider { get; }
     internal PowerShellImmutableArray<PowerShellSymbolId> PipelineSymbols { get; }
+}
+
+internal sealed class PowerShellLoweredProjectionCommandStage : PowerShellLoweredCommandStage
+{
+    internal PowerShellLoweredProjectionCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellSymbolId[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellLoweredFilteringCommandStage : PowerShellLoweredCommandStage
+{
+    internal PowerShellLoweredFilteringCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellSymbolId[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellLoweredMappingCommandStage : PowerShellLoweredCommandStage
+{
+    internal PowerShellLoweredMappingCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellSymbolId[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellLoweredSortingCommandStage : PowerShellLoweredCommandStage
+{
+    internal PowerShellLoweredSortingCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellSymbolId[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellLoweredHostedCommandStage : PowerShellLoweredCommandStage
+{
+    internal PowerShellLoweredHostedCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellSymbolId[] symbols) : base(span, provider, symbols) { }
 }
 
 internal sealed class PowerShellLoweredCommandRegionArgument
@@ -34,12 +59,12 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         PowerShellLoweredCommandStage[]? stages = null)
         : base(span)
     {
-        Source = source;
+        HostedFallbackSource = source;
         Arguments = arguments;
         Stages = stages ?? Array.Empty<PowerShellLoweredCommandStage>();
     }
 
-    internal string Source { get; }
+    internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandStage> Stages { get; }
 }
@@ -59,7 +84,7 @@ internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLower
         Target = target;
         TargetType = targetType;
         Declare = declare;
-        Source = source;
+        HostedFallbackSource = source;
         Arguments = arguments;
         Stages = stages ?? Array.Empty<PowerShellLoweredCommandStage>();
     }
@@ -67,7 +92,7 @@ internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLower
     internal PowerShellSymbolId Target { get; }
     internal Type TargetType { get; }
     internal bool Declare { get; }
-    internal string Source { get; }
+    internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCommandStage> Stages { get; }
 }

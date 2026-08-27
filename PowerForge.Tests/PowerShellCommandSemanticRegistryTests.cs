@@ -93,10 +93,22 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Contains(region.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => symbol.Symbol.Name == "_");
         Assert.Contains(region.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => symbol.Symbol.Name.Equals("PSItem", StringComparison.OrdinalIgnoreCase));
         Assert.All(region.Stages, static stage => Assert.False(stage.Provider.Adapter.RuntimeFree));
+        Assert.Collection(
+            region.Stages,
+            static stage => Assert.IsType<PowerShellBoundFilteringCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellBoundMappingCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellBoundProjectionCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellBoundSortingCommandStage>(stage));
 
         var lowered = Assert.IsType<PowerShellLoweredCommandRegionStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements));
         Assert.Equal(region.Stages.Select(static stage => stage.Provider.ProviderId), lowered.Stages.Select(static stage => stage.Provider.ProviderId));
         Assert.All(lowered.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => Assert.Equal(PowerShellSymbolKind.PipelineVariable, symbol.Kind));
+        Assert.Collection(
+            lowered.Stages,
+            static stage => Assert.IsType<PowerShellLoweredFilteringCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellLoweredMappingCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellLoweredProjectionCommandStage>(stage),
+            static stage => Assert.IsType<PowerShellLoweredSortingCommandStage>(stage));
     }
 
     [Fact]
@@ -119,6 +131,28 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.True(provider.Adapter.RuntimeFree);
         Assert.True(provider.Adapter.AotCompatible);
         Assert.Empty(provider.Adapter.Dependencies);
+    }
+
+    [Fact]
+    public void RuntimeFreeStreamFamiliesLowerToCompleteClrSinkContracts()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Write-AllStreams { Write-Output 42; Write-Verbose 'verbose'; Write-Debug 'debug'; Write-Warning 'warning'; Write-Information 'information'; Write-Error 'error' }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "streams.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var streams = Assert.Single(result.Analyzed.Functions).Body.Statements.Cast<PowerShellBoundStreamWriteStatement>().ToArray();
+        Assert.Equal(
+            new[] { PowerShellStreamCommandKind.Success, PowerShellStreamCommandKind.Verbose, PowerShellStreamCommandKind.Debug, PowerShellStreamCommandKind.Warning, PowerShellStreamCommandKind.Information, PowerShellStreamCommandKind.Error },
+            streams.Select(static stream => stream.Kind));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        foreach (var sink in new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeError" })
+            Assert.Contains(sink, source, StringComparison.Ordinal);
     }
 
     private static PowerShellCompilationCommandProviderContract Contract(string providerId, string commandName, string moduleName)

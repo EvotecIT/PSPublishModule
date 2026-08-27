@@ -93,11 +93,20 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 directory,
                 PowerShellCompilationDependencyNodeKind.NativeLibrary,
                 _mode == PowerShellCompilationMode.Strict
-                    ? PowerShellCompilationDependencyGraphDisposition.External
+                    ? PowerShellCompilationDependencyGraphDisposition.Rejected
                     : PowerShellCompilationDependencyGraphDisposition.Hosted,
                 "Static DllImport native-library contract; RID, cancellation, and cleanup remain explicit deployment requirements.",
                 targetFramework,
                 runtimeIdentifier);
+            _nodes[nodeId].Interop = new PowerShellCompilationInteropBoundaryContract
+            {
+                Owner = _mode == PowerShellCompilationMode.Strict ? "TypedNativeAdapterRequired" : "PowerShellHostedNative",
+                Platform = runtimeIdentifier ?? "TargetEnvironment",
+                Errors = _mode == PowerShellCompilationMode.Strict ? "RejectedBeforePublication" : "NativeErrorToPowerShellError",
+                Cancellation = _mode == PowerShellCompilationMode.Strict ? "ExplicitAdapterRequired" : "HostStop",
+                Cleanup = _mode == PowerShellCompilationMode.Strict ? "ExplicitHandleAndUnloadRequired" : "PowerShellHostLifetime",
+                Threading = "AdapterDeclared"
+            };
             AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.NativeLoad, match.Value);
         }
     }
@@ -218,6 +227,15 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         identity.InteropAdapter = adapter;
         identity.ApartmentState = "HostThread";
         identity.Provenance = isClsid ? "StaticComClsid" : "StaticComProgId";
+        _nodes[nodeId].Interop = new PowerShellCompilationInteropBoundaryContract
+        {
+            Owner = _mode == PowerShellCompilationMode.Strict ? "TypedComAdapterRequired" : "PowerShellHostedCom",
+            Platform = "Windows",
+            Errors = _mode == PowerShellCompilationMode.Strict ? "RejectedBeforePublication" : "PowerShellErrorRecord",
+            Cancellation = "HostStop",
+            Cleanup = "ReleaseComObjectOrHostDisposal",
+            Threading = "HostThread/" + identity.ApartmentState
+        };
         AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.ComActivation, evidence);
     }
 
@@ -239,6 +257,15 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             "External process requires explicit RID availability, exit/error mapping, cancellation, and cleanup handling.",
             targetFramework,
             runtimeIdentifier);
+        _nodes[nodeId].Interop = new PowerShellCompilationInteropBoundaryContract
+        {
+            Owner = _mode == PowerShellCompilationMode.Strict ? "TypedProcessAdapterRequired" : "PowerShellHostedProcess",
+            Platform = runtimeIdentifier ?? "TargetEnvironment",
+            Errors = _mode == PowerShellCompilationMode.Strict ? "RejectedBeforePublication" : "ExitCodeAndPowerShellErrorRecord",
+            Cancellation = _mode == PowerShellCompilationMode.Strict ? "ExplicitAdapterRequired" : "PowerShellStopProcessing",
+            Cleanup = _mode == PowerShellCompilationMode.Strict ? "ExplicitChildCleanupRequired" : "PowerShellProcessLifetime",
+            Threading = "ProcessBoundary"
+        };
         AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.ProcessTarget, command.Extent.Text);
     }
 

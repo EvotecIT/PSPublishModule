@@ -6,7 +6,7 @@ internal sealed class PowerShellBoundPipelineSymbol
     internal PowerShellSymbolId Symbol { get; }
 }
 
-internal sealed class PowerShellBoundCommandStage
+internal abstract class PowerShellBoundCommandStage
 {
     internal PowerShellBoundCommandStage(
         SourceSpan span,
@@ -21,6 +21,31 @@ internal sealed class PowerShellBoundCommandStage
     internal SourceSpan Span { get; }
     internal PowerShellCompilationCommandProviderContract Provider { get; }
     internal PowerShellImmutableArray<PowerShellBoundPipelineSymbol> PipelineSymbols { get; }
+}
+
+internal sealed class PowerShellBoundProjectionCommandStage : PowerShellBoundCommandStage
+{
+    internal PowerShellBoundProjectionCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellBoundPipelineSymbol[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellBoundFilteringCommandStage : PowerShellBoundCommandStage
+{
+    internal PowerShellBoundFilteringCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellBoundPipelineSymbol[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellBoundMappingCommandStage : PowerShellBoundCommandStage
+{
+    internal PowerShellBoundMappingCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellBoundPipelineSymbol[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellBoundSortingCommandStage : PowerShellBoundCommandStage
+{
+    internal PowerShellBoundSortingCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellBoundPipelineSymbol[] symbols) : base(span, provider, symbols) { }
+}
+
+internal sealed class PowerShellBoundHostedCommandStage : PowerShellBoundCommandStage
+{
+    internal PowerShellBoundHostedCommandStage(SourceSpan span, PowerShellCompilationCommandProviderContract provider, PowerShellBoundPipelineSymbol[] symbols) : base(span, provider, symbols) { }
 }
 
 internal sealed class PowerShellBoundCommandRegionArgument
@@ -44,12 +69,12 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         PowerShellBoundCommandStage[]? stages = null)
         : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput, PowerShellRequiredCapability.CommandRegion)
     {
-        Source = source;
+        HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
     }
 
-    internal string Source { get; }
+    internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
 }
@@ -67,14 +92,14 @@ internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundSt
     {
         Target = target;
         TargetType = targetType;
-        Source = source;
+        HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
     }
 
     internal PowerShellSymbolId Target { get; }
     internal Type TargetType { get; }
-    internal string Source { get; }
+    internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
 }

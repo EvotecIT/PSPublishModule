@@ -169,7 +169,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModulePropagatesCommandRegionHostAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Write-Verbose 'detail'; Write-Output 'region'; " +
+            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Write-Verbose 'detail'; Get-RegionText; " +
             "[int] $result = $Value; $result += 1; return $result }; " +
             "function Get-FrontierRegionOuter { [CmdletBinding()] param([int] $Value) return Get-FrontierRegionHelper -Value $Value }",
             ".psm1");
@@ -185,10 +185,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
+        Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "function global:Get-RegionText { 'region' }; Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains(
-            "Get_FrontierRegionHelper(Value, __writeVerbose, __writeDebug, __writeWarning, __invokePowerShellRegion, __invokePowerShellCapture)",
+            "Get_FrontierRegionHelper(Value, __writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeError, __invokePowerShellRegion, __invokePowerShellCapture)",
             generated,
             StringComparison.Ordinal);
     }

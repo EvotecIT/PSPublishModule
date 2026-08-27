@@ -18,7 +18,11 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         if (lifecycle.HasClean)
         {
             builder.AppendLine("        var versionTable = SessionState.PSVariable.GetValue(\"PSVersionTable\") as global::System.Collections.IDictionary;");
-            builder.AppendLine("        var powerShellVersion = versionTable?[\"PSVersion\"] as global::System.Version ?? new global::System.Version(0, 0);");
+            builder.AppendLine("        var versionValue = versionTable?[\"PSVersion\"];");
+            builder.AppendLine("        var versionType = versionValue?.GetType();");
+            builder.AppendLine("        var powerShellMajor = global::System.Convert.ToInt32(versionType?.GetProperty(\"Major\")?.GetValue(versionValue) ?? 0, global::System.Globalization.CultureInfo.InvariantCulture);");
+            builder.AppendLine("        var powerShellMinor = global::System.Convert.ToInt32(versionType?.GetProperty(\"Minor\")?.GetValue(versionValue) ?? 0, global::System.Globalization.CultureInfo.InvariantCulture);");
+            builder.AppendLine("        var powerShellVersion = new global::System.Version(powerShellMajor, powerShellMinor);");
             builder.Append("        if (powerShellVersion < new global::System.Version(")
                 .Append(lifecycle.MinimumPowerShellVersion.Replace('.', ','))
                 .AppendLine("))");

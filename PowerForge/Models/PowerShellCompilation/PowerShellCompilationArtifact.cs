@@ -199,6 +199,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// the newly resolved graph and every hashed local input exactly match this lock.
     /// </summary>
     public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
+
+    /// <summary>Additional compile-time-only command semantic providers used by this build.</summary>
+    public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
 }
 
 /// <summary>

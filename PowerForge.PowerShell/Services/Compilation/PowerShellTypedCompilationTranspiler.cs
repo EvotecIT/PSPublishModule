@@ -9,6 +9,17 @@ namespace PowerForge;
 public sealed class PowerShellTypedCompilationTranspiler
 {
     private const string TemplateResourceName = "PowerForge.PowerShell.Compilation.TypedLibrary.cs.template";
+    private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+
+    /// <summary>Creates a transpiler with the built-in deterministic command providers.</summary>
+    public PowerShellTypedCompilationTranspiler()
+        : this(Array.Empty<PowerShellCompilationCommandProviderContract>())
+    {
+    }
+
+    /// <summary>Creates a transpiler with additional compile-time-only command providers.</summary>
+    public PowerShellTypedCompilationTranspiler(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        => _commandRegistry = PowerShellCommandSemanticRegistry.Create(commandProviders);
 
     /// <summary>Translates all eligible functions in one PowerShell source file.</summary>
     public PowerShellTypedCompilationResult Transpile(
@@ -16,7 +27,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts);
+        => TranspileCore(new[] { sourcePath }, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts, _commandRegistry);
 
     /// <summary>Translates eligible functions from files sharing one PowerShell module scope.</summary>
     public PowerShellTypedCompilationResult Transpile(
@@ -24,7 +35,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName = "PowerForge.Compiled",
         string typeName = "CompiledPowerShell",
         string? targetFramework = null)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods: null, PowerShellCompilationCapabilities.StaticRuntimeFacts, _commandRegistry);
 
     internal PowerShellTypedCompilationResult TranspileForBinaryModule(
         IEnumerable<string> sourcePaths,
@@ -37,7 +48,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             typeName,
             targetFramework,
             excludedMethods: null,
-            PowerShellCompilationCapabilities.BinaryModule);
+            PowerShellCompilationCapabilities.BinaryModule,
+            _commandRegistry);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -46,7 +58,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string? targetFramework,
         ISet<string> excludedMethods,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
@@ -54,7 +66,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         string typeName,
         string? targetFramework,
         ISet<string>? excludedMethods,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticRegistry commandRegistry)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -74,7 +87,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var parsedFiles = new List<ParsedSource>();
         var basePath = Path.GetDirectoryName(fullPaths[0]) ?? Directory.GetCurrentDirectory();
-        var combinedPlan = new PowerShellCompilationAnalyzer().AnalyzeFiles(
+        var combinedPlan = new PowerShellCompilationAnalyzer(commandRegistry).AnalyzeFiles(
             PowerShellCompilationMode.Analyze,
             fullPaths,
             basePath,
@@ -95,7 +108,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework);
-        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics);
+        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry);
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -283,9 +296,10 @@ public sealed class PowerShellTypedCompilationTranspiler
         IReadOnlyList<ParsedSource> sources,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellCompilationDiagnostic> diagnostics)
+        ICollection<PowerShellCompilationDiagnostic> diagnostics,
+        PowerShellCommandSemanticRegistry commandRegistry)
     {
-        var result = new PowerShellSemanticCompilationPipeline().Compile(
+        var result = new PowerShellSemanticCompilationPipeline(commandRegistry).Compile(
             sources.Select(static source => source.Document),
             targetFramework,
             capabilities);
@@ -330,7 +344,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCSharpMethodEmission emitted,
         PowerShellCompilationCapability capabilities)
     {
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
             !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions)
             return;

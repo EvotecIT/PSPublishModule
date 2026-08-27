@@ -85,7 +85,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
             }
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
-            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities);
+            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities, spec.CommandProviders);
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
 
@@ -135,7 +135,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
-                var transpiler = new PowerShellTypedCompilationTranspiler();
+                var transpiler = new PowerShellTypedCompilationTranspiler(spec.CommandProviders);
                 typed = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                     ? transpiler.TranspileForBinaryModule(
                         compilationSourcePaths,
@@ -555,9 +555,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IEnumerable<string> sourcePaths,
         PowerShellCompilationMode mode,
         string targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
     {
-        var analyzer = new PowerShellCompilationAnalyzer();
+        var analyzer = new PowerShellCompilationAnalyzer(commandProviders);
         var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         var basePath = paths.Length == 0
             ? Directory.GetCurrentDirectory()

@@ -130,7 +130,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     private static string DisplayParameterSetName(string? name)
         => string.IsNullOrWhiteSpace(name) ? "__AllParameterSets" : name!;
 
-    private static PowerShellCompilationParameter[] AnalyzeParameters(
+    private PowerShellCompilationParameter[] AnalyzeParameters(
         ParamBlockAst? paramBlock,
         Ast unitRoot,
         string file,

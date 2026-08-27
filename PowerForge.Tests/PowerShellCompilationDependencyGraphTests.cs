@@ -225,6 +225,55 @@ public sealed class PowerShellCompilationDependencyGraphTests
         Assert.True(provider.Contract.Adapter!.RuntimeFree);
     }
 
+    [Fact]
+    public void InteropMatrixLocksRidErrorsCancellationCleanupAndComApartmentWithoutActivation()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write(
+            "Interop.ps1",
+            "[type]::GetTypeFromProgID('Shell.Application'); [type]::GetTypeFromCLSID([guid]'0D43FE01-F093-11CF-8940-00A0C9054228'); Start-Process 'tool.exe'; $signature = \"[DllImport('native-demo')]\"");
+
+        PowerShellCompilationDependencyGraph Resolve(PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
+            => new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
+                new PowerShellCompilationInputResolver().Resolve(script, kind, mode),
+                mode,
+                targetFramework: "net8.0",
+                runtimeIdentifier: "win-x64");
+
+        var package = Resolve(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package);
+        var hybrid = Resolve(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        var strict = Resolve(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
+
+        Assert.Equal(3, strict.SchemaVersion);
+        Assert.All(new[] { package, hybrid }, graph => Assert.All(
+            graph.Nodes.Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject),
+            static node =>
+            {
+                Assert.Equal(PowerShellCompilationDependencyGraphDisposition.Hosted, node.Disposition);
+                Assert.Equal("Windows", node.Interop.Platform);
+                Assert.Equal("HostStop", node.Interop.Cancellation);
+                Assert.Contains("ReleaseComObject", node.Interop.Cleanup, StringComparison.Ordinal);
+                Assert.Contains("HostThread", node.Interop.Threading, StringComparison.Ordinal);
+            }));
+        Assert.All(strict.Nodes.Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject), static node =>
+        {
+            Assert.Equal(PowerShellCompilationDependencyGraphDisposition.Rejected, node.Disposition);
+            Assert.Equal("TypedComAdapterRequired", node.Interop.Owner);
+            Assert.Equal("RejectedBeforePublication", node.Interop.Errors);
+        });
+
+        var strictProcess = Assert.Single(strict.Nodes, static node => node.Kind == PowerShellCompilationDependencyNodeKind.ExternalProcess);
+        Assert.Equal(PowerShellCompilationDependencyGraphDisposition.Rejected, strictProcess.Disposition);
+        Assert.Equal("win-x64", strictProcess.Interop.Platform);
+        Assert.Equal("ExplicitAdapterRequired", strictProcess.Interop.Cancellation);
+        Assert.Equal("ExplicitChildCleanupRequired", strictProcess.Interop.Cleanup);
+        var strictNative = Assert.Single(strict.Nodes, static node => node.Kind == PowerShellCompilationDependencyNodeKind.NativeLibrary);
+        Assert.Equal(PowerShellCompilationDependencyGraphDisposition.Rejected, strictNative.Disposition);
+        Assert.Equal("TypedNativeAdapterRequired", strictNative.Interop.Owner);
+        Assert.Equal("ExplicitHandleAndUnloadRequired", strictNative.Interop.Cleanup);
+        Assert.Equal(strict.LockSha256, PowerShellCompilationDependencyLockHasher.ComputeSha256(strict));
+    }
+
     private sealed class GraphFixture : IDisposable
     {
         internal GraphFixture()

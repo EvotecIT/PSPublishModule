@@ -16,6 +16,9 @@ internal static class PowerShellLoweredCommandProviderCollector
         {
             switch (statement)
             {
+                case PowerShellLoweredStreamWriteStatement stream:
+                    yield return stream.Provider;
+                    break;
                 case PowerShellLoweredCommandRegionStatement region:
                     foreach (var stage in region.Stages) yield return stage.Provider;
                     break;

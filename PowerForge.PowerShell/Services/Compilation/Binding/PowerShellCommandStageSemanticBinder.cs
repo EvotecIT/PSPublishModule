@@ -5,23 +5,32 @@ namespace PowerForge;
 /// <summary>Builds one deterministic semantic stage for every command in a hosted pipeline.</summary>
 internal static class PowerShellCommandStageSemanticBinder
 {
-    internal static PowerShellBoundCommandStage Bind(ParsedSourceDocument document, CommandAst command)
+    internal static PowerShellBoundCommandStage Bind(
+        ParsedSourceDocument document,
+        CommandAst command,
+        PowerShellCommandSemanticRegistry registry)
     {
-        var resolution = PowerShellCommandSemanticRegistry.Default.Resolve(command.GetCommandName());
+        var resolution = registry.Resolve(command.GetCommandName());
         var provider = resolution.Status == PowerShellCommandResolutionStatus.Resolved &&
                        IsSupportedByFamilyBinder(command, resolution.Contract!)
             ? resolution.Contract!
             : PowerShellHostedRegionCommandSemanticBinder.CreateContract(command.GetCommandName());
-        return new PowerShellBoundCommandStage(
-            PowerShellSourceParser.GetSpan(document, command.Extent),
-            provider,
-            BindPipelineSymbols(document, command, provider));
+        var span = PowerShellSourceParser.GetSpan(document, command.Extent);
+        var symbols = BindPipelineSymbols(document, command, provider);
+        return provider.Family switch
+        {
+            PowerShellCompilationCommandFamily.Projection => new PowerShellBoundProjectionCommandStage(span, provider, symbols),
+            PowerShellCompilationCommandFamily.Filtering => new PowerShellBoundFilteringCommandStage(span, provider, symbols),
+            PowerShellCompilationCommandFamily.Mapping => new PowerShellBoundMappingCommandStage(span, provider, symbols),
+            PowerShellCompilationCommandFamily.Sorting => new PowerShellBoundSortingCommandStage(span, provider, symbols),
+            _ => new PowerShellBoundHostedCommandStage(span, provider, symbols)
+        };
     }
 
     private static bool IsSupportedByFamilyBinder(CommandAst command, PowerShellCompilationCommandProviderContract provider)
         => provider.Family switch
         {
-            PowerShellCompilationCommandFamily.Stream => PowerShellStreamCommandSemanticBinder.IsSupported(command),
+            PowerShellCompilationCommandFamily.Stream => PowerShellStreamCommandSemanticBinder.IsSupported(command, provider),
             PowerShellCompilationCommandFamily.Projection => PowerShellProjectionCommandSemanticBinder.IsSupported(command),
             PowerShellCompilationCommandFamily.Filtering => PowerShellFilteringCommandSemanticBinder.IsSupported(command),
             PowerShellCompilationCommandFamily.Mapping => PowerShellMappingCommandSemanticBinder.IsSupported(command),
@@ -58,10 +67,14 @@ internal static class PowerShellCommandStageSemanticBinder
 
 internal static class PowerShellStreamCommandSemanticBinder
 {
-    internal static bool IsSupported(CommandAst command)
-        => TryBind(command, out _, out _);
+    internal static bool IsSupported(CommandAst command, PowerShellCompilationCommandProviderContract provider)
+        => TryBind(command, provider, out _, out _);
 
-    internal static bool TryBind(CommandAst command, out PowerShellStreamCommandKind kind, out ExpressionAst message)
+    internal static bool TryBind(
+        CommandAst command,
+        PowerShellCompilationCommandProviderContract provider,
+        out PowerShellStreamCommandKind kind,
+        out ExpressionAst message)
     {
         kind = default;
         message = null!;
@@ -69,15 +82,16 @@ internal static class PowerShellStreamCommandSemanticBinder
             pipeline.PipelineElements.Count != 1 ||
             command.Redirections.Count != 0)
             return false;
-        var resolution = PowerShellCommandSemanticRegistry.Default.Resolve(command.GetCommandName());
-        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved ||
-            resolution.Contract?.Family != PowerShellCompilationCommandFamily.Stream)
+        if (provider.Family != PowerShellCompilationCommandFamily.Stream || !provider.Adapter.RuntimeFree)
             return false;
-        switch (resolution.Contract.Stream)
+        switch (provider.Stream)
         {
+            case "Success": kind = PowerShellStreamCommandKind.Success; break;
             case "Verbose": kind = PowerShellStreamCommandKind.Verbose; break;
             case "Debug": kind = PowerShellStreamCommandKind.Debug; break;
             case "Warning": kind = PowerShellStreamCommandKind.Warning; break;
+            case "Information": kind = PowerShellStreamCommandKind.Information; break;
+            case "Error": kind = PowerShellStreamCommandKind.Error; break;
             default: return false;
         }
 
@@ -85,7 +99,7 @@ internal static class PowerShellStreamCommandSemanticBinder
         if (arguments.Length == 1 && arguments[0] is ExpressionAst positional)
         {
             message = positional;
-            return IsProvablyNonEmptyMessage(message);
+            return kind == PowerShellStreamCommandKind.Success ? IsRuntimeFreeSuccessValue(message) : IsProvablyNonEmptyMessage(message);
         }
         if (arguments.Length == 2 &&
             arguments[0] is CommandParameterAst parameter &&
@@ -93,13 +107,16 @@ internal static class PowerShellStreamCommandSemanticBinder
             arguments[1] is ExpressionAst named)
         {
             message = named;
-            return IsProvablyNonEmptyMessage(message);
+            return kind == PowerShellStreamCommandKind.Success ? IsRuntimeFreeSuccessValue(message) : IsProvablyNonEmptyMessage(message);
         }
         return false;
     }
 
     private static bool IsProvablyNonEmptyMessage(ExpressionAst message)
         => message is StringConstantExpressionAst { Value.Length: > 0 };
+
+    private static bool IsRuntimeFreeSuccessValue(ExpressionAst value)
+        => value is StringConstantExpressionAst or ConstantExpressionAst;
 }
 
 internal static class PowerShellProjectionCommandSemanticBinder

@@ -7,6 +7,23 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class PowerShellCompilationAnalyzer
 {
+    private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+
+    /// <summary>Creates an analyzer with the built-in deterministic command providers.</summary>
+    public PowerShellCompilationAnalyzer()
+        : this(PowerShellCommandSemanticRegistry.Default)
+    {
+    }
+
+    /// <summary>Creates an analyzer with additional compile-time-only command providers.</summary>
+    public PowerShellCompilationAnalyzer(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        : this(PowerShellCommandSemanticRegistry.Create(commandProviders))
+    {
+    }
+
+    internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry)
+        => _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+
     private static readonly HashSet<string> SupportedBinaryOperators = new(StringComparer.Ordinal)
     {
         "Plus", "Minus", "Multiply", "Divide", "Rem",
@@ -24,7 +41,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         "Equals", "PlusEquals", "MinusEquals", "MultiplyEquals", "DivideEquals", "RemEquals"
     };
 
-    private static PowerShellCompilationFilePlan AnalyzeFile(
+    private PowerShellCompilationFilePlan AnalyzeFile(
         string file,
         string basePath,
         string? targetFramework,
@@ -136,7 +153,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             unit.Parameters,
             unit.Diagnostics.Concat(additionalDiagnostics).ToArray());
 
-    private static PowerShellCompilationUnitPlan AnalyzeUnit(
+    private PowerShellCompilationUnitPlan AnalyzeUnit(
         string name,
         PowerShellCompilationUnitKind kind,
         ScriptBlockAst root,
@@ -178,7 +195,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             Deduplicate(diagnostics));
     }
 
-    private static void AnalyzeNode(
+    private void AnalyzeNode(
         Ast node,
         Ast unitRoot,
         string file,
@@ -256,7 +273,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                          commandName is not null && localFunctionNames?.Contains(commandName) == true))
                         break;
                     if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _) ||
+                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _, _commandRegistry) ||
                          (unitRoot is ScriptBlockAst commandBody &&
                           (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
                            PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
@@ -523,7 +540,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         return variables;
     }
 
-    private static void AnalyzeUnsupportedNamedBlock(
+    private void AnalyzeUnsupportedNamedBlock(
         NamedBlockAst? block,
         string blockName,
         Ast unitRoot,

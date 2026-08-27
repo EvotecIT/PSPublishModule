@@ -67,6 +67,9 @@ public enum PowerShellCompilationCommandErrors
 /// <summary>Runtime adapter required by a command provider.</summary>
 public sealed class PowerShellCompilationCommandAdapterContract
 {
+    /// <summary>Stable runtime-free adapter operation, such as WriteInformation or WriteOutput.</summary>
+    public string Operation { get; set; } = string.Empty;
+
     /// <summary>Versioned semantic-profile identity consumed by the adapter.</summary>
     public string SemanticProfile { get; set; } = string.Empty;
 

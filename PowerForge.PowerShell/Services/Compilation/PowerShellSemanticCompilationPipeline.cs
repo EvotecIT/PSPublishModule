@@ -15,6 +15,11 @@ internal sealed class PowerShellSemanticCompilationPipeline
     {
     }
 
+    internal PowerShellSemanticCompilationPipeline(PowerShellCommandSemanticRegistry commandRegistry)
+        : this(new PowerShellSemanticBinder(commandRegistry), new PowerShellSemanticAnalyzer(), new PowerShellTypedLowerer(), new PowerShellBoundCSharpBackend())
+    {
+    }
+
     internal PowerShellSemanticCompilationPipeline(
         PowerShellSemanticBinder binder,
         PowerShellSemanticAnalyzer analyzer,

@@ -498,10 +498,11 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundStreamWriteStatement stream => new PowerShellLoweredStreamWriteStatement(
                 stream.Span,
                 stream.Kind,
+                stream.Provider,
                 LowerExpression(stream.Message, functions, names, targetCapabilities)),
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
-                region.Source,
+                region.HostedFallbackSource,
                 region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
                 LowerCommandStages(region.Stages)),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
@@ -772,14 +773,22 @@ internal sealed partial class PowerShellTypedLowerer
             capture.Target,
             capture.TargetType,
             localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
-            capture.Source,
+            capture.HostedFallbackSource,
             capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
             LowerCommandStages(capture.Stages));
 
     private static PowerShellLoweredCommandStage[] LowerCommandStages(IEnumerable<PowerShellBoundCommandStage> stages)
-        => stages.Select(static stage => new PowerShellLoweredCommandStage(
-            stage.Span,
-            stage.Provider,
-            stage.PipelineSymbols.Select(static symbol => symbol.Symbol).ToArray())).ToArray();
+        => stages.Select<PowerShellBoundCommandStage, PowerShellLoweredCommandStage>(static stage =>
+        {
+            var symbols = stage.PipelineSymbols.Select(static symbol => symbol.Symbol).ToArray();
+            return stage switch
+            {
+                PowerShellBoundProjectionCommandStage => new PowerShellLoweredProjectionCommandStage(stage.Span, stage.Provider, symbols),
+                PowerShellBoundFilteringCommandStage => new PowerShellLoweredFilteringCommandStage(stage.Span, stage.Provider, symbols),
+                PowerShellBoundMappingCommandStage => new PowerShellLoweredMappingCommandStage(stage.Span, stage.Provider, symbols),
+                PowerShellBoundSortingCommandStage => new PowerShellLoweredSortingCommandStage(stage.Span, stage.Provider, symbols),
+                _ => new PowerShellLoweredHostedCommandStage(stage.Span, stage.Provider, symbols)
+            };
+        }).ToArray();
 
 }
