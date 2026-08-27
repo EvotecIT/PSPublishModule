@@ -515,7 +515,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        var result = RunCancellableProcess("dotnet", workingDir, args, environmentVariables);
+        string dotNetPath = ResolveDotNetChildExecutable("dotnet");
+        var result = RunCancellableProcess(dotNetPath, workingDir, args, environmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();
@@ -529,7 +530,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             throw new DotNetPublishCommandException(
                 message: msg,
-                fileName: "dotnet",
+                fileName: dotNetPath,
                 workingDirectory: string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                 args: args,
                 exitCode: result.ExitCode,
@@ -550,19 +551,168 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string?>? environmentVariables)
     {
+        fileName = ResolveDotNetChildExecutable(fileName);
+        IReadOnlyDictionary<string, string?> safeEnvironment =
+            CreateSafeDotNetChildEnvironment(environmentVariables);
         var result = _processRunner.RunAsync(
                 new ProcessRunRequest(
                     fileName,
                     string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                     args,
                     Timeout.InfiniteTimeSpan,
-                    environmentVariables),
+                    safeEnvironment),
                 _cancellationToken.Value)
             .GetAwaiter()
             .GetResult();
         _cancellationToken.Value.ThrowIfCancellationRequested();
         return (result.ExitCode, result.StdOut, result.StdErr);
     }
+
+    internal static string ResolveRunDotNetExecutablePath()
+    {
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_DOTNET_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(configuredPath.Trim().Trim('"'));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "POWERFORGE_DOTNET_PATH must identify a rooted trusted dotnet executable.",
+                    exception);
+            }
+            if (!Path.IsPathRooted(configuredPath.Trim().Trim('"')) ||
+                !TryResolveTrustedBuildTool("dotnet", out string configuredTool) ||
+                !string.Equals(
+                    candidate,
+                    configuredTool,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"POWERFORGE_DOTNET_PATH does not identify a trusted dotnet installation: {configuredPath}.");
+            }
+            return configuredTool;
+        }
+
+        if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
+        {
+            throw new InvalidOperationException(
+                "A trusted dotnet executable could not be resolved for the publish run.");
+        }
+        return dotNetPath;
+    }
+
+    internal static string ResolveDotNetChildExecutable(string fileName)
+    {
+        if (!fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            return fileName;
+
+        string path = ActiveDotNetExecutablePath.Value ?? ResolveRunDotNetExecutablePath();
+        ValidateDotNetExecutableSnapshot(path, ActiveDotNetExecutableSha256.Value);
+        return path;
+    }
+
+    internal static void ValidateDotNetExecutableSnapshot(string path, string? expectedSha256)
+    {
+        if (!IsIndependentlyTrustedDotNetExecutable(path))
+        {
+            throw new InvalidOperationException(
+                $"The selected dotnet executable is not independently trusted: {path}.");
+        }
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+
+        string actualSha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The selected dotnet executable changed after admission: {path}.");
+        }
+    }
+
+    private static void ValidateExplicitDotNetEnvironmentVariables(
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        foreach (KeyValuePair<string, string?> variable in
+                 environmentVariables ?? new Dictionary<string, string?>())
+        {
+            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key) &&
+                !string.IsNullOrEmpty(variable.Value))
+            {
+                throw new InvalidOperationException(
+                    $"Dotnet environment variable '{variable.Key}' is not allowed because it can inject executable runtime or build behavior.");
+            }
+        }
+    }
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+        => CreateSafeDotNetChildEnvironment(
+            environmentVariables,
+            Environment.GetEnvironmentVariables().Keys
+                .Cast<object?>()
+                .Select(key => key?.ToString())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!));
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames)
+    {
+        ValidateExplicitDotNetEnvironmentVariables(environmentVariables);
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string?> variable in
+                 environmentVariables ?? new Dictionary<string, string?>())
+        {
+            values[variable.Key] = variable.Value;
+        }
+        foreach (string name in inheritedVariableNames)
+        {
+            if (!string.IsNullOrWhiteSpace(name) &&
+                !values.ContainsKey(name) &&
+                !IsApprovedDotNetChildAmbientEnvironmentVariable(name))
+                values[name] = null;
+        }
+        values["DOTNET_ROOT"] = Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"));
+        values["DOTNET_ROOT(x86)"] = null;
+        values["DOTNET_MULTILEVEL_LOOKUP"] = "0";
+        foreach (string name in DisabledUserMsBuildImportEnvironmentVariables)
+            values[name] = "false";
+        return values;
+    }
+
+    private static readonly string[] DisabledUserMsBuildImportEnvironmentVariables =
+    {
+        "ImportUserLocationsByWildcardBeforeMicrosoftCommonProps",
+        "ImportUserLocationsByWildcardAfterMicrosoftCommonProps",
+        "ImportUserLocationsByWildcardBeforeMicrosoftCommonTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftCommonTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftCSharpTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftCSharpTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftVisualBasicTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftVisualBasicTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftNetFrameworkProps",
+        "ImportUserLocationsByWildcardAfterMicrosoftNetFrameworkProps",
+        "ImportUserLocationsByWildcardBeforeMicrosoftNetFrameworkTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftNetFrameworkTargets"
+    };
+
+    private static bool IsApprovedDotNetChildAmbientEnvironmentVariable(string name)
+        => IsApprovedControlledBuildEnvironmentVariable(name) ||
+           name.Equals("APPDATA", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("LOCALAPPDATA", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("NUMBER_OF_PROCESSORS", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("OS", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PATH", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("SYSTEMDRIVE", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TEMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMPDIR", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("USERPROFILE", StringComparison.OrdinalIgnoreCase);
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(
         string fileName,

@@ -8,11 +8,13 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadControlledEvaluatedPublishInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageInputCatalog? verifiedPackages,
+        IReadOnlyCollection<VerifiedPackageInputCatalog> graphVerifiedPackages,
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         out EvaluatedPublishInput[] publishInputs)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
@@ -30,7 +32,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedBuildInputs,
                     executableMsBuildInputs,
                     request.ReadEffectiveGlobalProperties(),
-                    evaluatedProjectContexts: null,
+                    BuildControlledPublishProjectContexts(request, graphBuildNodes),
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -57,28 +59,52 @@ public sealed partial class DotNetPublishPipelineRunner
 
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
-            string[] offlinePackageSources = { offlinePackageSource };
-            if (verifiedPackages is not null &&
-                !verifiedPackages.TrySeedControlledPackageSource(
-                    offlinePackageSource,
-                    controlledSourceRoot,
-                    controlledProjectPath!,
-                    out offlinePackageSources))
+            var offlinePackageSources = new List<string>();
+            int packageCatalogIndex = 0;
+            foreach (VerifiedPackageInputCatalog packageCatalog in graphVerifiedPackages)
             {
-                return false;
+                string catalogSource = Directory.CreateDirectory(Path.Combine(
+                    offlinePackageSource,
+                    packageCatalogIndex++.ToString(System.Globalization.CultureInfo.InvariantCulture))).FullName;
+                if (!packageCatalog.TrySeedControlledPackageSource(
+                        catalogSource,
+                        controlledSourceRoot,
+                        controlledProjectPath!,
+                        out string[] catalogSources))
+                {
+                    return false;
+                }
+                offlinePackageSources.AddRange(catalogSources);
             }
+            if (offlinePackageSources.Count == 0)
+                offlinePackageSources.Add(offlinePackageSource);
+            string[] distinctOfflinePackageSources = offlinePackageSources
+                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToArray();
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
                 new XElement("configuration",
                     new XElement("packageSources",
                         new XElement("clear"),
-                        offlinePackageSources.Select((source, index) =>
+                        distinctOfflinePackageSources.Select((source, index) =>
                             new XElement("add",
                                 new XAttribute("key", "verified-" + index),
                                 new XAttribute("value", source)))),
                     new XElement("auditSources", new XElement("clear"))))
                 .Save(controlledNuGetConfig);
-            string offlinePackageSourceList = string.Join(";", offlinePackageSources);
+            string offlinePackageSourceList = string.Join(";", distinctOfflinePackageSources);
+
+            if (!TryBuildControlledPublishProjectGraph(
+                    graphBuildNodes,
+                    controlledGitRoot!,
+                    controlledSourceRoot,
+                    controlledEnvironment,
+                    controlledNuGetConfig,
+                    offlinePackageSourceList,
+                    controlledOutputRoot))
+            {
+                return false;
+            }
 
             var arguments = new List<string>
             {
@@ -121,7 +147,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledEnvironment,
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
+            {
                 return false;
+            }
 
             int itemsMarker = process.StdOut.LastIndexOf("\"Items\"", StringComparison.Ordinal);
             int jsonStart = itemsMarker < 0
@@ -221,6 +249,103 @@ public sealed partial class DotNetPublishPipelineRunner
                 // Temporary controlled-build cleanup is best effort.
             }
         }
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>
+        BuildControlledPublishProjectContexts(
+            ProjectEvaluationRequest rootRequest,
+            IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    {
+        StringComparer comparer = IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        return graphBuildNodes
+            .Select(node => node.Request)
+            .Concat(new[] { rootRequest })
+            .GroupBy(node => Path.GetFullPath(node.ProjectPath), comparer)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(node => node.ReadEffectiveGlobalProperties())
+                    .GroupBy(
+                        properties => string.Join("\n", properties.OrderBy(
+                            property => property.Key,
+                            StringComparer.OrdinalIgnoreCase).Select(property =>
+                            property.Key + "=" + property.Value)),
+                        StringComparer.Ordinal)
+                    .Select(context => (IReadOnlyDictionary<string, string>)context.First())
+                    .ToArray(),
+                comparer);
+    }
+
+    private static bool TryBuildControlledPublishProjectGraph(
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        string originalGitRoot,
+        string controlledSourceRoot,
+        IReadOnlyDictionary<string, string?> controlledEnvironment,
+        string controlledNuGetConfig,
+        string offlinePackageSourceList,
+        string controlledOutputRoot)
+    {
+        foreach (ControlledPublishGraphNode node in graphBuildNodes)
+        {
+            string originalProjectPath = Path.GetFullPath(node.Request.ProjectPath);
+            if (!IsSameOrBelowBuildInputPath(originalProjectPath, originalGitRoot))
+                return false;
+            string controlledProjectPath = Path.GetFullPath(Path.Combine(
+                controlledSourceRoot,
+                FrameworkCompatibility.GetRelativePath(originalGitRoot, originalProjectPath)));
+            if (!IsSameOrBelowBuildInputPath(controlledProjectPath, controlledSourceRoot) ||
+                !File.Exists(controlledProjectPath))
+            {
+                return false;
+            }
+
+            var arguments = new List<string>
+            {
+                "msbuild",
+                controlledProjectPath,
+                "-nologo",
+                "-maxCpuCount:1",
+                "-nodeReuse:false",
+                "-verbosity:quiet",
+                "-restore",
+                "-target:Build"
+            };
+            if (!TryAppendControlledProjectEvaluationProperties(
+                    arguments,
+                    node.Request,
+                    originalGitRoot,
+                    controlledSourceRoot))
+            {
+                return false;
+            }
+            arguments.Add("-p:BuildProjectReferences=false");
+            if (!TryBuildControlledPathMap(
+                    controlledSourceRoot,
+                    originalGitRoot,
+                    node.PathMap,
+                    out string controlledPathMap))
+            {
+                return false;
+            }
+            arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
+            AppendControlledProofSafeguards(
+                arguments,
+                controlledNuGetConfig,
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "packages.lock.json"));
+
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(controlledProjectPath)!,
+                arguments,
+                controlledEnvironment,
+                TimeSpan.FromMinutes(5));
+            if (process.ExitCode != 0 || process.TimedOut)
+                return false;
+        }
+        return true;
     }
 
     private static bool TryAppendControlledProjectEvaluationProperties(

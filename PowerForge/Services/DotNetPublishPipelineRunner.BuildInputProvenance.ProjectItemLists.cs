@@ -38,6 +38,19 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool IsControlledEquivalent { get; }
     }
 
+    private sealed class ControlledPublishGraphNode
+    {
+        internal ControlledPublishGraphNode(ProjectEvaluationRequest request, string? pathMap)
+        {
+            Request = request;
+            PathMap = pathMap;
+        }
+
+        internal ProjectEvaluationRequest Request { get; }
+
+        internal string? PathMap { get; }
+    }
+
     private static string[] ReadProjectReferenceItemListNames(
         XDocument document,
         IReadOnlyDictionary<string, string> evaluatedProperties)
@@ -183,11 +196,13 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedPublishInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageInputCatalog? verifiedPackages,
+        IReadOnlyCollection<VerifiedPackageInputCatalog> graphVerifiedPackages,
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         out EvaluatedPublishInput[] publishInputs)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
@@ -204,12 +219,68 @@ public sealed partial class DotNetPublishPipelineRunner
         return TryReadControlledEvaluatedPublishInputs(
             request,
             verifiedPackages,
+            graphVerifiedPackages,
             trustedBuildInfrastructureRoots,
             evaluatedBuildInputs,
             executableMsBuildInputs,
             evaluatedPathMap,
             proveControlledGeneratedInputs,
+            graphBuildNodes,
             out publishInputs);
+    }
+
+    private static bool TryReadFrozenProjectReferenceGraph(
+        ProjectEvaluationRequest rootRequest,
+        IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
+        IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
+        IReadOnlyDictionary<string, string?> pathMapsByEvaluation,
+        out ControlledPublishGraphNode[] graphNodes,
+        out string[] graphEvaluationKeys)
+    {
+        var states = new Dictionary<string, int>(StringComparer.Ordinal);
+        var orderedKeys = new List<string>();
+        string rootKey = rootRequest.BuildVisitKey();
+        if (!Visit(rootKey))
+        {
+            graphNodes = Array.Empty<ControlledPublishGraphNode>();
+            graphEvaluationKeys = Array.Empty<string>();
+            return false;
+        }
+
+        graphEvaluationKeys = orderedKeys.ToArray();
+        graphNodes = orderedKeys
+            .Where(key => !key.Equals(rootKey, StringComparison.Ordinal))
+            .Select(key => new ControlledPublishGraphNode(
+                requestsByEvaluation[key],
+                pathMapsByEvaluation[key]))
+            .ToArray();
+        return true;
+
+        bool Visit(string key)
+        {
+            if (states.TryGetValue(key, out int state))
+                return state == 2;
+            if (!requestsByEvaluation.TryGetValue(key, out ProjectEvaluationRequest? request) ||
+                !evaluationsByEvaluation.TryGetValue(key, out EvaluatedProjectInputs? evaluation))
+            {
+                return false;
+            }
+
+            states[key] = 1;
+            foreach (EvaluatedProjectReference reference in evaluation.ProjectReferences)
+            {
+                if (!File.Exists(reference.ProjectPath))
+                    continue;
+                string childKey = request.ForProject(reference).BuildVisitKey();
+                if (states.TryGetValue(childKey, out int childState) && childState == 1)
+                    return false;
+                if (!Visit(childKey))
+                    return false;
+            }
+            states[key] = 2;
+            orderedKeys.Add(key);
+            return true;
+        }
     }
 
     private static bool ContainsPotentialPublishItemMutation(

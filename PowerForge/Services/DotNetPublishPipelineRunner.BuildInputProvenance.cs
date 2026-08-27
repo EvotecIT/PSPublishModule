@@ -325,6 +325,10 @@ public sealed partial class DotNetPublishPipelineRunner
         var pathMapsByEvaluation = new Dictionary<string, string?>(StringComparer.Ordinal);
         var controlledGeneratedOutputProofs = new Dictionary<string, bool>(StringComparer.Ordinal);
         var verifiedPackagesByEvaluation = new Dictionary<string, VerifiedPackageInputCatalog?>(StringComparer.Ordinal);
+        var requestsByEvaluation = new Dictionary<string, ProjectEvaluationRequest>(StringComparer.Ordinal);
+        var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
+        var trustedBuildInfrastructureRootsByEvaluation =
+            new Dictionary<string, string[]>(StringComparer.Ordinal);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
@@ -357,7 +361,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
-                        buildPlan?.NoBuildInPublish == true,
                         out EvaluatedProjectInputs? evaluation) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
@@ -384,10 +387,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 msBuildInputsByEvaluation[visitKey] = evaluation.MsBuildInputs;
                 pathMapsByEvaluation[visitKey] = evaluation.PathMap;
                 verifiedPackagesByEvaluation[visitKey] = evaluation.VerifiedPackages;
+                requestsByEvaluation[visitKey] = request;
+                evaluationsByEvaluation[visitKey] = evaluation;
+                trustedBuildInfrastructureRootsByEvaluation[visitKey] =
+                    evaluation.TrustedBuildInfrastructureRoots;
                 generatedProjectReferenceOutputs.AddRange(
                     evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
-                evaluatedPublishInputs.AddRange(
-                    evaluation.PublishInputs.Select(input => (visitKey, input)));
                 if (string.IsNullOrEmpty(request.TargetFramework))
                 {
                     if (evaluation.TargetFrameworks.Length > 0)
@@ -409,8 +414,72 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        foreach (KeyValuePair<string, ProjectEvaluationRequest> entry in requestsByEvaluation)
+        {
+            string evaluationKey = entry.Key;
+            ProjectEvaluationRequest request = entry.Value;
+            if (string.IsNullOrWhiteSpace(request.TargetFramework) ||
+                !TryReadFrozenProjectReferenceGraph(
+                    request,
+                    requestsByEvaluation,
+                    evaluationsByEvaluation,
+                    pathMapsByEvaluation,
+                    out ControlledPublishGraphNode[] graphNodes,
+                    out string[] graphEvaluationKeys))
+            {
+                if (!string.IsNullOrWhiteSpace(request.TargetFramework))
+                {
+                    projectDirectories = directories.ToArray();
+                    return false;
+                }
+                continue;
+            }
+
+            string[] graphBuildInputs = graphEvaluationKeys
+                .SelectMany(key => buildInputsByEvaluation[key])
+                .Distinct(comparison)
+                .ToArray();
+            string[] graphMsBuildInputs = graphEvaluationKeys
+                .SelectMany(key => msBuildInputsByEvaluation[key])
+                .Distinct(comparison)
+                .ToArray();
+            string[] graphTrustedRoots = graphEvaluationKeys
+                .SelectMany(key => trustedBuildInfrastructureRootsByEvaluation[key])
+                .Distinct(comparison)
+                .ToArray();
+            VerifiedPackageInputCatalog[] graphPackages = graphEvaluationKeys
+                .Select(key => verifiedPackagesByEvaluation[key])
+                .OfType<VerifiedPackageInputCatalog>()
+                .Distinct()
+                .ToArray();
+            if (!TryReadEvaluatedPublishInputs(
+                    request,
+                    verifiedPackagesByEvaluation[evaluationKey],
+                    graphPackages,
+                    graphTrustedRoots,
+                    graphBuildInputs,
+                    graphMsBuildInputs,
+                    pathMapsByEvaluation[evaluationKey],
+                    buildPlan?.NoBuildInPublish == true,
+                    graphNodes,
+                    out EvaluatedPublishInput[] publishInputs))
+            {
+                projectDirectories = directories.ToArray();
+                return false;
+            }
+            evaluatedPublishInputs.AddRange(
+                publishInputs.Select(input => (evaluationKey, input)));
+        }
+
         var provenNoBuildPublishInputsByEvaluation =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        bool IsTrustedSdkGeneratedOutput(string path)
+            => generatedRootsByEvaluation.Keys.Any(ownerKey =>
+                IsTrustedSdkGeneratedPublishInput(
+                    path,
+                    generatedRootsByEvaluation[ownerKey],
+                    projectDirectoriesByEvaluation[ownerKey],
+                    directories));
         if (buildPlan?.NoBuildInPublish == true)
         {
             foreach (IGrouping<string, (string EvaluationKey, EvaluatedPublishInput Input)> group in
@@ -420,11 +489,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 string[] trustedInputs = group
                     .Where(entry => entry.Input.IsSdkDefined &&
                         entry.Input.IsControlledEquivalent &&
-                        IsTrustedSdkGeneratedPublishInput(
-                            entry.Input.FullPath,
-                            generatedRootsByEvaluation[evaluationKey],
-                            projectDirectoriesByEvaluation[evaluationKey],
-                            directories))
+                        IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
                     .Select(entry => entry.Input.FullPath)
                     .Distinct(comparison)
                     .ToArray();
@@ -441,11 +506,7 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
         {
             bool trustedGeneratedOutput = publishInput.IsSdkDefined &&
-                IsTrustedSdkGeneratedPublishInput(
-                    publishInput.FullPath,
-                    generatedRootsByEvaluation[evaluationKey],
-                    projectDirectoriesByEvaluation[evaluationKey],
-                    directories) &&
+                IsTrustedSdkGeneratedOutput(publishInput.FullPath) &&
                 (buildPlan?.NoBuildInPublish != true ||
                  (provenNoBuildPublishInputsByEvaluation.TryGetValue(
                       evaluationKey,
@@ -608,7 +669,6 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
-        bool proveControlledPublishInputs,
         out EvaluatedProjectInputs? evaluation)
     {
         evaluation = null;
@@ -678,7 +738,9 @@ public sealed partial class DotNetPublishPipelineRunner
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
+            {
                 return false;
+            }
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             JsonElement root = document.RootElement;
@@ -1041,20 +1103,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
-                !TryReadEvaluatedPublishInputs(
-                    request,
-                    verifiedPackages,
-                    trustedBuildInfrastructureRoots,
-                    inputs,
-                    importPaths.Concat(new[] { request.ProjectPath }).ToArray(),
-                    pathMap,
-                    proveControlledPublishInputs,
-                    out publishInputs))
-            {
-                return false;
-            }
-
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
                 importPaths.Concat(new[] { request.ProjectPath }).Distinct(
@@ -1069,7 +1117,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 pathMap,
                 generatedProjectReferenceOutputs.ToArray(),
                 publishInputs,
-                verifiedPackages);
+                verifiedPackages,
+                trustedBuildInfrastructureRoots);
             return true;
         }
         catch
@@ -1139,8 +1188,24 @@ public sealed partial class DotNetPublishPipelineRunner
         if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) ||
             fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
         {
-            if (!TryResolveTrustedBuildTool(fileName, out effectiveFileName))
+            if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(ActiveDotNetExecutablePath.Value))
+            {
+                effectiveFileName = ResolveDotNetChildExecutable("dotnet");
+            }
+            else if (!TryResolveTrustedBuildTool(fileName, out effectiveFileName))
                 return (-1, string.Empty, "Trusted build tool could not be resolved.", false);
+        }
+        if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                environmentVariables = CreateSafeDotNetChildEnvironment(environmentVariables);
+            }
+            catch (Exception exception)
+            {
+                return (-1, string.Empty, exception.GetBaseException().Message, false);
+            }
         }
         if (fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
         {

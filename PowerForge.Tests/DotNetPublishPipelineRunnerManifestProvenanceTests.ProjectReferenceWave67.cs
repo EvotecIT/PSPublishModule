@@ -19,17 +19,50 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 root,
                 OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
             File.Copy(installedDotNet, configuredPath);
-            Directory.CreateDirectory(Path.Combine(root, "host", "fxr"));
-            Directory.CreateDirectory(Path.Combine(root, "shared", "Microsoft.NETCore.App"));
-            Directory.CreateDirectory(Path.Combine(root, "sdk"));
+            string installedRoot = Path.GetDirectoryName(installedDotNet)!;
+            foreach ((string relativeRoot, string pattern) in new[]
+                     {
+                         (Path.Combine("host", "fxr"), OperatingSystem.IsWindows()
+                             ? "hostfxr.dll"
+                             : OperatingSystem.IsMacOS() ? "libhostfxr.dylib" : "libhostfxr.so"),
+                         (Path.Combine("shared", "Microsoft.NETCore.App"), OperatingSystem.IsWindows()
+                             ? "coreclr.dll"
+                             : OperatingSystem.IsMacOS() ? "libcoreclr.dylib" : "libcoreclr.so"),
+                         ("sdk", "MSBuild.dll")
+                     })
+            {
+                string source = Directory.EnumerateFiles(
+                        Path.Combine(installedRoot, relativeRoot),
+                        pattern,
+                        SearchOption.AllDirectories)
+                    .First();
+                string destination = Path.Combine(
+                    root,
+                    Path.GetRelativePath(installedRoot, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                File.Copy(source, destination);
+            }
             Environment.SetEnvironmentVariable("POWERFORGE_DOTNET_PATH", configuredPath);
 
-            Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool(
-                "dotnet",
-                out string resolvedPath));
-            Assert.Equal(Path.GetFullPath(configuredPath), resolvedPath, OperatingSystem.IsWindows()
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool(
+                    "dotnet",
+                    out string resolvedPath));
+                Assert.Equal(
+                    Path.GetFullPath(configuredPath),
+                    resolvedPath,
+                    StringComparer.OrdinalIgnoreCase);
+                Assert.Equal(
+                    Path.GetFullPath(configuredPath),
+                    DotNetPublishPipelineRunner.ResolveRunDotNetExecutablePath(),
+                    StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(
+                    DotNetPublishPipelineRunner.ResolveRunDotNetExecutablePath);
+            }
         }
         finally
         {

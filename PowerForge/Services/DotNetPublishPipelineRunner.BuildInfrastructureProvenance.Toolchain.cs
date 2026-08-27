@@ -24,7 +24,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0 ||
                     !HasSinglePhysicalLink(fullPath) ||
                     (toolName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
-                     !IsUsableDotNetInstallation(fullPath)))
+                     (!IsUsableDotNetInstallation(fullPath) ||
+                      !IsIndependentlyTrustedDotNetExecutable(fullPath))))
                 {
                     continue;
                 }
@@ -192,14 +193,105 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             string root = Path.GetDirectoryName(executablePath)!;
-            return Directory.Exists(Path.Combine(root, "host", "fxr")) &&
-                   Directory.Exists(Path.Combine(root, "shared", "Microsoft.NETCore.App")) &&
-                   Directory.Exists(Path.Combine(root, "sdk"));
+            string hostFxrRoot = Path.Combine(root, "host", "fxr");
+            string runtimeRoot = Path.Combine(root, "shared", "Microsoft.NETCore.App");
+            string sdkRoot = Path.Combine(root, "sdk");
+            string hostFxrName = IsWindows()
+                ? "hostfxr.dll"
+                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    ? "libhostfxr.dylib"
+                    : "libhostfxr.so";
+            string coreClrName = IsWindows()
+                ? "coreclr.dll"
+                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    ? "libcoreclr.dylib"
+                    : "libcoreclr.so";
+            return Directory.Exists(hostFxrRoot) &&
+                   Directory.Exists(runtimeRoot) &&
+                   Directory.Exists(sdkRoot) &&
+                   Directory.EnumerateFiles(hostFxrRoot, hostFxrName, SearchOption.AllDirectories).Any() &&
+                   Directory.EnumerateFiles(runtimeRoot, coreClrName, SearchOption.AllDirectories).Any() &&
+                   Directory.EnumerateFiles(sdkRoot, "MSBuild.dll", SearchOption.AllDirectories).Any();
         }
         catch
         {
             return false;
         }
+    }
+
+    internal static bool IsIndependentlyTrustedDotNetExecutable(string executablePath)
+    {
+        try
+        {
+            string fullPath = Path.GetFullPath(executablePath);
+            if (IsWindows())
+            {
+                DotNetPublishReleaseArtifactVerifier.AuthenticodeResult signature =
+                    DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(fullPath);
+                return signature.IsValid &&
+                       signature.Subject.IndexOf("CN=.NET", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                       signature.Subject.IndexOf("O=Microsoft Corporation", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            return EnumeratePlatformDotNetCandidates()
+                .Select(Path.GetFullPath)
+                .Contains(fullPath, StringComparer.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> EnumeratePlatformDotNetCandidates()
+    {
+        string executableName = IsWindows() ? "dotnet.exe" : "dotnet";
+        string? processPath = null;
+        try
+        {
+            processPath = Process.GetCurrentProcess().MainModule?.FileName;
+        }
+        catch
+        {
+            // Fixed installation roots remain available.
+        }
+        if (!string.IsNullOrWhiteSpace(processPath) &&
+            Path.GetFileName(processPath!).Equals(executableName, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return processPath!;
+        }
+
+        string? runtimeDirectory = null;
+        try
+        {
+            runtimeDirectory = RuntimeEnvironment.GetRuntimeDirectory();
+        }
+        catch
+        {
+            // Fixed installation roots remain available.
+        }
+        string? runtimeRoot = string.IsNullOrWhiteSpace(runtimeDirectory)
+            ? null
+            : TryGetDotNetRootFromRuntimeDirectory(runtimeDirectory!);
+        if (!string.IsNullOrWhiteSpace(runtimeRoot))
+            yield return Path.Combine(runtimeRoot!, executableName);
+
+        if (IsWindows())
+        {
+            string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (!string.IsNullOrWhiteSpace(programFiles))
+                yield return Path.Combine(programFiles!, "dotnet", "dotnet.exe");
+            string? programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            if (!string.IsNullOrWhiteSpace(programFilesX86))
+                yield return Path.Combine(programFilesX86!, "dotnet", "dotnet.exe");
+            yield break;
+        }
+
+        yield return "/usr/lib/dotnet/dotnet";
+        yield return "/usr/share/dotnet/dotnet";
+        yield return "/usr/local/share/dotnet/dotnet";
+        yield return "/usr/local/share/dotnet/x64/dotnet";
+        yield return "/opt/homebrew/share/dotnet/dotnet";
     }
 
     private static IEnumerable<string> EnumerateGitCandidates()

@@ -101,16 +101,40 @@ public sealed partial class DotNetPublishPipelineRunner
             "DOTNET_ADDITIONAL_DEPS",
             "DOTNET_SHARED_STORE",
             "DOTNET_DiagnosticPorts",
+            "DOTNET_GCName",
+            "DOTNET_GCPath",
+            "DOTNET_HOST_PATH",
+            "DOTNET_JitName",
+            "DOTNET_MSBUILD_SDK_RESOLVER_CLI_DIR",
             "MSBUILDENABLEALLPROPERTYFUNCTIONS",
             "MSBUILDADDITIONALSDKRESOLVERSFOLDER",
             "MSBUILD_EXE_PATH",
+            "MSBUILDLEGACYEXTENSIONSPATH",
+            "MSBUILDUSEREXTENSIONSPATH",
             "MSBUILDSDKSPATH",
+            "MSBUILDEXTENSIONSPATH",
+            "MSBUILDEXTENSIONSPATH32",
+            "MSBUILDEXTENSIONSPATH64",
+            "ROSLYNTARGETSPATH",
+            "CSCTOOLPATH",
+            "CSCTOOLEXE",
+            "VBCTOOLPATH",
+            "VBCTOOLEXE",
+            "FSCTOOLPATH",
+            "FSCTOOLEXE",
             "NUGET_PLUGIN_PATHS",
             "NUGET_CREDENTIALPROVIDERS_PATH"
         };
         return IsNativeLoaderInjectionEnvironmentVariable(name) ||
                exactNames.Any(value => name.Equals(value, StringComparison.OrdinalIgnoreCase)) ||
+               name.StartsWith("CustomBeforeMicrosoft", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("CustomAfterMicrosoft", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("DOTNET_ROOT_", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("ImportUserLocationsByWildcard", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("MSBUILDNODEHANDLER", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("COMPlus_GCName", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("COMPlus_GCPath", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("COMPlus_JitName", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_PROFILER", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("CORECLR_ENABLE_PROFILING", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith("COR_PROFILER", StringComparison.OrdinalIgnoreCase) ||

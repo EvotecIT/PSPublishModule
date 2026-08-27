@@ -18,6 +18,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private readonly Func<byte[], byte[], PowerForgePayloadInventorySignature> _verifyPortableInventory;
     private readonly Func<string, DotNetPublishReleaseArtifactVerifier.AuthenticodeResult> _readAuthenticodeSignature;
     private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
+    private static readonly AsyncLocal<string?> ActiveDotNetExecutablePath = new();
+    private static readonly AsyncLocal<string?> ActiveDotNetExecutableSha256 = new();
 
     /// <summary>
     /// Creates a new instance using the provided logger.

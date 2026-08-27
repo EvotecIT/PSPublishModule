@@ -33,6 +33,8 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new ArgumentException("MSI reservation owner cannot be empty.", nameof(msiReservationOwner));
         cancellationToken.ThrowIfCancellationRequested();
         var previousCancellationToken = _cancellationToken.Value;
+        string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
+        string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
         _cancellationToken.Value = cancellationToken;
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
@@ -55,6 +57,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
+            ActiveDotNetExecutablePath.Value = ResolveRunDotNetExecutablePath();
+            ActiveDotNetExecutableSha256.Value = ComputeSha256Hex(
+                File.ReadAllBytes(ActiveDotNetExecutablePath.Value));
+            ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
             cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
                 plan.ProjectRoot,
                 EnumerateTrackedGeneratedProvenancePaths(
@@ -263,6 +269,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 ClearMsiVersionStateWrites(msiReservationOwner);
                 _cancellationToken.Value = previousCancellationToken;
+                ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
+                ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
             }
         }
     }
