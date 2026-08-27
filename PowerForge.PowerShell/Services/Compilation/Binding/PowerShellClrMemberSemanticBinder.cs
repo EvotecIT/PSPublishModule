@@ -166,8 +166,6 @@ internal static class PowerShellClrMemberSemanticBinder
             if (selected is null) return null;
             kind = target.IsStatic ? PowerShellClrInvocationKind.StaticMethod : PowerShellClrInvocationKind.InstanceMethod;
             resultType = ((MethodInfo)selected).ReturnType;
-            if (resultType == typeof(void))
-                return Reject(diagnostics, "PSB2606", "Void CLR invocations require statement-output lowering and are not yet eligible for this bound expression path.", span);
         }
 
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))

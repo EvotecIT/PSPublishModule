@@ -313,7 +313,10 @@ internal sealed class PowerShellSemanticBinder
                 ? null
                 : BindExpression(document, returnStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework);
             return returnStatement.Pipeline is null || expression is not null
-                ? new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, returnStatement.Extent), expression)
+                ? new PowerShellBoundReturnStatement(
+                    PowerShellSourceParser.GetSpan(document, returnStatement.Extent),
+                    expression,
+                    expression is not PowerShellBoundMutationExpression && expression?.Type.ClrType != typeof(void))
                 : null;
         }
         if (statement is IfStatementAst ifStatement)
@@ -509,12 +512,15 @@ internal sealed class PowerShellSemanticBinder
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is ContinueStatementAst { Label: null } continueStatement && HasContinuableAncestor(continueStatement))
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
-        if (statement is PipelineAst pipeline && (isTerminal || IsLocalFunctionPipeline(pipeline, functions)))
+        if (statement is PipelineAst pipeline)
         {
             var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework);
+            if (expression is null) return null;
+            var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
+            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions)) return null;
             return expression is null
                 ? null
-                : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression);
+                : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
         }
         return null;
     }

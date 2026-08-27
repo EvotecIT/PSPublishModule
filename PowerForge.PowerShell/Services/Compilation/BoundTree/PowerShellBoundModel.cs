@@ -238,24 +238,32 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
 
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression)
-        : base(span, expression is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput)
+    internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue = true)
+        : base(span,
+            (expression is null || !emitsValue ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
+            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None))
     {
         Expression = expression;
+        EmitsValue = expression is not null && emitsValue;
     }
 
     internal PowerShellBoundExpression? Expression { get; }
+    internal bool EmitsValue { get; }
 }
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression)
-        : base(span, PowerShellSemanticEffect.SuccessOutput)
+    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput)
+        : base(span,
+            (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
+            (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None))
     {
         Expression = expression;
+        EmitsOutput = emitsOutput;
     }
 
     internal PowerShellBoundExpression Expression { get; }
+    internal bool EmitsOutput { get; }
 }
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement

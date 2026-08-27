@@ -66,8 +66,23 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression) : base(span) => Expression = expression;
+    internal PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression, bool emitsValue)
+        : base(span)
+    {
+        Expression = expression;
+        EmitsValue = expression is not null && emitsValue;
+    }
+
     internal PowerShellLoweredExpression? Expression { get; }
+    internal bool EmitsValue { get; }
+}
+
+internal sealed class PowerShellLoweredExpressionStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredExpressionStatement(SourceSpan span, PowerShellLoweredExpression expression)
+        : base(span) => Expression = expression;
+
+    internal PowerShellLoweredExpression Expression { get; }
 }
 
 internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredStatement

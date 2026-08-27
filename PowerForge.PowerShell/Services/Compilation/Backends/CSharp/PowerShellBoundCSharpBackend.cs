@@ -106,8 +106,15 @@ internal sealed class PowerShellBoundCSharpBackend
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
                 return;
+            case PowerShellLoweredReturnStatement { EmitsValue: false } returned:
+                builder.Append(prefix).Append(EmitExpression(returned.Expression!)).AppendLine(";");
+                builder.Append(prefix).AppendLine("return;");
+                return;
             case PowerShellLoweredReturnStatement returned:
                 builder.Append(prefix).Append("return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
+                return;
+            case PowerShellLoweredExpressionStatement expression:
+                builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
                 return;
             case PowerShellLoweredIfStatement conditional:
                 for (var index = 0; index < conditional.Clauses.Length; index++)

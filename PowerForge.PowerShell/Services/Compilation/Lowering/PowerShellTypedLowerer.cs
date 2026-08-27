@@ -200,8 +200,13 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(assignment.Value, functions, names, targetCapabilities)),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
-                returned.Expression is null ? null : LowerExpression(returned.Expression, functions, names, targetCapabilities)),
-            PowerShellBoundExpressionStatement expression => new PowerShellLoweredReturnStatement(
+                returned.Expression is null ? null : LowerExpression(returned.Expression, functions, names, targetCapabilities),
+                returned.EmitsValue),
+            PowerShellBoundExpressionStatement { EmitsOutput: true } expression => new PowerShellLoweredReturnStatement(
+                expression.Span,
+                LowerExpression(expression.Expression, functions, names, targetCapabilities),
+                emitsValue: true),
+            PowerShellBoundExpressionStatement expression => new PowerShellLoweredExpressionStatement(
                 expression.Span,
                 LowerExpression(expression.Expression, functions, names, targetCapabilities)),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
