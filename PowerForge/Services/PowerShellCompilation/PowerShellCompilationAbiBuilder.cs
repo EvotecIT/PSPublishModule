@@ -49,6 +49,24 @@ internal static class PowerShellCompilationAbiBuilder
                 Boolean(method.SupportsShouldProcess),
                 method.ConfirmImpact,
                 string.Join("\0", method.Aliases.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)));
+            foreach (var provider in method.CommandProviders.OrderBy(static item => item.ProviderId, StringComparer.Ordinal)
+                         .ThenBy(static item => item.ProviderVersion, StringComparer.Ordinal))
+            {
+                AppendRecord(builder, "command-provider",
+                    provider.ProviderId,
+                    provider.ProviderVersion,
+                    provider.FeatureId,
+                    provider.Family.ToString(),
+                    provider.CommandName,
+                    provider.Output.ToString(),
+                    provider.Cardinality.ToString(),
+                    provider.Stream,
+                    provider.Errors.ToString(),
+                    provider.Adapter.SemanticProfile,
+                    Boolean(provider.Adapter.RuntimeFree),
+                    Boolean(provider.Adapter.AotCompatible),
+                    string.Join("\0", provider.Adapter.Dependencies.OrderBy(static value => value, StringComparer.Ordinal)));
+            }
             foreach (var parameter in method.Parameters)
             {
                 AppendRecord(builder, "parameter",
@@ -135,6 +153,7 @@ internal static class PowerShellCompilationAbiBuilder
             DefaultParameterSetName = method.CommandBinding.DefaultParameterSetName,
             SupportsShouldProcess = method.CommandBinding.SupportsShouldProcess,
             ConfirmImpact = method.CommandBinding.ConfirmImpact,
+            CommandProviders = method.CommandProviders.ToArray(),
             Parameters = parameters.ToArray()
         };
     }

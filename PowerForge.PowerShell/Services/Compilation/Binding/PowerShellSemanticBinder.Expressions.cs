@@ -181,11 +181,21 @@ internal sealed partial class PowerShellSemanticBinder
                     diagnostics);
             case CommandAst command:
                 var commandName = command.GetCommandName();
+                var commandResolution = PowerShellCommandSemanticRegistry.Default.Resolve(commandName);
+                var featureId = commandResolution.Status == PowerShellCommandResolutionStatus.Resolved
+                    ? commandResolution.Contract!.FeatureId
+                    : commandName is null
+                        ? PowerShellCompilationFeatureIds.DynamicCommand
+                        : PowerShellCompilationFeatureIds.ForCommand(commandName);
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    commandName is null ? PowerShellCompilationFeatureIds.DynamicCommand : PowerShellCompilationFeatureIds.ForCommand(commandName),
-                    commandName is null
+                    featureId,
+                    commandResolution.Status == PowerShellCommandResolutionStatus.Ambiguous
+                        ? $"Command invocation '{commandName}' is ambiguous across registered semantic providers: {string.Join(", ", commandResolution.Candidates.Select(static contract => contract.ProviderId))}."
+                        : commandName is null
                         ? "Dynamic command invocation requires PowerShell runtime command discovery."
-                        : $"Command invocation '{commandName}' requires a registered semantic provider or a hosted PowerShell command region.",
+                        : commandResolution.Status == PowerShellCommandResolutionStatus.Resolved
+                            ? $"Command invocation '{commandName}' is owned by semantic provider '{commandResolution.Contract!.ProviderId}' and requires its {commandResolution.Contract.Family} binding context."
+                            : $"Command invocation '{commandName}' requires a registered semantic provider or a hosted PowerShell command region.",
                     span));
                 return null;
             default:

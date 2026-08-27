@@ -1,0 +1,143 @@
+using PowerForge;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed class PowerShellCommandSemanticRegistryTests
+{
+    [Theory]
+    [InlineData("Select-Object", "powerforge.command.projection.select-object")]
+    [InlineData("select", "powerforge.command.projection.select-object")]
+    [InlineData("Microsoft.PowerShell.Utility\\Select-Object", "powerforge.command.projection.select-object")]
+    [InlineData("Microsoft.PowerShell.Utility\\Write-Verbose", "powerforge.command.stream.verbose")]
+    public void DefaultRegistryResolvesCanonicalAliasesAndModuleQualification(string commandName, string providerId)
+    {
+        var result = PowerShellCommandSemanticRegistry.Default.Resolve(commandName);
+
+        Assert.Equal(PowerShellCommandResolutionStatus.Resolved, result.Status);
+        Assert.Equal(providerId, result.Contract!.ProviderId);
+        Assert.True(result.Contract.CompileTimeOnly);
+        Assert.False(result.Contract.MayImportSourceModules);
+        Assert.False(result.Contract.MayExecuteSource);
+    }
+
+    [Fact]
+    public void RegistryIsStableAcrossRegistrationOrder()
+    {
+        var first = Contract("provider.zulu", "Get-Zulu", "Zulu.Module");
+        var second = Contract("provider.alpha", "Get-Alpha", "Alpha.Module");
+
+        var forward = new PowerShellCommandSemanticRegistry(new[] { first, second });
+        var reverse = new PowerShellCommandSemanticRegistry(new[] { second, first });
+
+        Assert.Equal(forward.Contracts.Select(static contract => contract.ProviderId), reverse.Contracts.Select(static contract => contract.ProviderId));
+        Assert.Equal("provider.alpha", forward.Resolve("Get-Alpha").Contract!.ProviderId);
+        Assert.Equal("provider.zulu", reverse.Resolve("Zulu.Module\\Get-Zulu").Contract!.ProviderId);
+    }
+
+    [Fact]
+    public void DuplicateAndUnsafeProvidersFailRegistration()
+    {
+        var duplicate = Contract("provider.same", "Get-One", "One.Module");
+        var duplicateId = Contract("provider.same", "Get-Two", "Two.Module");
+        var duplicateError = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCommandSemanticRegistry(new[] { duplicate, duplicateId }));
+        Assert.Contains("registered more than once", duplicateError.Message, StringComparison.Ordinal);
+
+        var unsafeProvider = Contract("provider.unsafe", "Get-Unsafe", "Unsafe.Module");
+        unsafeProvider.MayExecuteSource = true;
+        var unsafeError = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCommandSemanticRegistry(new[] { unsafeProvider }));
+        Assert.Contains("compile-time-only", unsafeError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnqualifiedConflictsAreAmbiguousButQualifiedCommandsRemainDeterministic()
+    {
+        var first = Contract("provider.one", "Get-Thing", "One.Module");
+        var second = Contract("provider.two", "Get-Thing", "Two.Module");
+        var registry = new PowerShellCommandSemanticRegistry(new[] { second, first });
+
+        var ambiguous = registry.Resolve("Get-Thing");
+
+        Assert.Equal(PowerShellCommandResolutionStatus.Ambiguous, ambiguous.Status);
+        Assert.Equal(new[] { "provider.one", "provider.two" }, ambiguous.Candidates.Select(static contract => contract.ProviderId));
+        Assert.Equal("provider.one", registry.Resolve("One.Module\\Get-Thing").Contract!.ProviderId);
+        Assert.Equal("provider.two", registry.Resolve("Two.Module\\Get-Thing").Contract!.ProviderId);
+    }
+
+    [Fact]
+    public void HostedPipelineCarriesProviderContractsAndExplicitPipelineSymbolsThroughLowering()
+    {
+        var source = "function Get-Pipeline { param([object[]] $InputObject) " +
+                     "$InputObject | Where-Object { $_ -ne $null } | ForEach-Object { $PSItem } | Select-Object -First 1 | Sort-Object }";
+        var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "pipeline.ps1");
+        var document = PowerShellSourceParser.Parse(source, path);
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var region = Assert.IsType<PowerShellBoundCommandRegionStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
+        Assert.Equal(
+            new[]
+            {
+                PowerShellCompilationCommandFamily.Filtering,
+                PowerShellCompilationCommandFamily.Mapping,
+                PowerShellCompilationCommandFamily.Projection,
+                PowerShellCompilationCommandFamily.Sorting
+            },
+            region.Stages.Select(static stage => stage.Provider.Family));
+        Assert.Contains(region.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => symbol.Symbol.Name == "_");
+        Assert.Contains(region.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => symbol.Symbol.Name.Equals("PSItem", StringComparison.OrdinalIgnoreCase));
+        Assert.All(region.Stages, static stage => Assert.False(stage.Provider.Adapter.RuntimeFree));
+
+        var lowered = Assert.IsType<PowerShellLoweredCommandRegionStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements));
+        Assert.Equal(region.Stages.Select(static stage => stage.Provider.ProviderId), lowered.Stages.Select(static stage => stage.Provider.ProviderId));
+        Assert.All(lowered.Stages.SelectMany(static stage => stage.PipelineSymbols), static symbol => Assert.Equal(PowerShellSymbolKind.PipelineVariable, symbol.Kind));
+    }
+
+    [Fact]
+    public void ModuleQualifiedStreamCommandUsesTheRegisteredRuntimeFreeBinder()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Write-Proof { Microsoft.PowerShell.Utility\\Write-Verbose 'proof' }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "stream.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var stream = Assert.IsType<PowerShellBoundStreamWriteStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
+        Assert.Equal(PowerShellStreamCommandKind.Verbose, stream.Kind);
+        Assert.Contains("__writeVerbose", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+        var provider = PowerShellCommandSemanticRegistry.Default.Resolve("Microsoft.PowerShell.Utility\\Write-Verbose").Contract!;
+        Assert.True(provider.Adapter.RuntimeFree);
+        Assert.True(provider.Adapter.AotCompatible);
+        Assert.Empty(provider.Adapter.Dependencies);
+    }
+
+    private static PowerShellCompilationCommandProviderContract Contract(string providerId, string commandName, string moduleName)
+        => new()
+        {
+            ProviderId = providerId,
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand(commandName),
+            Family = PowerShellCompilationCommandFamily.HostedRegion,
+            CommandName = commandName,
+            ModuleNames = new[] { moduleName },
+            Output = PowerShellCompilationCommandOutput.Unknown,
+            Cardinality = PowerShellCompilationCommandCardinality.Unknown,
+            Stream = "Success+PowerShell",
+            Errors = PowerShellCompilationCommandErrors.PowerShellHost,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+}

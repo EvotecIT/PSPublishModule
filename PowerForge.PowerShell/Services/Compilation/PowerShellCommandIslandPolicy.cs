@@ -69,7 +69,7 @@ internal static class PowerShellCommandIslandPolicy
                 {
                     var name = variable.VariablePath.UserPath;
                     if (HasNestedScriptBlockAncestor(variable, statements[index]))
-                        return IsNestedPipelineVariable(variable, statements[index], name) || available.Contains(name) || assigned.Contains(name);
+                        return IsNestedPipelineVariable(variable, statements[index], name) || IsLiteralAutomaticVariable(name) || available.Contains(name) || assigned.Contains(name);
                     return available.Contains(name) || assigned.Contains(name) ||
                            name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                            name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
@@ -132,7 +132,7 @@ internal static class PowerShellCommandIslandPolicy
             {
                 var name = variable.VariablePath.UserPath;
                 if (HasNestedScriptBlockAncestor(variable, statement))
-                    return IsNestedPipelineVariable(variable, statement, name);
+                    return IsNestedPipelineVariable(variable, statement, name) || IsLiteralAutomaticVariable(name);
                 return parameters.Contains(name) ||
                        name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                        name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
@@ -230,7 +230,7 @@ internal static class PowerShellCommandIslandPolicy
             {
                 var name = variable.VariablePath.UserPath;
                 if (HasNestedScriptBlockAncestor(variable, candidate))
-                    return IsNestedPipelineVariable(variable, candidate, name) || parameters.Contains(name);
+                    return IsNestedPipelineVariable(variable, candidate, name) || IsLiteralAutomaticVariable(name) || parameters.Contains(name);
                 return parameters.Contains(name) ||
                        name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                        name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
@@ -368,46 +368,19 @@ internal static class PowerShellCommandIslandPolicy
         return false;
     }
 
+    private static bool IsLiteralAutomaticVariable(string name)
+        => name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("null", StringComparison.OrdinalIgnoreCase);
+
     internal static bool TryGetStreamCommand(
         CommandAst command,
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message)
-    {
-        kind = default;
-        message = null!;
-        if (command.Parent is not PipelineAst pipeline ||
-            pipeline.PipelineElements.Count != 1 ||
-            command.Redirections.Count != 0)
-            return false;
-
-        switch (command.GetCommandName()?.ToUpperInvariant())
-        {
-            case "WRITE-VERBOSE": kind = PowerShellStreamCommandKind.Verbose; break;
-            case "WRITE-DEBUG": kind = PowerShellStreamCommandKind.Debug; break;
-            case "WRITE-WARNING": kind = PowerShellStreamCommandKind.Warning; break;
-            default: return false;
-        }
-
-        var arguments = command.CommandElements.Skip(1).ToArray();
-        if (arguments.Length == 1 && arguments[0] is ExpressionAst positional)
-        {
-            message = positional;
-            return IsProvablyNonEmptyStreamMessage(message);
-        }
-        if (arguments.Length == 2 &&
-            arguments[0] is CommandParameterAst parameter &&
-            parameter.ParameterName.Equals("Message", StringComparison.OrdinalIgnoreCase) &&
-            arguments[1] is ExpressionAst named)
-        {
-            message = named;
-            return IsProvablyNonEmptyStreamMessage(message);
-        }
-        return false;
-    }
+        => PowerShellStreamCommandSemanticBinder.TryBind(command, out kind, out message);
 
     private static bool IsStreamCommand(CommandAst command)
-        => command.GetCommandName()?.ToUpperInvariant() is "WRITE-VERBOSE" or "WRITE-DEBUG" or "WRITE-WARNING";
+        => PowerShellCommandSemanticRegistry.Default.Resolve(command.GetCommandName()).Contract?.Family ==
+           PowerShellCompilationCommandFamily.Stream;
 
-    private static bool IsProvablyNonEmptyStreamMessage(ExpressionAst message)
-        => message is StringConstantExpressionAst { Value.Length: > 0 };
 }

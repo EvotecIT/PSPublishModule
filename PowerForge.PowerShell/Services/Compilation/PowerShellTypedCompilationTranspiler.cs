@@ -359,7 +359,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.SourceSpan.StartColumn,
             emitted.SourceSpan.EndLine,
             emitted.SourceSpan.EndColumn,
-            emitted.SourceMap);
+            emitted.SourceMap,
+            emitted.CommandProviders);
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -482,7 +483,8 @@ internal sealed class PowerShellCSharpMethodEmission
         PowerShellCompilationHelp? help = null,
         string[]? aliases = null,
         PowerShellCompilationCommandBinding? commandBinding = null,
-        PowerShellCompilationSourceMapEntry[]? sourceMap = null)
+        PowerShellCompilationSourceMapEntry[]? sourceMap = null,
+        PowerShellCompilationCommandProviderContract[]? commandProviders = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -497,6 +499,7 @@ internal sealed class PowerShellCSharpMethodEmission
         Aliases = aliases ?? Array.Empty<string>();
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
+        CommandProviders = commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
     }
 
     internal string GeneratedName { get; }
@@ -512,4 +515,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal PowerShellCompilationSourceMapEntry[] SourceMap { get; }
+    internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
 }

@@ -46,7 +46,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(64, manifest.GeneratedSourceSha256.Length);
 
         var abi = Assert.IsType<PowerShellCompilationAbiManifest>(manifest.PublicAbi);
-        Assert.Equal(2, abi.SchemaVersion);
+        Assert.Equal(3, abi.SchemaVersion);
         Assert.Equal("PowerForge.Compiled", abi.NamespaceName);
         Assert.Equal("ContractProofMethods", abi.TypeName);
         Assert.Equal(64, abi.Sha256.Length);
@@ -219,5 +219,38 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 Assert.Equal("__boundParameters", generated.ClrName);
                 Assert.Equal("BoundParameterNames", generated.CompilerPurpose);
             });
+    }
+
+    [Fact]
+    public void AbiHashCoversCommandProviderAndAdapterVersions()
+    {
+        PowerShellCompilationCommandProviderContract Provider(string version) => new()
+        {
+            ProviderId = "proof.command.provider",
+            ProviderVersion = version,
+            FeatureId = "command.proof",
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = "Write-Proof",
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "Verbose",
+            Errors = PowerShellCompilationCommandErrors.Terminating,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+        PowerShellCompiledMethod Method(PowerShellCompilationCommandProviderContract provider) => new(
+            "Write-Proof", "Write_Proof", "System.Void", Array.Empty<PowerShellCompilationParameter>(), 1, null,
+            false, false, null, false, false, null, false, string.Empty,
+            commandProviders: new[] { provider });
+
+        var first = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { Method(Provider("1.0")) });
+        var second = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { Method(Provider("2.0")) });
+
+        Assert.NotEqual(first.Sha256, second.Sha256);
+        Assert.Equal("1.0", Assert.Single(Assert.Single(first.Methods).CommandProviders).ProviderVersion);
     }
 }

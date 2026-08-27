@@ -14,7 +14,7 @@ public sealed class PowerShellCompilationSemanticProfile
     public const string RuntimeFreeStrictVersion = "1.1";
 
     /// <summary>Current compiler/runtime ABI version.</summary>
-    public const string RuntimeFreeAbiVersion = "2";
+    public const string RuntimeFreeAbiVersion = "3";
 
     /// <summary>Profile name.</summary>
     public string Name { get; set; } = RuntimeFreeStrictName;
@@ -41,7 +41,7 @@ public sealed class PowerShellCompilationSemanticProfile
 public sealed class PowerShellCompilationAbiManifest
 {
     /// <summary>ABI schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Generated CLR namespace.</summary>
     public string NamespaceName { get; set; } = string.Empty;
@@ -100,6 +100,9 @@ public sealed class PowerShellCompilationAbiMethod
 
     /// <summary>Ordered CLR parameters.</summary>
     public PowerShellCompilationAbiParameter[] Parameters { get; set; } = Array.Empty<PowerShellCompilationAbiParameter>();
+
+    /// <summary>Versioned command semantic providers whose adapters participate in method behavior.</summary>
+    public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
 }
 
 /// <summary>One ordered public CLR parameter contract.</summary>

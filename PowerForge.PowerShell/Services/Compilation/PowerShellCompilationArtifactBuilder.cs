@@ -354,6 +354,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     AuthenticodeSignedFiles = signing?.SignedFiles ?? 0,
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
+                    CommandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
+                        .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
+                        .Select(static group => group.First())
+                        .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+                        .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
+                        .ToArray(),
                     ResourceSummary = PowerShellCompilationResourceSummary.Create(dependencyPlan),
                     Diagnostics = diagnostics
                 };

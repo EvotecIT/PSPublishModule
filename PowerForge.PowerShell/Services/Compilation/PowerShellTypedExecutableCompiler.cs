@@ -163,7 +163,8 @@ internal static class PowerShellTypedExecutableCompiler
             sourceColumn: method.SourceSpan.StartColumn,
             sourceEndLine: method.SourceSpan.EndLine,
             sourceEndColumn: method.SourceSpan.EndColumn,
-            sourceMap: method.SourceMap);
+            sourceMap: method.SourceMap,
+            commandProviders: method.CommandProviders);
 
     private static void ValidateCommands(
         string path,

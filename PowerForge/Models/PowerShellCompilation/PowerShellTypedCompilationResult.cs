@@ -110,7 +110,8 @@ public sealed class PowerShellCompiledMethod
         int sourceColumn = 1,
         int sourceEndLine = 0,
         int sourceEndColumn = 0,
-        PowerShellCompilationSourceMapEntry[]? sourceMap = null)
+        PowerShellCompilationSourceMapEntry[]? sourceMap = null,
+        PowerShellCompilationCommandProviderContract[]? commandProviders = null)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -121,6 +122,7 @@ public sealed class PowerShellCompiledMethod
         SourceEndLine = sourceEndLine > 0 ? sourceEndLine : sourceLine;
         SourceEndColumn = sourceEndColumn > 0 ? sourceEndColumn : sourceColumn;
         SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
+        CommandProviders = commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>();
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
@@ -161,6 +163,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Statement-level source spans and method-relative generated C# ranges.</summary>
     public PowerShellCompilationSourceMapEntry[] SourceMap { get; }
+
+    /// <summary>Versioned command semantic providers used by the generated method.</summary>
+    public PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
 
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }

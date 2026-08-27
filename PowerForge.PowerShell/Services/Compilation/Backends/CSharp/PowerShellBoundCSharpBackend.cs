@@ -99,7 +99,8 @@ internal sealed class PowerShellBoundCSharpBackend
             declaredOutputType: function.DeclaredOutputType,
             aliases: function.Aliases.ToArray(),
             commandBinding: function.CommandBinding,
-            sourceMap: sourceMap.ToArray());
+            sourceMap: sourceMap.ToArray(),
+            commandProviders: PowerShellLoweredCommandProviderCollector.Collect(function.Statements));
     }
 
     private static void EmitStatement(

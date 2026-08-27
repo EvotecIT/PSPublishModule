@@ -299,6 +299,9 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Discovered source, module, assembly, and content dependency decisions.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationDependency>();
 
+    /// <summary>Versioned command semantic providers used by compiled methods.</summary>
+    public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
+
     /// <summary>Resource selection totals for the produced artifact.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; set; } = new();
 

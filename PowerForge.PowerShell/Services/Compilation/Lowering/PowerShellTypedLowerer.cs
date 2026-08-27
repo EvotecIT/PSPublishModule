@@ -478,7 +478,8 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.Source,
-                region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray()),
+                region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
+                LowerCommandStages(region.Stages)),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
@@ -748,7 +749,14 @@ internal sealed class PowerShellTypedLowerer
             capture.TargetType,
             localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
             capture.Source,
-            capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray());
+            capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
+            LowerCommandStages(capture.Stages));
+
+    private static PowerShellLoweredCommandStage[] LowerCommandStages(IEnumerable<PowerShellBoundCommandStage> stages)
+        => stages.Select(static stage => new PowerShellLoweredCommandStage(
+            stage.Span,
+            stage.Provider,
+            stage.PipelineSymbols.Select(static symbol => symbol.Symbol).ToArray())).ToArray();
 
     private sealed class LoweredNameAllocator
     {

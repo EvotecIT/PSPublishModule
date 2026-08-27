@@ -19,7 +19,7 @@ internal static class PowerShellCommandRegionSemanticBinder
             var last = PowerShellSourceParser.GetSpan(document, statements[statements.Count - 1].Extent);
             span = new SourceSpan(span.DocumentId, span.StartOffset, last.EndOffset, span.StartLine, span.StartColumn, last.EndLine, last.EndColumn);
         }
-        return new PowerShellBoundCommandRegionStatement(span, source, arguments);
+        return new PowerShellBoundCommandRegionStatement(span, source, arguments, BindStages(document, statements));
     }
 
     internal static PowerShellBoundCommandCaptureStatement BindCapture(
@@ -38,7 +38,8 @@ internal static class PowerShellCommandRegionSemanticBinder
             target.Symbol,
             ((ConvertExpressionAst)assignment.Left).StaticType,
             source,
-            arguments);
+            arguments,
+            BindStages(document, referenced));
     }
 
     private static PowerShellBoundCommandRegionArgument[] BindArguments<TAst>(
@@ -60,4 +61,15 @@ internal static class PowerShellCommandRegionSemanticBinder
 
     private static string EmitBracedVariable(string name)
         => "${" + name.Replace("`", "``").Replace("}", "`}") + "}";
+
+    private static PowerShellBoundCommandStage[] BindStages<TAst>(ParsedSourceDocument document, IEnumerable<TAst> syntax)
+        where TAst : Ast
+        => syntax.SelectMany(static item => item.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true))
+            .Cast<CommandAst>()
+            .OrderBy(static command => command.Extent.StartOffset)
+            .Select(command =>
+            {
+                return PowerShellCommandStageSemanticBinder.Bind(document, command);
+            })
+            .ToArray();
 }
