@@ -102,6 +102,13 @@ Validate the installed file with `visudo -cf`. Sites upgrading from the earlier
 one-shot action must install these rules before repinning the action; retaining only
 the old promotion rule will reject the deferred verification protocol.
 
+The generated Apache virtual hosts use `AllowOverride FileInfo`. This is the narrow
+override class required for PowerForge's generated `.htaccess` redirects and custom
+error documents while keeping authentication, directory indexing, and unrelated
+server policy under the root-owned virtual host. Existing hosts created with
+`AllowOverride None` must update that one directory policy and reload Apache before
+declared aliases can work in production.
+
 The promoter rejects path traversal, links, special files, checksum mismatches,
 unconfigured site ids, mutable site configuration, and workflow staging files owned
 by another account. It atomically promotes a timestamped release, purges Cloudflare
