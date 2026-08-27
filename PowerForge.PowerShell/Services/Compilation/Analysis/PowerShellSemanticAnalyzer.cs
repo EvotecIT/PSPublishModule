@@ -95,9 +95,35 @@ internal sealed class PowerShellSemanticAnalyzer
                     AnalyzeDefiniteAssignment(loop.Body, loopState, locals, diagnostics);
                     continue;
                 }
+                if (statement is PowerShellBoundForStatement forLoop)
+                {
+                    if (forLoop.Initializer is not null)
+                    {
+                        ReportReads(forLoop.Initializer, assigned, locals, diagnostics);
+                        if (forLoop.Initializer.Operation == PowerShellBoundMutationOperator.Assign)
+                            assigned.Add(forLoop.Initializer.Target.StableKey);
+                    }
+                    if (forLoop.Condition is not null) ReportReads(forLoop.Condition, assigned, locals, diagnostics);
+                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
+                    AnalyzeDefiniteAssignment(forLoop.Body, loopState, locals, diagnostics);
+                    if (forLoop.Iterator is not null) ReportReads(forLoop.Iterator, loopState, locals, diagnostics);
+                    continue;
+                }
                 var expression = GetExpression(statement);
                 if (expression is not null) ReportReads(expression, assigned, locals, diagnostics);
-                if (statement is PowerShellBoundAssignmentStatement assignment) assigned.Add(assignment.Target.StableKey);
+                if (statement is PowerShellBoundAssignmentStatement assignment)
+                {
+                    if (assignment.Operation != PowerShellBoundMutationOperator.Assign &&
+                        locals.Contains(assignment.Target.StableKey) &&
+                        !assigned.Contains(assignment.Target.StableKey))
+                    {
+                        diagnostics.Add(new PowerShellSemanticDiagnostic(
+                            "PSD1001",
+                            $"Local variable '${assignment.Target.Name}' is read before its first definite assignment.",
+                            assignment.Span));
+                    }
+                    assigned.Add(assignment.Target.StableKey);
+                }
             }
         }
 
@@ -335,6 +361,10 @@ internal sealed class PowerShellSemanticAnalyzer
             {
                 foreach (var nested in EnumerateStatements(loop.Body)) yield return nested;
             }
+            else if (statement is PowerShellBoundForStatement forLoop)
+            {
+                foreach (var nested in EnumerateStatements(forLoop.Body)) yield return nested;
+            }
         }
     }
 
@@ -349,6 +379,12 @@ internal sealed class PowerShellSemanticAnalyzer
         else if (statement is PowerShellBoundWhileStatement loop)
         {
             yield return loop.Condition;
+        }
+        else if (statement is PowerShellBoundForStatement forLoop)
+        {
+            if (forLoop.Initializer is not null) yield return forLoop.Initializer;
+            if (forLoop.Condition is not null) yield return forLoop.Condition;
+            if (forLoop.Iterator is not null) yield return forLoop.Iterator;
         }
     }
 
@@ -374,6 +410,14 @@ internal sealed class PowerShellSemanticAnalyzer
         {
             foreach (var read in EnumerateVariableReads(unary.Operand)) yield return read;
         }
+        if (expression is PowerShellBoundMutationExpression mutation)
+        {
+            if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
+                yield return new PowerShellBoundVariableExpression(mutation.Span, mutation.Target, mutation.Type);
+            if (mutation.Value is not null)
+            foreach (var read in EnumerateVariableReads(mutation.Value))
+                yield return read;
+        }
     }
 
     private static IEnumerable<PowerShellBoundInvocationExpression> EnumerateInvocations(PowerShellBoundExpression expression)
@@ -397,6 +441,10 @@ internal sealed class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundUnaryExpression unary)
         {
             foreach (var nested in EnumerateInvocations(unary.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
+        {
+            foreach (var nested in EnumerateInvocations(mutation.Value)) yield return nested;
         }
     }
 

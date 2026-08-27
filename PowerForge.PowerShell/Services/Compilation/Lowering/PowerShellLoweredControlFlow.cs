@@ -38,6 +38,31 @@ internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStateme
     internal PowerShellLoweredStatement[] Statements { get; }
 }
 
+internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredForStatement(
+        SourceSpan span,
+        PowerShellLoweredMutationExpression? initializer,
+        PowerShellLoweredExpression? condition,
+        PowerShellLoweredMutationExpression? iterator,
+        PowerShellLoweredStatement[] statements,
+        bool declareInitializer)
+        : base(span)
+    {
+        Initializer = initializer;
+        Condition = condition;
+        Iterator = iterator;
+        Statements = statements;
+        DeclareInitializer = declareInitializer;
+    }
+
+    internal PowerShellLoweredMutationExpression? Initializer { get; }
+    internal PowerShellLoweredExpression? Condition { get; }
+    internal PowerShellLoweredMutationExpression? Iterator { get; }
+    internal PowerShellLoweredStatement[] Statements { get; }
+    internal bool DeclareInitializer { get; }
+}
+
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
     internal PowerShellLoweredBreakStatement(SourceSpan span) : base(span) { }

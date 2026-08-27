@@ -41,6 +41,34 @@ internal sealed class PowerShellBoundWhileStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock Body { get; }
 }
 
+internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundForStatement(
+        SourceSpan span,
+        PowerShellBoundMutationExpression? initializer,
+        PowerShellBoundExpression? condition,
+        PowerShellBoundMutationExpression? iterator,
+        PowerShellBoundBlock body)
+        : base(
+            span,
+            PowerShellSemanticEffect.Mutation | body.Effects,
+            (initializer?.Capabilities ?? PowerShellRequiredCapability.None) |
+            (condition?.Capabilities ?? PowerShellRequiredCapability.None) |
+            (iterator?.Capabilities ?? PowerShellRequiredCapability.None) |
+            body.Capabilities)
+    {
+        Initializer = initializer;
+        Condition = condition;
+        Iterator = iterator;
+        Body = body;
+    }
+
+    internal PowerShellBoundMutationExpression? Initializer { get; }
+    internal PowerShellBoundExpression? Condition { get; }
+    internal PowerShellBoundMutationExpression? Iterator { get; }
+    internal PowerShellBoundBlock Body { get; }
+}
+
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundBreakStatement(SourceSpan span) : base(span, PowerShellSemanticEffect.None) { }

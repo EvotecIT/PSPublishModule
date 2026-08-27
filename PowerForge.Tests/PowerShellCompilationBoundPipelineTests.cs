@@ -172,9 +172,29 @@ public sealed class PowerShellCompilationBoundPipelineTests
         Assert.IsType<PowerShellLoweredIfStatement>(statements[1]);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("string result = default!;", source, StringComparison.Ordinal);
-        Assert.Contains("result = \"yes\";", source, StringComparison.Ordinal);
-        Assert.Contains("result = \"no\";", source, StringComparison.Ordinal);
+        Assert.Contains("result = (\"yes\" ?? string.Empty);", source, StringComparison.Ordinal);
+        Assert.Contains("result = (\"no\" ?? string.Empty);", source, StringComparison.Ordinal);
         Assert.Contains("return result;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ForLoopMutationsAreBoundAndLoweredWithoutEmitterInference()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Sum { param([int] $Count) [int] $total = 0; for ([int] $index = 0; $index -lt $Count; $index++) { $total += $index }; return $total }",
+            TestPath("for-loop.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var loop = Assert.IsType<PowerShellBoundForStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForStatement));
+        Assert.Equal(PowerShellBoundMutationOperator.Assign, loop.Initializer!.Operation);
+        Assert.Equal(PowerShellBoundMutationOperator.PostIncrement, loop.Iterator!.Operation);
+        var lowered = Assert.IsType<PowerShellLoweredForStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForStatement));
+        Assert.True(lowered.DeclareInitializer);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("for (int index = 0; (index < Count); index++)", source, StringComparison.Ordinal);
+        Assert.Contains("total = checked((int)(total + index));", source, StringComparison.Ordinal);
     }
 
     [Fact]

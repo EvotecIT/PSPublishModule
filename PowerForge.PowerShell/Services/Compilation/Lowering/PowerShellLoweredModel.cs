@@ -56,19 +56,33 @@ internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatem
 
 internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredAssignmentStatement(SourceSpan span, PowerShellSymbolId target, Type clrType, PowerShellLoweredExpression value, bool declare)
+    internal PowerShellLoweredAssignmentStatement(
+        SourceSpan span,
+        PowerShellSymbolId target,
+        Type clrType,
+        PowerShellLoweredExpression value,
+        bool declare,
+        PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
+        bool normalizeNullString = false,
+        bool checkedIntegral = false)
         : base(span)
     {
         Target = target;
         ClrType = clrType;
         Value = value;
         Declare = declare;
+        Operation = operation;
+        NormalizeNullString = normalizeNullString;
+        CheckedIntegral = checkedIntegral;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal Type ClrType { get; }
     internal PowerShellLoweredExpression Value { get; }
     internal bool Declare { get; }
+    internal PowerShellBoundMutationOperator Operation { get; }
+    internal bool NormalizeNullString { get; }
+    internal bool CheckedIntegral { get; }
 }
 
 internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLoweredStatement

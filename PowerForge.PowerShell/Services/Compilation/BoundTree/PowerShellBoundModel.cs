@@ -253,15 +253,27 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundAssignmentStatement(SourceSpan span, PowerShellSymbolId target, PowerShellBoundExpression value)
+    internal PowerShellBoundAssignmentStatement(
+        SourceSpan span,
+        PowerShellSymbolId target,
+        PowerShellBoundExpression value,
+        PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
+        bool normalizeNullString = false,
+        bool checkedIntegral = false)
         : base(span, PowerShellSemanticEffect.Mutation)
     {
         Target = target;
         Value = value;
+        Operation = operation;
+        NormalizeNullString = normalizeNullString;
+        CheckedIntegral = checkedIntegral;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellBoundExpression Value { get; }
+    internal PowerShellBoundMutationOperator Operation { get; }
+    internal bool NormalizeNullString { get; }
+    internal bool CheckedIntegral { get; }
 }
 
 internal sealed class PowerShellBoundParameter

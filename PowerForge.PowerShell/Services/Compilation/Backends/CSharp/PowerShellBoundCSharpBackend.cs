@@ -86,7 +86,13 @@ internal sealed class PowerShellBoundCSharpBackend
             case PowerShellLoweredAssignmentStatement assignment:
                 builder.Append(prefix);
                 if (assignment.Declare) builder.Append(PowerShellCSharpMethodEmitter.GetTypeName(assignment.ClrType)).Append(' ');
-                builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(assignment.Target.Name)).Append(" = ").Append(EmitExpression(assignment.Value)).AppendLine(";");
+                builder.Append(EmitMutation(
+                    assignment.Target,
+                    assignment.ClrType,
+                    assignment.Operation,
+                    assignment.Value,
+                    assignment.NormalizeNullString,
+                    assignment.CheckedIntegral)).AppendLine(";");
                 return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
@@ -109,6 +115,15 @@ internal sealed class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredWhileStatement loop:
                 builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
+                EmitBlock(builder, loop.Statements, indent);
+                return;
+            case PowerShellLoweredForStatement loop:
+                var initializer = loop.Initializer is null
+                    ? string.Empty
+                    : (loop.DeclareInitializer ? PowerShellCSharpMethodEmitter.GetTypeName(loop.Initializer.TargetClrType) + " " : string.Empty) + EmitExpression(loop.Initializer);
+                var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
+                var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
+                builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
                 EmitBlock(builder, loop.Statements, indent);
                 return;
             case PowerShellLoweredBreakStatement:
@@ -139,10 +154,52 @@ internal sealed class PowerShellBoundCSharpBackend
                 $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
+            PowerShellLoweredMutationExpression mutation => EmitMutation(
+                mutation.Target,
+                mutation.TargetClrType,
+                mutation.Operation,
+                mutation.Value,
+                mutation.NormalizeNullString,
+                mutation.CheckedIntegral),
             PowerShellLoweredInvocationExpression invocation =>
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitMutation(
+        PowerShellSymbolId target,
+        Type targetType,
+        PowerShellBoundMutationOperator operation,
+        PowerShellLoweredExpression? value,
+        bool normalizeNullString,
+        bool checkedIntegral)
+    {
+        var identifier = PowerShellCSharpMethodEmitter.SanitizeIdentifier(target.Name);
+        if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
+            PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
+        {
+            var incrementSymbol = operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.PostIncrement ? "+" : "-";
+            return operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement
+                ? (incrementSymbol == "+" ? "++" : "--") + identifier
+                : identifier + (incrementSymbol == "+" ? "++" : "--");
+        }
+        if (value is null) throw new InvalidOperationException($"Mutation '{operation}' requires a value.");
+        var right = EmitExpression(value);
+        if (normalizeNullString) right = $"({right} ?? string.Empty)";
+        if (operation == PowerShellBoundMutationOperator.Assign) return $"{identifier} = {right}";
+        var symbol = operation switch
+        {
+            PowerShellBoundMutationOperator.Add => "+",
+            PowerShellBoundMutationOperator.Subtract => "-",
+            PowerShellBoundMutationOperator.Multiply => "*",
+            PowerShellBoundMutationOperator.Divide => "/",
+            PowerShellBoundMutationOperator.Remainder => "%",
+            _ => throw new InvalidOperationException($"Mutation '{operation}' has no C# rendering owner.")
+        };
+        return checkedIntegral
+            ? $"{identifier} = checked(({PowerShellCSharpMethodEmitter.GetTypeName(targetType)})({identifier} {symbol} {right}))"
+            : $"{identifier} {symbol}= {right}";
+    }
 
     private static string EmitBinary(PowerShellLoweredBinaryExpression expression)
     {

@@ -29,8 +29,12 @@ internal sealed class PowerShellTypedLowerer
             var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
+            var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
+                .Select(static assignment => assignment.Target.StableKey)
+                .ToHashSet(StringComparer.Ordinal);
             var predeclared = EnumerateNestedAssignments(function.Body)
                 .Where(localTypes.ContainsKey)
+                .Where(key => !topLevelAssignments.Contains(key))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static key => key, StringComparer.Ordinal)
                 .ToArray();
@@ -82,6 +86,10 @@ internal sealed class PowerShellTypedLowerer
             {
                 foreach (var assignment in EnumerateAssignments(loop.Body)) yield return assignment;
             }
+            else if (statement is PowerShellBoundForStatement forLoop)
+            {
+                foreach (var assignment in EnumerateAssignments(forLoop.Body)) yield return assignment;
+            }
         }
     }
 
@@ -103,6 +111,10 @@ internal sealed class PowerShellTypedLowerer
             {
                 foreach (var nested in EnumerateAssignments(loop.Body)) yield return nested;
             }
+            else if (statement is PowerShellBoundForStatement forLoop)
+            {
+                foreach (var nested in EnumerateAssignments(forLoop.Body)) yield return nested;
+            }
         }
     }
 
@@ -119,7 +131,10 @@ internal sealed class PowerShellTypedLowerer
                 assignment.Target,
                 symbolTypes[assignment.Target.StableKey],
                 LowerExpression(assignment.Value, functions),
-                localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey)),
+                localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey),
+                assignment.Operation,
+                assignment.NormalizeNullString,
+                assignment.CheckedIntegral),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
                 returned.Expression is null ? null : LowerExpression(returned.Expression, functions)),
@@ -136,10 +151,30 @@ internal sealed class PowerShellTypedLowerer
                 loop.Span,
                 LowerExpression(loop.Condition, functions),
                 LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared)),
+            PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
         };
+
+    private static PowerShellLoweredForStatement LowerFor(
+        PowerShellBoundForStatement loop,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, Type> symbolTypes,
+        IReadOnlyDictionary<string, Type> localTypes,
+        ISet<string> declared)
+    {
+        var declareInitializer = loop.Initializer is not null &&
+                                 localTypes.ContainsKey(loop.Initializer.Target.StableKey) &&
+                                 declared.Add(loop.Initializer.Target.StableKey);
+        return new PowerShellLoweredForStatement(
+            loop.Span,
+            loop.Initializer is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Initializer, functions),
+            loop.Condition is null ? null : LowerExpression(loop.Condition, functions),
+            loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions),
+            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared),
+            declareInitializer);
+    }
 
     private static PowerShellLoweredStatement[] LowerStatements(
         PowerShellBoundBlock block,
@@ -171,6 +206,15 @@ internal sealed class PowerShellTypedLowerer
                 unary.Type.ClrType,
                 unary.Operation,
                 LowerExpression(unary.Operand, functions)),
+            PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
+                mutation.Span,
+                mutation.Type.ClrType,
+                mutation.Target,
+                mutation.TargetClrType,
+                mutation.Operation,
+                mutation.Value is null ? null : LowerExpression(mutation.Value, functions),
+                mutation.NormalizeNullString,
+                mutation.CheckedIntegral),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
