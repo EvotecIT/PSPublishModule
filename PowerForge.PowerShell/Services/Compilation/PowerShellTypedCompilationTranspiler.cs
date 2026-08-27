@@ -94,7 +94,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath, basePath)));
         }
         if (parsedFiles.Count != fullPaths.Length)
-            return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
+            return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework);
         var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics);
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
@@ -215,7 +215,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics);
+        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework);
     }
 
     private static void EmitFunctionGraph(
@@ -383,7 +383,9 @@ public sealed class PowerShellTypedCompilationTranspiler
         string typeName,
         PowerShellCompiledMethod[] methods,
         string[] methodSources,
-        IEnumerable<PowerShellCompilationDiagnostic> diagnostics)
+        IEnumerable<PowerShellCompilationDiagnostic> diagnostics,
+        IEnumerable<ParsedSource> parsedFiles,
+        string? targetFramework)
     {
         var template = ReadTemplate();
         var source = template
@@ -402,7 +404,8 @@ public sealed class PowerShellTypedCompilationTranspiler
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
-            sourcePaths);
+            sourcePaths,
+            parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework)).ToArray());
     }
 
     private static string ReadTemplate()

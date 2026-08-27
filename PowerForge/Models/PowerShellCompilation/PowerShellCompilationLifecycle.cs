@@ -13,7 +13,7 @@ public enum PowerShellCompilationLifecycleExecution
 public sealed class PowerShellCompilationLifecycleContract
 {
     /// <summary>Lifecycle schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     /// <summary>Execution owner.</summary>
     public PowerShellCompilationLifecycleExecution Execution { get; set; }
     /// <summary>Whether an authored begin block exists.</summary>
@@ -24,6 +24,12 @@ public sealed class PowerShellCompilationLifecycleContract
     public bool HasEnd { get; set; }
     /// <summary>Whether an authored clean block exists.</summary>
     public bool HasClean { get; set; }
+    /// <summary>Minimum PowerShell host version required by the authored lifecycle syntax.</summary>
+    public string MinimumPowerShellVersion { get; set; } = "5.1";
+    /// <summary>Whether the original pipeline record is passed to the hosted function binder.</summary>
+    public bool PreservesOriginalPipelineRecord { get; set; }
+    /// <summary>Whether cleanup is guarded across begin, process, end, stop, and early termination.</summary>
+    public bool CleanupGuaranteed { get; set; }
     /// <summary>Whether the cmdlet accepts pipeline input by value.</summary>
     public bool ValueFromPipeline { get; set; }
     /// <summary>Whether the cmdlet accepts pipeline input by property name.</summary>
@@ -42,4 +48,43 @@ public sealed class PowerShellCompilationLifecycleContract
     public string[] PipelineParameterNames { get; set; } = Array.Empty<string>();
     /// <summary>Why this lifecycle is hosted rather than certified runtime-free.</summary>
     public string HostingReason { get; set; } = string.Empty;
+}
+
+/// <summary>Parser-owned lifecycle source bound into a neutral front-end contract.</summary>
+public sealed class PowerShellCompilationLifecycleSource
+{
+    /// <summary>Authored function name.</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Authored source file.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+    /// <summary>One-based source start line.</summary>
+    public int SourceLine { get; set; }
+    /// <summary>One-based source start column.</summary>
+    public int SourceColumn { get; set; }
+    /// <summary>One-based source end line.</summary>
+    public int SourceEndLine { get; set; }
+    /// <summary>One-based source end column.</summary>
+    public int SourceEndColumn { get; set; }
+    /// <summary>Authored function body used by the hosted adapter.</summary>
+    public string HostedBodySource { get; set; } = string.Empty;
+    /// <summary>SHA-256 of the full authored function.</summary>
+    public string SourceSha256 { get; set; } = string.Empty;
+    /// <summary>Whether begin is present.</summary>
+    public bool HasBegin { get; set; }
+    /// <summary>Whether process is present.</summary>
+    public bool HasProcess { get; set; }
+    /// <summary>Whether end is present.</summary>
+    public bool HasEnd { get; set; }
+    /// <summary>Whether clean is present.</summary>
+    public bool HasClean { get; set; }
+    /// <summary>Minimum PowerShell host version required by the authored lifecycle.</summary>
+    public string MinimumPowerShellVersion { get; set; } = "5.1";
+    /// <summary>Bound parameters.</summary>
+    public PowerShellCompilationParameter[] Parameters { get; set; } = Array.Empty<PowerShellCompilationParameter>();
+    /// <summary>Bound advanced-function metadata.</summary>
+    public PowerShellCompilationCommandBinding CommandBinding { get; set; } = new();
+    /// <summary>Bound aliases.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
+    /// <summary>Bound help.</summary>
+    public PowerShellCompilationHelp? Help { get; set; }
 }

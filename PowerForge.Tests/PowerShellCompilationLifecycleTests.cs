@@ -55,6 +55,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var lifecycle = Assert.Single(result.Manifest.Lifecycles);
         Assert.Equal(PowerShellCompilationLifecycleExecution.HostedSteppablePipeline, lifecycle.Execution);
         Assert.True(lifecycle.HasBegin && lifecycle.HasProcess && lifecycle.HasEnd && lifecycle.HasClean);
+        Assert.Equal(2, lifecycle.SchemaVersion);
+        Assert.Equal("7.3", lifecycle.MinimumPowerShellVersion);
+        Assert.True(lifecycle.PreservesOriginalPipelineRecord);
+        Assert.True(lifecycle.CleanupGuaranteed);
         Assert.True(lifecycle.ValueFromPipeline);
         Assert.True(lifecycle.ValueFromPipelineByPropertyName);
         Assert.True(lifecycle.ValueFromRemainingArguments);
@@ -101,6 +105,104 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_HybridLifecyclePreservesOriginalRecordAndCleansEveryFailurePath()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Test-RecordIdentity {
+                [CmdletBinding()] param([Parameter(ValueFromPipelineByPropertyName)][int] $Number)
+                process { "$($_.Marker)|$([object]::ReferenceEquals($_.PSObject.BaseObject, $_.Self.PSObject.BaseObject))|$Number" }
+            }
+            function Test-BeginFailure {
+                [CmdletBinding()] param([string] $CleanupPath)
+                begin { throw 'begin-failure' }
+                clean { [System.IO.File]::WriteAllText($CleanupPath, 'begin-clean') }
+            }
+            function Test-EndFailure {
+                [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Number, [string] $CleanupPath)
+                process { $Number }
+                end { throw 'end-failure' }
+                clean { [System.IO.File]::WriteAllText($CleanupPath, 'end-clean') }
+            }
+            function Test-EarlyStop {
+                [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Number, [string] $CleanupPath)
+                process { $Number }
+                clean { [System.IO.File]::WriteAllText($CleanupPath, 'stop-clean') }
+            }
+            Export-ModuleMember -Function Test-RecordIdentity,Test-BeginFailure,Test-EndFailure,Test-EarlyStop
+            """,
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Lifecycle.FailurePaths",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            TargetFramework = "net10.0"
+        });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+
+        var identity = RunModuleProof(
+            result.ArtifactPath!,
+            "$item=[pscustomobject]@{Number=7;Marker='kept';Self=$null}; $item.Self=$item; $item | Test-RecordIdentity");
+        Assert.Equal("kept|True|7", identity);
+
+        var beginPath = Path.Combine(fixture.RootPath, "begin-clean.txt");
+        var endPath = Path.Combine(fixture.RootPath, "end-clean.txt");
+        var stopPath = Path.Combine(fixture.RootPath, "stop-clean.txt");
+        var failureProof = RunModuleProof(
+            result.ArtifactPath!,
+            $"try {{ Test-BeginFailure -CleanupPath '{EscapePowerShell(beginPath)}' }} catch {{ $_.Exception.Message }}; " +
+            $"try {{ 1 | Test-EndFailure -CleanupPath '{EscapePowerShell(endPath)}' }} catch {{ $_.Exception.Message }}; " +
+            $"1..3 | Test-EarlyStop -CleanupPath '{EscapePowerShell(stopPath)}' | Select-Object -First 1; " +
+            $"Get-Content '{EscapePowerShell(beginPath)}'; Get-Content '{EscapePowerShell(endPath)}'; Get-Content '{EscapePowerShell(stopPath)}'");
+        Assert.Contains("begin-failure", failureProof, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("end-failure", failureProof, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("begin-clean" + Environment.NewLine + "end-clean" + Environment.NewLine + "stop-clean", failureProof, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_Net472LifecycleRunsOnWindowsPowerShellAndRejectsCleanBefore73()
+    {
+        if (!OperatingSystem.IsWindows() || !File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")))
+            return;
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Invoke-LegacyLifecycle {
+                [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Number)
+                begin { $total = 0 }
+                process { $total += $Number }
+                end { $total }
+            }
+            function Invoke-CleanLifecycle {
+                [CmdletBinding()] param()
+                process { 'new-host' }
+                clean { $null = 1 }
+            }
+            Export-ModuleMember -Function Invoke-LegacyLifecycle,Invoke-CleanLifecycle
+            """,
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.Lifecycle.WindowsPowerShell",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid)
+        {
+            TargetFramework = "net472"
+        });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+
+        var proof = RunWindowsPowerShellModuleProof(
+            result.ArtifactPath!,
+            "1,2 | Invoke-LegacyLifecycle; try { Invoke-CleanLifecycle } catch { $_.Exception.Message }");
+
+        Assert.StartsWith("3" + Environment.NewLine, proof, StringComparison.Ordinal);
+        Assert.Contains("requires PowerShell 7.3 or newer", proof, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_StrictBinaryModuleRejectsHostedLifecycle()
     {
         using var fixture = ArtifactFixture.Create(
@@ -120,5 +222,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(result.Succeeded);
         Assert.Contains("begin", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Strict", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string EscapePowerShell(string path)
+        => path.Replace("'", "''", StringComparison.Ordinal);
+
+    private static string RunWindowsPowerShellModuleProof(string modulePath, string command)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add($"Import-Module -Name '{EscapePowerShell(modulePath)}' -Force; {command}");
+        using var process = System.Diagnostics.Process.Start(startInfo)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "Windows PowerShell lifecycle proof timed out.");
+        Assert.Equal(0, process.ExitCode);
+        Assert.True(string.IsNullOrWhiteSpace(error), error);
+        return string.Join(Environment.NewLine, output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
     }
 }
