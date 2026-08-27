@@ -306,7 +306,8 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan? buildPlan,
         out string[] projectDirectories,
         out HashSet<string> buildInputs,
-        out HashSet<string> sourceInputs)
+        out HashSet<string> sourceInputs,
+        out NoBuildPublishInput[] noBuildPublishInputs)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         ProjectEvaluationRequest[] roots = BuildProjectEvaluationRequests(
@@ -334,6 +335,7 @@ public sealed partial class DotNetPublishPipelineRunner
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
+        noBuildPublishInputs = Array.Empty<NoBuildPublishInput>();
 
         foreach (ProjectEvaluationRequest root in roots)
         {
@@ -473,6 +475,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var provenNoBuildPublishInputsByEvaluation =
             new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var provenNoBuildPublishInputs = new List<NoBuildPublishInput>();
         bool IsTrustedSdkGeneratedOutput(string path)
             => generatedRootsByEvaluation.Keys.Any(ownerKey =>
                 IsTrustedSdkGeneratedPublishInput(
@@ -500,6 +503,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 provenNoBuildPublishInputsByEvaluation[evaluationKey] =
                     new HashSet<string>(trustedInputs, comparison);
+                provenNoBuildPublishInputs.AddRange(group
+                    .Where(entry => entry.Input.IsSdkDefined &&
+                        entry.Input.IsControlledEquivalent &&
+                        !string.IsNullOrWhiteSpace(entry.Input.ControlledSha256) &&
+                        IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
+                    .Select(entry => new NoBuildPublishInput(
+                        evaluationKey,
+                        entry.Input.FullPath,
+                        entry.Input.RelativePath,
+                        entry.Input.Metadata,
+                        entry.Input.ControlledSha256!)));
             }
         }
 
@@ -568,6 +582,12 @@ public sealed partial class DotNetPublishPipelineRunner
             sourceInputs.Add(output.OutputPath);
         }
 
+        noBuildPublishInputs = provenNoBuildPublishInputs
+            .GroupBy(
+                input => input.EvaluationKey + "\0" + input.FullPath + "\0" + input.RelativePath,
+                StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
         projectDirectories = directories.ToArray();
         return true;
     }

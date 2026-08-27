@@ -93,6 +93,20 @@ public sealed partial class DotNetPublishPipelineRunner
                     foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
                         changed |= reachable.Add(destination);
                 }
+
+                foreach (XElement onError in target.Descendants().Where(element =>
+                             element.Name.LocalName.Equals("OnError", StringComparison.OrdinalIgnoreCase)))
+                {
+                    string? destinations = onError.Attribute("ExecuteTargets")?.Value;
+                    if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
+                    {
+                        reachableDocument = new XDocument();
+                        reachableDocuments = Array.Empty<XDocument>();
+                        return false;
+                    }
+                    foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
+                        changed |= reachable.Add(destination);
+                }
             }
         }
         while (changed);

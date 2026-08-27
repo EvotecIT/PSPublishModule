@@ -610,9 +610,23 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             return fileName;
 
-        string path = ActiveDotNetExecutablePath.Value ?? ResolveRunDotNetExecutablePath();
-        ValidateDotNetExecutableSnapshot(path, ActiveDotNetExecutableSha256.Value);
-        return path;
+        string? path = ActiveDotNetExecutablePath.Value;
+        string? expectedSha256 = ActiveDotNetExecutableSha256.Value;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = ResolveRunDotNetExecutablePath();
+            string sha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+            ValidateDotNetExecutableSnapshot(path, sha256);
+            expectedSha256 = sha256;
+            if (ActiveToolSnapshotScope.Value)
+            {
+                ActiveDotNetExecutablePath.Value = path;
+                ActiveDotNetExecutableSha256.Value = sha256;
+            }
+        }
+        string resolvedPath = path!;
+        ValidateDotNetExecutableSnapshot(resolvedPath, expectedSha256);
+        return resolvedPath;
     }
 
     internal static string ResolveRunGitExecutablePath()
@@ -654,9 +668,23 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
             return fileName;
 
-        string path = ActiveGitExecutablePath.Value ?? ResolveRunGitExecutablePath();
-        ValidateGitExecutableSnapshot(path, ActiveGitExecutableSha256.Value);
-        return path;
+        string? path = ActiveGitExecutablePath.Value;
+        string? expectedSha256 = ActiveGitExecutableSha256.Value;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = ResolveRunGitExecutablePath();
+            string sha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+            ValidateGitExecutableSnapshot(path, sha256);
+            expectedSha256 = sha256;
+            if (ActiveToolSnapshotScope.Value)
+            {
+                ActiveGitExecutablePath.Value = path;
+                ActiveGitExecutableSha256.Value = sha256;
+            }
+        }
+        string resolvedPath = path!;
+        ValidateGitExecutableSnapshot(resolvedPath, expectedSha256);
+        return resolvedPath;
     }
 
     internal static void ValidateGitExecutableSnapshot(string path, string? expectedSha256)
@@ -706,10 +734,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static void ValidateNativeAotEnvironmentVariables(DotNetPublishPlan plan)
     {
-        bool hasNativeAot = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
-            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
-            .Any(combination => combination.Style == DotNetPublishStyle.AotSpeed ||
-                                combination.Style == DotNetPublishStyle.AotSize);
+        bool hasNativeAot = PlanUsesNativeAot(plan);
         if (hasNativeAot &&
             plan.EnvironmentVariables.TryGetValue("PATH", out string? path) &&
             !string.IsNullOrWhiteSpace(path))
@@ -718,6 +743,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 "An explicit PATH is not allowed for NativeAOT publish because it can replace native compiler or linker tools.");
         }
     }
+
+    private static bool PlanUsesNativeAot(DotNetPublishPlan plan)
+        => (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .Any(combination => combination.Style == DotNetPublishStyle.AotSpeed ||
+                                combination.Style == DotNetPublishStyle.AotSize);
 
     internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables)
@@ -752,6 +783,8 @@ public sealed partial class DotNetPublishPipelineRunner
         values["DOTNET_MULTILEVEL_LOOKUP"] = "0";
         foreach (string name in DisabledUserMsBuildImportEnvironmentVariables)
             values[name] = "false";
+        if (ActiveNativeAotPublish.Value)
+            values["PATH"] = Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"));
         return values;
     }
 

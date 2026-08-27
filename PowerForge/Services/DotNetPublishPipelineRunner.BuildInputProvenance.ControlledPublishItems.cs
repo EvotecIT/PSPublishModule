@@ -220,12 +220,18 @@ public sealed partial class DotNetPublishPipelineRunner
                     File.Exists(originalInputPath) &&
                     File.Exists(item.FullPath) &&
                     AreControlledGeneratedOutputsEquivalent(originalInputPath, item.FullPath);
+                string? controlledSha256 = isControlledEquivalent
+                    ? ComputeSha256Hex(File.ReadAllBytes(item.FullPath))
+                    : null;
                 if (isSdkDefined && !proveControlledGeneratedInputs)
                     continue;
                 results.Add(new EvaluatedPublishInput(
                     originalInputPath,
+                    relativePath,
+                    item.Metadata,
                     isSdkDefined,
-                    isControlledEquivalent));
+                    isControlledEquivalent,
+                    controlledSha256));
             }
 
             publishInputs = results.ToArray();

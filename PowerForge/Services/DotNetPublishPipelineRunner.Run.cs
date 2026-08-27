@@ -37,6 +37,13 @@ public sealed partial class DotNetPublishPipelineRunner
         string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
         string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
         string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
+        bool previousNativeAotPublish = ActiveNativeAotPublish.Value;
+        bool previousToolSnapshotScope = ActiveToolSnapshotScope.Value;
+        ActiveDotNetExecutablePath.Value = null;
+        ActiveDotNetExecutableSha256.Value = null;
+        ActiveGitExecutablePath.Value = null;
+        ActiveGitExecutableSha256.Value = null;
+        ActiveToolSnapshotScope.Value = true;
         _cancellationToken.Value = cancellationToken;
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
@@ -59,19 +66,19 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            ActiveDotNetExecutablePath.Value = ResolveRunDotNetExecutablePath();
-            ActiveDotNetExecutableSha256.Value = ComputeSha256Hex(
-                File.ReadAllBytes(ActiveDotNetExecutablePath.Value));
-            ActiveGitExecutablePath.Value = ResolveRunGitExecutablePath();
-            ActiveGitExecutableSha256.Value = ComputeSha256Hex(
-                File.ReadAllBytes(ActiveGitExecutablePath.Value));
             ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
             ValidateNativeAotEnvironmentVariables(plan);
-            cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
-                plan.ProjectRoot,
-                EnumerateTrackedGeneratedProvenancePaths(
-                    plan,
-                    Array.Empty<DotNetPublishMsiBuildResult>()));
+            ValidateTrackedGeneratedProvenancePaths(plan);
+            ActiveNativeAotPublish.Value = PlanUsesNativeAot(plan);
+            if ((plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                .Any(step => step.Kind == DotNetPublishStepKind.Manifest))
+            {
+                cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
+                    plan.ProjectRoot,
+                    EnumerateTrackedGeneratedProvenancePaths(
+                        plan,
+                        Array.Empty<DotNetPublishMsiBuildResult>()));
+            }
 
             foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
             {
@@ -103,17 +110,29 @@ public sealed partial class DotNetPublishPipelineRunner
                             Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
+                        {
                             // Bind provenance to the project-reference bytes available immediately
-                            // after BeforeTargetPublish hooks and before dotnet publish consumes them.
-                            _ = ReadPortableInventorySourceProvenance(plan);
+                            // after BeforeTargetPublish hooks and make the real no-build publish consume
+                            // private snapshots of the bytes proven by the detached rebuild.
+                            SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan);
+                            using NoBuildPublishInputSnapshot? inputSnapshot =
+                                CreateNoBuildPublishInputSnapshot(
+                                    plan,
+                                    step.TargetName!,
+                                    step.Framework ?? string.Empty,
+                                    step.Runtime!,
+                                    step.Style,
+                                    provenance);
                             artefacts.Add(Publish(
                                 plan,
                                 step.TargetName!,
                                 step.Framework ?? string.Empty,
                                 step.Runtime!,
                                 step.Style,
-                                msiReservationOwner));
+                                msiReservationOwner,
+                                inputSnapshot));
                             break;
+                        }
                         case DotNetPublishStepKind.Bundle:
                             artefacts.Add(BuildBundle(plan, artefacts, step));
                             break;
@@ -279,6 +298,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
                 ActiveGitExecutablePath.Value = previousGitExecutablePath;
                 ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
+                ActiveNativeAotPublish.Value = previousNativeAotPublish;
+                ActiveToolSnapshotScope.Value = previousToolSnapshotScope;
             }
         }
     }

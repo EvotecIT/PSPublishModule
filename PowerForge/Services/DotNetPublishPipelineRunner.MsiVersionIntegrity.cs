@@ -270,7 +270,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray(),
-            dirtyReasons.ToArray());
+            dirtyReasons.ToArray(),
+            dirtyScope.NoBuildPublishInputs);
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -552,6 +553,22 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (var msiBuild in msiBuilds)
             yield return msiBuild.VersionStatePath ?? string.Empty;
+    }
+
+    private static void ValidateTrackedGeneratedProvenancePaths(DotNetPublishPlan plan)
+    {
+        foreach (var candidate in EnumerateTrackedGeneratedProvenancePaths(
+                     plan,
+                     Array.Empty<DotNetPublishMsiBuildResult>()))
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            _ = Path.GetFullPath(
+                Path.IsPathRooted(candidate)
+                    ? candidate
+                    : Path.Combine(plan.ProjectRoot, candidate));
+        }
     }
 
     internal static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
@@ -937,12 +954,14 @@ public sealed partial class DotNetPublishPipelineRunner
             string? revision,
             bool? dirty,
             string[]? dirtyPaths = null,
-            string[]? dirtyReasons = null)
+            string[]? dirtyReasons = null,
+            NoBuildPublishInput[]? noBuildPublishInputs = null)
         {
             Revision = revision;
             Dirty = dirty;
             DirtyPaths = dirtyPaths ?? Array.Empty<string>();
             DirtyReasons = dirtyReasons ?? Array.Empty<string>();
+            NoBuildPublishInputs = noBuildPublishInputs ?? Array.Empty<NoBuildPublishInput>();
         }
 
         public string? Revision { get; }
@@ -952,6 +971,8 @@ public sealed partial class DotNetPublishPipelineRunner
         public string[] DirtyPaths { get; }
 
         public string[] DirtyReasons { get; }
+
+        internal NoBuildPublishInput[] NoBuildPublishInputs { get; }
     }
 
     private sealed class MsiVersionStateWrite

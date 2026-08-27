@@ -298,7 +298,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string framework,
         string rid,
         DotNetPublishStyle? styleOverride,
-        string reservationOwner)
+        string reservationOwner,
+        NoBuildPublishInputSnapshot? inputSnapshot)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
@@ -368,10 +369,19 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Info($"Using staging publish dir -> {publishDir}");
         }
 
-        var publishArgs = BuildPublishArguments(plan, target, tfm, rid, style, publishDir, reservationOwner);
+        var publishArgs = BuildPublishArguments(
+            plan,
+            target,
+            tfm,
+            rid,
+            style,
+            publishDir,
+            reservationOwner,
+            inputSnapshot?.TargetsPath);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
         RunDotnet(plan.ProjectRoot, publishArgs, plan.EnvironmentVariables);
+        inputSnapshot?.ValidateUnchanged();
 
         var cleanup = ApplyCleanup(publishDir, target.Publish);
 
@@ -555,7 +565,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string runtime,
         DotNetPublishStyle style,
         string outputDir,
-        string? reservationOwner = null)
+        string? reservationOwner = null,
+        string? noBuildInputTargetsPath = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
@@ -567,22 +578,30 @@ public sealed partial class DotNetPublishPipelineRunner
             "-c", plan.Configuration,
             "--nologo",
             "-f", framework,
-            "--runtime", runtime,
             "--output", outputDir
         };
+
+        if (!string.IsNullOrWhiteSpace(runtime))
+        {
+            publishArgs.Add("--runtime");
+            publishArgs.Add(runtime);
+        }
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
         if (plan.NoBuildInPublish && !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);
-        publishArgs.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildPropertiesForRun(
+        Dictionary<string, string> properties = BuildPublishMsBuildPropertiesForRun(
             plan,
             target,
             framework,
             runtime,
             style,
-            reservationOwner)));
+            reservationOwner);
+        if (!string.IsNullOrWhiteSpace(noBuildInputTargetsPath))
+            properties["CustomAfterMicrosoftCommonTargets"] = noBuildInputTargetsPath!;
+        publishArgs.AddRange(BuildMsBuildPropertyArgs(properties));
         return publishArgs;
     }
 

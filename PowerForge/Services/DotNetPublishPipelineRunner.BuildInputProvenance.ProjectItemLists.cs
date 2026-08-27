@@ -23,19 +23,58 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal EvaluatedPublishInput(
             string fullPath,
+            string relativePath,
+            IReadOnlyDictionary<string, string> metadata,
             bool isSdkDefined,
-            bool isControlledEquivalent = false)
+            bool isControlledEquivalent = false,
+            string? controlledSha256 = null)
         {
             FullPath = fullPath;
+            RelativePath = relativePath;
+            Metadata = metadata;
             IsSdkDefined = isSdkDefined;
             IsControlledEquivalent = isControlledEquivalent;
+            ControlledSha256 = controlledSha256;
         }
 
         internal string FullPath { get; }
 
+        internal string RelativePath { get; }
+
+        internal IReadOnlyDictionary<string, string> Metadata { get; }
+
         internal bool IsSdkDefined { get; }
 
         internal bool IsControlledEquivalent { get; }
+
+        internal string? ControlledSha256 { get; }
+    }
+
+    internal sealed class NoBuildPublishInput
+    {
+        internal NoBuildPublishInput(
+            string evaluationKey,
+            string fullPath,
+            string relativePath,
+            IReadOnlyDictionary<string, string> metadata,
+            string sha256)
+        {
+            EvaluationKey = evaluationKey;
+            FullPath = fullPath;
+            RelativePath = relativePath;
+            Metadata = metadata;
+            Sha256 = sha256;
+        }
+
+        internal string EvaluationKey { get; }
+
+        internal string FullPath { get; }
+
+        internal string RelativePath { get; }
+
+        internal IReadOnlyDictionary<string, string> Metadata { get; }
+
+        internal string Sha256 { get; }
     }
 
     private sealed class ControlledPublishGraphNode
