@@ -98,6 +98,10 @@ internal sealed class PowerShellBoundCSharpBackend
             case PowerShellLoweredIndexAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");
                 return;
+            case PowerShellLoweredClrMemberAssignmentStatement assignment:
+                builder.Append(prefix).Append('(').Append(EmitExpression(assignment.Receiver)).Append(").")
+                    .Append(assignment.MemberName).Append(" = ").Append(EmitExpression(assignment.Value)).AppendLine(";");
+                return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
                 return;

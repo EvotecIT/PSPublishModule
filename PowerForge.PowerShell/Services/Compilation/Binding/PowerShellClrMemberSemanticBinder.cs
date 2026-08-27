@@ -9,6 +9,59 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellClrMemberSemanticBinder
 {
+    internal static PowerShellBoundClrMemberAssignmentStatement? BindAssignment(
+        ParsedSourceDocument document,
+        AssignmentStatementAst syntax,
+        MemberExpressionAst memberSyntax,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        string? targetFramework,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (syntax.Operator.ToString() != "Equals" || memberSyntax.Expression is not VariableExpressionAst)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2614", "Typed CLR member mutation requires simple '=' assignment to a local or parameter receiver.", span));
+            return null;
+        }
+        if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)
+            return null;
+        if (!target.Type.IsValueType && !target.IsKnownNonNull)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime error identity.", span));
+            return null;
+        }
+        if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
+        var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
+            .Where(member => IsSupportedMember(member, targetFramework))
+            .Where(static member => member switch
+            {
+                PropertyInfo property => property.GetMethod is { IsPublic: true } && property.SetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0,
+                FieldInfo field => !field.IsInitOnly && !field.IsLiteral,
+                _ => false
+            })
+            .ToArray();
+        if (members.Length != 1)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2616", members.Length == 0
+                ? $"CLR member '{target.Type.FullName}.{name}' was not found as one target-compatible readable and writable member."
+                : $"Writable CLR member '{target.Type.FullName}.{name}' is ambiguous.", span));
+            return null;
+        }
+        if (members[0] is PropertyInfo && PowerShellRuntimeExceptionCatchPolicy.Contains(memberSyntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2617", $"CLR property assignment '{target.Type.FullName}.{members[0].Name}' inside a RuntimeException catch cannot preserve PowerShell error wrapping.", span));
+            return null;
+        }
+        var memberType = members[0] is PropertyInfo property ? property.PropertyType : ((FieldInfo)members[0]).FieldType;
+        var value = bindExpression(syntax.Right, memberType);
+        if (value is null || !PowerShellGeneratedTypePolicy.IsSupported(memberType, targetFramework) || !PowerShellClrTypeSemantics.CanAssign(memberType, value.Type.ClrType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2618", $"Member assignment value is not assignable to '{memberType.FullName}'.", value?.Span ?? span));
+            return null;
+        }
+        return new PowerShellBoundClrMemberAssignmentStatement(span, target.Receiver!, target.Type, members[0].Name, value);
+    }
+
     internal static PowerShellBoundExpression? BindMember(
         ParsedSourceDocument document,
         MemberExpressionAst syntax,
@@ -257,7 +310,8 @@ internal static class PowerShellClrMemberSemanticBinder
     }
 
     private static bool IsKnownNonNull(PowerShellBoundExpression expression)
-        => expression is PowerShellBoundLiteralExpression { Value: not null } or PowerShellBoundArrayExpression ||
+        => expression.ValueState == PowerShellValueState.Known && !expression.Type.ClrType.IsValueType ||
+           expression is PowerShellBoundLiteralExpression { Value: not null } or PowerShellBoundArrayExpression ||
            expression is PowerShellBoundClrInvocationExpression { InvocationKind: PowerShellClrInvocationKind.Constructor };
 
     private static bool IsSupportedMember(MemberInfo member, string? targetFramework)

@@ -8,10 +8,18 @@ internal sealed class PowerShellSemanticSymbolBinding
     {
         Symbol = symbol;
         Type = type;
+        ValueState = PowerShellValueState.Unknown;
     }
 
     internal PowerShellSymbolId Symbol { get; }
-    internal PowerShellTypeFact Type { get; }
+    internal PowerShellTypeFact Type { get; private set; }
+    internal PowerShellValueState ValueState { get; private set; }
+
+    internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState)
+    {
+        if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
+        ValueState = valueState;
+    }
 }
 
 /// <summary>Owns local and parameter mutation semantics.</summary>
@@ -38,8 +46,15 @@ internal static class PowerShellMutationSemanticBinder
         };
         if (operation is null) return null;
         var targetType = target.Type.ClrType;
-        var value = bindExpression(syntax.Right, targetType);
+        var value = bindExpression(syntax.Right, target.Type.Provenance == PowerShellTypeFactProvenance.Unknown ? null : targetType);
         if (value is null) return null;
+        if (operation == PowerShellBoundMutationOperator.Assign)
+        {
+            target.Refine(
+                new PowerShellTypeFact(value.Type.ClrType, PowerShellTypeFactProvenance.Inferred, $"The first bound assignment to '${target.Symbol.Name}' provides a stable CLR representation."),
+                value.ValueState);
+            targetType = target.Type.ClrType;
+        }
         if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2401", $"Assignment requires PowerShell conversion from '{value.Type.ClrType.FullName}' to '{targetType.FullName}', which is not an implicit CLR conversion.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));

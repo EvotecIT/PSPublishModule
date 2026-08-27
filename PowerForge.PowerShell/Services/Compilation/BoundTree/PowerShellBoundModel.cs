@@ -193,8 +193,8 @@ internal sealed class PowerShellBoundLiteralExpression : PowerShellBoundExpressi
 
 internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundVariableExpression(SourceSpan span, PowerShellSymbolId symbol, PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+    internal PowerShellBoundVariableExpression(SourceSpan span, PowerShellSymbolId symbol, PowerShellTypeFact type, PowerShellValueState valueState = PowerShellValueState.Unknown)
+        : base(span, type, valueState)
     {
         Symbol = symbol;
     }

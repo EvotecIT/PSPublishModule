@@ -55,7 +55,7 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         PowerShellBoundExpression[] arguments,
         Type[] parameterTypes,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(span, type, invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown)
     {
         DeclaringType = declaringType;
         MemberName = memberName;
@@ -73,4 +73,26 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
     internal PowerShellBoundExpression[] Arguments { get; }
     internal Type[] ParameterTypes { get; }
+}
+
+internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundClrMemberAssignmentStatement(
+        SourceSpan span,
+        PowerShellBoundExpression receiver,
+        Type declaringType,
+        string memberName,
+        PowerShellBoundExpression value)
+        : base(span, PowerShellSemanticEffect.Mutation)
+    {
+        Receiver = receiver;
+        DeclaringType = declaringType;
+        MemberName = memberName;
+        Value = value;
+    }
+
+    internal PowerShellBoundExpression Receiver { get; }
+    internal Type DeclaringType { get; }
+    internal string MemberName { get; }
+    internal PowerShellBoundExpression Value { get; }
 }

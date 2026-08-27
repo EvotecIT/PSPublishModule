@@ -454,6 +454,11 @@ internal sealed class PowerShellSemanticAnalyzer
             yield return indexAssignment.Index;
             yield return indexAssignment.Value;
         }
+        else if (statement is PowerShellBoundClrMemberAssignmentStatement memberAssignment)
+        {
+            yield return memberAssignment.Receiver;
+            yield return memberAssignment.Value;
+        }
         else if (statement is PowerShellBoundIfStatement conditional)
         {
             foreach (var clause in conditional.Clauses) yield return clause.Condition;

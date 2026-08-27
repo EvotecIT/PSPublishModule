@@ -327,6 +327,25 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ConstructorInitializedLocalRefinesBeforeMemberMutation()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-ShortName { $builder = [System.Text.StringBuilder]::new('Ada'); $builder.Length = 1; return $builder.ToString() }",
+            TestPath("member-mutation.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Equal(typeof(System.Text.StringBuilder), Assert.Single(function.Locals).Type.ClrType);
+        Assert.IsType<PowerShellBoundClrMemberAssignmentStatement>(function.Body.Statements[1]);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("StringBuilder builder = new global::System.Text.StringBuilder(\"Ada\");", source, StringComparison.Ordinal);
+        Assert.Contains("(builder).Length = 1;", source, StringComparison.Ordinal);
+        Assert.Contains("return (builder).ToString();", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IndexedReadsAndMutationsFlowThroughCollectionIr()
     {
         var document = PowerShellSourceParser.Parse(

@@ -187,6 +187,12 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(assignment.Index, functions),
                 LowerExpression(assignment.Value, functions),
                 assignment.Kind),
+            PowerShellBoundClrMemberAssignmentStatement assignment => new PowerShellLoweredClrMemberAssignmentStatement(
+                assignment.Span,
+                LowerExpression(assignment.Receiver, functions),
+                assignment.DeclaringType,
+                assignment.MemberName,
+                LowerExpression(assignment.Value, functions)),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
                 returned.Expression is null ? null : LowerExpression(returned.Expression, functions)),

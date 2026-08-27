@@ -118,6 +118,9 @@ internal sealed class PowerShellSemanticBinder
             statements.Add(bound);
         }
 
+        var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
+        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
+
         var body = new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray());
         var scopeSymbols = parameters.Select(static parameter => parameter.Symbol)
             .Concat(locals.Select(static local => local.Symbol))
@@ -254,6 +257,16 @@ internal sealed class PowerShellSemanticBinder
                     assignment,
                     index,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    diagnostics);
+            }
+            if (assignment.Left is MemberExpressionAst member)
+            {
+                return PowerShellClrMemberSemanticBinder.BindAssignment(
+                    document,
+                    assignment,
+                    member,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    targetFramework,
                     diagnostics);
             }
             var mutation = PowerShellMutationSemanticBinder.BindAssignment(
@@ -589,7 +602,7 @@ internal sealed class PowerShellSemanticBinder
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, null, LiteralType(typeof(object), "$null has no narrower CLR representation."), PowerShellValueState.Null);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
-                return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type);
+                return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type, symbol.ValueState);
             case ConvertExpressionAst conversion when PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion):
                 return PowerShellDictionarySemanticBinder.BindLiteral(
                     document,

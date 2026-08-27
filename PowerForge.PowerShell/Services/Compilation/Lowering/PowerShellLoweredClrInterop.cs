@@ -57,3 +57,20 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
     internal PowerShellLoweredExpression[] Arguments { get; }
     internal Type[] ParameterTypes { get; }
 }
+
+internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredClrMemberAssignmentStatement(SourceSpan span, PowerShellLoweredExpression receiver, Type declaringType, string memberName, PowerShellLoweredExpression value)
+        : base(span)
+    {
+        Receiver = receiver;
+        DeclaringType = declaringType;
+        MemberName = memberName;
+        Value = value;
+    }
+
+    internal PowerShellLoweredExpression Receiver { get; }
+    internal Type DeclaringType { get; }
+    internal string MemberName { get; }
+    internal PowerShellLoweredExpression Value { get; }
+}
