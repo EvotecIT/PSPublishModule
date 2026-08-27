@@ -21,7 +21,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         {
             File.WriteAllText(Path.Combine(root, "App.proj"), $$"""
                 <Project>
-                  <Target Name="Discover"><{{taskName}} /></Target>
+                  <Target Name="Discover" BeforeTargets="Build"><{{taskName}} /></Target>
                 </Project>
                 """);
 

@@ -9,6 +9,7 @@ public sealed partial class DotNetPublishPipelineRunner
         JsonElement properties,
         string projectDirectory,
         IEnumerable<string> packageRoots,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         Dictionary<string, string> hashes,
         HashSet<string> sdkManagedPackageKeys)
     {
@@ -50,6 +51,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     AddAutoReferencedPackageHash(
                         library,
                         autoReferenced,
+                        committedPackageHashes,
                         hashes,
                         sdkManagedPackageKeys);
             }
@@ -58,6 +60,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 AddSdkDownloadPackageHash(
                     download,
                     packageRoots,
+                    committedPackageHashes,
                     hashes,
                     sdkManagedPackageKeys);
         }
@@ -100,6 +103,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AddAutoReferencedPackageHash(
         JsonProperty library,
         HashSet<string> autoReferenced,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         Dictionary<string, string> hashes,
         HashSet<string> sdkManagedPackageKeys)
     {
@@ -119,12 +123,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         string packageKey = packageId + "|" + library.Name.Substring(separator + 1);
         AddPackageHash(packageKey, sha512.GetString(), hashes);
-        AddSdkManagedPackageKey(packageKey, sha512.GetString(), hashes, sdkManagedPackageKeys);
+        AddSdkManagedPackageKey(
+            packageKey,
+            sha512.GetString(),
+            committedPackageHashes,
+            sdkManagedPackageKeys);
     }
 
     private static void AddSdkDownloadPackageHash(
         string packageKey,
         IEnumerable<string> packageRoots,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         Dictionary<string, string> hashes,
         HashSet<string> sdkManagedPackageKeys)
     {
@@ -172,17 +181,21 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         AddPackageHash(packageKey, discoveredHash, hashes);
-        AddSdkManagedPackageKey(packageKey, discoveredHash, hashes, sdkManagedPackageKeys);
+        AddSdkManagedPackageKey(
+            packageKey,
+            discoveredHash,
+            committedPackageHashes,
+            sdkManagedPackageKeys);
     }
 
     private static void AddSdkManagedPackageKey(
         string packageKey,
         string? expectedHash,
-        IReadOnlyDictionary<string, string> hashes,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
         HashSet<string> sdkManagedPackageKeys)
     {
         if (!string.IsNullOrWhiteSpace(expectedHash) &&
-            hashes.TryGetValue(packageKey, out string? actualHash) &&
+            committedPackageHashes.TryGetValue(packageKey, out string? actualHash) &&
             string.Equals(actualHash, expectedHash, StringComparison.Ordinal))
         {
             sdkManagedPackageKeys.Add(packageKey);

@@ -389,12 +389,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal static VerifiedPackageInputCatalog? TryCreate(
+        internal static bool TryCreate(
             string projectPath,
             JsonElement properties,
             IEnumerable<string> packageRoots,
-            VerifiedPackageArchiveCache archives)
+            VerifiedPackageArchiveCache archives,
+            out VerifiedPackageInputCatalog? catalog)
         {
+            catalog = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
             string lockFilePath = ReadEvaluatedPath(properties, "NuGetLockFilePath", projectDirectory)
                 ?? Path.Combine(projectDirectory, "packages.lock.json");
@@ -415,31 +417,38 @@ public sealed partial class DotNetPublishPipelineRunner
                     allRoots.Add(Path.GetFullPath(defaultPackages));
             }
 
-            TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
+            bool hasCommittedLock = TryReadLockedPackageHashes(
+                lockFilePath,
+                out Dictionary<string, string> hashes);
+            var committedPackageHashes = new Dictionary<string, string>(
+                hashes,
+                StringComparer.OrdinalIgnoreCase);
             var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AddSdkManagedPackageHashes(
                 properties,
                 projectDirectory,
                 allRoots,
+                committedPackageHashes,
                 hashes,
                 sdkManagedPackageKeys);
             if (allRoots.Count == 0)
-                return null;
+                return !hasCommittedLock && hashes.Count == 0;
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
                     hashes,
                     archives,
                     out Dictionary<string, string> archivePathsByPackageKey))
             {
-                return null;
+                return false;
             }
 
-            return new VerifiedPackageInputCatalog(
+            catalog = new VerifiedPackageInputCatalog(
                 allRoots,
                 hashes,
                 archives,
                 archivePathsByPackageKey,
                 sdkManagedPackageKeys);
+            return true;
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)

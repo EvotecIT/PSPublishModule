@@ -176,15 +176,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string? previous = Environment.GetEnvironmentVariable("POWERFORGE_GIT_PATH");
         try
         {
-            string sourcePath = Environment.ProcessPath!;
+            Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out string sourcePath));
             string configuredPath = Path.Combine(root, OperatingSystem.IsWindows() ? "configured-git.exe" : "configured-git");
             File.Copy(sourcePath, configuredPath);
             Environment.SetEnvironmentVariable("POWERFORGE_GIT_PATH", configuredPath);
 
-            Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out string resolvedPath));
-            Assert.Equal(Path.GetFullPath(configuredPath), resolvedPath, OperatingSystem.IsWindows()
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out string resolvedPath));
+                Assert.Equal(Path.GetFullPath(configuredPath), resolvedPath, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                Assert.False(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out _));
+            }
         }
         finally
         {

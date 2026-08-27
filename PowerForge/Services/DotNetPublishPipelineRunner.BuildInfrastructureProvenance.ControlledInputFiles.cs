@@ -222,7 +222,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             return !controlledDocuments.Any(document =>
-                ContainsUncontrolledControlledBuildTask(document, controlledDocuments));
+                ContainsUncontrolledControlledBuildTask(
+                    document,
+                    controlledDocuments,
+                    evaluatedGlobalProperties));
         }
         catch
         {
@@ -349,13 +352,25 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool ContainsUncontrolledControlledBuildTask(
         XDocument document,
-        IReadOnlyCollection<XDocument> relatedDocuments)
+        IReadOnlyCollection<XDocument> relatedDocuments,
+        IReadOnlyDictionary<string, string>? evaluatedProperties = null)
     {
-        return ContainsUncontrolledImportActivation(document) ||
-               ContainsUncontrolledTaskInputPropertyFunction(document, relatedDocuments) ||
-               ContainsUncontrolledSdkTaskExecutionOverride(document) ||
-               ContainsUncontrolledCompilerOptionOverride(document) ||
-               document.Descendants().Any(element =>
+        evaluatedProperties ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!TryCreateReachableControlledBuildDocuments(
+                document,
+                relatedDocuments,
+                evaluatedProperties,
+                out XDocument reachableDocument,
+                out XDocument[] reachableDocuments))
+        {
+            return true;
+        }
+
+        return ContainsUncontrolledImportActivation(reachableDocument) ||
+               ContainsUncontrolledTaskInputPropertyFunction(reachableDocument, reachableDocuments) ||
+               ContainsUncontrolledSdkTaskExecutionOverride(reachableDocument) ||
+               ContainsUncontrolledCompilerOptionOverride(reachableDocument) ||
+               reachableDocument.Descendants().Any(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
              (!IsModeledControlledBuildTask(element.Name.LocalName) ||

@@ -89,7 +89,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(projectPath, "<Project><Import Project=\"payload.xml\" /></Project>");
             File.WriteAllText(importedPath, """
                 <Project>
-                  <Target Name="Imported"><Exec Command="echo imported" /></Target>
+                  <Target Name="Imported" BeforeTargets="Build"><Exec Command="echo imported" /></Target>
                 </Project>
                 """);
 

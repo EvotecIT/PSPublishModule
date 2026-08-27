@@ -109,7 +109,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         {
             File.WriteAllText(Path.Combine(root, "App.proj"), $"""
                 <Project>
-                  <Target Name="Compile">
+                  <Target Name="Compile" BeforeTargets="Build">
                     <Csc EnvironmentVariables="{environmentVariables}" />
                   </Target>
                 </Project>

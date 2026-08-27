@@ -822,11 +822,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                verifiedPackages = VerifiedPackageInputCatalog.TryCreate(
+                if (!VerifiedPackageInputCatalog.TryCreate(
                         request.ProjectPath,
                         properties,
                         packageRoots,
-                        verifiedPackageArchives);
+                        verifiedPackageArchives,
+                        out verifiedPackages))
+                {
+                    return false;
+                }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
                     Path.GetDirectoryName(request.ProjectPath)!);
@@ -1192,6 +1196,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 !string.IsNullOrWhiteSpace(ActiveDotNetExecutablePath.Value))
             {
                 effectiveFileName = ResolveDotNetChildExecutable("dotnet");
+            }
+            else if (fileName.Equals("git", StringComparison.OrdinalIgnoreCase) &&
+                     !string.IsNullOrWhiteSpace(ActiveGitExecutablePath.Value))
+            {
+                effectiveFileName = ResolveGitChildExecutable("git");
             }
             else if (!TryResolveTrustedBuildTool(fileName, out effectiveFileName))
                 return (-1, string.Empty, "Trusted build tool could not be resolved.", false);

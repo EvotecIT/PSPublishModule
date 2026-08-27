@@ -25,7 +25,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     !HasSinglePhysicalLink(fullPath) ||
                     (toolName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
                      (!IsUsableDotNetInstallation(fullPath) ||
-                      !IsIndependentlyTrustedDotNetExecutable(fullPath))))
+                      !IsIndependentlyTrustedDotNetExecutable(fullPath))) ||
+                    (toolName.Equals("git", StringComparison.OrdinalIgnoreCase) &&
+                     !IsIndependentlyTrustedGitExecutable(fullPath)))
                 {
                     continue;
                 }
@@ -243,6 +245,35 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    internal static bool IsIndependentlyTrustedGitExecutable(string executablePath)
+    {
+        try
+        {
+            string fullPath = Path.GetFullPath(executablePath);
+            if (IsWindows())
+            {
+                DotNetPublishReleaseArtifactVerifier.AuthenticodeResult signature =
+                    DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(fullPath);
+                FileVersionInfo version = FileVersionInfo.GetVersionInfo(fullPath);
+                bool trustedSigner =
+                    signature.Subject.IndexOf("CN=Johannes Schindelin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    signature.Subject.IndexOf("O=GitHub, Inc.", StringComparison.OrdinalIgnoreCase) >= 0;
+                return signature.IsValid &&
+                       trustedSigner &&
+                       string.Equals(version.ProductName, "Git", StringComparison.OrdinalIgnoreCase) &&
+                       string.Equals(version.OriginalFilename, "git.exe", StringComparison.OrdinalIgnoreCase);
+            }
+
+            return EnumeratePlatformGitCandidates()
+                .Select(Path.GetFullPath)
+                .Contains(fullPath, StringComparer.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static IEnumerable<string> EnumeratePlatformDotNetCandidates()
     {
         string executableName = IsWindows() ? "dotnet.exe" : "dotnet";
@@ -300,6 +331,28 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(configuredPath) && Path.IsPathRooted(configuredPath))
             yield return configuredPath!;
 
+        if (IsWindows())
+        {
+            string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (!string.IsNullOrWhiteSpace(programFiles))
+            {
+                yield return Path.Combine(programFiles!, "Git", "mingw64", "bin", "git.exe");
+                yield return Path.Combine(programFiles!, "Git", "bin", "git.exe");
+                yield return Path.Combine(programFiles!, "Git", "cmd", "git.exe");
+            }
+            string? programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            if (!string.IsNullOrWhiteSpace(programFilesX86))
+                yield return Path.Combine(programFilesX86!, "Git", "cmd", "git.exe");
+            yield break;
+        }
+
+        yield return "/usr/bin/git";
+        yield return "/usr/local/bin/git";
+        yield return "/opt/homebrew/bin/git";
+    }
+
+    private static IEnumerable<string> EnumeratePlatformGitCandidates()
+    {
         if (IsWindows())
         {
             string? programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);

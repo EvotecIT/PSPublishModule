@@ -35,6 +35,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var previousCancellationToken = _cancellationToken.Value;
         string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
         string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
+        string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
+        string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
         _cancellationToken.Value = cancellationToken;
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
@@ -60,7 +62,11 @@ public sealed partial class DotNetPublishPipelineRunner
             ActiveDotNetExecutablePath.Value = ResolveRunDotNetExecutablePath();
             ActiveDotNetExecutableSha256.Value = ComputeSha256Hex(
                 File.ReadAllBytes(ActiveDotNetExecutablePath.Value));
+            ActiveGitExecutablePath.Value = ResolveRunGitExecutablePath();
+            ActiveGitExecutableSha256.Value = ComputeSha256Hex(
+                File.ReadAllBytes(ActiveGitExecutablePath.Value));
             ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
+            ValidateNativeAotEnvironmentVariables(plan);
             cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
                 plan.ProjectRoot,
                 EnumerateTrackedGeneratedProvenancePaths(
@@ -271,6 +277,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 _cancellationToken.Value = previousCancellationToken;
                 ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
                 ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
+                ActiveGitExecutablePath.Value = previousGitExecutablePath;
+                ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
             }
         }
     }

@@ -20,6 +20,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private readonly AsyncLocal<CancellationToken> _cancellationToken = new();
     private static readonly AsyncLocal<string?> ActiveDotNetExecutablePath = new();
     private static readonly AsyncLocal<string?> ActiveDotNetExecutableSha256 = new();
+    private static readonly AsyncLocal<string?> ActiveGitExecutablePath = new();
+    private static readonly AsyncLocal<string?> ActiveGitExecutableSha256 = new();
 
     /// <summary>
     /// Creates a new instance using the provided logger.

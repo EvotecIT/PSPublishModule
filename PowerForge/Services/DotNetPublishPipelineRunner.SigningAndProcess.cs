@@ -615,6 +615,62 @@ public sealed partial class DotNetPublishPipelineRunner
         return path;
     }
 
+    internal static string ResolveRunGitExecutablePath()
+    {
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_GIT_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(configuredPath.Trim().Trim('"'));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "POWERFORGE_GIT_PATH must identify a rooted trusted Git executable.",
+                    exception);
+            }
+            if (!Path.IsPathRooted(configuredPath.Trim().Trim('"')) ||
+                !TryResolveTrustedBuildTool("git", out string configuredTool) ||
+                !string.Equals(
+                    candidate,
+                    configuredTool,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"POWERFORGE_GIT_PATH does not identify a trusted Git executable: {configuredPath}.");
+            }
+            return configuredTool;
+        }
+
+        if (!TryResolveTrustedBuildTool("git", out string gitPath))
+            throw new InvalidOperationException("A trusted Git executable could not be resolved for the publish run.");
+        return gitPath;
+    }
+
+    internal static string ResolveGitChildExecutable(string fileName)
+    {
+        if (!fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
+            return fileName;
+
+        string path = ActiveGitExecutablePath.Value ?? ResolveRunGitExecutablePath();
+        ValidateGitExecutableSnapshot(path, ActiveGitExecutableSha256.Value);
+        return path;
+    }
+
+    internal static void ValidateGitExecutableSnapshot(string path, string? expectedSha256)
+    {
+        if (!IsIndependentlyTrustedGitExecutable(path))
+            throw new InvalidOperationException($"The selected Git executable is not independently trusted: {path}.");
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+
+        string actualSha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"The selected Git executable changed after admission: {path}.");
+    }
+
     internal static void ValidateDotNetExecutableSnapshot(string path, string? expectedSha256)
     {
         if (!IsIndependentlyTrustedDotNetExecutable(path))
@@ -645,6 +701,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new InvalidOperationException(
                     $"Dotnet environment variable '{variable.Key}' is not allowed because it can inject executable runtime or build behavior.");
             }
+        }
+    }
+
+    internal static void ValidateNativeAotEnvironmentVariables(DotNetPublishPlan plan)
+    {
+        bool hasNativeAot = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .Any(combination => combination.Style == DotNetPublishStyle.AotSpeed ||
+                                combination.Style == DotNetPublishStyle.AotSize);
+        if (hasNativeAot &&
+            plan.EnvironmentVariables.TryGetValue("PATH", out string? path) &&
+            !string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                "An explicit PATH is not allowed for NativeAOT publish because it can replace native compiler or linker tools.");
         }
     }
 
@@ -747,6 +818,7 @@ public sealed partial class DotNetPublishPipelineRunner
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        fileName = ResolveGitChildExecutable(fileName);
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
