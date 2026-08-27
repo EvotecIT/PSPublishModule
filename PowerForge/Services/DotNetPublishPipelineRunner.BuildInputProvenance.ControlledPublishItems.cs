@@ -57,11 +57,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
+            string[] offlinePackageSources = { offlinePackageSource };
             if (verifiedPackages is not null &&
                 !verifiedPackages.TrySeedControlledPackageSource(
                     offlinePackageSource,
                     controlledSourceRoot,
-                    controlledProjectPath!))
+                    controlledProjectPath!,
+                    out offlinePackageSources))
             {
                 return false;
             }
@@ -70,11 +72,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XElement("configuration",
                     new XElement("packageSources",
                         new XElement("clear"),
-                        new XElement("add",
-                            new XAttribute("key", "verified"),
-                            new XAttribute("value", offlinePackageSource))),
+                        offlinePackageSources.Select((source, index) =>
+                            new XElement("add",
+                                new XAttribute("key", "verified-" + index),
+                                new XAttribute("value", source)))),
                     new XElement("auditSources", new XElement("clear"))))
                 .Save(controlledNuGetConfig);
+            string offlinePackageSourceList = string.Join(";", offlinePackageSources);
 
             var arguments = new List<string>
             {
@@ -107,7 +111,7 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSource,
+                offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
             var process = RunBuildInputEvaluationProcess(

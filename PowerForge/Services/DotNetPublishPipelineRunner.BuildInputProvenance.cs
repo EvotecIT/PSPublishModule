@@ -789,11 +789,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
                 importPaths.UnionWith(preprocessedImports);
+                string[] evaluatedImportPaths = importPaths.ToArray();
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
                     request.ProjectPath,
                     importPaths));
                 if (verifiedPackages is not null &&
-                    !verifiedPackages.TrySetControlledBuildInputs(importPaths))
+                    !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
                 {
                     return false;
                 }

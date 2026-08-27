@@ -179,8 +179,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 };
 
                 Assert.True((bool)prime.Invoke(null, arguments)!);
-                string selectedPath = Assert.Single(Assert.IsType<string[]>(arguments[3]));
-                Assert.Equal(Path.GetFullPath(validPackagePath), Path.GetFullPath(selectedPath));
+                KeyValuePair<string, string> selected = Assert.Single(
+                    Assert.IsType<Dictionary<string, string>>(arguments[3]));
+                Assert.Equal(packageId + "|" + packageVersion, selected.Key);
+                Assert.Equal(Path.GetFullPath(validPackagePath), Path.GetFullPath(selected.Value));
             }
             finally
             {

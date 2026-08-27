@@ -41,6 +41,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly ISet<string> CompilerResponseFileOutputSwitches =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
+            "bugreport",
             "doc",
             "errorlog",
             "generatedfilesout",

@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -11,10 +13,9 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
             VerifiedPackageArchiveCache archives,
-            out string[] archivePaths)
+            out Dictionary<string, string> archivePathsByPackageKey)
         {
-            var paths = new List<string>();
-            archivePaths = Array.Empty<string>();
+            archivePathsByPackageKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 foreach (KeyValuePair<string, string> package in lockedPackageHashes)
@@ -46,13 +47,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    paths.Add(Path.GetFullPath(archivePath!));
+                    archivePathsByPackageKey.Add(package.Key, Path.GetFullPath(archivePath!));
                 }
-                archivePaths = paths.ToArray();
                 return true;
             }
             catch
             {
+                archivePathsByPackageKey.Clear();
                 return false;
             }
         }
@@ -81,11 +82,12 @@ public sealed partial class DotNetPublishPipelineRunner
                         if (segments.Length < 3 || segments.Any(segment => segment == ".."))
                             return false;
 
-                        string expectedName = segments[0] + "." + segments[1] + ".nupkg";
-                        string? archivePath = _archivePaths.FirstOrDefault(path =>
-                            Path.GetFileName(path).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
-                        if (string.IsNullOrWhiteSpace(archivePath))
+                        string packageKey = segments[0] + "|" + segments[1];
+                        if (!_archivePathsByPackageKey.TryGetValue(packageKey, out string? archivePath) ||
+                            string.IsNullOrWhiteSpace(archivePath))
+                        {
                             return false;
+                        }
 
                         string fullArchivePath = Path.GetFullPath(archivePath!);
                         if (!_controlledBuildInputsByArchive.TryGetValue(
@@ -113,14 +115,16 @@ public sealed partial class DotNetPublishPipelineRunner
             string destination,
             string controlledSourceRoot,
             string controlledProjectPath,
+            out string[] packageSources,
             bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
                 destination,
-                _archivePaths,
+                _archivePathsByPackageKey,
                 _sdkManagedArchivePaths,
                 _controlledBuildInputsByArchive,
                 controlledSourceRoot,
                 controlledProjectPath,
+                out packageSources,
                 allowSdkManagedToolchainPackages);
     }
 
@@ -128,18 +132,24 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         internal bool TrySeedControlledPackageSource(
             string destination,
-            IReadOnlyCollection<string> archivePaths,
+            IReadOnlyDictionary<string, string> archivePathsByPackageKey,
             HashSet<string> sdkManagedArchivePaths,
             IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive,
             string controlledSourceRoot,
             string controlledProjectPath,
+            out string[] packageSources,
             bool allowSdkManagedToolchainPackages)
         {
+            packageSources = Array.Empty<string>();
             try
             {
                 Directory.CreateDirectory(destination);
-                foreach (string archivePath in archivePaths.OrderBy(path => path, StringComparer.Ordinal))
+                var sources = new List<string>();
+                foreach (KeyValuePair<string, string> package in archivePathsByPackageKey.OrderBy(
+                             entry => entry.Key,
+                             StringComparer.OrdinalIgnoreCase))
                 {
+                    string archivePath = package.Value;
                     if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
                     {
                         return false;
@@ -159,19 +169,36 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
+                    string packageSource = Path.Combine(
+                        destination,
+                        CreateControlledPackageSourceDirectoryName(package.Key));
+                    Directory.CreateDirectory(packageSource);
+                    string destinationPath = Path.Combine(packageSource, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
                         return false;
                     }
                     cached.Archive.CopyTo(destinationPath);
+                    sources.Add(packageSource);
                 }
+                packageSources = sources.Count == 0
+                    ? new[] { destination }
+                    : sources.ToArray();
                 return true;
             }
             catch
             {
+                packageSources = Array.Empty<string>();
                 return false;
             }
+        }
+
+        private static string CreateControlledPackageSourceDirectoryName(string packageKey)
+        {
+            using SHA256 sha256 = SHA256.Create();
+            return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(packageKey)))
+                .Replace("-", string.Empty)
+                .ToLowerInvariant();
         }
     }
 
@@ -263,12 +290,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach ((string name, string declaringPath, string packageDirectory, _, XDocument document) in documents)
                 {
                     bool executable = executableNames.Contains(name);
-                    if (executable)
-                    {
-                        controlledDocuments.Add(document);
-                        controlledDocumentSources.Add((document, declaringPath));
-                        executableDocuments.Add((document, declaringPath));
-                    }
+                    if (!executable)
+                        continue;
+                    controlledDocuments.Add(document);
+                    controlledDocumentSources.Add((document, declaringPath));
+                    executableDocuments.Add((document, declaringPath));
                     if (document.DescendantNodes()
                             .OfType<XText>()
                             .Select(text => text.Value)

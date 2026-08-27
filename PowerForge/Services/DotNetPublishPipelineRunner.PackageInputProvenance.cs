@@ -364,7 +364,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly string[] _packageRoots;
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
-        private readonly string[] _archivePaths;
+        private readonly IReadOnlyDictionary<string, string> _archivePathsByPackageKey;
         private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -373,7 +373,7 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
             VerifiedPackageArchiveCache archives,
-            string[] archivePaths,
+            IReadOnlyDictionary<string, string> archivePathsByPackageKey,
             IEnumerable<string> sdkManagedPackageKeys)
         {
             _packageRoots = packageRoots
@@ -382,10 +382,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             _lockedPackageHashes = lockedPackageHashes;
             _archives = archives;
-            _archivePaths = archivePaths;
+            _archivePathsByPackageKey = archivePathsByPackageKey;
             _sdkManagedArchivePaths = new HashSet<string>(
-                archivePaths.Where(path => sdkManagedPackageKeys.Any(packageKey =>
-                    PackageArchiveMatchesKey(path, packageKey))),
+                sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
+                    .Select(packageKey => archivePathsByPackageKey[packageKey]),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
@@ -425,27 +425,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 sdkManagedPackageKeys);
             if (allRoots.Count == 0)
                 return null;
-            if (!TryPrimeLockedPackageArchives(allRoots, hashes, archives, out string[] archivePaths))
+            if (!TryPrimeLockedPackageArchives(
+                    allRoots,
+                    hashes,
+                    archives,
+                    out Dictionary<string, string> archivePathsByPackageKey))
+            {
                 return null;
+            }
 
             return new VerifiedPackageInputCatalog(
                 allRoots,
                 hashes,
                 archives,
-                archivePaths,
+                archivePathsByPackageKey,
                 sdkManagedPackageKeys);
-        }
-
-        private static bool PackageArchiveMatchesKey(string archivePath, string packageKey)
-        {
-            int separator = packageKey.LastIndexOf('|');
-            if (separator <= 0 || separator == packageKey.Length - 1)
-                return false;
-            string expectedName = packageKey.Substring(0, separator) + "." +
-                                  packageKey.Substring(separator + 1) + ".nupkg";
-            return Path.GetFileName(archivePath).Equals(
-                expectedName,
-                StringComparison.OrdinalIgnoreCase);
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -522,13 +516,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
-                string expectedName = packageId + "." + packageVersion + ".nupkg";
-                string? archivePath = _archivePaths.FirstOrDefault(candidate =>
-                        Path.GetFileName(candidate).Equals(
-                        expectedName,
-                        StringComparison.OrdinalIgnoreCase));
-                if (string.IsNullOrWhiteSpace(archivePath))
+                if (!_archivePathsByPackageKey.TryGetValue(packageKey, out string? archivePath) ||
+                    string.IsNullOrWhiteSpace(archivePath))
+                {
                     return false;
+                }
                 VerifiedPackageArchive? archive = _archives.TryGetOrOpen(archivePath!, expectedHash);
                 if (archive is null)
                     return false;
