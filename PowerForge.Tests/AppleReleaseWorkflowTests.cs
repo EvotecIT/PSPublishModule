@@ -539,7 +539,7 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void SourceBuildActionUsesCanonicalReleaseBuilderAndPinnedDotNetSetup()
+    public void SourceBuildActionUsesCompleteSelfContainedPayloadAndPinnedDotNetSetup()
     {
         var root = FindRepoRoot();
         var action = Read(root, ".github", "actions", "build-powerforge", "action.yml");
@@ -547,6 +547,9 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
         Assert.Contains("Build/Build-Project.ps1", action, StringComparison.Ordinal);
         Assert.Contains("'-Target', 'PowerForge'", action, StringComparison.Ordinal);
+        Assert.Contains("'-Flavors', 'Portable'", action, StringComparison.Ordinal);
+        Assert.Contains("/Portable/PowerForge", action, StringComparison.Ordinal);
+        Assert.DoesNotContain("SingleContained", action, StringComparison.Ordinal);
         Assert.Contains("runtime must be osx-arm64 or osx-x64", action, StringComparison.Ordinal);
         Assert.Contains("tool-path=$toolPath", action, StringComparison.Ordinal);
     }
