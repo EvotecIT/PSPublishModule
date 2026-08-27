@@ -306,6 +306,18 @@ EXAMPLES
             Assert.Equal("true", apiFilePath.Attribute("required")?.Value);
             Assert.Equal("false", jfrogFilePath.Attribute("required")?.Value);
             Assert.Equal("true", jfrogBaseUri.Attribute("required")?.Value);
+
+            var aggregateFilePath = doc.Descendants(commandNs + "parameters")
+                .Elements(commandNs + "parameter")
+                .Single(element => string.Equals(element.Element(mamlNs + "name")?.Value, "FilePath", StringComparison.Ordinal));
+            Assert.Equal("false", aggregateFilePath.Attribute("required")?.Value);
+
+            var markdownRoot = Path.Combine(root, "Docs");
+            new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "TestModule", markdownRoot);
+            var markdown = File.ReadAllText(Path.Combine(markdownRoot, "New-Thing.md"));
+            var filePathSection = markdown.Substring(markdown.IndexOf("### -FilePath", StringComparison.Ordinal));
+            filePathSection = filePathSection.Substring(0, filePathSection.IndexOf("### -JFrogBaseUri", StringComparison.Ordinal));
+            Assert.Contains("Required: False", filePathSection, StringComparison.Ordinal);
         }
         finally
         {

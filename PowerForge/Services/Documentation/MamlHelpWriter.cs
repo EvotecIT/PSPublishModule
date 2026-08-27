@@ -475,7 +475,7 @@ internal sealed class MamlHelpWriter
     private static bool ParameterRequiredInSet(DocumentationParameterHelp p, string? setName, string? syntaxText)
     {
         if (p is null) return false;
-        if (string.IsNullOrEmpty(setName)) return p.Required;
+        if (string.IsNullOrEmpty(setName)) return DocumentationParameterRequiredResolver.IsAlwaysRequired(p);
 
         var setRequired = p.ParameterSetRequired;
         if (setRequired is null || setRequired.Count == 0)
