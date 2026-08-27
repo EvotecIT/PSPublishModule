@@ -39,9 +39,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var expression = UnwrapTransparentExpression(receiver);
         if (expression is not VariableExpressionAst variable)
             return;
-        var parameter = _body.ParamBlock?.Parameters.FirstOrDefault(candidate =>
-            candidate.Name.VariablePath.UserPath.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase));
-        if (parameter?.StaticType == typeof(System.Management.Automation.SwitchParameter))
+        var parameter = _parameters.FirstOrDefault(candidate =>
+            candidate.Name.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase));
+        if (parameter?.IsSwitch == true)
             throw Error(observation, $"Switch parameter '${variable.VariablePath.UserPath}' is represented as Boolean by the runtime-independent method and cannot expose SwitchParameter members or CLR type identity.");
     }
 }

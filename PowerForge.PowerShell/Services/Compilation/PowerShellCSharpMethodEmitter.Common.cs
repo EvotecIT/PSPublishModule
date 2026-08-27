@@ -45,11 +45,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private static bool HasContinuableAncestor(Ast node)
         => HasLoopAncestor(node) || HasAncestor<SwitchStatementAst>(node);
 
-    private static Type GetCompiledParameterType(ParameterAst parameter)
-        => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
-            ? typeof(bool)
-            : parameter.StaticType;
-
     private static bool CanAssign(Type target, Type source)
     {
         if (target == source || target.IsAssignableFrom(source)) return true;

@@ -554,10 +554,6 @@ public sealed partial class PowerShellCompilationAnalyzer
         => conversion.StaticType == typeof(System.Collections.Specialized.OrderedDictionary) &&
            conversion.Child is HashtableAst;
 
-    private static bool IsAttributeNamed(AttributeAst attribute, string name)
-        => attribute.TypeName.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ||
-           attribute.TypeName.Name.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase);
-
     private static StatementAst[] GetEndStatements(ScriptBlockAst scriptBlock, bool excludeFunctionDefinitions, bool excludeModuleExports)
         => scriptBlock.EndBlock?.Statements
             .Where(statement => !excludeFunctionDefinitions || statement is not FunctionDefinitionAst)

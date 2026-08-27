@@ -49,6 +49,50 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ParameterAliasesBindingsAndValidationAreBoundBeforeLowering()
+    {
+        var source = "function Get-Value { param([Parameter(Mandatory, Position=0)] [Alias('c')] [ValidateRange(1, 9)] [int] $Count) return $Count }";
+        var document = PowerShellSourceParser.Parse(source, TestPath("parameter-contract.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        var bound = Assert.Single(Assert.Single(result.Analyzed.Functions).Parameters);
+        Assert.Equal(typeof(int), bound.Type.ClrType);
+        Assert.Equal("Count", bound.Contract.Name);
+        Assert.Equal(new[] { "c" }, bound.Contract.Aliases);
+        Assert.True(bound.Contract.IsMandatory);
+        Assert.Equal(0, Assert.Single(bound.Contract.Bindings).Position);
+        var validation = Assert.Single(bound.Contract.Validations);
+        Assert.Equal(PowerShellCompilationValidationKind.Range, validation.Kind);
+        Assert.Equal(new[] { "1", "9" }, validation.Arguments);
+        var lowered = Assert.Single(Assert.Single(result.Lowered.Functions).Parameters);
+        Assert.Same(bound.Contract, lowered.Contract);
+    }
+
+    [Fact]
+    public void PublicTranspilerUsesBoundPipelineForPlainTypedParametersAndAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "parameter.ps1");
+        try
+        {
+            File.WriteAllText(path, "function Get-Count { param([Alias('c')] [int] $Count) return $Count }");
+
+            var result = new PowerShellTypedCompilationTranspiler().Transpile(path);
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+            var method = Assert.Single(result.Methods);
+            Assert.Equal(new[] { "c" }, Assert.Single(method.Parameters).Aliases);
+            Assert.Contains("public static int Get_Count(int Count)", result.SourceCode, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void FileAndDeclarationOrderDoNotChangeSemanticOrEmissionOrder()
     {
         var first = PowerShellSourceParser.Parse("function Get-Zulu { return 2 }", TestPath("z.ps1"));

@@ -85,8 +85,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var variable = FindAssignedVariable(assignment.Left)
             ?? throw Error(assignment.Left, "Only local-variable assignment is supported.");
         var name = variable.VariablePath.UserPath;
-        var isParameter = _body.ParamBlock?.Parameters.Any(parameter =>
-            parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
+        var isParameter = _parameterNames.Contains(name);
         if (!_declaredLocals.Contains(name) && !isParameter)
             throw Error(assignment, $"Inline assignment target '${name}' was not safely predeclared.");
         var right = EmitExpression(assignment.Right);

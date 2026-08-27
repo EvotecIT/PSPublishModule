@@ -5,7 +5,9 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerShellTypedLowerer
 {
-    internal PowerShellLoweredProgram Lower(PowerShellBoundProgram program)
+    internal PowerShellLoweredProgram Lower(
+        PowerShellBoundProgram program,
+        PowerShellCompilationCapability targetCapabilities = PowerShellCompilationCapability.None)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
@@ -54,7 +56,7 @@ internal sealed class PowerShellTypedLowerer
                 function.Symbol,
                 PowerShellCSharpMethodEmitter.SanitizeIdentifier(function.Symbol.Name),
                 function.ReturnType.ClrType,
-                function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType)).ToArray(),
+                function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType, parameter.Contract)).ToArray(),
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
                 statements.ToArray(),
@@ -66,7 +68,8 @@ internal sealed class PowerShellTypedLowerer
             diagnostics.OrderBy(static diagnostic => diagnostic.Span.DocumentId, StringComparer.Ordinal)
                 .ThenBy(static diagnostic => diagnostic.Span.StartOffset)
                 .ThenBy(static diagnostic => diagnostic.Code, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            targetCapabilities);
     }
 
     private static PowerShellLoweredExpression LowerExpression(

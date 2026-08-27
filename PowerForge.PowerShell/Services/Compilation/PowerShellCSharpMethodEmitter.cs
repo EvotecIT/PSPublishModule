@@ -25,7 +25,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
     private readonly PowerShellCompilationCapability _capabilities;
     private readonly IReadOnlyDictionary<string, PowerShellLocalFunctionSignature> _localFunctions;
     private readonly HashSet<string> _localFunctionNames;
-    private readonly IReadOnlyDictionary<string, PowerShellCompilationParameter> _parameterMetadata;
+    private readonly PowerShellBoundParameterContract[] _parameters;
+    private readonly HashSet<string> _parameterNames;
     private bool _requiresPowerShellStreams;
     private bool _requiresPowerShellCommandRegions;
     private bool _requiresPowerShellRuntimeState;
@@ -79,8 +80,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         _capabilities = capabilities;
         _localFunctions = localFunctions ?? new Dictionary<string, PowerShellLocalFunctionSignature>(StringComparer.OrdinalIgnoreCase);
         _localFunctionNames = _localFunctions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        _parameterMetadata = (parameterMetadata ?? Array.Empty<PowerShellCompilationParameter>())
-            .ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
+        _parameters = PowerShellBoundParameterContract.Bind(body, parameterMetadata);
+        _parameterNames = _parameters.Select(static parameter => parameter.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         _memberEmitter = new PowerShellCSharpMemberEmitter(
             InferExpressionType,
             EmitExpression,
@@ -95,19 +97,17 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     internal PowerShellCSharpMethodEmission Emit()
     {
-        var paramBlock = _body.ParamBlock;
-        var parameters = paramBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
-        foreach (var parameter in parameters)
+        foreach (var parameter in _parameters)
         {
-            var name = parameter.Name.VariablePath.UserPath;
-            var parameterType = GetCompiledParameterType(parameter);
+            var name = parameter.Name;
+            var parameterType = parameter.ClrType;
             if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(parameterType, _targetFramework, _capabilities))
-                throw Error(parameter, $"Parameter '${name}' uses CLR type '{parameterType.FullName}' outside the generated project reference set.");
+                throw Error(_body, $"Parameter '${name}' uses CLR type '{parameterType.FullName}' outside the generated project reference set.");
             if (_variables.ContainsKey(name))
-                throw Error(parameter, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");
+                throw Error(_body, $"Parameter '${name}' duplicates another parameter under PowerShell's case-insensitive naming rules.");
             var identifier = SanitizeIdentifier(name);
             if (_variableIdentifiers.Values.Contains(identifier, StringComparer.Ordinal))
-                throw Error(parameter, $"Parameter '${name}' collides with another parameter after CLR identifier normalization.");
+                throw Error(_body, $"Parameter '${name}' collides with another parameter after CLR identifier normalization.");
             _variables.Add(name, parameterType);
             _variableIdentifiers.Add(name, identifier);
             _explicitlyTypedVariables.Add(name);
@@ -115,8 +115,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
         var statements = _statements ?? _body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         _requiresBoundParameters = _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) &&
-            (_parameterMetadata.Values.Any(static parameter => parameter.DefaultValue is not null) ||
-             _parameterMetadata.Values.Any(static parameter => !parameter.IsMandatory && parameter.Validations.Length > 0) ||
+            (_parameters.Any(static parameter => parameter.Metadata.DefaultValue is not null) ||
+             _parameters.Any(static parameter => !parameter.Metadata.IsMandatory && parameter.Metadata.Validations.Length > 0) ||
              statements.SelectMany(static statement => statement.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: false))
                  .OfType<InvokeMemberExpressionAst>()
                  .Any(static invocation => PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out _)));
@@ -146,8 +146,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         var declaredOutputType = GetDeclaredOutputType();
         if (returnType != typeof(void) && !HasTerminalValue(statements))
             throw Error(_body, $"Typed non-void unit '{_sourceName}' must end with an explicit return statement on the conservative compilation path.");
-        var parameterParts = parameters.Select(parameter =>
-            $"{GetTypeName(GetCompiledParameterType(parameter))} {SanitizeIdentifier(parameter.Name.VariablePath.UserPath)}").ToList();
+        var parameterParts = _parameters.Select(parameter =>
+            $"{GetTypeName(parameter.ClrType)} {SanitizeIdentifier(parameter.Name)}").ToList();
         if (_requiresPowerShellStreams)
         {
             parameterParts.Add("global::System.Action<string> __writeVerbose");
@@ -176,9 +176,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         AppendLine("checked");
         AppendLine("{");
         _indent++;
-        EmitParameterDefaults(parameters);
-        EmitParameterBindingNormalization(parameters);
-        EmitParameterValidations(parameters);
+        EmitParameterPrologue();
         foreach (var name in _predeclaredLocals.OrderBy(name => _firstAssignmentOffsets[name]))
         {
             AppendLine($"{GetTypeName(_variables[name])} {GetVariableIdentifier(name)} = default!;");
@@ -251,6 +249,20 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         return declared;
     }
 
+    private void EmitParameterPrologue()
+    {
+        var contracts = _parameters.Select(static parameter => new PowerShellParameterEmissionContract(
+            parameter.Name,
+            parameter.ClrType,
+            parameter.Metadata)).ToArray();
+        var source = new PowerShellParameterPrologueRenderer(
+            _capabilities,
+            GetTypeName,
+            GetTemporaryIdentifier).Render(contracts);
+        if (source.Length == 0) return;
+        foreach (var line in source.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)) AppendLine(line);
+    }
+
     private void EmitRuntimeRegion(IReadOnlyList<StatementAst> statements)
     {
         var referencedNames = statements
@@ -260,10 +272,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             .Where(name => _variables.ContainsKey(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var switchParameters = _body.ParamBlock?.Parameters
-            .Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
-            .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var switchParameters = _parameters.Where(static parameter => parameter.IsSwitch)
+            .Select(static parameter => parameter.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(name =>
             (switchParameters.Contains(name) ? "[switch] " : string.Empty) + EmitBracedPowerShellVariable(name))) + ")";
         var script = parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
@@ -386,7 +397,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             if (name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
-                _body.ParamBlock?.Parameters.Any(parameter => parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true)
+                _parameterNames.Contains(name))
                 continue;
             if (_firstAssignmentOffsets.TryGetValue(name, out var firstAssignment) && variable.Extent.StartOffset < firstAssignment)
                 throw Error(variable, $"Local '${name}' is read before its first assignment; that relies on dynamic PowerShell null semantics.");

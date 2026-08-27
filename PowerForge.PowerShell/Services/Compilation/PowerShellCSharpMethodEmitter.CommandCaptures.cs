@@ -36,10 +36,9 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             .Where(reference => _variables.ContainsKey(reference))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var switchParameters = _body.ParamBlock?.Parameters
-            .Where(static parameter => parameter.StaticType == typeof(System.Management.Automation.SwitchParameter))
-            .Select(static parameter => parameter.Name.VariablePath.UserPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var switchParameters = _parameters.Where(static parameter => parameter.IsSwitch)
+            .Select(static parameter => parameter.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var parameterBlock = "param(" + string.Join(", ", referencedNames.Select(reference =>
             (switchParameters.Contains(reference) ? "[switch] " : string.Empty) + EmitBracedPowerShellVariable(reference))) + ")";
         var script = parameterBlock + Environment.NewLine + assignment.Right.Extent.Text;
@@ -51,8 +50,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
         if (targetType == typeof(string))
             converted = $"({converted} ?? string.Empty)";
 
-        var isParameter = _body.ParamBlock?.Parameters.Any(parameter =>
-            parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
+        var isParameter = _parameterNames.Contains(name);
         var declaration = !_declaredLocals.Contains(name) && !isParameter;
         var left = declaration ? $"{targetName} {GetVariableIdentifier(name)}" : GetVariableIdentifier(name);
         AppendLine($"{left} = {converted};");

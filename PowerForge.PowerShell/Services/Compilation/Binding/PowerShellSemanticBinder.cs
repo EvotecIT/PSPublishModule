@@ -8,7 +8,7 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerShellSemanticBinder
 {
-    internal PowerShellBoundProgram Bind(IEnumerable<ParsedSourceDocument> documents)
+    internal PowerShellBoundProgram Bind(IEnumerable<ParsedSourceDocument> documents, string? targetFramework = null)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
@@ -23,7 +23,7 @@ internal sealed class PowerShellSemanticBinder
         foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
         {
             if (declaration.Document.Errors.Length > 0 || !functionsByName.ContainsKey(declaration.Syntax.Name)) continue;
-            var bound = BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName, diagnostics);
+            var bound = BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName, diagnostics, targetFramework);
             if (bound is not null) functions.Add(bound);
         }
 
@@ -89,10 +89,11 @@ internal sealed class PowerShellSemanticBinder
         FunctionDefinitionAst function,
         PowerShellSymbolId functionSymbol,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework)
     {
         var symbols = new Dictionary<string, SymbolBinding>(StringComparer.OrdinalIgnoreCase);
-        var parameters = BindParameters(document, function, symbols, diagnostics);
+        var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
         var locals = DeclareLocals(document, function, symbols);
 
@@ -139,7 +140,8 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         IDictionary<string, SymbolBinding> symbols,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework)
     {
         var parameters = new List<PowerShellBoundParameter>();
         foreach (var parameter in function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
@@ -152,11 +154,15 @@ internal sealed class PowerShellSemanticBinder
                 return null;
             }
 
-            var type = parameter.StaticType == typeof(object)
+            var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework);
+            var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+                ? typeof(bool)
+                : parameter.StaticType;
+            var type = clrType == typeof(object)
                 ? PowerShellTypeFact.Unknown
-                : new PowerShellTypeFact(parameter.StaticType, PowerShellTypeFactProvenance.Explicit, $"Parameter '${name}' has an authored type constraint.");
+                : new PowerShellTypeFact(clrType, PowerShellTypeFactProvenance.Explicit, $"Parameter '${name}' has an authored type constraint.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
-            var bound = new PowerShellBoundParameter(symbol, type);
+            var bound = new PowerShellBoundParameter(symbol, type, contract);
             symbols.Add(name, new SymbolBinding(symbol, type));
             parameters.Add(bound);
         }

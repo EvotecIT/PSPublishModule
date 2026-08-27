@@ -73,14 +73,16 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
 
 internal sealed class PowerShellLoweredParameter
 {
-    internal PowerShellLoweredParameter(PowerShellSymbolId symbol, Type clrType)
+    internal PowerShellLoweredParameter(PowerShellSymbolId symbol, Type clrType, PowerShellCompilationParameter contract)
     {
         Symbol = symbol;
         ClrType = clrType;
+        Contract = contract;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal Type ClrType { get; }
+    internal PowerShellCompilationParameter Contract { get; }
 }
 
 internal sealed class PowerShellLoweredFunction
@@ -129,12 +131,17 @@ internal sealed class PowerShellLoweredLocal
 
 internal sealed class PowerShellLoweredProgram
 {
-    internal PowerShellLoweredProgram(PowerShellLoweredFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
+    internal PowerShellLoweredProgram(
+        PowerShellLoweredFunction[] functions,
+        PowerShellSemanticDiagnostic[] diagnostics,
+        PowerShellCompilationCapability targetCapabilities)
     {
         Functions = functions;
         Diagnostics = diagnostics;
+        TargetCapabilities = targetCapabilities;
     }
 
     internal PowerShellLoweredFunction[] Functions { get; }
     internal PowerShellSemanticDiagnostic[] Diagnostics { get; }
+    internal PowerShellCompilationCapability TargetCapabilities { get; }
 }

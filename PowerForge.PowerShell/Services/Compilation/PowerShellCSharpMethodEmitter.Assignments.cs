@@ -23,8 +23,7 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             ?? throw Error(assignment.Left, "Only local-variable assignment is supported.");
         var name = variable.VariablePath.UserPath;
         var identifier = GetVariableIdentifier(name);
-        var isParameter = _body.ParamBlock?.Parameters.Any(parameter =>
-            parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
+        var isParameter = _parameterNames.Contains(name);
         var declaration = !_declaredLocals.Contains(name) && !isParameter;
         var left = declaration ? $"{GetTypeName(_variables[name])} {identifier}" : identifier;
         var operation = assignment.Operator.ToString() switch

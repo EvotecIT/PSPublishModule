@@ -11,15 +11,24 @@ internal sealed class PowerShellBoundCSharpBackend
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
-        var methods = program.Functions.Select(EmitFunction).ToArray();
+        var methods = program.Functions.Select(function => EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics);
     }
 
-    private static PowerShellCSharpMethodEmission EmitFunction(PowerShellLoweredFunction function)
+    private static PowerShellCSharpMethodEmission EmitFunction(
+        PowerShellLoweredFunction function,
+        PowerShellCompilationCapability targetCapabilities)
     {
         var builder = new StringBuilder();
-        var parameters = string.Join(", ", function.Parameters.Select(parameter =>
-            $"{PowerShellCSharpMethodEmitter.GetTypeName(parameter.ClrType)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Symbol.Name)}"));
+        var parameterParts = function.Parameters.Select(parameter =>
+            $"{PowerShellCSharpMethodEmitter.GetTypeName(parameter.ClrType)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Symbol.Name)}").ToList();
+        var requiresBoundParameters = function.Parameters.Any(parameter =>
+            parameter.Contract.DefaultValue is not null ||
+            !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
+            targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
+        if (requiresBoundParameters)
+            parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
+        var parameters = string.Join(", ", parameterParts);
         builder.Append("    public static ")
             .Append(PowerShellCSharpMethodEmitter.GetTypeName(function.ReturnType))
             .Append(' ')
@@ -30,6 +39,29 @@ internal sealed class PowerShellBoundCSharpBackend
             .AppendLine("    {")
             .AppendLine("        checked")
             .AppendLine("        {");
+
+        var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        var temporaryIndex = 0;
+        string GetTemporaryIdentifier(string prefix)
+        {
+            string candidate;
+            do { candidate = $"__{prefix}_{temporaryIndex++}"; } while (!usedIdentifiers.Add(candidate));
+            return candidate;
+        }
+        var parameterContracts = function.Parameters.Select(static parameter => new PowerShellParameterEmissionContract(
+            parameter.Symbol.Name,
+            parameter.ClrType,
+            parameter.Contract)).ToArray();
+        var prologue = new PowerShellParameterPrologueRenderer(
+            targetCapabilities,
+            PowerShellCSharpMethodEmitter.GetTypeName,
+            GetTemporaryIdentifier).Render(parameterContracts);
+        if (prologue.Length > 0)
+        {
+            foreach (var line in prologue.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                builder.Append("            ").AppendLine(line);
+        }
 
         foreach (var statement in function.Statements)
         {
@@ -58,7 +90,12 @@ internal sealed class PowerShellBoundCSharpBackend
         }
 
         builder.AppendLine("        }").Append("    }");
-        return new PowerShellCSharpMethodEmission(function.GeneratedName, function.ReturnType, builder.ToString(), help: function.Help?.ToPublicModel());
+        return new PowerShellCSharpMethodEmission(
+            function.GeneratedName,
+            function.ReturnType,
+            builder.ToString(),
+            requiresPowerShellBoundParameters: requiresBoundParameters,
+            help: function.Help?.ToPublicModel());
     }
 
     private static string EmitExpression(PowerShellLoweredExpression expression)

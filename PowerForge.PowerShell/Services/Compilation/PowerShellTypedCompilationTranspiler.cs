@@ -95,7 +95,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
-        var boundEmissions = CreateBoundEmissionIndex(parsedFiles);
+        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities);
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -431,9 +431,9 @@ public sealed class PowerShellTypedCompilationTranspiler
         FunctionSource source,
         IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions)
     {
-        if (source.Unit.Parameters.Length != 0 ||
-            PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
-            GetFunctionAliases(source.Function).Length != 0)
+        if (source.Function.Body.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute =>
+                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
+                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase)) == true)
             return null;
 
         return boundEmissions.TryGetValue(
@@ -444,9 +444,14 @@ public sealed class PowerShellTypedCompilationTranspiler
     }
 
     private static IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> CreateBoundEmissionIndex(
-        IReadOnlyList<ParsedSource> sources)
+        IReadOnlyList<ParsedSource> sources,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
-        var result = new PowerShellSemanticCompilationPipeline().Compile(sources.Select(static source => source.Document));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            sources.Select(static source => source.Document),
+            targetFramework,
+            capabilities);
         var paths = sources.ToDictionary(static source => source.Document.DocumentId, static source => source.Path, StringComparer.Ordinal);
         var emissions = new Dictionary<string, PowerShellCSharpMethodEmission>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < result.Lowered.Functions.Length && index < result.Emitted.Methods.Length; index++)

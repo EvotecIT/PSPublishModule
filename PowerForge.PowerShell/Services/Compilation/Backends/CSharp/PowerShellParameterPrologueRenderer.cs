@@ -1,112 +1,127 @@
-using System.Management.Automation.Language;
+using System.Text;
 
 namespace PowerForge;
 
-internal sealed partial class PowerShellCSharpMethodEmitter
+internal sealed class PowerShellParameterEmissionContract
 {
-    private void EmitParameterBindingNormalization(IReadOnlyList<ParameterAst> parameters)
+    internal PowerShellParameterEmissionContract(string name, Type clrType, PowerShellCompilationParameter metadata)
     {
-        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string)))
+        Name = name;
+        ClrType = clrType;
+        Metadata = metadata;
+    }
+
+    internal string Name { get; }
+    internal Type ClrType { get; }
+    internal PowerShellCompilationParameter Metadata { get; }
+}
+
+/// <summary>Renders parameter defaults, normalization, and validation from neutral bound contracts.</summary>
+internal sealed class PowerShellParameterPrologueRenderer
+{
+    private readonly PowerShellCompilationCapability _capabilities;
+    private readonly Func<Type, string> _getTypeName;
+    private readonly Func<string, string> _getTemporaryIdentifier;
+    private readonly StringBuilder _builder = new();
+    private int _indent;
+
+    internal PowerShellParameterPrologueRenderer(
+        PowerShellCompilationCapability capabilities,
+        Func<Type, string> getTypeName,
+        Func<string, string> getTemporaryIdentifier)
+    {
+        _capabilities = capabilities;
+        _getTypeName = getTypeName;
+        _getTemporaryIdentifier = getTemporaryIdentifier;
+    }
+
+    internal string Render(IReadOnlyList<PowerShellParameterEmissionContract> parameters)
+    {
+        RenderDefaults(parameters);
+        RenderNormalization(parameters);
+        RenderValidations(parameters);
+        return _builder.ToString().TrimEnd();
+    }
+
+    private void RenderDefaults(IEnumerable<PowerShellParameterEmissionContract> parameters)
+    {
+        foreach (var parameter in parameters.Where(static parameter => parameter.Metadata.DefaultValue is not null))
         {
-            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
+            AppendLine($"if (!__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(parameter.Metadata.Name)}))");
+            AppendLine($"    {PowerShellClrSymbolMapper.MapIdentifier(parameter.Name)} = {PowerShellCSharpLiteral.Emit(parameter.Metadata.DefaultValue!, parameter.ClrType, _getTypeName)};");
+        }
+    }
+
+    private void RenderNormalization(IEnumerable<PowerShellParameterEmissionContract> parameters)
+    {
+        foreach (var parameter in parameters.Where(static parameter => parameter.ClrType == typeof(string)))
+        {
+            var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
             AppendLine($"{identifier} = {identifier} ?? string.Empty;");
         }
-        foreach (var parameter in parameters.Where(static parameter => GetCompiledParameterType(parameter) == typeof(string[])))
+        foreach (var parameter in parameters.Where(static parameter => parameter.ClrType == typeof(string[])))
         {
-            var identifier = GetVariableIdentifier(parameter.Name.VariablePath.UserPath);
+            var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
             AppendLine($"{identifier} = {identifier} is null ? null! : global::System.Linq.Enumerable.Select({identifier}, static value => value ?? string.Empty).ToArray();");
         }
     }
 
-    private void EmitParameterValidations(IReadOnlyList<ParameterAst> parameters)
+    private void RenderValidations(IReadOnlyList<PowerShellParameterEmissionContract> parameters)
     {
-        for (var index = 0; index < parameters.Count; index++)
+        foreach (var parameter in parameters)
         {
-            var parameter = parameters[index];
-            var name = parameter.Name.VariablePath.UserPath;
-            if (!_parameterMetadata.TryGetValue(name, out var metadata))
-                continue;
-
-            var parameterType = GetCompiledParameterType(parameter);
-            var identifier = GetVariableIdentifier(name);
+            var metadata = parameter.Metadata;
+            var parameterType = parameter.ClrType;
+            var identifier = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name);
             if (metadata.IsMandatory && parameterType == typeof(string) && !metadata.AllowEmptyString)
             {
-                var condition = metadata.AllowNull
-                    ? $"{identifier} is not null && {identifier}.Length == 0"
-                    : $"global::System.String.IsNullOrEmpty({identifier})";
-                AppendLine($"if ({condition})");
-                AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow an empty string.", metadata.Name)};");
+                var condition = metadata.AllowNull ? $"{identifier} is not null && {identifier}.Length == 0" : $"global::System.String.IsNullOrEmpty({identifier})";
+                AppendFailure(condition, $"Mandatory parameter '-{metadata.Name}' does not allow an empty string.", metadata.Name);
             }
             else if (metadata.IsMandatory && parameterType.IsArray)
             {
                 if (!metadata.AllowNull)
-                {
-                    AppendLine($"if ({identifier} is null)");
-                    AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name)};");
-                }
+                    AppendFailure($"{identifier} is null", $"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name);
                 if (!metadata.AllowEmptyCollection)
-                {
-                    AppendLine($"if ({identifier} is not null && {identifier}.Length == 0)");
-                    AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.", metadata.Name)};");
-                }
+                    AppendFailure($"{identifier} is not null && {identifier}.Length == 0", $"Mandatory parameter '-{metadata.Name}' does not allow an empty collection.", metadata.Name);
             }
             else if (metadata.IsMandatory && !metadata.AllowNull && !parameterType.IsValueType)
             {
-                AppendLine($"if ({identifier} is null)");
-                AppendLine($"    throw {EmitParameterBindingValidationException($"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name)};");
+                AppendFailure($"{identifier} is null", $"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name);
             }
-            if (metadata.Validations.Length == 0)
-                continue;
-            var skipWhenOmitted = !metadata.IsMandatory &&
-                                  metadata.DefaultValue is null &&
+            if (metadata.Validations.Length == 0) continue;
+            var skipWhenOmitted = !metadata.IsMandatory && metadata.DefaultValue is null &&
                                   _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
-            if (skipWhenOmitted)
-            {
-                AppendLine($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
-                AppendLine("{");
-                _indent++;
-            }
+            if (skipWhenOmitted) BeginBlock($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
             if (parameterType.IsArray)
             {
                 var elementType = parameterType.GetElementType()!;
-                var item = GetTemporaryIdentifier("validation_value");
-                EmitArrayValidationRules(metadata, identifier);
-                AppendLine($"foreach (var {item} in {identifier} ?? global::System.Array.Empty<{GetTypeName(elementType)}>())");
-                AppendLine("{");
-                _indent++;
-                EmitValidationRules(metadata, item, elementType, validateCollectionElement: true);
-                _indent--;
-                AppendLine("}");
+                RenderArrayValidationRules(metadata, identifier);
+                var item = _getTemporaryIdentifier("validation_value");
+                BeginBlock($"foreach (var {item} in {identifier} ?? global::System.Array.Empty<{_getTypeName(elementType)}>())");
+                RenderValidationRules(metadata, item, elementType, validateCollectionElement: true);
+                EndBlock();
             }
             else
             {
-                EmitValidationRules(metadata, identifier, parameterType);
+                RenderValidationRules(metadata, identifier, parameterType);
             }
-            if (skipWhenOmitted)
-            {
-                _indent--;
-                AppendLine("}");
-            }
+            if (skipWhenOmitted) EndBlock();
         }
     }
 
-    private void EmitArrayValidationRules(PowerShellCompilationParameter parameter, string value)
+    private void RenderArrayValidationRules(PowerShellCompilationParameter parameter, string value)
     {
         foreach (var validation in parameter.Validations)
         {
             var condition = validation.Kind == PowerShellCompilationValidationKind.NotNullOrEmpty
                 ? $"{value} is null || {value}.Length == 0"
                 : $"{value} is null";
-            AppendLine($"if ({condition})");
-            AppendLine($"    throw {EmitParameterBindingValidationException(GetValidationMessage(parameter.Name, validation.Kind), parameter.Name)};");
+            AppendFailure(condition, GetValidationMessage(parameter.Name, validation.Kind), parameter.Name);
         }
     }
 
-    private void EmitValidationRules(
-        PowerShellCompilationParameter parameter,
-        string value,
-        Type valueType,
-        bool validateCollectionElement = false)
+    private void RenderValidationRules(PowerShellCompilationParameter parameter, string value, Type valueType, bool validateCollectionElement = false)
     {
         foreach (var validation in parameter.Validations)
         {
@@ -121,17 +136,19 @@ internal sealed partial class PowerShellCSharpMethodEmitter
                 PowerShellCompilationValidationKind.Set => EmitValidateSetFailure(value, validation.Arguments),
                 PowerShellCompilationValidationKind.Range => EmitValidateRangeFailure(value, valueType, validation.Arguments),
                 PowerShellCompilationValidationKind.Pattern => EmitValidatePatternFailure(value, validation.Arguments.Single()),
-                _ => throw Error(_body, $"Validation metadata '{validation.Kind}' is not supported for typed method parameters.")
+                _ => throw new InvalidOperationException($"Validation metadata '{validation.Kind}' is not supported for typed method parameters.")
             };
-            if (validateCollectionElement &&
-                !valueType.IsValueType &&
+            if (validateCollectionElement && !valueType.IsValueType &&
                 validation.Kind is not PowerShellCompilationValidationKind.NotNull and not PowerShellCompilationValidationKind.NotNullOrEmpty)
                 condition = condition is null ? $"{value} is null" : $"{value} is null || {condition}";
-            if (condition is null)
-                continue;
-            AppendLine($"if ({condition})");
-            AppendLine($"    throw {EmitParameterBindingValidationException(GetValidationMessage(parameter.Name, validation.Kind), parameter.Name)};");
+            if (condition is not null) AppendFailure(condition, GetValidationMessage(parameter.Name, validation.Kind), parameter.Name);
         }
+    }
+
+    private void AppendFailure(string condition, string message, string parameterName)
+    {
+        AppendLine($"if ({condition})");
+        AppendLine($"    throw {EmitParameterBindingValidationException(message, parameterName)};");
     }
 
     private string EmitParameterBindingValidationException(string message, string parameterName)
@@ -148,8 +165,6 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private static string EmitValidateRangeFailure(string value, Type valueType, IReadOnlyList<string> arguments)
     {
-        if (arguments.Count != 2)
-            throw new InvalidOperationException("ValidateRange requires exactly two invariant numeric bounds.");
         if (valueType == typeof(float) || valueType == typeof(double))
         {
             var actual = $"global::System.Convert.ToDouble({value}, global::System.Globalization.CultureInfo.InvariantCulture)";
@@ -179,4 +194,8 @@ internal sealed partial class PowerShellCSharpMethodEmitter
             PowerShellCompilationValidationKind.Pattern => $"Parameter '-{parameterName}' contains a value that does not match its validation pattern.",
             _ => $"Parameter '-{parameterName}' failed validation."
         };
+
+    private void BeginBlock(string header) { AppendLine(header); AppendLine("{"); _indent++; }
+    private void EndBlock() { _indent--; AppendLine("}"); }
+    private void AppendLine(string line) => _builder.Append(' ', _indent * 4).AppendLine(line);
 }

@@ -262,14 +262,19 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
 
 internal sealed class PowerShellBoundParameter
 {
-    internal PowerShellBoundParameter(PowerShellSymbolId symbol, PowerShellTypeFact type)
+    internal PowerShellBoundParameter(
+        PowerShellSymbolId symbol,
+        PowerShellTypeFact type,
+        PowerShellCompilationParameter contract)
     {
         Symbol = symbol;
         Type = type;
+        Contract = contract;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellTypeFact Type { get; }
+    internal PowerShellCompilationParameter Contract { get; }
 }
 
 internal sealed class PowerShellBoundLocal
