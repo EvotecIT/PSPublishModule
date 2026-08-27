@@ -363,13 +363,13 @@ public sealed class PowerForgeInstallerAuthoringTests
     }
 
     [Fact]
-    public void EmitSource_EscapesLiteralUrlQueryBracketsButPreservesInstallerProperties()
+    public void EmitSource_EscapesAllLiteralUrlBrackets()
     {
         var definition = CreateMonitoringInstaller();
         definition.ExitLaunch = new PowerForgeInstallerExitLaunch
         {
             Text = "Open filtered dashboard",
-            Target = "https://example.test/[TENANT]/search?filter[status]=[STATUS]"
+            Target = "https://example.test/search?filter=[status]&items[value]=active"
         };
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
@@ -378,7 +378,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
             (string?)element.Attribute("Dialog") == "ExitDialog" &&
             (string?)element.Attribute("Property") == "WixShellExecTarget" &&
-            (string?)element.Attribute("Value") == "https://example.test/[TENANT]/search?filter[\\[]status[\\]]=[STATUS]");
+            (string?)element.Attribute("Value") == "https://example.test/search?filter=[\\[]status[\\]]&items[\\[]value[\\]]=active");
     }
 
     [Fact]
@@ -619,6 +619,36 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
             (string?)e.Attribute("Property") == "WixShellExecTarget" &&
             (string?)e.Attribute("Value") == "http://127.0.0.1:9000/" &&
+            (string?)e.Attribute("Order") == "3"));
+    }
+
+    [Fact]
+    public void EmitSource_EscapesLiteralBracketsForDialogAndRestoredUrlTargets()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open monitoring",
+            Target = "https://example.test/?filter=[status]"
+        };
+        var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
+        dialog.Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = "https://example.test/studio?items[value]=active"
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+        var action = doc.Descendants(Wix + "Control").Single(e =>
+            (string?)e.Attribute("Id") == "OpenStudio");
+
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Value") == "https://example.test/studio?items[\\[]value[\\]]=active" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Value") == "https://example.test/?filter=[\\[]status[\\]]" &&
             (string?)e.Attribute("Order") == "3"));
     }
 

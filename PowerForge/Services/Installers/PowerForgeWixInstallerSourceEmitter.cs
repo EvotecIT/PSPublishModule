@@ -349,54 +349,21 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         var formatted = new StringBuilder(target.Length);
         for (var index = 0; index < target.Length; index++)
         {
-            if (target[index] != '[')
+            if (target[index] == '[')
             {
-                formatted.Append(target[index]);
-                continue;
+                formatted.Append("[\\[]");
             }
-
-            var closingBracket = target.IndexOf(']', index + 1);
-            if (closingBracket < 0)
+            else if (target[index] == ']')
             {
-                formatted.Append(target[index]);
-                continue;
-            }
-
-            if (IsInstallerPropertyReference(target, index, closingBracket))
-            {
-                formatted.Append(target, index, closingBracket - index + 1);
+                formatted.Append("[\\]]");
             }
             else
             {
-                formatted.Append("[\\[]");
-                formatted.Append(target, index + 1, closingBracket - index - 1);
-                formatted.Append("[\\]]");
+                formatted.Append(target[index]);
             }
-
-            index = closingBracket;
         }
 
         return formatted.ToString();
-    }
-
-    private static bool IsInstallerPropertyReference(string target, int openingBracket, int closingBracket)
-    {
-        if (closingBracket == openingBracket + 1
-            || (openingBracket > 0 && (char.IsLetterOrDigit(target[openingBracket - 1]) || target[openingBracket - 1] == '_')))
-        {
-            return false;
-        }
-
-        for (var index = openingBracket + 1; index < closingBracket; index++)
-        {
-            var character = target[index];
-            if (!char.IsLetterOrDigit(character) && character != '_' && character != '.')
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static string BuildRequiredInputDialogId(int index)
@@ -625,7 +592,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XElement(
                     WixNamespace + "Publish",
                     new XAttribute("Property", "WixShellExecTarget"),
-                    new XAttribute("Value", action.Target),
+                    new XAttribute("Value", FormatExitLaunchTarget(action.Target)),
                     new XAttribute("Order", "1"),
                     new XAttribute("Condition", action.Condition)),
                 new XElement(
@@ -651,7 +618,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return new XElement(
             WixNamespace + "Publish",
             new XAttribute("Property", "WixShellExecTarget"),
-            new XAttribute("Value", exitLaunch.Target),
+            new XAttribute("Value", FormatExitLaunchTarget(exitLaunch.Target)),
             new XAttribute("Order", "3"),
             new XAttribute("Condition", string.IsNullOrWhiteSpace(condition) ? "1" : condition));
     }
