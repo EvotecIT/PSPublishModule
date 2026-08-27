@@ -394,9 +394,14 @@ public sealed partial class DotNetPublishPipelineRunner
 
             // ResolveReferences reports an expected TargetPath even when project builds are
             // disabled and the child has not been built. An absent future output is not a
-            // current provenance input, but a present output must pass controlled proof below.
-            if (!File.Exists(fullPath))
+            // current provenance input only while its existing path ancestry remains inside
+            // the recorded repository and free of links. Unsafe absent outputs flow through
+            // the normal generated-output proof below so provenance fails closed.
+            if (!File.Exists(fullPath) &&
+                !HasUnsafeAbsentProjectReferenceOutputPath(fullPath, declaringProjectPath))
+            {
                 return true;
+            }
 
             outputs = assemblyProjectReferences
                 .Select(projectReference => new GeneratedProjectReferenceOutput(fullPath, projectReference))
@@ -448,6 +453,65 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(projectReference => new GeneratedProjectReferenceOutput(fullPath, projectReference))
             .ToArray();
         return true;
+    }
+
+    private static bool HasUnsafeAbsentProjectReferenceOutputPath(
+        string outputPath,
+        string declaringProjectPath)
+    {
+        try
+        {
+            string projectDirectory = Path.GetDirectoryName(Path.GetFullPath(declaringProjectPath))!;
+            string? gitRoot = ReadGitText(projectDirectory, "rev-parse --show-toplevel");
+            if (string.IsNullOrWhiteSpace(gitRoot) ||
+                !IsSameOrBelowBuildInputPath(outputPath, gitRoot!))
+            {
+                return true;
+            }
+
+            string current = Path.GetFullPath(outputPath);
+            string boundary = NormalizeBuildInputPathRoot(gitRoot!);
+            StringComparison comparison = IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            while (true)
+            {
+                bool atBoundary = string.Equals(
+                    current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    boundary.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    comparison);
+                try
+                {
+                    if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                        return true;
+                    if (atBoundary)
+                        return false;
+                }
+                catch (Exception exception) when (
+                    exception is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    if (atBoundary)
+                        return true;
+                }
+                catch
+                {
+                    return true;
+                }
+
+                string? parent = Path.GetDirectoryName(current);
+                if (string.IsNullOrWhiteSpace(parent) ||
+                    string.Equals(parent, current, comparison) ||
+                    !IsSameOrBelowBuildInputPath(parent, boundary))
+                {
+                    return true;
+                }
+                current = parent;
+            }
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static bool IsDeclaredProjectReferenceOutput(
