@@ -1073,6 +1073,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Enabled = definition.ExitLaunch.Enabled,
                     Text = definition.ExitLaunch.Text,
                     Target = definition.ExitLaunch.Target,
+                    EscapeLiteralBrackets = definition.ExitLaunch.EscapeLiteralBrackets,
                     Condition = definition.ExitLaunch.Condition
                 },
             LicenseAgreement = definition.LicenseAgreement is null
@@ -1155,6 +1156,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Id = action.Id,
                     Text = action.Text,
                     Target = action.Target,
+                    EscapeLiteralBrackets = action.EscapeLiteralBrackets,
                     Condition = action.Condition
                 });
             }

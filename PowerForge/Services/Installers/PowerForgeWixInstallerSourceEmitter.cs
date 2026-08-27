@@ -325,7 +325,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XAttribute("Dialog", "ExitDialog"),
                 new XAttribute("Control", "Finish"),
                 new XAttribute("Property", "WixShellExecTarget"),
-                new XAttribute("Value", FormatExitLaunchTarget(exitLaunch.Target)),
+                new XAttribute("Value", FormatShellTarget(exitLaunch.Target, exitLaunch.EscapeLiteralBrackets)),
                 new XAttribute("Order", "1"),
                 new XAttribute("Condition", exitLaunch.Condition)),
             new XElement(
@@ -339,9 +339,9 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         };
     }
 
-    private static string FormatExitLaunchTarget(string target)
+    private static string FormatShellTarget(string target, bool escapeLiteralBrackets)
     {
-        if (!Uri.TryCreate(target, UriKind.Absolute, out _))
+        if (!escapeLiteralBrackets)
         {
             return target;
         }
@@ -592,7 +592,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XElement(
                     WixNamespace + "Publish",
                     new XAttribute("Property", "WixShellExecTarget"),
-                    new XAttribute("Value", FormatExitLaunchTarget(action.Target)),
+                    new XAttribute("Value", FormatShellTarget(action.Target, action.EscapeLiteralBrackets)),
                     new XAttribute("Order", "1"),
                     new XAttribute("Condition", action.Condition)),
                 new XElement(
@@ -618,7 +618,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return new XElement(
             WixNamespace + "Publish",
             new XAttribute("Property", "WixShellExecTarget"),
-            new XAttribute("Value", FormatExitLaunchTarget(exitLaunch.Target)),
+            new XAttribute("Value", FormatShellTarget(exitLaunch.Target, exitLaunch.EscapeLiteralBrackets)),
             new XAttribute("Order", "3"),
             new XAttribute("Condition", string.IsNullOrWhiteSpace(condition) ? "1" : condition));
     }

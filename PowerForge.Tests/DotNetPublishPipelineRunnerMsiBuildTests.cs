@@ -2059,7 +2059,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             authoring.ExitLaunch = new PowerForgeInstallerExitLaunch
             {
                 Text = "Open app",
-                Target = "http://127.0.0.1:9000/"
+                Target = "http://127.0.0.1:9000/",
+                EscapeLiteralBrackets = true
             };
             authoring.LicenseAgreement = new PowerForgeInstallerLicenseAgreement
             {
@@ -2089,7 +2090,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                     {
                         Id = "OpenConfig",
                         Text = "Open config",
-                        Target = "http://127.0.0.1:9000/config"
+                        Target = "http://127.0.0.1:9000/config",
+                        EscapeLiteralBrackets = true
                     }
                 }
             });
@@ -2114,6 +2116,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.NotNull(installerPlan.Authoring!.ExitLaunch);
             Assert.Equal("Open app", installerPlan.Authoring.ExitLaunch!.Text);
             Assert.Equal("http://127.0.0.1:9000/", installerPlan.Authoring.ExitLaunch.Target);
+            Assert.True(installerPlan.Authoring.ExitLaunch.EscapeLiteralBrackets);
             Assert.NotNull(installerPlan.Authoring.LicenseAgreement);
             Assert.Equal("Installer/App/License.rtf", installerPlan.Authoring.LicenseAgreement!.Path);
             var input = Assert.Single(installerPlan.Authoring!.Inputs);
@@ -2127,6 +2130,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var action = Assert.Single(dialog.Actions);
             Assert.Equal("OpenConfig", action.Id);
             Assert.Equal("http://127.0.0.1:9000/config", action.Target);
+            Assert.True(action.EscapeLiteralBrackets);
 
             var prepareStep = Assert.Single(plan.Steps, s => s.Kind == DotNetPublishStepKind.MsiPrepare);
             Assert.Equal("ProductFiles", prepareStep.HarvestComponentGroupId);

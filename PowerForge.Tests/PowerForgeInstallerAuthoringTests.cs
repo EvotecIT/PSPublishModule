@@ -350,7 +350,8 @@ public sealed class PowerForgeInstallerAuthoringTests
         definition.ExitLaunch = new PowerForgeInstallerExitLaunch
         {
             Text = "Open local dashboard",
-            Target = "http://[::1]:9000/"
+            Target = "http://[::1]:9000/",
+            EscapeLiteralBrackets = true
         };
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
@@ -369,7 +370,8 @@ public sealed class PowerForgeInstallerAuthoringTests
         definition.ExitLaunch = new PowerForgeInstallerExitLaunch
         {
             Text = "Open filtered dashboard",
-            Target = "https://example.test/search?filter=[status]&items[value]=active"
+            Target = "https://example.test/search?filter=[status]&items[value]=active",
+            EscapeLiteralBrackets = true
         };
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
@@ -379,6 +381,25 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)element.Attribute("Dialog") == "ExitDialog" &&
             (string?)element.Attribute("Property") == "WixShellExecTarget" &&
             (string?)element.Attribute("Value") == "https://example.test/search?filter=[\\[]status[\\]]&items[\\[]value[\\]]=active");
+    }
+
+    [Fact]
+    public void EmitSource_PreservesMsiPropertiesInAbsoluteUrlTargetsByDefault()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open instance",
+            Target = "https://example.test/?instance=[INSTANCE]"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "https://example.test/?instance=[INSTANCE]");
     }
 
     [Fact]
@@ -629,14 +650,16 @@ public sealed class PowerForgeInstallerAuthoringTests
         definition.ExitLaunch = new PowerForgeInstallerExitLaunch
         {
             Text = "Open monitoring",
-            Target = "https://example.test/?filter=[status]"
+            Target = "https://example.test/?filter=[status]",
+            EscapeLiteralBrackets = true
         };
         var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
         dialog.Actions.Add(new PowerForgeInstallerDialogAction
         {
             Id = "OpenStudio",
             Text = "Open Studio",
-            Target = "https://example.test/studio?items[value]=active"
+            Target = "https://example.test/studio?items[value]=active",
+            EscapeLiteralBrackets = true
         });
 
         var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
