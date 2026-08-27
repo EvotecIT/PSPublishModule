@@ -48,17 +48,29 @@ public sealed partial class PowerShellCompilationAnalyzer
             input.ModuleRoot,
             normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+        var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
+        var dependencies = dependencyPlanner.Analyze(
+            input,
+            capabilityMode,
+            resourceMode,
+            includeResource,
+            excludeResource,
+            outputDirectory);
+        var dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+            input.SourcePath,
+            input.ModuleManifestPath,
+            input.ModuleRoot,
+            input.Kind,
+            capabilityMode,
+            input.CompilationSourceFiles,
+            dependencies,
+            normalizedTargetFramework);
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
             plan.TargetFramework,
-            new PowerShellCompilationDependencyPlanner().Analyze(
-                input,
-                capabilityMode,
-                resourceMode,
-                includeResource,
-                excludeResource,
-                outputDirectory));
+            dependencies,
+            dependencyGraph);
         return capabilityMode == PowerShellCompilationMode.Package
             ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
             : combined;
@@ -104,7 +116,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     file.Units,
                     file.Diagnostics.Concat(new[] { diagnostic }).ToArray());
             }).ToArray();
-            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies);
+            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph);
         }
     }
 

@@ -304,7 +304,8 @@ public sealed class PowerShellCompilationPlan
         PowerShellCompilationMode mode,
         PowerShellCompilationFilePlan[] files,
         string? targetFramework = null,
-        PowerShellCompilationDependency[]? dependencies = null)
+        PowerShellCompilationDependency[]? dependencies = null,
+        PowerShellCompilationDependencyGraph? dependencyGraph = null)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -312,6 +313,7 @@ public sealed class PowerShellCompilationPlan
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework;
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
+        DependencyGraph = dependencyGraph;
         ResourceSummary = PowerShellCompilationResourceSummary.Create(Dependencies);
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
@@ -330,6 +332,9 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Deterministic runtime dependency and resource decisions for the selected artifact shape.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; }
+
+    /// <summary>Locked dependency graph used for analysis and deployment evidence when input resolution supplied one.</summary>
+    public PowerShellCompilationDependencyGraph? DependencyGraph { get; }
 
     /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; }

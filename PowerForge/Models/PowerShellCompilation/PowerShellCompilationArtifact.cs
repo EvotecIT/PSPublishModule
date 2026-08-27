@@ -201,7 +201,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -298,6 +298,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Discovered source, module, assembly, and content dependency decisions.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationDependency>();
+
+    /// <summary>Locked dependency graph used by analysis, build planning, and deployment validation.</summary>
+    public PowerShellCompilationDependencyGraph? DependencyGraph { get; set; }
 
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();

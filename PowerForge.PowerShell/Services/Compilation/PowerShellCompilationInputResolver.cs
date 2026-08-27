@@ -28,7 +28,16 @@ public sealed class PowerShellCompilationResolvedInput
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
-        Dependencies = new PowerShellCompilationDependencyPlanner().Analyze(this);
+        var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
+        Dependencies = dependencyPlanner.Analyze(this);
+        DependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+            SourcePath,
+            ModuleManifestPath,
+            ModuleRoot,
+            Kind,
+            Mode,
+            CompilationSourceFiles,
+            Dependencies);
     }
 
     /// <summary>Original absolute input path.</summary>
@@ -60,6 +69,9 @@ public sealed class PowerShellCompilationResolvedInput
 
     /// <summary>Deterministic source, module, assembly, and content dependency decisions for the inferred artifact shape.</summary>
     public PowerShellCompilationDependency[] Dependencies { get; }
+
+    /// <summary>Locked dependency graph sharing stable identities across analysis and deployment views.</summary>
+    public PowerShellCompilationDependencyGraph DependencyGraph { get; }
 
     internal string[] RecursiveSourceDirectories { get; }
 }

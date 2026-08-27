@@ -48,6 +48,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
+            var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
+            if (dependencyGraph.Conflicts.Length > 0)
+                throw new InvalidOperationException("PowerShell compilation dependency graph contains incompatible identities: " + string.Join(" ", dependencyGraph.Conflicts));
+            if (dependencyGraph.Cycles.Length > 0)
+                throw new InvalidOperationException("PowerShell compilation dependency graph contains a static dependency cycle: " + string.Join(" -> ", dependencyGraph.Cycles[0]));
             var missingDependencies = dependencyPlan
                 .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
                 .ToArray();
@@ -354,6 +359,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     AuthenticodeSignedFiles = signing?.SignedFiles ?? 0,
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
+                    DependencyGraph = dependencyGraph,
                     CommandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
                         .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
                         .Select(static group => group.First())

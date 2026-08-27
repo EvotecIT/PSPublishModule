@@ -40,6 +40,32 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             outputDirectory);
     }
 
+    /// <summary>Builds the locked graph used by semantic analysis, artifact planning, and deployment evidence.</summary>
+    public PowerShellCompilationDependencyGraph AnalyzeGraph(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode? mode = null,
+        PowerShellCompilationResourceMode resourceMode = PowerShellCompilationResourceMode.Declared,
+        IEnumerable<string>? includeResource = null,
+        IEnumerable<string>? excludeResource = null,
+        string? outputDirectory = null,
+        string? targetFramework = null,
+        string? runtimeIdentifier = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        var effectiveMode = mode ?? input.Mode;
+        var dependencies = Analyze(input, effectiveMode, resourceMode, includeResource, excludeResource, outputDirectory);
+        return PowerShellCompilationDependencyGraphBuilder.Build(
+            input.SourcePath,
+            input.ModuleManifestPath,
+            input.ModuleRoot,
+            input.Kind,
+            effectiveMode,
+            input.CompilationSourceFiles,
+            dependencies,
+            targetFramework,
+            runtimeIdentifier);
+    }
+
     internal static PowerShellCompilationDependency[] Analyze(
         PowerShellCompilationBuildSpec spec,
         IEnumerable<string> sourceFiles)
@@ -61,6 +87,29 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             spec.IncludeResource,
             spec.ExcludeResource,
             spec.OutputDirectory);
+    }
+
+    internal static PowerShellCompilationDependencyGraph AnalyzeGraph(
+        PowerShellCompilationBuildSpec spec,
+        IEnumerable<string> sourceFiles,
+        IReadOnlyCollection<PowerShellCompilationDependency> dependencies)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var manifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath)
+            : spec.ModuleManifestPath;
+        if (!File.Exists(manifestPath)) manifestPath = null;
+        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        return PowerShellCompilationDependencyGraphBuilder.Build(
+            spec.SourcePath,
+            manifestPath,
+            moduleRoot,
+            spec.Kind,
+            spec.Mode,
+            sourceFiles,
+            dependencies,
+            spec.TargetFramework,
+            spec.RuntimeIdentifier);
     }
     private static PowerShellCompilationDependency[] AnalyzeCore(
         string sourcePath,
