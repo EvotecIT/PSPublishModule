@@ -79,6 +79,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             int compiledMethods;
             int runtimeRoutedUnits;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
+            PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
+            var dependencyClosureVerified = false;
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
                 : Array.Empty<string>();
@@ -228,6 +230,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 runtimeRoutedUnits = 0;
             }
 
+            if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime && compiledMethodDetails.Count > 0)
+            {
+                runtimeFreeContract = PowerShellRuntimeFreeArtifactContract.Create(
+                    workspace,
+                    "PowerForge.Compiled",
+                    typed?.TypeName ?? "CompiledPowerShellScript",
+                    compiledMethodDetails);
+            }
+
             var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
             var process = RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier);
             result.BuildOutput = BoundOutput(process.Output);
@@ -285,6 +296,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                                         ? "GeneratedPackagedSource"
                                         : "GeneratedSource")));
                 }
+                if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime)
+                    dependencyClosureVerified = PowerShellStrictDependencyClosureVerifier.Verify(stagedArtifact.Files);
                 var signing = PowerShellCompilationArtifactSigner.Sign(spec, stagedArtifact.Files);
                 if (signing is not null)
                 {
@@ -317,6 +330,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     RuntimeIdentifier = runtimeIdentifier,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
                     UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
+                    SemanticProfile = runtimeFreeContract?.SemanticProfile,
+                    PublicAbi = runtimeFreeContract?.PublicAbi,
+                    GeneratedSourceSha256 = runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty,
+                    ContainsEmbeddedPowerShellSource = stagedArtifact.Files.Any(static file =>
+                        PowerShellStrictDependencyClosureVerifier.IsPowerShellSource(file.Path)),
+                    AllowsPowerShellRuntimeEvaluation = requiresPowerShellRuntime || usesPowerShellRuntimeFallback,
+                    DependencyClosureVerified = dependencyClosureVerified,
                     SelfContained = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SelfContained,
                     SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
                     Optimization = spec.Optimization,

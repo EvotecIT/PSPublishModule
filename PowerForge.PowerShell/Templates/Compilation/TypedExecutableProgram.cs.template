@@ -111,7 +111,7 @@ internal static class Program
             var values = raw[parameter.Name];
             if (boundEmptyCollections.Contains(parameter.Name))
             {
-                converted[parameter.Name] = Array.CreateInstance(parameter.Type.GetElementType()!, 0);
+                converted[parameter.Name] = parameter.ParseValues(Array.Empty<string>());
                 ValidateValue(parameter, converted[parameter.Name]);
                 continue;
             }
@@ -119,22 +119,12 @@ internal static class Program
             {
                 if (parameter.IsRequired)
                     throw new ArgumentException($"Required parameter '--{parameter.Name}' was not provided.");
-                converted[parameter.Name] = parameter.Type.IsValueType
-                    ? Activator.CreateInstance(parameter.Type)!
-                    : null!;
+                converted[parameter.Name] = parameter.CreateDefault();
                 continue;
             }
-            if (parameter.IsRequired && parameter.Type == typeof(string) && values[0].Length == 0 && !parameter.AllowEmptyString)
+            if (parameter.IsRequired && parameter.IsString && values[0].Length == 0 && !parameter.AllowEmptyString)
                 throw new ArgumentException($"Required parameter '--{parameter.Name}' cannot be an empty string.");
-            if (parameter.IsArray)
-            {
-                var elementType = parameter.Type.GetElementType()!;
-                converted[parameter.Name] = ParseArray(values, elementType, parameter.Name);
-            }
-            else
-            {
-                converted[parameter.Name] = ParseScalar(values[0], parameter.Type, parameter.Name);
-            }
+            converted[parameter.Name] = parameter.ParseValues(values);
             ValidateValue(parameter, converted[parameter.Name]);
         }
         return converted;
@@ -175,60 +165,53 @@ internal static class Program
         values.Add(value);
     }
 
-    private static object ParseScalar(string value, Type type, string parameterName)
+    private static T ParseValue<T>(string value, string parameterName, Func<string, T> parser, string typeName)
     {
         try
         {
-            var scalar = Nullable.GetUnderlyingType(type) ?? type;
-            if (scalar == typeof(string)) return value;
-            if (scalar == typeof(bool))
-            {
-                if (value.Equals("$true", StringComparison.OrdinalIgnoreCase)) return true;
-                if (value.Equals("$false", StringComparison.OrdinalIgnoreCase)) return false;
-                return bool.Parse(value);
-            }
-            if (scalar == typeof(byte)) return byte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(sbyte)) return sbyte.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(short)) return short.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(ushort)) return ushort.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(int)) return int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(uint)) return uint.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(long)) return long.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(ulong)) return ulong.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
-            if (scalar == typeof(float)) return float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (scalar == typeof(double)) return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
-            if (scalar == typeof(decimal)) return decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
-            if (scalar == typeof(char) && value.Length == 1) return value[0];
-            if (scalar.IsEnum)
-            {
-                var names = value.Split(',').Select(static name => name.Trim()).ToArray();
-                var definedNames = Enum.GetNames(scalar);
-                if (names.Length == 0 ||
-                    names.Any(name => name.Length == 0 || !definedNames.Contains(name, StringComparer.OrdinalIgnoreCase)) ||
-                    names.Length > 1 && !Attribute.IsDefined(scalar, typeof(FlagsAttribute)))
-                    throw new FormatException("Enum arguments must use defined names.");
-                return Enum.Parse(scalar, value, ignoreCase: true);
-            }
-            if (scalar == typeof(DateTime)) return DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-            if (scalar == typeof(DateTimeOffset)) return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-            if (scalar == typeof(TimeSpan)) return TimeSpan.Parse(value, CultureInfo.InvariantCulture);
-            if (scalar == typeof(Guid)) return Guid.Parse(value);
-            if (scalar == typeof(Uri)) return new Uri(value, UriKind.RelativeOrAbsolute);
-            if (scalar == typeof(Version)) return Version.Parse(value);
+            return parser(value);
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException)
         {
-            throw new ArgumentException($"Value '{value}' is invalid for parameter '--{parameterName}' ({type.Name}).", exception);
+            throw new ArgumentException($"Value '{value}' is invalid for parameter '--{parameterName}' ({typeName}).", exception);
         }
-        throw new ArgumentException($"Parameter '--{parameterName}' uses unsupported CLR type '{type.FullName}'.");
     }
 
-    private static object ParseArray(IReadOnlyList<string> values, Type elementType, string parameterName)
+    private static bool ParseBoolean(string value, string parameterName)
     {
-        var result = Array.CreateInstance(elementType, values.Count);
-        for (var index = 0; index < values.Count; index++)
-            result.SetValue(ParseScalar(values[index], elementType, parameterName), index);
-        return result;
+        if (value.Equals("$true", StringComparison.OrdinalIgnoreCase)) return true;
+        if (value.Equals("$false", StringComparison.OrdinalIgnoreCase)) return false;
+        return ParseValue(value, parameterName, bool.Parse, nameof(Boolean));
+    }
+
+    private static byte ParseByte(string value, string name) => ParseValue(value, name, static text => byte.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(Byte));
+    private static sbyte ParseSByte(string value, string name) => ParseValue(value, name, static text => sbyte.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(SByte));
+    private static short ParseInt16(string value, string name) => ParseValue(value, name, static text => short.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(Int16));
+    private static ushort ParseUInt16(string value, string name) => ParseValue(value, name, static text => ushort.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(UInt16));
+    private static int ParseInt32(string value, string name) => ParseValue(value, name, static text => int.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(Int32));
+    private static uint ParseUInt32(string value, string name) => ParseValue(value, name, static text => uint.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(UInt32));
+    private static long ParseInt64(string value, string name) => ParseValue(value, name, static text => long.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(Int64));
+    private static ulong ParseUInt64(string value, string name) => ParseValue(value, name, static text => ulong.Parse(text, NumberStyles.Integer, CultureInfo.InvariantCulture), nameof(UInt64));
+    private static float ParseSingle(string value, string name) => ParseValue(value, name, static text => float.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture), nameof(Single));
+    private static double ParseDouble(string value, string name) => ParseValue(value, name, static text => double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture), nameof(Double));
+    private static decimal ParseDecimal(string value, string name) => ParseValue(value, name, static text => decimal.Parse(text, NumberStyles.Number, CultureInfo.InvariantCulture), nameof(Decimal));
+    private static char ParseChar(string value, string name) => ParseValue(value, name, static text => text.Length == 1 ? text[0] : throw new FormatException("A character value must contain exactly one character."), nameof(Char));
+    private static DateTime ParseDateTime(string value, string name) => ParseValue(value, name, static text => DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), nameof(DateTime));
+    private static DateTimeOffset ParseDateTimeOffset(string value, string name) => ParseValue(value, name, static text => DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind), nameof(DateTimeOffset));
+    private static TimeSpan ParseTimeSpan(string value, string name) => ParseValue(value, name, static text => TimeSpan.Parse(text, CultureInfo.InvariantCulture), nameof(TimeSpan));
+    private static Guid ParseGuid(string value, string name) => ParseValue(value, name, Guid.Parse, nameof(Guid));
+    private static Uri ParseUri(string value, string name) => ParseValue(value, name, static text => new Uri(text, UriKind.RelativeOrAbsolute), nameof(Uri));
+    private static Version ParseVersion(string value, string name) => ParseValue(value, name, Version.Parse, nameof(Version));
+
+    private static TEnum ParseEnum<TEnum>(string value, string parameterName) where TEnum : struct, Enum
+    {
+        var names = value.Split(',').Select(static name => name.Trim()).ToArray();
+        var definedNames = Enum.GetNames<TEnum>();
+        if (names.Length == 0 ||
+            names.Any(name => name.Length == 0 || !definedNames.Contains(name, StringComparer.OrdinalIgnoreCase)) ||
+            names.Length > 1 && !typeof(TEnum).IsDefined(typeof(FlagsAttribute), inherit: false))
+            throw new ArgumentException($"Value '{value}' is invalid for parameter '--{parameterName}' ({typeof(TEnum).Name}).");
+        return Enum.Parse<TEnum>(value, ignoreCase: true);
     }
 
     private static void ValidateValue(ParameterSpec parameter, object? value)
@@ -323,7 +306,10 @@ internal static class Program
     {
         internal ParameterSpec(
             string name,
-            Type type,
+            bool isArray,
+            bool isString,
+            Func<object> defaultFactory,
+            Func<IReadOnlyList<string>, string, object> valueParser,
             bool isRequired,
             bool isSwitch,
             int? position,
@@ -335,7 +321,10 @@ internal static class Program
             ValidationSpec[] validations)
         {
             Name = name;
-            Type = type;
+            IsArray = isArray;
+            IsString = isString;
+            DefaultFactory = defaultFactory;
+            ValueParser = valueParser;
             IsRequired = isRequired;
             IsSwitch = isSwitch;
             Position = position;
@@ -348,7 +337,8 @@ internal static class Program
         }
 
         internal string Name { get; }
-        internal Type Type { get; }
+        internal bool IsArray { get; }
+        internal bool IsString { get; }
         internal bool IsRequired { get; }
         internal bool IsSwitch { get; }
         internal int? Position { get; }
@@ -358,7 +348,10 @@ internal static class Program
         internal bool AllowEmptyString { get; }
         internal bool AllowEmptyCollection { get; }
         internal ValidationSpec[] Validations { get; }
-        internal bool IsArray => Type.IsArray;
+        private Func<object> DefaultFactory { get; }
+        private Func<IReadOnlyList<string>, string, object> ValueParser { get; }
+        internal object CreateDefault() => DefaultFactory();
+        internal object ParseValues(IReadOnlyList<string> values) => ValueParser(values, Name);
     }
 
     private enum ValidationKind

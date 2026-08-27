@@ -46,6 +46,7 @@ internal static class PowerShellTypedExecutableEmitter
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select((parameter, index) =>
         {
             var metadata = analyzedParameters[parameter.Name.VariablePath.UserPath];
+            var compiledType = GetCompiledParameterType(parameter);
             var acceptsRemainingArguments = metadata.Bindings.Any(static binding => binding.ValueFromRemainingArguments);
             var position = metadata.Bindings.Select(static binding => binding.Position).FirstOrDefault(static value => value.HasValue);
             if (!position.HasValue)
@@ -55,8 +56,11 @@ internal static class PowerShellTypedExecutableEmitter
                 else if (commandBinding.PositionalBinding && !hasExplicitPositions)
                     position = index;
             }
-            return "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(metadata.Name) + ", typeof(" +
-                   PowerShellCSharpMethodEmitter.GetTypeName(GetCompiledParameterType(parameter)) + "), " +
+            return "        new ParameterSpec(" + PowerShellCSharpLiteral.QuoteString(metadata.Name) + ", " +
+                   (compiledType.IsArray ? "true" : "false") + ", " +
+                   (compiledType == typeof(string) ? "true" : "false") + ", " +
+                   GenerateDefaultFactory(compiledType) + ", " +
+                   GenerateValueParser(compiledType) + ", " +
                    (metadata.IsMandatory ? "true" : "false") + ", " +
                    (metadata.IsSwitch ? "true" : "false") + ", " +
                    (position.HasValue ? position.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null") + ", " +
@@ -98,6 +102,50 @@ internal static class PowerShellTypedExecutableEmitter
     private static string GenerateValidations(IEnumerable<PowerShellCompilationValidation> validations)
         => "new ValidationSpec[] { " + string.Join(", ", validations.Select(validation =>
             "new ValidationSpec(ValidationKind." + validation.Kind + ", " + GenerateStringArray(validation.Arguments) + ")")) + " }";
+
+    private static string GenerateDefaultFactory(Type type)
+        => type.IsValueType
+            ? "static () => default(" + PowerShellCSharpMethodEmitter.GetTypeName(type) + ")"
+            : "static () => null!";
+
+    private static string GenerateValueParser(Type type)
+    {
+        var isArray = type.IsArray;
+        var scalar = Nullable.GetUnderlyingType(isArray ? type.GetElementType()! : type) ??
+                     (isArray ? type.GetElementType()! : type);
+        var scalarTypeName = PowerShellCSharpMethodEmitter.GetTypeName(isArray ? type.GetElementType()! : type);
+        var parse = GetParserExpression(scalar);
+        return isArray
+            ? "static (values, name) => values.Select(value => (" + scalarTypeName + ")" + parse.Replace("{{VALUE}}", "value").Replace("{{NAME}}", "name") + ").ToArray()"
+            : "static (values, name) => " + parse.Replace("{{VALUE}}", "values[0]").Replace("{{NAME}}", "name");
+    }
+
+    private static string GetParserExpression(Type scalar)
+    {
+        if (scalar.IsEnum)
+            return "ParseEnum<" + PowerShellCSharpMethodEmitter.GetTypeName(scalar) + ">({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(string)) return "{{VALUE}}";
+        if (scalar == typeof(bool)) return "ParseBoolean({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(byte)) return "ParseByte({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(sbyte)) return "ParseSByte({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(short)) return "ParseInt16({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(ushort)) return "ParseUInt16({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(int)) return "ParseInt32({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(uint)) return "ParseUInt32({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(long)) return "ParseInt64({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(ulong)) return "ParseUInt64({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(float)) return "ParseSingle({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(double)) return "ParseDouble({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(decimal)) return "ParseDecimal({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(char)) return "ParseChar({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(DateTime)) return "ParseDateTime({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(DateTimeOffset)) return "ParseDateTimeOffset({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(TimeSpan)) return "ParseTimeSpan({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(Guid)) return "ParseGuid({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(Uri)) return "ParseUri({{VALUE}}, {{NAME}})";
+        if (scalar == typeof(Version)) return "ParseVersion({{VALUE}}, {{NAME}})";
+        throw new InvalidOperationException($"Strict executable parameter parser does not support CLR type '{scalar.FullName}'.");
+    }
 
     private static string ReadTemplate(string resourceName)
     {

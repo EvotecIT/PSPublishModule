@@ -74,6 +74,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(result.Manifest);
         Assert.False(result.Manifest.RequiresPowerShellRuntime);
         Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
+        Assert.NotNull(result.Manifest.SemanticProfile);
+        Assert.NotNull(result.Manifest.PublicAbi);
+        Assert.Equal("CompiledPowerShellScript", result.Manifest.PublicAbi.TypeName);
+        Assert.False(result.Manifest.ContainsEmbeddedPowerShellSource);
+        Assert.False(result.Manifest.AllowsPowerShellRuntimeEvaluation);
+        Assert.True(result.Manifest.DependencyClosureVerified);
+        Assert.Equal(64, result.Manifest.GeneratedSourceSha256.Length);
         Assert.Equal(1, result.Manifest.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);

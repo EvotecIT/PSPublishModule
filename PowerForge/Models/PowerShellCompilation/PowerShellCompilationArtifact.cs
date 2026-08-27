@@ -201,7 +201,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -229,6 +229,24 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Whether any unit executes through dynamic PowerShell script semantics.</summary>
     public bool UsesPowerShellRuntimeFallback { get; set; }
+
+    /// <summary>Versioned semantic profile for runtime-free Strict artifacts.</summary>
+    public PowerShellCompilationSemanticProfile? SemanticProfile { get; set; }
+
+    /// <summary>Normalized public CLR ABI, when the artifact exposes runtime-free managed methods.</summary>
+    public PowerShellCompilationAbiManifest? PublicAbi { get; set; }
+
+    /// <summary>SHA-256 of the complete generated C# input set before compilation.</summary>
+    public string GeneratedSourceSha256 { get; set; } = string.Empty;
+
+    /// <summary>Whether generated output embeds authored PowerShell source.</summary>
+    public bool ContainsEmbeddedPowerShellSource { get; set; }
+
+    /// <summary>Whether generated code permits dynamic PowerShell source evaluation.</summary>
+    public bool AllowsPowerShellRuntimeEvaluation { get; set; }
+
+    /// <summary>Whether the final managed dependency closure was mechanically checked.</summary>
+    public bool DependencyClosureVerified { get; set; }
 
     /// <summary>Whether the .NET runtime is included with the artifact.</summary>
     public bool SelfContained { get; set; }
