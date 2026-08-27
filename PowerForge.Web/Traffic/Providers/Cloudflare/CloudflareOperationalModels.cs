@@ -79,7 +79,11 @@ public sealed class CloudflareOperationalCollectionResult
     public bool Success { get; set; }
     /// <summary>Stable fleet site identifier for this pulse.</summary>
     public string SiteId { get; set; } = string.Empty;
-    /// <summary>Capture time.</summary>
+    /// <summary>Inclusive start of the requested UTC window.</summary>
+    public DateTimeOffset FromUtc { get; set; }
+    /// <summary>Exclusive end of the requested UTC window.</summary>
+    public DateTimeOffset ThroughUtc { get; set; }
+    /// <summary>Time when collection completed.</summary>
     public DateTimeOffset CollectedAtUtc { get; set; }
     /// <summary>Number of provider requests attempted.</summary>
     public int RequestCount { get; set; }

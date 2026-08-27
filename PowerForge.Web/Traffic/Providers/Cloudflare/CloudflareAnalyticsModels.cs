@@ -49,14 +49,6 @@ public sealed class CloudflareAnalyticsCapabilityProbeResult
     public int? MaxDurationSeconds { get; set; }
     /// <summary>Provider-reported retention boundary, when available.</summary>
     public int? NotOlderThanSeconds { get; set; }
-    /// <summary>Whether the firewall events adaptive group dataset is enabled.</summary>
-    public bool FirewallDatasetEnabled { get; set; }
-    /// <summary>Provider-reported maximum firewall rows.</summary>
-    public int FirewallMaxPageSize { get; set; }
-    /// <summary>Provider-reported maximum firewall query duration, when available.</summary>
-    public int? FirewallMaxDurationSeconds { get; set; }
-    /// <summary>Provider-reported firewall retention boundary, when available.</summary>
-    public int? FirewallNotOlderThanSeconds { get; set; }
     /// <summary>Stable failure category.</summary>
     public string? ErrorCode { get; set; }
     /// <summary>Sanitized failure description.</summary>

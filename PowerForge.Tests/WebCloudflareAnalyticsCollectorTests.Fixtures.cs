@@ -11,6 +11,9 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private static CloudflareAnalyticsCollector CreateCollector(HttpClient client) =>
         new(client, new FakeTokenProvider(), timeProvider: new FixedTimeProvider(CompletionTime));
 
+    private static CloudflareAnalyticsCollector CreateCollector(HttpClient client, TimeProvider timeProvider) =>
+        new(client, new FakeTokenProvider(), timeProvider: timeProvider);
+
     private static CloudflareAnalyticsCollectionOptions CreateOptions() => new()
     {
         ProviderId = "cloudflare",
@@ -106,11 +109,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private static HttpResponseMessage CapabilityResponse(
         int maxPageSize = 1000,
         int? maxDuration = 86_400,
-        int? notOlderThan = 2_678_400,
-        bool firewallEnabled = true,
-        int? firewallMaxPageSize = null,
-        int? firewallMaxDuration = null,
-        int? firewallNotOlderThan = null) => JsonResponse(new
+        int? notOlderThan = 2_678_400) => JsonResponse(new
     {
         errors = (object?)null,
         data = new
@@ -123,14 +122,32 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
                     {
                         settings = new
                         {
-                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan },
-                            firewallEventsAdaptiveGroups = new
-                            {
-                                enabled = firewallEnabled,
-                                maxPageSize = firewallMaxPageSize ?? maxPageSize,
-                                maxDuration = firewallMaxDuration ?? maxDuration,
-                                notOlderThan = firewallNotOlderThan ?? notOlderThan
-                            }
+                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    private static HttpResponseMessage FirewallCapabilityResponse(
+        bool enabled = true,
+        int maxPageSize = 1000,
+        int? maxDuration = 86_400,
+        int? notOlderThan = 2_678_400) => JsonResponse(new
+    {
+        errors = (object?)null,
+        data = new
+        {
+            viewer = new
+            {
+                zones = new[]
+                {
+                    new
+                    {
+                        settings = new
+                        {
+                            firewallEventsAdaptiveGroups = new { enabled, maxPageSize, maxDuration, notOlderThan }
                         }
                     }
                 }
@@ -204,6 +221,12 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => value;
+    }
+
+    private sealed class AdvancingTimeProvider(DateTimeOffset value, TimeSpan step) : TimeProvider
+    {
+        private int _calls;
+        public override DateTimeOffset GetUtcNow() => value.AddTicks(step.Ticks * _calls++);
     }
 
     private sealed class ScriptedHandler(Func<HttpRequestMessage, int, HttpResponseMessage> responder) : HttpMessageHandler
