@@ -26,6 +26,13 @@ internal sealed class PowerShellBoundCSharpBackend
             parameter.Contract.DefaultValue is not null ||
             !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
             targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
+        if (function.RequiresPowerShellRuntimeState)
+        {
+            parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
+            parameterParts.Add("global::System.Func<string, string, bool> __shouldProcessAction");
+            parameterParts.Add("object __psVersion");
+            parameterParts.Add("bool __whatIfPreference");
+        }
         if (requiresBoundParameters)
             parameterParts.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
         var parameters = string.Join(", ", parameterParts);
@@ -72,6 +79,7 @@ internal sealed class PowerShellBoundCSharpBackend
             function.ReturnType,
             builder.ToString(),
             requiresPowerShellBoundParameters: requiresBoundParameters,
+            requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType);
     }
@@ -244,6 +252,7 @@ internal sealed class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpMethodEmitter.SanitizeIdentifier(variable.Symbol.Name),
+            PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredConversionExpression conversion =>
                 $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
@@ -267,6 +276,15 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredInvocationExpression invocation => EmitLocalInvocation(invocation),
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
+    {
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget)
+            return $"__shouldProcessTarget({EmitExpression(expression.Arguments[0])})";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction)
+            return $"__shouldProcessAction({EmitExpression(expression.Arguments[0])}, {EmitExpression(expression.Arguments[1])})";
+        return PowerShellRuntimeStateIntrinsicPolicy.EmitStatic(expression.Kind, expression.TargetFramework);
+    }
 
     private static string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
     {

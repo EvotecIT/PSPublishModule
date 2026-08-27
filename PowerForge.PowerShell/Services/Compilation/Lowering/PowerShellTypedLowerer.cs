@@ -32,6 +32,33 @@ internal sealed class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeStateIntrinsics) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1003",
+                    "Runtime-state semantics require the runtime-state-intrinsics target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1004",
+                    "PSVersion semantics require the PowerShell-host-types target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1005",
+                    "WhatIf and ShouldProcess semantics require a stream-backed PowerShell host.",
+                    function.Symbol.Declaration));
+                continue;
+            }
 
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
@@ -66,6 +93,7 @@ internal sealed class PowerShellTypedLowerer
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
                 function.DeclaredOutputType,
+                RequiresRuntimeStateHostBinding(function.Body),
                 statements.ToArray(),
                 function.Body.Span));
         }
@@ -78,6 +106,71 @@ internal sealed class PowerShellTypedLowerer
                 .ToArray(),
             targetCapabilities);
     }
+
+    private static bool RequiresRuntimeStateHostBinding(PowerShellBoundBlock block)
+        => block.Statements.Any(StatementRequiresRuntimeStateHostBinding);
+
+    private static bool StatementRequiresRuntimeStateHostBinding(PowerShellBoundStatement statement)
+        => statement switch
+        {
+            PowerShellBoundAssignmentStatement assignment => ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
+            PowerShellBoundIndexAssignmentStatement assignment =>
+                ExpressionRequiresRuntimeStateHostBinding(assignment.Target) ||
+                ExpressionRequiresRuntimeStateHostBinding(assignment.Index) ||
+                ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
+            PowerShellBoundClrMemberAssignmentStatement assignment =>
+                ExpressionRequiresRuntimeStateHostBinding(assignment.Receiver) ||
+                ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
+            PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionRequiresRuntimeStateHostBinding(returned.Expression),
+            PowerShellBoundExpressionStatement expression => ExpressionRequiresRuntimeStateHostBinding(expression.Expression),
+            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause =>
+                    ExpressionRequiresRuntimeStateHostBinding(clause.Condition) || RequiresRuntimeStateHostBinding(clause.Body)) ||
+                (conditional.ElseBlock is not null && RequiresRuntimeStateHostBinding(conditional.ElseBlock)),
+            PowerShellBoundWhileStatement loop => ExpressionRequiresRuntimeStateHostBinding(loop.Condition) || RequiresRuntimeStateHostBinding(loop.Body),
+            PowerShellBoundForStatement loop =>
+                (loop.Initializer is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Initializer)) ||
+                (loop.Condition is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Condition)) ||
+                (loop.Iterator is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Iterator)) ||
+                RequiresRuntimeStateHostBinding(loop.Body),
+            PowerShellBoundForEachStatement loop => ExpressionRequiresRuntimeStateHostBinding(loop.Collection) || RequiresRuntimeStateHostBinding(loop.Body),
+            PowerShellBoundSwitchStatement switchStatement =>
+                ExpressionRequiresRuntimeStateHostBinding(switchStatement.Value) ||
+                switchStatement.Clauses.Any(clause => ExpressionRequiresRuntimeStateHostBinding(clause.Value) || RequiresRuntimeStateHostBinding(clause.Body)) ||
+                (switchStatement.DefaultBlock is not null && RequiresRuntimeStateHostBinding(switchStatement.DefaultBlock)),
+            PowerShellBoundThrowStatement thrown => thrown.Expression is not null && ExpressionRequiresRuntimeStateHostBinding(thrown.Expression),
+            PowerShellBoundTryStatement tryStatement =>
+                RequiresRuntimeStateHostBinding(tryStatement.Body) ||
+                tryStatement.Catches.Any(clause => RequiresRuntimeStateHostBinding(clause.Body)) ||
+                (tryStatement.FinallyBlock is not null && RequiresRuntimeStateHostBinding(tryStatement.FinallyBlock)),
+            _ => false
+        };
+
+    private static bool ExpressionRequiresRuntimeStateHostBinding(PowerShellBoundExpression expression)
+        => expression switch
+        {
+            PowerShellBoundRuntimeStateExpression runtime => runtime.RequiresHostBinding,
+            PowerShellBoundConversionExpression conversion => ExpressionRequiresRuntimeStateHostBinding(conversion.Operand),
+            PowerShellBoundBinaryExpression binary => ExpressionRequiresRuntimeStateHostBinding(binary.Left) || ExpressionRequiresRuntimeStateHostBinding(binary.Right),
+            PowerShellBoundUnaryExpression unary => ExpressionRequiresRuntimeStateHostBinding(unary.Operand),
+            PowerShellBoundTypeTestExpression typeTest => ExpressionRequiresRuntimeStateHostBinding(typeTest.Operand),
+            PowerShellBoundRegexExpression regex =>
+                ExpressionRequiresRuntimeStateHostBinding(regex.Input) ||
+                ExpressionRequiresRuntimeStateHostBinding(regex.Pattern) ||
+                (regex.Replacement is not null && ExpressionRequiresRuntimeStateHostBinding(regex.Replacement)),
+            PowerShellBoundWildcardExpression wildcard => ExpressionRequiresRuntimeStateHostBinding(wildcard.Input) || ExpressionRequiresRuntimeStateHostBinding(wildcard.Pattern),
+            PowerShellBoundMembershipExpression membership => ExpressionRequiresRuntimeStateHostBinding(membership.Left) || ExpressionRequiresRuntimeStateHostBinding(membership.Right),
+            PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionRequiresRuntimeStateHostBinding(mutation.Value),
+            PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionRequiresRuntimeStateHostBinding),
+            PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry =>
+                ExpressionRequiresRuntimeStateHostBinding(entry.Key) || ExpressionRequiresRuntimeStateHostBinding(entry.Value)),
+            PowerShellBoundIndexExpression index => ExpressionRequiresRuntimeStateHostBinding(index.Target) || ExpressionRequiresRuntimeStateHostBinding(index.Index),
+            PowerShellBoundClrMemberExpression member => member.Receiver is not null && ExpressionRequiresRuntimeStateHostBinding(member.Receiver),
+            PowerShellBoundClrInvocationExpression invocation =>
+                (invocation.Receiver is not null && ExpressionRequiresRuntimeStateHostBinding(invocation.Receiver)) ||
+                invocation.Arguments.Any(ExpressionRequiresRuntimeStateHostBinding),
+            PowerShellBoundInvocationExpression invocation => invocation.Arguments.Any(ExpressionRequiresRuntimeStateHostBinding),
+            _ => false
+        };
 
     private static IEnumerable<string> EnumerateNestedAssignments(PowerShellBoundBlock block)
     {
@@ -312,6 +405,12 @@ internal sealed class PowerShellTypedLowerer
         {
             PowerShellBoundLiteralExpression literal => new PowerShellLoweredLiteralExpression(literal.Span, literal.Type.ClrType, literal.Value),
             PowerShellBoundVariableExpression variable => new PowerShellLoweredVariableExpression(variable.Span, variable.Type.ClrType, variable.Symbol),
+            PowerShellBoundRuntimeStateExpression runtime => new PowerShellLoweredRuntimeStateExpression(
+                runtime.Span,
+                runtime.Type.ClrType,
+                runtime.Kind,
+                runtime.TargetFramework,
+                runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray()),
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(
                 conversion.Span,
                 conversion.Type.ClrType,

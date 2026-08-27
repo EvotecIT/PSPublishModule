@@ -153,6 +153,7 @@ internal sealed class PowerShellLoweredFunction
         PowerShellLoweredLocal[] locals,
         PowerShellBoundHelpMetadata? help,
         Type? declaredOutputType,
+        bool requiresPowerShellRuntimeState,
         PowerShellLoweredStatement[] statements,
         SourceSpan span)
     {
@@ -163,6 +164,7 @@ internal sealed class PowerShellLoweredFunction
         Locals = locals;
         Help = help;
         DeclaredOutputType = declaredOutputType;
+        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         Statements = statements;
         Span = span;
     }
@@ -174,6 +176,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellLoweredLocal[] Locals { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
+    internal bool RequiresPowerShellRuntimeState { get; }
     internal PowerShellLoweredStatement[] Statements { get; }
     internal SourceSpan Span { get; }
 }

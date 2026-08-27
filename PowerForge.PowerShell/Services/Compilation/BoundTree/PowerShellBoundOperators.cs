@@ -42,7 +42,7 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(span, type, PowerShellValueState.Unknown, left.Effects | right.Effects, left.Capabilities | right.Capabilities)
     {
         Operation = operation;
         Left = left;
@@ -61,7 +61,7 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
         PowerShellBoundUnaryOperator operation,
         PowerShellBoundExpression operand,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(span, type, PowerShellValueState.Unknown, operand.Effects, operand.Capabilities)
     {
         Operation = operation;
         Operand = operand;
@@ -74,7 +74,7 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
 internal sealed class PowerShellBoundTypeTestExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundTypeTestExpression(SourceSpan span, PowerShellBoundExpression operand, Type targetType, bool negate)
-        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known)
+        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known, operand.Effects, operand.Capabilities)
     {
         Operand = operand;
         TargetType = targetType;
@@ -105,7 +105,9 @@ internal sealed class PowerShellBoundRegexExpression : PowerShellBoundExpression
         : base(
             span,
             new PowerShellTypeFact(operation == PowerShellBoundRegexOperation.Replace ? typeof(string) : typeof(bool), PowerShellTypeFactProvenance.Inferred, "The regex operator binds one invariant direct Regex operation."),
-            PowerShellValueState.Unknown)
+            PowerShellValueState.Unknown,
+            input.Effects | pattern.Effects | (replacement?.Effects ?? PowerShellSemanticEffect.None),
+            input.Capabilities | pattern.Capabilities | (replacement?.Capabilities ?? PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Input = input;

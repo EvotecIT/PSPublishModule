@@ -105,7 +105,10 @@ internal enum PowerShellRequiredCapability
     NativeProcess = 16,
     Com = 32,
     Reflection = 64,
-    PowerShellLanguageOperators = 128
+    PowerShellLanguageOperators = 128,
+    RuntimeStateIntrinsics = 256,
+    PowerShellHostTypes = 512,
+    PowerShellStreams = 1024
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -211,7 +214,7 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundConversionExpression(SourceSpan span, PowerShellTypeFact targetType, PowerShellBoundExpression operand)
-        : base(span, targetType, operand.ValueState)
+        : base(span, targetType, operand.ValueState, operand.Effects, operand.Capabilities)
     {
         Operand = operand;
     }
@@ -228,7 +231,12 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         PowerShellTypeFact returnType,
         int[]? authoredEvaluationOrder = null,
         string[]? boundParameterNames = null)
-        : base(span, returnType, PowerShellValueState.Unknown)
+        : base(
+            span,
+            returnType,
+            PowerShellValueState.Unknown,
+            arguments.Aggregate(PowerShellSemanticEffect.None, static (effects, argument) => effects | argument.Effects),
+            arguments.Aggregate(PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
     {
         Target = target;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();

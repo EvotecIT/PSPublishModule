@@ -25,7 +25,12 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellTypeFact type,
         bool normalizeNullString,
         bool checkedIntegral)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(
+            span,
+            type,
+            PowerShellValueState.Unknown,
+            PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None),
+            value?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         Target = target;
         TargetClrType = targetClrType;

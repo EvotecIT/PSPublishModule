@@ -26,7 +26,12 @@ internal sealed class PowerShellBoundClrMemberExpression : PowerShellBoundExpres
         PowerShellBoundExpression? receiver,
         PowerShellClrReceiverBehavior receiverBehavior,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(
+            span,
+            type,
+            PowerShellValueState.Unknown,
+            receiver?.Effects ?? PowerShellSemanticEffect.None,
+            receiver?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         DeclaringType = declaringType;
         MemberName = memberName;
@@ -55,7 +60,12 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         PowerShellBoundExpression[] arguments,
         Type[] parameterTypes,
         PowerShellTypeFact type)
-        : base(span, type, invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown)
+        : base(
+            span,
+            type,
+            invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown,
+            arguments.Aggregate(receiver?.Effects ?? PowerShellSemanticEffect.None, static (effects, argument) => effects | argument.Effects),
+            arguments.Aggregate(receiver?.Capabilities ?? PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
     {
         DeclaringType = declaringType;
         MemberName = memberName;
@@ -83,7 +93,7 @@ internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBo
         Type declaringType,
         string memberName,
         PowerShellBoundExpression value)
-        : base(span, PowerShellSemanticEffect.Mutation)
+        : base(span, PowerShellSemanticEffect.Mutation | receiver.Effects | value.Effects, receiver.Capabilities | value.Capabilities)
     {
         Receiver = receiver;
         DeclaringType = declaringType;

@@ -511,6 +511,44 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void RuntimeStateIntrinsicsCarryExactTargetAndHostContractsThroughIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-StaticFact { if ($IsWindows) { return $PSEdition + ':Windows' }; return $PSEdition + ':Other' } function Test-Approval { [CmdletBinding(SupportsShouldProcess = $true)] param([string] $Target) return $PSCmdlet.ShouldProcess($Target) }",
+            TestPath("runtime-state-ir.ps1"));
+
+        var supported = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net8.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(supported.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var staticFunction = Assert.Single(supported.Analyzed.Functions, static function => function.Symbol.Name == "Get-StaticFact");
+        Assert.True(staticFunction.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeStateIntrinsics));
+        Assert.False(staticFunction.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams));
+        var staticMethod = Assert.Single(supported.Emitted.Methods, static method => method.GeneratedName == "Get_StaticFact");
+        Assert.False(staticMethod.RequiresPowerShellRuntimeState);
+        Assert.Contains("RuntimeInformation.IsOSPlatform", staticMethod.Source, StringComparison.Ordinal);
+
+        var hostedFunction = Assert.Single(supported.Analyzed.Functions, static function => function.Symbol.Name == "Test-Approval");
+        Assert.True(hostedFunction.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams));
+        var hostedExpression = Assert.IsType<PowerShellLoweredRuntimeStateExpression>(
+            Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(
+                Assert.Single(supported.Lowered.Functions, static function => function.Symbol.Name == "Test-Approval").Statements)).Expression);
+        Assert.Equal(PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget, hostedExpression.Kind);
+        var hostedMethod = Assert.Single(supported.Emitted.Methods, static method => method.GeneratedName == "Test_Approval");
+        Assert.True(hostedMethod.RequiresPowerShellRuntimeState);
+        Assert.Contains("__shouldProcessTarget(Target)", hostedMethod.Source, StringComparison.Ordinal);
+
+        var runtimeFree = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net8.0",
+            PowerShellCompilationCapabilities.StaticRuntimeFacts);
+        Assert.NotEmpty(runtimeFree.Emitted.Diagnostics);
+        Assert.Single(runtimeFree.Emitted.Methods, static method => method.GeneratedName == "Get_StaticFact");
+    }
+
+    [Fact]
     public void RuntimeLanguageConversionRemainsOutsideTheRuntimeFreeBoundPath()
     {
         var document = PowerShellSourceParser.Parse(

@@ -47,7 +47,12 @@ internal sealed class PowerShellBoundDictionaryEntry
 internal sealed class PowerShellBoundDictionaryExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundDictionaryExpression(SourceSpan span, Type dictionaryType, PowerShellBoundDictionaryKind kind, PowerShellBoundDictionaryEntry[] entries)
-        : base(span, new PowerShellTypeFact(dictionaryType, PowerShellTypeFactProvenance.Inferred, "A homogeneous literal selects one case-insensitive CLR dictionary representation."), PowerShellValueState.Known)
+        : base(
+            span,
+            new PowerShellTypeFact(dictionaryType, PowerShellTypeFactProvenance.Inferred, "A homogeneous literal selects one case-insensitive CLR dictionary representation."),
+            PowerShellValueState.Known,
+            entries.Aggregate(PowerShellSemanticEffect.None, static (effects, entry) => effects | entry.Key.Effects | entry.Value.Effects),
+            entries.Aggregate(PowerShellRequiredCapability.None, static (capabilities, entry) => capabilities | entry.Key.Capabilities | entry.Value.Capabilities))
     {
         Kind = kind;
         Entries = entries;
@@ -74,7 +79,7 @@ internal sealed class PowerShellBoundIndexExpression : PowerShellBoundExpression
         PowerShellBoundExpression index,
         PowerShellBoundIndexKind kind,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown)
+        : base(span, type, PowerShellValueState.Unknown, target.Effects | index.Effects, target.Capabilities | index.Capabilities)
     {
         Target = target;
         Index = index;
@@ -94,7 +99,10 @@ internal sealed class PowerShellBoundIndexAssignmentStatement : PowerShellBoundS
         PowerShellBoundExpression index,
         PowerShellBoundExpression value,
         PowerShellBoundIndexKind kind)
-        : base(span, PowerShellSemanticEffect.Mutation)
+        : base(
+            span,
+            PowerShellSemanticEffect.Mutation | target.Effects | index.Effects | value.Effects,
+            target.Capabilities | index.Capabilities | value.Capabilities)
     {
         Target = target;
         Index = index;
