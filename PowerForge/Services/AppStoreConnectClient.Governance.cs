@@ -199,7 +199,7 @@ public sealed partial class AppStoreConnectClient
             }
         };
         return PatchSingleAsync(
-            $"../v2/territoryAvailabilities/{Uri.EscapeDataString(territoryAvailabilityId.Trim())}",
+            $"territoryAvailabilities/{Uri.EscapeDataString(territoryAvailabilityId.Trim())}",
             body,
             ParseTerritoryAvailability,
             cancellationToken);

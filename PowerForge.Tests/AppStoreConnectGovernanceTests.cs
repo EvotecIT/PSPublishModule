@@ -110,7 +110,7 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
-    public async Task UpdateTerritoryAvailabilityAsync_TargetsTheV2Resource()
+    public async Task UpdateTerritoryAvailabilityAsync_TargetsTheV1Resource()
     {
         var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
             """{ "data": { "type": "territoryAvailabilities", "id": "territory-1", "attributes": { "available": false }, "relationships": { "territory": { "data": { "type": "territories", "id": "POL" } } } } }"""));
@@ -123,7 +123,7 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.Equal(HttpMethod.Patch, Assert.Single(handler.Methods));
         Assert.Equal(
-            "https://api.appstoreconnect.apple.com/v2/territoryAvailabilities/territory-1",
+            "https://api.appstoreconnect.apple.com/v1/territoryAvailabilities/territory-1",
             Assert.Single(handler.RequestUris).ToString());
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
