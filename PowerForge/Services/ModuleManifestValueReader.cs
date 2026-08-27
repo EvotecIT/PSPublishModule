@@ -1,4 +1,6 @@
 using System.IO;
+using System.Globalization;
+using System.Text;
 
 namespace PowerForge;
 
@@ -87,6 +89,44 @@ internal static class ModuleManifestValueReader
         return null;
     }
 
+    internal static string[]? ReadTopLevelLiteralStringOrArrayOrThrow(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText) ||
+            !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expression) &&
+            ModuleManifestTextParser.TryParseStrictStringArrayExpression(expression!, out var values) &&
+            values is not null)
+        {
+            return values;
+        }
+
+        throw new InvalidDataException(
+            $"PowerShell manifest property '{key}' must contain a literal string or string array for compiled module export preservation.");
+    }
+
+    internal static string? ReadTopLevelLiteralStringOrThrow(string manifestPath, string key)
+    {
+        if (!TryReadManifestText(manifestPath, out var manifestText) ||
+            !ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expression) &&
+            ModuleManifestTextParser.TryParseQuotedStringExpression(expression!, out var value) &&
+            value is not null)
+        {
+            return value.Trim();
+        }
+
+        throw new InvalidDataException(
+            $"PowerShell manifest property '{key}' must contain a literal string for compiled module ownership preservation.");
+    }
+
     internal static string[] ReadPsDataStringOrArray(string manifestPath, string key)
     {
         if (!TryReadManifestText(manifestPath, out var manifestText))
@@ -148,12 +188,34 @@ internal static class ModuleManifestValueReader
 
         try
         {
-            manifestText = File.ReadAllText(manifestPath);
+            manifestText = ReadPowerShellCompatibleText(manifestPath);
             return !string.IsNullOrWhiteSpace(manifestText);
         }
         catch
         {
             return false;
+        }
+    }
+
+    internal static string ReadPowerShellCompatibleText(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(
+                path,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+                detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
+        }
+        catch (DecoderFallbackException)
+        {
+#if NETFRAMEWORK
+            return File.ReadAllText(path, Encoding.Default);
+#else
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var codePage = CultureInfo.CurrentCulture.TextInfo.ANSICodePage;
+            return File.ReadAllText(path, Encoding.GetEncoding(codePage));
+#endif
         }
     }
 }

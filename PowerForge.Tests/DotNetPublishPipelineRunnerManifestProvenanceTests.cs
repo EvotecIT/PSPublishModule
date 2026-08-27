@@ -2436,23 +2436,31 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     private static void RunDotNet(string root, string arguments)
     {
-        using var process = Process.Start(new ProcessStartInfo
+        using var process = new Process
         {
-            FileName = "dotnet",
-            Arguments = arguments,
-            WorkingDirectory = root,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-        Assert.NotNull(process);
-        Task<string> outputTask = process!.StandardOutput.ReadToEndAsync();
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = arguments,
+                WorkingDirectory = root,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        Assert.True(process.Start(), $"dotnet {arguments} failed to start");
+        Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
         Task<string> errorTask = process.StandardError.ReadToEndAsync();
-        Assert.True(process.WaitForExit(120000), $"dotnet {arguments} timed out");
-        Task.WhenAll(outputTask, errorTask).GetAwaiter().GetResult();
-        string output = outputTask.GetAwaiter().GetResult();
-        string error = errorTask.GetAwaiter().GetResult();
+        if (!process.WaitForExit(120000))
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            Assert.Fail($"dotnet {arguments} timed out");
+        }
+
+        Task.WaitAll(outputTask, errorTask);
+        string output = outputTask.Result;
+        string error = errorTask.Result;
         Assert.True(process.ExitCode == 0, $"dotnet {arguments} failed: {output}{error}");
     }
 

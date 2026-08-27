@@ -1,54 +1,4 @@
-# Get library name, from the PSM1 file name
-$LibraryName = '{{LibraryName}}'
-$Library = "$LibraryName.dll"
-$Class = "$LibraryName.Initialize"
-
-$LibRoot = [IO.Path]::Combine($PowerForgeModuleRoot, 'Lib')
-$AssemblyFolders = Get-ChildItem -LiteralPath $LibRoot -Directory -ErrorAction SilentlyContinue
-
-$Default = $false
-$Core = $false
-$Standard = $false
-foreach ($A in $AssemblyFolders.Name) {
-    if ($A -eq 'Default') {
-        $Default = $true
-    } elseif ($A -eq 'Core') {
-        $Core = $true
-    } elseif ($A -eq 'Standard') {
-        $Standard = $true
-    }
-}
-if ($Standard -and $Core -and $Default) {
-    $FrameworkNet = 'Default'
-    $Framework = 'Standard'
-} elseif ($Standard -and $Core) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Standard'
-} elseif ($Core -and $Default) {
-    $Framework = 'Core'
-    $FrameworkNet = 'Default'
-} elseif ($Standard -and $Default) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Default'
-} elseif ($Standard) {
-    $Framework = 'Standard'
-    $FrameworkNet = 'Standard'
-} elseif ($Core) {
-    $Framework = 'Core'
-    $FrameworkNet = ''
-} elseif ($Default) {
-    $Framework = 'Default'
-    $FrameworkNet = 'Default'
-} else {
-    Write-Error -Message 'No assemblies found'
-    return
-}
-
-if ($PSEdition -eq 'Core') {
-    $LibFolder = $Framework
-} else {
-    $LibFolder = $FrameworkNet
-}
+{{BinaryAssemblyResolverBlock}}
 
 {{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
     $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
@@ -64,32 +14,84 @@ if ($PSEdition -eq 'Core') {
     }
 }
 $PowerForgeDesktopBinaryLoaded = $false
+$PowerForgeDesktopBinaryDirectories = @()
 try {
     $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-    $ModuleAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, $Library)
-
-    if ($PSEdition -eq 'Core') {
-        $LoaderAssemblyPath = [IO.Path]::Combine($LibRoot, $LibFolder, '{{LoaderAssemblyName}}.dll')
+    $PowerForgeResolvedBinaryModules = [Collections.Generic.List[object]]::new()
+    $PowerForgeResolvedBinaryModulePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($Library in $LibraryFileNames) {
+        try {
+            $ResolvedModuleAssembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
+            $ResolvedModuleAssemblyPath = [IO.Path]::GetFullPath($ResolvedModuleAssembly.Path)
+            if ($PowerForgeResolvedBinaryModulePaths.Add($ResolvedModuleAssemblyPath)) {
+                $PowerForgeResolvedBinaryModules.Add([pscustomobject]@{
+                    Library = $Library
+                    Assembly = $ResolvedModuleAssembly
+                })
+            }
+        } catch {
+            if ($ErrorActionPreference -eq 'Stop') {
+                if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                    & $UnregisterPowerForgeDesktopAssemblyResolver
+                }
+                throw
+            } else {
+                Write-Warning -Message "Resolving module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
+            }
+        }
+    }
+    $PowerForgeCoreModuleAssemblyPaths = [string[]]@($PowerForgeResolvedBinaryModules.Assembly.Path)
+    if ($PSEdition -eq 'Core' -and $PowerForgeResolvedBinaryModules.Count -gt 0) {
+        $LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory, '{{LoaderAssemblyName}}.dll')
         if (-not ('{{LoaderTypeName}}' -as [type])) {
             Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
         }
-
-        $ModuleAssembly = [{{LoaderTypeName}}]::LoadModule($ModuleAssemblyPath, '{{ModuleName}}')
-        $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
-
-{{TypeAcceleratorBlock}}
-        if ($InnerModule) {
-{{ExportBridgeBlock}}
-        }
-    } elseif (-not ($Class -as [type])) {
-        & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
-    } else {
-        $Type = "$Class" -as [Type]
-        & $ImportModule -Force -Assembly ($Type.Assembly)
     }
 
-    if ($PSEdition -ne 'Core') {
-        $PowerForgeDesktopBinaryLoaded = $true
+    for ($LibraryIndex = 0; $LibraryIndex -lt $PowerForgeResolvedBinaryModules.Count; $LibraryIndex++) {
+        $Library = $PowerForgeResolvedBinaryModules[$LibraryIndex].Library
+        $ResolvedModuleAssembly = $PowerForgeResolvedBinaryModules[$LibraryIndex].Assembly
+        $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
+        $LibraryDirectory = $ResolvedModuleAssembly.Directory
+        $LibFolder = $LibraryDirectory
+        $LibraryName = [IO.Path]::GetFileNameWithoutExtension($ModuleAssemblyPath)
+        $Class = "$LibraryName.Initialize"
+
+        try {
+            if ($PSEdition -eq 'Core') {
+                $ModuleAssembly = [{{LoaderTypeName}}]::LoadModuleFromGroup(
+                    $PowerForgeCoreModuleAssemblyPaths,
+                    $ModuleAssemblyPath,
+                    '{{ModuleName}}')
+                $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
+
+{{TypeAcceleratorBlock}}
+                if ($InnerModule) {
+{{ExportBridgeBlock}}
+                }
+            } elseif (-not ($Class -as [type])) {
+                & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
+            } else {
+                $Type = "$Class" -as [Type]
+                & $ImportModule -Force -Assembly ($Type.Assembly)
+            }
+
+            if ($PSEdition -ne 'Core') {
+                $PowerForgeDesktopBinaryLoaded = $true
+                if ($LibraryDirectory -notin $PowerForgeDesktopBinaryDirectories) {
+                    $PowerForgeDesktopBinaryDirectories += $LibraryDirectory
+                }
+            }
+        } catch {
+            if ($ErrorActionPreference -eq 'Stop') {
+                if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+                    & $UnregisterPowerForgeDesktopAssemblyResolver
+                }
+                throw
+            } else {
+                Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
+            }
+        }
     }
 } catch {
     if ($ErrorActionPreference -eq 'Stop') {
@@ -103,7 +105,9 @@ try {
 }
 
 if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
+    foreach ($PowerForgeDesktopBinaryDirectory in $PowerForgeDesktopBinaryDirectories) {
 {{DesktopTypeAcceleratorBlock}}
+    }
 }
 if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
     $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false

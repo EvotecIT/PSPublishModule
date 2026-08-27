@@ -1130,7 +1130,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string?>? environmentVariables,
         TimeSpan timeout,
-        IReadOnlyList<KeyValuePair<string, string>>? controlledGitConfiguration = null)
+        IReadOnlyList<KeyValuePair<string, string>>? controlledGitConfiguration = null,
+        string? controlledGitIndexFile = null)
     {
         string effectiveFileName = fileName;
         IReadOnlyList<string> effectiveArguments = arguments;
@@ -1147,7 +1148,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             environmentVariables = CreateTrustedGitEnvironment(
                 environmentVariables,
-                controlledGitConfiguration);
+                controlledGitConfiguration,
+                controlledGitIndexFile);
         }
         return RunProcessCore(
             effectiveFileName,

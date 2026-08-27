@@ -107,7 +107,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {
             return $null
         }
 
-        foreach ($File in Get-ChildItem -LiteralPath $LibDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue) {
+        foreach ($File in Get-ChildItem -LiteralPath $LibDirectory -File -ErrorAction SilentlyContinue | Where-Object Extension -IEQ '.dll') {
             try {
                 $AssemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($File.FullName)
                 $Assembly = & $ImportPowerForgeAlcAssembly -AssemblyName $AssemblyName.Name

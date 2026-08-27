@@ -76,7 +76,7 @@ public static partial class ManifestEditor
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
         if (string.IsNullOrWhiteSpace(key)) return false;
 
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens;
         ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
@@ -110,7 +110,7 @@ public static partial class ManifestEditor
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
         if (string.IsNullOrWhiteSpace(parentKey) || string.IsNullOrWhiteSpace(key)) return false;
 
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         Token[] tokens;
         ParseError[] errors;
         var ast = Parser.ParseFile(filePath, out tokens, out errors);
@@ -131,7 +131,7 @@ public static partial class ManifestEditor
     private static bool TrySetPsDataValue(string filePath, string key, string valueExpression)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         if (!TryEnsurePsDataHashtable(filePath, ref content, out var psData)) return false;
 
         // Try replace existing
@@ -167,7 +167,7 @@ public static partial class ManifestEditor
         if (privateData == null)
         {
             if (!InsertKeyValue(top, content, filePath, "PrivateData", "@{ PSData = @{} }")) return false;
-            content = File.ReadAllText(filePath);
+            content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
             ast = Parser.ParseFile(filePath, out tokens, out errors);
             if (errors != null && errors.Length > 0) return false;
             top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
@@ -180,7 +180,7 @@ public static partial class ManifestEditor
         if (psDataHash == null)
         {
             if (!InsertKeyValue(privateData!, content, filePath, "PSData", "@{}")) return false;
-            content = File.ReadAllText(filePath);
+            content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
             ast = Parser.ParseFile(filePath, out tokens, out errors);
             if (errors != null && errors.Length > 0) return false;
             top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
@@ -194,7 +194,7 @@ public static partial class ManifestEditor
     private static bool TrySetPsDataSubValue(string filePath, string parentKey, string key, string valueExpression)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
-        var content = File.ReadAllText(filePath);
+        var content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
         if (!TryEnsurePsDataHashtable(filePath, ref content, out var psDataRoot)) return false;
         // Ensure parent hashtable exists: PrivateData.PSData.<parentKey>
         var ast = Parser.ParseFile(filePath, out _, out _);
@@ -205,7 +205,7 @@ public static partial class ManifestEditor
         if (parent == null)
         {
             if (!InsertKeyValue(psdata!, content, filePath, parentKey, "@{}")) return false;
-            content = File.ReadAllText(filePath);
+            content = ModuleManifestValueReader.ReadPowerShellCompatibleText(filePath);
             ast = Parser.ParseFile(filePath, out _, out _);
             top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
             privateData = FindChildHashtable(top!, "PrivateData");

@@ -1,0 +1,396 @@
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Reflection;
+
+namespace PowerForge.Compiled;
+
+internal static class Program
+{
+    private const string ScriptResourceName = "PowerForge.Compiled.Source.ps1";
+    private static readonly string EntryRelativePath = {{ENTRY_RELATIVE_PATH}};
+    private static readonly string EntrySha256 = {{ENTRY_SHA256}};
+    private static readonly EmbeddedDependency[] Dependencies =
+    {
+{{DEPENDENCY_SPECS}}
+    };
+    private static readonly HashSet<string> Parameters = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETERS}} };
+    private static readonly HashSet<string> SwitchParameters = new(StringComparer.OrdinalIgnoreCase) { {{SWITCH_PARAMETERS}} };
+    private static readonly HashSet<string> BooleanParameters = new(StringComparer.OrdinalIgnoreCase) { {{BOOLEAN_PARAMETERS}} };
+    private static readonly Dictionary<string, string> ParameterAliases = new(StringComparer.OrdinalIgnoreCase) { {{PARAMETER_ALIASES}} };
+
+    private static int Main(string[] args)
+    {
+        try
+        {
+            var source = ReadEmbeddedScript();
+            PowerForgePackagedEntryPoint.Path = ExtractEmbeddedSources(source);
+            ConfigureBundledModules();
+            var initialState = InitialSessionState.CreateDefault2();
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            using var runspace = RunspaceFactory.CreateRunspace(initialState);
+            runspace.Open();
+            using var powerShell = PowerShell.Create();
+            powerShell.Runspace = runspace;
+            powerShell.AddScript(source, useLocalScope: false);
+            foreach (var argument in ParseArguments(args))
+            {
+                if (argument.Name is null)
+                    powerShell.AddArgument(argument.Value);
+                else if (argument.Value is null)
+                    powerShell.AddParameter(argument.Name);
+                else
+                    powerShell.AddParameter(argument.Name, argument.Value);
+            }
+            powerShell.AddCommand("Out-String").AddParameter("Stream");
+
+            int? requestedExitCode = null;
+            using var output = new PSDataCollection<PSObject>();
+            output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
+            powerShell.Streams.Information.DataAdded += (_, eventArgs) =>
+            {
+                var record = powerShell.Streams.Information[eventArgs.Index];
+                if (record.MessageData is HostInformationMessage { NoNewLine: true } hostMessage)
+                    Console.Out.Write(hostMessage.Message);
+                else
+                    Console.Out.WriteLine(record.MessageData?.ToString());
+            };
+            powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
+            powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
+            powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
+            powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
+            {
+                var error = powerShell.Streams.Error[eventArgs.Index];
+                if (TryGetScriptExitCode(error.Exception, out var exitCode))
+                    requestedExitCode ??= exitCode;
+                else
+                    Console.Error.WriteLine(error.ToString());
+            };
+            try
+            {
+                powerShell.Invoke<PSObject>(input: null, output);
+            }
+            catch (RuntimeException exception) when (TryGetScriptExitCode(exception, out _))
+            {
+                TryGetScriptExitCode(exception, out var exitCode);
+                requestedExitCode = exitCode;
+            }
+
+            if (requestedExitCode.HasValue)
+                return requestedExitCode.Value;
+            if (powerShell.InvocationStateInfo.State == PSInvocationState.Failed)
+                return 1;
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception.ToString());
+            return 1;
+        }
+    }
+
+    private static void ConfigureBundledModules()
+    {
+        var powerShellHome = Path.GetDirectoryName(typeof(PSObject).Assembly.Location);
+        if (string.IsNullOrWhiteSpace(powerShellHome))
+            return;
+        var runtimeFamily = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? "win"
+            : "unix";
+        var bundledModules = new[]
+            {
+                Path.Combine(powerShellHome, "Modules"),
+                Path.Combine(powerShellHome, "runtimes", runtimeFamily, "lib", {{TARGET_FRAMEWORK}}, "Modules"),
+                Path.Combine(AppContext.BaseDirectory, "Modules"),
+                Path.Combine(AppContext.BaseDirectory, "runtimes", runtimeFamily, "lib", {{TARGET_FRAMEWORK}}, "Modules")
+            }
+            .FirstOrDefault(Directory.Exists);
+        if (bundledModules is null)
+            return;
+        var existing = Environment.GetEnvironmentVariable("PSModulePath");
+        Environment.SetEnvironmentVariable(
+            "PSModulePath",
+            string.IsNullOrWhiteSpace(existing)
+                ? bundledModules
+                : bundledModules + Path.PathSeparator + existing);
+    }
+
+    private static string ReadEmbeddedScript()
+    {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ScriptResourceName)
+            ?? throw new InvalidOperationException($"Embedded PowerShell script '{ScriptResourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static string ExtractEmbeddedSources(string entrySource)
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var cacheBase = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(cacheBase))
+            cacheBase = System.IO.Path.GetTempPath();
+        var cacheRoot = System.IO.Path.Combine(cacheBase, "PowerForge", "PackagedSources");
+        Directory.CreateDirectory(cacheRoot);
+        var assemblyName = assembly.GetName().Name ?? "Artifact";
+        var safeName = string.Concat(assemblyName.Select(static character =>
+            char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_'));
+        var root = System.IO.Path.Combine(cacheRoot, safeName + "-" + assembly.ManifestModule.ModuleVersionId.ToString("N"));
+        var completeMarker = System.IO.Path.Combine(root, ".complete");
+        string? invalidRoot = null;
+        if (!IsExtractionCacheValid(root, completeMarker, assembly))
+        {
+            if (Directory.Exists(root))
+            {
+                invalidRoot = root + ".invalid-" + Guid.NewGuid().ToString("N");
+                try
+                {
+                    Directory.Move(root, invalidRoot);
+                }
+                catch (IOException) when (IsExtractionCacheValid(root, completeMarker, assembly))
+                {
+                    invalidRoot = null;
+                }
+            }
+            var stagingRoot = root + ".staging-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                Directory.CreateDirectory(stagingRoot);
+                var stagedEntryPath = ResolveContainedExtractionPath(stagingRoot, EntryRelativePath);
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(stagedEntryPath)!);
+                File.WriteAllText(stagedEntryPath, entrySource, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                foreach (var dependency in Dependencies)
+                {
+                    var target = ResolveContainedExtractionPath(stagingRoot, dependency.RelativePath);
+                    Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
+                    using (var stream = assembly.GetManifestResourceStream(dependency.ResourceName)
+                               ?? throw new InvalidOperationException($"Embedded PowerShell dependency '{dependency.ResourceName}' was not found."))
+                    using (var file = File.Create(target))
+                        stream.CopyTo(file);
+                    if (dependency.UnixFileMode != 0 && !OperatingSystem.IsWindows())
+                        File.SetUnixFileMode(target, (UnixFileMode)dependency.UnixFileMode);
+                }
+                File.WriteAllText(System.IO.Path.Combine(stagingRoot, ".complete"), assembly.ManifestModule.ModuleVersionId.ToString("N"));
+                try
+                {
+                    Directory.Move(stagingRoot, root);
+                }
+                catch (IOException) when (IsExtractionCacheValid(root, completeMarker, assembly))
+                {
+                    Directory.Delete(stagingRoot, recursive: true);
+                }
+            }
+            catch
+            {
+                try { Directory.Delete(stagingRoot, recursive: true); } catch { }
+                if (invalidRoot is not null)
+                {
+                    try { Directory.Delete(invalidRoot, recursive: true); } catch { }
+                }
+                throw;
+            }
+            if (invalidRoot is not null)
+            {
+                try { Directory.Delete(invalidRoot, recursive: true); } catch { }
+            }
+        }
+        if (!IsExtractionCacheValid(root, completeMarker, assembly))
+            throw new InvalidOperationException($"Packaged PowerShell extraction cache '{root}' is incomplete or failed payload validation.");
+        return ResolveContainedExtractionPath(root, EntryRelativePath);
+    }
+
+    private static bool IsExtractionCacheValid(string root, string completeMarker, Assembly assembly)
+    {
+        try
+        {
+            if (!File.Exists(completeMarker) ||
+                !File.ReadAllText(completeMarker).Trim().Equals(assembly.ManifestModule.ModuleVersionId.ToString("N"), StringComparison.OrdinalIgnoreCase))
+                return false;
+            var entryPath = ResolveContainedExtractionPath(root, EntryRelativePath);
+            if (!File.Exists(entryPath) || !ComputeFileSha256(entryPath).Equals(EntrySha256, StringComparison.OrdinalIgnoreCase))
+                return false;
+            return Dependencies.All(dependency =>
+            {
+                var path = ResolveContainedExtractionPath(root, dependency.RelativePath);
+                return File.Exists(path) && ComputeFileSha256(path).Equals(dependency.Sha256, StringComparison.OrdinalIgnoreCase);
+            });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var algorithm = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    private static string ResolveContainedExtractionPath(string root, string relativePath)
+    {
+        if (System.IO.Path.IsPathRooted(relativePath))
+            throw new InvalidOperationException($"Embedded PowerShell dependency path '{relativePath}' must be relative.");
+        var fullRoot = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+        var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, relativePath.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+        var comparison = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!fullPath.StartsWith(fullRoot, comparison))
+            throw new InvalidOperationException($"Embedded PowerShell dependency path '{relativePath}' escapes its extraction root.");
+        return fullPath;
+    }
+
+    private static IEnumerable<ScriptArgument> ParseArguments(IReadOnlyList<string> arguments)
+    {
+        var positionalOnly = false;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var value = arguments[index];
+            if (!positionalOnly && value == "--")
+            {
+                positionalOnly = true;
+                continue;
+            }
+
+            if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
+            {
+                name = ResolveParameterName(name);
+                if (inlineValue is null && !SwitchParameters.Contains(name))
+                {
+                    if (index + 1 >= arguments.Count || LooksLikeParameter(arguments[index + 1]))
+                        throw new ArgumentException($"Parameter '-{name}' requires a value. Use '-{name}=value' when the value begins with '-'.");
+                    inlineValue = arguments[++index];
+                }
+                object? boundValue = inlineValue;
+                if (SwitchParameters.Contains(name) && inlineValue is not null)
+                    boundValue = ParseBooleanValue("Switch", name, inlineValue);
+                else if (BooleanParameters.Contains(name))
+                    boundValue = ParseBooleanValue("Boolean", name, inlineValue!);
+                yield return new ScriptArgument(name, boundValue);
+                continue;
+            }
+
+            yield return new ScriptArgument(null, value);
+        }
+    }
+
+    private static string ResolveParameterName(string name)
+    {
+        var exact = Parameters.FirstOrDefault(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) return exact;
+        if (ParameterAliases.TryGetValue(name, out var aliased)) return aliased;
+        var matches = Parameters
+            .Where(candidate => candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .Concat(ParameterAliases
+                .Where(alias => alias.Key.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                .Select(alias => alias.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToArray();
+        return matches.Length switch
+        {
+            0 => name,
+            1 => matches[0],
+            _ => throw new ArgumentException($"Parameter name '-{name}' is ambiguous.")
+        };
+    }
+
+    private static bool TryParseParameter(string value, out string name, out string? inlineValue)
+    {
+        name = string.Empty;
+        inlineValue = null;
+        if (!LooksLikeParameter(value)) return false;
+        var prefixLength = value.StartsWith("--", StringComparison.Ordinal) ? 2 : 1;
+        var token = value[prefixLength..];
+        var separator = token.IndexOfAny(new[] { '=', ':' });
+        if (separator >= 0)
+        {
+            name = token[..separator];
+            inlineValue = token[(separator + 1)..];
+        }
+        else
+        {
+            name = token;
+        }
+        return name.Length > 0;
+    }
+
+    private static bool LooksLikeParameter(string value)
+    {
+        if (value.Length < 2 || value[0] != '-') return false;
+        var index = value.Length > 2 && value[1] == '-' ? 2 : 1;
+        return index < value.Length && (char.IsLetter(value[index]) || value[index] == '_');
+    }
+
+    private static bool ParseBooleanValue(string kind, string name, string value)
+        => value.ToLowerInvariant() switch
+        {
+            "$true" or "true" => true,
+            "$false" or "false" => false,
+            _ => throw new ArgumentException($"{kind} parameter '-{name}' requires an explicit Boolean value such as '$true' or '$false'.")
+        };
+
+    private static bool TryGetScriptExitCode(Exception exception, out int exitCode)
+    {
+        if (exception is PowerForgeScriptExitException scriptExit)
+        {
+            exitCode = scriptExit.ExitCode;
+            return true;
+        }
+        if (exception is RuntimeException runtimeException &&
+            runtimeException.ErrorRecord?.Exception is Exception recordException &&
+            !ReferenceEquals(recordException, exception) &&
+            TryGetScriptExitCode(recordException, out exitCode))
+            return true;
+        if (exception.InnerException is not null && TryGetScriptExitCode(exception.InnerException, out exitCode))
+            return true;
+        exitCode = 0;
+        return false;
+    }
+
+    private sealed class ScriptArgument
+    {
+        internal ScriptArgument(string? name, object? value)
+        {
+            Name = name;
+            Value = value;
+        }
+
+        internal string? Name { get; }
+        internal object? Value { get; }
+    }
+
+    private sealed class EmbeddedDependency
+    {
+        internal EmbeddedDependency(string resourceName, string relativePath, string sha256, int unixFileMode)
+        {
+            ResourceName = resourceName;
+            RelativePath = relativePath;
+            Sha256 = sha256;
+            UnixFileMode = unixFileMode;
+        }
+
+        internal string ResourceName { get; }
+        internal string RelativePath { get; }
+        internal string Sha256 { get; }
+        internal int UnixFileMode { get; }
+    }
+
+}
+
+public static class PowerForgePackagedEntryPoint
+{
+    public static string Path { get; internal set; } = string.Empty;
+}
+
+public sealed class PowerForgeScriptExitException : Exception
+{
+    public PowerForgeScriptExitException(int exitCode)
+        : base($"PowerShell script requested process exit code {exitCode}.")
+    {
+        ExitCode = exitCode;
+    }
+
+    public int ExitCode { get; }
+}

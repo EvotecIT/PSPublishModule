@@ -41,6 +41,11 @@ public sealed class DocumentationBuildResult
     public string? ErrorMessage { get; }
 
     /// <summary>
+    /// Help metadata captured before presentation fallbacks are rendered.
+    /// </summary>
+    internal DocumentationExtractionPayload? AuthoredHelpPayload { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public DocumentationBuildResult(
@@ -78,6 +83,31 @@ public sealed class DocumentationBuildResult
         string externalHelpFilePath,
         string? errorMessage,
         IReadOnlyList<string>? externalHelpFilePaths)
+        : this(
+            enabled,
+            docsPath,
+            readmePath,
+            succeeded,
+            exitCode,
+            markdownFiles,
+            externalHelpFilePath,
+            errorMessage,
+            externalHelpFilePaths,
+            authoredHelpPayload: null)
+    {
+    }
+
+    internal DocumentationBuildResult(
+        bool enabled,
+        string docsPath,
+        string readmePath,
+        bool succeeded,
+        int exitCode,
+        int markdownFiles,
+        string externalHelpFilePath,
+        string? errorMessage,
+        IReadOnlyList<string>? externalHelpFilePaths,
+        DocumentationExtractionPayload? authoredHelpPayload)
     {
         Enabled = enabled;
         DocsPath = docsPath;
@@ -91,5 +121,6 @@ public sealed class DocumentationBuildResult
                 ? Array.Empty<string>()
                 : new[] { ExternalHelpFilePath });
         ErrorMessage = errorMessage;
+        AuthoredHelpPayload = authoredHelpPayload;
     }
 }

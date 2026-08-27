@@ -6,6 +6,18 @@ using Xunit;
 public class WebPipelineRunnerProjectCatalogTests
 {
     [Fact]
+    public void SplitCsvLine_ParsesQuotedEmptyCells()
+    {
+        var splitMethod = typeof(WebPipelineRunner)
+            .GetMethod("SplitCsvLine", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(splitMethod);
+
+        var cells = Assert.IsType<string[]>(splitMethod!.Invoke(null, new object?[] { "\"eventviewerx\",\"\",\"PSEventViewer\"" }));
+
+        Assert.Equal(new[] { "eventviewerx", string.Empty, "PSEventViewer" }, cells);
+    }
+
+    [Fact]
     public void RunPipeline_ProjectCatalog_AllowsDedicatedExternalSurfaceWhenExternalUrlCanBackfillLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-surface-warn-" + Guid.NewGuid().ToString("N"));
@@ -494,11 +506,25 @@ public class WebPipelineRunnerProjectCatalogTests
                 }
                 """);
 
+            var gammaManifestPath = Path.Combine(root, "projects-sources", "gamma", "WebsiteArtifacts");
+            Directory.CreateDirectory(gammaManifestPath);
+            File.WriteAllText(Path.Combine(gammaManifestPath, "project-manifest.json"),
+                """
+                {
+                  "slug": "gamma",
+                  "name": "Gamma",
+                  "mode": "hub-full",
+                  "description": "Gamma project",
+                  "aliases": ["/projects/gamma-legacy/"]
+                }
+                """);
+
             var curationPath = Path.Combine(root, "data", "projects", "curation.csv");
             File.WriteAllText(curationPath,
                 """
-                "slug","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
-                "beta","Invoke-Beta","./data/projects/beta-api-guides.json"
+                "slug","aliases","packageAliases.nuget","packageAliases.powerShellGallery","apiDocs.quickStartTypes","apiDocs.relatedContentManifest"
+                "beta","[""/projects/beta-legacy/?ids=one,two"",""/projects/beta-classic/?mode=a;b#details""]","[""Beta.Core"",""Beta.Extensions""]","[""Beta"",""BetaLegacy""]","Invoke-Beta","./data/projects/beta-api-guides.json"
+                "gamma","[malformed","","","",""
                 """);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
@@ -535,6 +561,13 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/alpha-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"quickStartTypes\": \"Invoke-Beta\"", catalogText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("\"relatedContentManifest\": \"./data/projects/beta-api-guides.json\"", catalogText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("\"/projects/beta-legacy/?ids=one,two\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"/projects/beta-classic/?mode=a;b#details\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"packageAliases\":", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"Beta.Extensions\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"BetaLegacy\"", catalogText, StringComparison.Ordinal);
+            Assert.Contains("\"/projects/gamma-legacy/\"", catalogText, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"aliases\": []", catalogText, StringComparison.Ordinal);
         }
         finally
         {

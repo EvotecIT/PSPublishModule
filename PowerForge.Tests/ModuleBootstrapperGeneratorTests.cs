@@ -1,6 +1,6 @@
 using PowerForge;
 
-public class ModuleBootstrapperGeneratorTests
+public partial class ModuleBootstrapperGeneratorTests
 {
     [Theory]
     [InlineData("AMD64", "win-x64")]
@@ -190,10 +190,20 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("ProcessArchitecture", bootstrapper);
             Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
-            Assert.Contains("Lib\\{0}\\runtimes\\{1}\\native", bootstrapper);
-            Assert.Contains("$NativeLibraryFolders = @(", bootstrapper);
+            Assert.Contains("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName", bootstrapper);
+            var librariesScript = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+            Assert.Contains("Skipping preload-folder discovery", librariesScript, StringComparison.Ordinal);
+            Assert.Contains("Skipping Desktop resolver root", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("Skipping native runtime discovery", bootstrapper, StringComparison.Ordinal);
+            var preloadResolveIndex = librariesScript.IndexOf("$PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal);
+            Assert.True(
+                librariesScript.LastIndexOf("try {", preloadResolveIndex, StringComparison.Ordinal) >= 0 &&
+                librariesScript.IndexOf("} catch {", preloadResolveIndex, StringComparison.Ordinal) > preloadResolveIndex,
+                "Preload-folder resolution must isolate failures per configured assembly.");
+            Assert.Contains("$NativeLibraryDirectories = @(", bootstrapper);
             Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
-            Assert.Contains("foreach ($NativeLibraryFolder in $NativeLibraryFolders)", bootstrapper);
+            Assert.Contains("foreach ($NativeLibraryDirectory in $NativeLibraryDirectories)", bootstrapper);
+            Assert.Contains("Join-Path -Path $NativeLibraryDirectory -ChildPath (\"runtimes\\{0}\\native\" -f $ArchFolder)", bootstrapper);
             Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
             Assert.Contains("[array] $RemainingPathEntries = foreach ($PathEntry in $PathEntries)", bootstrapper);
@@ -205,6 +215,14 @@ public class ModuleBootstrapperGeneratorTests
             Assert.Contains("'AMD64' { 'win-x64' }", bootstrapper);
             Assert.Contains("if ([IntPtr]::Size -eq 4) { 'win-x86' } else { 'win-x64' }", bootstrapper);
             Assert.Contains("Unknown Windows architecture", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal),
+                "The managed assembly directory must be resolved before native PATH probing.");
+            Assert.True(
+                bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("foreach ($Library in $LibraryFileNames)", StringComparison.Ordinal),
+                "Native PATH probing must complete before the binary module import loop.");
             Assert.DoesNotContain("\r\n\r\ntry {", bootstrapper);
         }
         finally
@@ -223,6 +241,65 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_UsesPowerShell70BaselineForNetStandard21()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.1", "net8.0-windows" });
+
+        Assert.Equal("netcoreapp3.1", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_IncludesNetCoreAppBaselines()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "netcoreapp3.1", "net8.0" });
+
+        Assert.Equal("netcoreapp3.1", framework);
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFramework_IgnoresNetCoreAppBeforeAssemblyDependencyResolver()
+    {
+        var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "netcoreapp2.1", "net8.0" });
+
+        Assert.Equal("net8.0", framework);
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithNetStandard21_WritesPowerShell70CompatibleAssemblyLoadContextLoader()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ps70-alc-" + Guid.NewGuid().ToString("N"));
+        var coreRoot = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(coreRoot);
+        File.WriteAllText(Path.Combine(coreRoot, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0", "netstandard2.1", "net472" });
+
+            var loaderPath = Path.Combine(coreRoot, "DemoModule.ModuleLoadContext.dll");
+            Assert.True(File.Exists(loaderPath));
+            Assert.Contains(
+                ".NETCoreApp,Version=v3.1",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(loaderPath)),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void ResolveAssemblyLoadContextTargetFramework_DefaultsToNet8WhenNoModernFrameworkIsKnown()
     {
         var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFramework(new[] { "net472", "netstandard2.0" });
@@ -231,7 +308,7 @@ public class ModuleBootstrapperGeneratorTests
     }
 
     [Fact]
-    public void ResolveAssemblyLoadContextTargetDirectories_PrefersStandardWhenAllLibLayoutsExist()
+    public void ResolveAssemblyLoadContextTargetDirectories_CoversEverySelectableModernLayout()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-layout-" + Guid.NewGuid().ToString("N"));
         var libRoot = Path.Combine(root, "Lib");
@@ -243,7 +320,207 @@ public class ModuleBootstrapperGeneratorTests
         {
             var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
 
-            Assert.Equal(new[] { Path.Combine(libRoot, "Standard") }, directories);
+            Assert.Equal(
+                new[] { Path.Combine(libRoot, "Core"), Path.Combine(libRoot, "Standard") },
+                directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_KeepsResolvedRuntimeForCoreOnlyPayloads()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-target-" + Guid.NewGuid().ToString("N"));
+        var core = Directory.CreateDirectory(Path.Combine(root, "Core")).FullName;
+        File.WriteAllText(Path.Combine(core, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName), "net8.0");
+
+        try
+        {
+            var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads(
+                "net8.0",
+                new[] { core });
+
+            Assert.Equal("net8.0", framework);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_InfersPrebuiltCompatibleFloors()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-prebuilt-" + Guid.NewGuid().ToString("N"));
+        var namedCore = Directory.CreateDirectory(Path.Combine(root, "Core-netcoreapp3.1")).FullName;
+        var olderNamedCore = Directory.CreateDirectory(Path.Combine(root, "Core-netcoreapp2.1")).FullName;
+        var markedCore = Directory.CreateDirectory(Path.Combine(root, "marked", "Core")).FullName;
+        var markedDefault = Directory.CreateDirectory(Path.Combine(root, "marked", "Default")).FullName;
+        File.WriteAllText(Path.Combine(markedCore, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName), "netcoreapp3.1");
+        File.WriteAllText(Path.Combine(markedDefault, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName), "netstandard2.0");
+
+        try
+        {
+            Assert.Equal(
+                "netcoreapp3.1",
+                ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads("net8.0", new[] { namedCore }));
+            Assert.Equal(
+                "netcoreapp3.1",
+                ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads("net8.0", new[] { olderNamedCore }));
+            Assert.Equal(
+                "netcoreapp3.1",
+                ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads("net8.0", new[] { markedCore }));
+            Assert.Equal(
+                "netcoreapp3.1",
+                ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads("net8.0", new[] { markedDefault }));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithPrebuiltMultipleModernPayloads_DiscoversFoldersAndWritesLibraryMaps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-multitfm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                targetFrameworks: Array.Empty<string>());
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
+
+            Assert.Contains("$PowerForgeRuntimeVersion = [Environment]::Version", bootstrapper);
+            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", bootstrapper);
+            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
+            Assert.Contains("'Core-net10.0' = @(", libraries);
+            Assert.Contains("Lib\\Core-net10.0\\DemoModule.dll", libraries);
+            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithOnlyNamedCorePayload_AllowsRuntimeSelectionBeforeEmptyLayoutGuard()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-named-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" }, handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$HasNamedCorePayload = $true", bootstrapper);
+            Assert.Contains("$PSEdition -eq 'Core' -and $HasNamedCorePayload", bootstrapper);
+            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
+            Assert.Contains("No compatible PowerShell Core assemblies found", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Generate_WithDefaultAndNamedCorePayload_RejectsIncompatibleCoreRuntime(bool useAssemblyLoadContext)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-default-named-core-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
+        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: useAssemblyLoadContext);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains(
+                "$HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))",
+                bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_UsesRootLibForRootLevelBinaryLayout()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-root-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(libRoot);
+
+            Assert.Equal(new[] { libRoot }, directories);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveAssemblyLoadContextTargetDirectories_CoversEveryRuntimeFallbackForConfiguredAssemblies()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-configured-layout-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib")).FullName;
+        var coreRoot = Directory.CreateDirectory(Path.Combine(libRoot, "Core")).FullName;
+        var defaultRoot = Directory.CreateDirectory(Path.Combine(libRoot, "Default")).FullName;
+        File.WriteAllText(Path.Combine(coreRoot, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(defaultRoot, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(libRoot, "ExtraModule.dll"), string.Empty);
+
+        try
+        {
+            var directories = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetDirectories(
+                libRoot,
+                new[] { "DemoModule.dll", "ExtraModule.dll" });
+
+            Assert.Equal(new[] { coreRoot, defaultRoot, libRoot }, directories);
         }
         finally
         {
@@ -261,6 +538,9 @@ public class ModuleBootstrapperGeneratorTests
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
         File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
         File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+        File.WriteAllText(
+            Path.Combine(root, "Lib", "Core", ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
+            "net8.0");
         File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
 
         try
@@ -277,7 +557,10 @@ public class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
             Assert.Contains("DemoModule.ModuleLoadContext.dll", bootstrapper);
-            Assert.Contains("LoadModule($ModuleAssemblyPath, 'DemoModule')", bootstrapper);
+            Assert.Contains("::LoadModuleFromGroup(", bootstrapper);
+            Assert.Contains("$PowerForgeCoreModuleAssemblyPaths", bootstrapper);
+            Assert.Contains("$PowerForgeResolvedBinaryModulePaths = [Collections.Generic.HashSet[string]]", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath,", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("AddExportedAlias", bootstrapper);
@@ -299,8 +582,15 @@ public class ModuleBootstrapperGeneratorTests
                 bootstrapper.IndexOf("& $ImportModule $ModuleAssemblyPath", StringComparison.Ordinal),
                 "Desktop dependencies must load before the exported binary module.");
 
-            Assert.True(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
-            Assert.False(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            var coreLoaderPath = Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll");
+            Assert.True(File.Exists(coreLoaderPath));
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
+            var coreLoaderTargetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(coreLoaderPath))
+                .GetCustomAttributesData()
+                .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
+                .ConstructorArguments[0]
+                .Value as string;
+            Assert.Equal(".NETCoreApp,Version=v3.1", coreLoaderTargetFramework);
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
@@ -310,6 +600,130 @@ public class ModuleBootstrapperGeneratorTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContext_LoadsInterdependentExportsIntoOneContext()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-export-group-" + Guid.NewGuid().ToString("N"));
+        var libCore = Path.Combine(root, "Lib", "Core");
+        Directory.CreateDirectory(libCore);
+
+        try
+        {
+            var sharedPath = BuildFixtureProject(
+                root,
+                "SharedExportProject",
+                "SharedExport",
+                """
+                namespace SharedExport;
+
+                public sealed class SharedValue
+                {
+                }
+                """);
+            var primaryPath = BuildFixtureProject(
+                root,
+                "PrimaryExportProject",
+                "PrimaryExport",
+                """
+                namespace PrimaryExport;
+
+                public static class Entry
+                {
+                    public static void Accept(SharedExport.SharedValue value) { }
+                }
+                """,
+                new[] { sharedPath });
+
+            var packagedPrimary = Path.Combine(libCore, "PrimaryExport.dll");
+            var packagedShared = Path.Combine(root, "Lib", "SharedExport.dll");
+            File.Copy(primaryPath, packagedPrimary, overwrite: true);
+            File.Copy(sharedPath, packagedShared, overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "PrimaryExport.dll", "SharedExport.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
+            var loaderAssembly = System.Reflection.Assembly.LoadFile(Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll"));
+            var contextType = loaderAssembly.GetType("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", throwOnError: true)!;
+            var loadModules = contextType.GetMethod("LoadModules", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+            var loaded = (System.Reflection.Assembly[])loadModules.Invoke(
+                null,
+                new object?[] { new[] { packagedPrimary, packagedShared }, "DemoModule" })!;
+
+            Assert.Equal(2, loaded.Length);
+            var parameterType = loaded[0]
+                .GetType("PrimaryExport.Entry", throwOnError: true)!
+                .GetMethod("Accept", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+                .GetParameters()[0]
+                .ParameterType;
+            var sharedType = loaded[1].GetType("SharedExport.SharedValue", throwOnError: true)!;
+
+            Assert.Same(sharedType, parameterType);
+            Assert.Same(
+                System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(loaded[0]),
+                System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(loaded[1]));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, true); } catch { /* generated loader assembly remains locked after reflection load */ }
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithAssemblyLoadContextAndStandardFallback_BuildsPowerShell70CompatibleLoader()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-standard-" + Guid.NewGuid().ToString("N"));
+        var libStandard = Directory.CreateDirectory(Path.Combine(root, "Lib", "Standard")).FullName;
+        var libCore = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libStandard, "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(libCore, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "netstandard2.0", "net8.0" });
+
+            foreach (var loaderPath in new[]
+                     {
+                         Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll"),
+                         Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll")
+                     })
+            {
+                Assert.True(File.Exists(loaderPath));
+                var targetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(loaderPath))
+                    .GetCustomAttributesData()
+                    .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
+                    .ConstructorArguments[0]
+                    .Value as string;
+                Assert.Equal(".NETCoreApp,Version=v3.1", targetFramework);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                try { Directory.Delete(root, true); } catch { /* generated loader assembly remains locked after reflection load */ }
+            }
         }
     }
 
@@ -324,9 +738,9 @@ public class ModuleBootstrapperGeneratorTests
 
         Assert.Contains("LoadPackagedNativeLibrary", source);
         Assert.Contains("TryLoadPackagedNativeLibrary", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"native\", fileName)", source);
         Assert.Contains("RuntimeInformation.ProcessArchitecture", source);
-        Assert.Contains("RuntimeInformation.RuntimeIdentifier", source);
+        Assert.Contains("GetProperty(\"RuntimeIdentifier\", BindingFlags.Public | BindingFlags.Static)", source);
         Assert.Contains("LoadUnmanagedDllFromPath(path)", source);
         Assert.Contains("BadImageFormatException || ex is DllNotFoundException || ex is FileLoadException", source);
         Assert.Contains("yield return \"win-\" + arch", source);
@@ -348,20 +762,22 @@ public class ModuleBootstrapperGeneratorTests
             "DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext");
         var source = ModuleBootstrapperGenerator.BuildAssemblyLoadContextSource(identity);
 
-        Assert.Contains("private readonly AssemblyDependencyResolver? _resolver;", source);
-        Assert.Contains("private readonly DependencyManifestResolver? _manifestResolver;", source);
-        Assert.Contains("_resolver = TryCreateResolver(_moduleAssemblyPath);", source);
-        Assert.Contains("_manifestResolver = DependencyManifestResolver.TryCreate(_moduleAssemblyPath);", source);
+        Assert.Contains("private readonly AssemblyDependencyResolver[] _resolvers;", source);
+        Assert.Contains("private readonly DependencyManifestResolver[] _manifestResolvers;", source);
+        Assert.Contains("_resolvers = moduleAssemblyPaths", source);
+        Assert.Contains("_manifestResolvers = moduleAssemblyPaths", source);
         Assert.Contains("catch (InvalidOperationException)", source);
         Assert.Contains("return null;", source);
-        Assert.Contains("_resolver?.ResolveAssemblyToPath(assemblyName)", source);
-        Assert.Contains("_resolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
-        Assert.Contains("_manifestResolver?.ResolveAssemblyToPath(assemblyName)", source);
-        Assert.Contains("_manifestResolver?.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("foreach (var resolver in _resolvers)", source);
+        Assert.Contains("resolver.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("resolver.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
+        Assert.Contains("foreach (var manifestResolver in _manifestResolvers)", source);
+        Assert.Contains("manifestResolver.ResolveAssemblyToPath(assemblyName)", source);
+        Assert.Contains("manifestResolver.ResolveUnmanagedDllToPath(unmanagedDllName)", source);
         Assert.Contains("ResolvePackagedRuntimeAssembly(assemblyName.Name)", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, \"runtimes\", rid, \"lib\")", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, \"runtimes\", rid, \"lib\")", source);
         Assert.Contains("Path.ChangeExtension(assemblyPath, \".deps.json\")", source);
-        Assert.Contains("Path.Combine(_assemblyDirectory, assemblyName.Name + \".dll\")", source);
+        Assert.Contains("Path.Combine(assemblyDirectory, assemblyName.Name + \".dll\")", source);
         Assert.Contains("LoadPackagedNativeLibrary(unmanagedDllName)", source);
     }
 
@@ -568,11 +984,320 @@ public class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$Framework = 'Default'", bootstrapper);
+            Assert.Contains("$PowerForgePreferredBinaryFolders = if ($PSEdition -eq 'Core')", bootstrapper);
             Assert.True(File.Exists(Path.Combine(root, "Lib", "Default", "DemoModule.ModuleLoadContext.dll")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
             Assert.DoesNotContain("DemoModule.ModuleLoadContext.dll", libraries);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithRootPrimaryAndNestedAuxiliary_WritesAlcLoaderBesidePrimaryAssembly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-root-primary-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        File.WriteAllText(Path.Combine(root, "Lib", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Core", "Dependency.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.AllowList,
+                assemblyTypeAccelerators: new[] { "Dependency.Widget" });
+
+            Assert.True(File.Exists(Path.Combine(root, "Lib", "DemoModule.ModuleLoadContext.dll")));
+            Assert.False(File.Exists(Path.Combine(root, "Lib", "Core", "DemoModule.ModuleLoadContext.dll")));
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory", bootstrapper);
+            Assert.Contains("$LibFolder = $LibraryDirectory", bootstrapper);
+            Assert.Contains("$PowerForgeAlcLibraryDirectory = [IO.Path]::GetFullPath($LibFolder)", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithMultipleConfiguredAssemblies_ImportsEveryAssemblyAndPrefersModuleName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-multiple-exports-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib"));
+        File.WriteAllText(Path.Combine(root, "Lib", "DemoModule.DLL"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "Auxiliary.dll"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(Array.Empty<string>(), new[] { "Get-Demo" }, Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                exports,
+                new[] { "Auxiliary.dll", "DemoModule.dll" },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll', 'Auxiliary.dll')", bootstrapper);
+            Assert.Contains("foreach ($Library in $LibraryFileNames)", bootstrapper);
+            Assert.Contains("Where-Object { $_.Name -ieq $LibraryFileName }", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath = $ResolvedModuleAssembly.Path", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("./Lib/Plugins/DemoModule.dll")]
+    [InlineData(@".\Lib\Plugins\DemoModule.dll")]
+    [Trait("Category", "Integration")]
+    public void Generate_WithPathQualifiedExportAssembly_PreservesRelativeLocation(string configuredReference)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-qualified-export-" + Guid.NewGuid().ToString("N"));
+        var pluginRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Plugins")).FullName;
+        File.WriteAllText(Path.Combine(pluginRoot, "DemoModule.DLL"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            const string expectedReference = "Plugins/DemoModule.dll";
+            Assert.Contains("$LibraryFileNames = @('" + expectedReference + "')", bootstrapper);
+            Assert.Contains("$RelativeCandidate -ieq $RelativeReference", bootstrapper);
+            Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void Generate_WithUnqualifiedNestedExportAssembly_ResolvesUniqueRecursiveMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-unqualified-nested-export-" + Guid.NewGuid().ToString("N"));
+        var fixtureRoot = Path.Combine(root, "Fixture");
+        var moduleRoot = Path.Combine(root, "Module");
+        var pluginRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Plugins")).FullName;
+        Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core-net99.0"));
+        File.WriteAllText(Path.Combine(moduleRoot, "Lib", "Core-net99.0", "Auxiliary.dll"), string.Empty);
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                fixtureRoot,
+                "NestedBinaryFixture",
+                "DemoModule",
+                "namespace NestedBinaryFixture; public static class Marker { public static string Value => \"nested\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(pluginRoot, "DemoModule.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            var bootstrapper = File.ReadAllText(bootstrapperPath);
+            Assert.Contains("$RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse", bootstrapper);
+            Assert.Contains("matched multiple nested Lib payloads", bootstrapper);
+            Assert.Contains("$PowerForgeHasNoCompatibleNamedCorePayload", bootstrapper);
+            Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-ExecutionPolicy");
+            processStartInfo.ArgumentList.Add("Bypass");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) + "' -Force -ErrorAction Stop");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void InlineMergedScriptPayload_ExecutesFunctionsPrependedBeforeFirstSourceMarker()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-prepended-source-" + Guid.NewGuid().ToString("N"));
+        var fixtureRoot = Path.Combine(root, "Fixture");
+        var moduleRoot = Path.Combine(root, "Module");
+        var libRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "Core")).FullName;
+        var publicRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Public")).FullName;
+
+        try
+        {
+            var fixtureAssembly = BuildFixtureProject(
+                fixtureRoot,
+                "PrependedSourceFixture",
+                "DemoModule",
+                "namespace PrependedSourceFixture; public static class Marker { public static string Value => \"binary\"; }");
+            File.Copy(fixtureAssembly, Path.Combine(libRoot, "DemoModule.dll"), overwrite: true);
+            File.WriteAllText(
+                Path.Combine(publicRoot, "Get-Original.ps1"),
+                "function Get-Original { 'original' }");
+
+            var exports = new ExportSet(
+                new[] { "Get-Recovered", "Get-Original" },
+                Array.Empty<string>(),
+                Array.Empty<string>());
+            var sources = ModuleMergeComposer.BuildSources(
+                moduleRoot,
+                "DemoModule",
+                information: null,
+                exports,
+                fixRelativePaths: false,
+                exportAssemblies: new[] { "DemoModule.dll" });
+            var merged = ModuleMergeComposer.PrependFunctions(
+                new[] { "function Get-Recovered { 'recovered' }" },
+                sources.MergedScriptContent);
+
+            ModuleBootstrapperGenerator.Generate(
+                moduleRoot,
+                "DemoModule",
+                exports,
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: false);
+            var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
+            ModuleBootstrapperGenerator.InlineMergedScriptPayload(bootstrapperPath, merged);
+
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "pwsh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            processStartInfo.ArgumentList.Add("-NoLogo");
+            processStartInfo.ArgumentList.Add("-NoProfile");
+            processStartInfo.ArgumentList.Add("-NonInteractive");
+            processStartInfo.ArgumentList.Add("-ExecutionPolicy");
+            processStartInfo.ArgumentList.Add("Bypass");
+            processStartInfo.ArgumentList.Add("-Command");
+            processStartInfo.ArgumentList.Add(
+                "Import-Module -Name '" + bootstrapperPath.Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force -ErrorAction Stop; '{0},{1}' -f (Get-Recovered), (Get-Original)");
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo)!;
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(
+                process.ExitCode == 0,
+                $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+            Assert.Contains("recovered,original", standardOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithAbsoluteExportAssembly_UsesPackagedFileName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-absolute-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
+        var configuredReference = Path.Combine(root, "build-output", "DemoModule.dll");
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("Artifacts/DemoModule.dll")]
+    [InlineData(@"bin\Release\DemoModule.dll")]
+    public void Generate_WithProjectRelativeExportAssembly_UsesPackagedFileName(string configuredReference)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-relative-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+        File.WriteAllText(Path.Combine(libRoot, "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { configuredReference },
+                handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -740,10 +1465,43 @@ public class ModuleBootstrapperGeneratorTests
             Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
-            Assert.Contains("$Public  = @(", bootstrapper);
+            Assert.Contains("$Public  = [string[]]@(", bootstrapper);
             Assert.Contains("[IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')", bootstrapper);
+            Assert.Contains("[Array]::Sort($Public, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Private, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Classes, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.Contains("[Array]::Sort($Enums, [StringComparer]::Ordinal)", bootstrapper);
+            Assert.True(
+                bootstrapper.IndexOf("$Enums + $Classes", StringComparison.Ordinal) >= 0,
+                "Enums must be dot-sourced before classes so class declarations can reference enum types.");
             Assert.DoesNotContain("$PowerForgeModuleRoot", bootstrapper);
             Assert.DoesNotContain("$LibraryName =", bootstrapper);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithAuxiliaryLibraryOnly_KeepsScriptModuleBootstrapper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-auxiliary-lib-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib"));
+        File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo {}");
+        File.WriteAllText(Path.Combine(root, "Lib", "Auxiliary.DLL"), string.Empty);
+
+        try
+        {
+            var exports = new ExportSet(new[] { "Get-Demo" }, Array.Empty<string>(), Array.Empty<string>());
+            ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, exportAssemblies: null, handleRuntimes: false);
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            Assert.Contains("$Public  = [string[]]@(", bootstrapper, StringComparison.Ordinal);
+            Assert.DoesNotContain("$LibraryName =", bootstrapper, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
         }
         finally
         {

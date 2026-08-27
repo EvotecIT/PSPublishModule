@@ -43,7 +43,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static Dictionary<string, string?> CreateTrustedGitEnvironment(
         IReadOnlyDictionary<string, string?>? requestedEnvironment = null,
-        IReadOnlyList<KeyValuePair<string, string>>? controlledConfiguration = null)
+        IReadOnlyList<KeyValuePair<string, string>>? controlledConfiguration = null,
+        string? controlledIndexFile = null)
     {
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (requestedEnvironment is not null)
@@ -98,6 +99,8 @@ public sealed partial class DotNetPublishPipelineRunner
             environment["GIT_CONFIG_KEY_" + index] = configuration[index].Key;
             environment["GIT_CONFIG_VALUE_" + index] = configuration[index].Value;
         }
+        if (!string.IsNullOrWhiteSpace(controlledIndexFile))
+            environment["GIT_INDEX_FILE"] = Path.GetFullPath(controlledIndexFile!);
         environment["GIT_TERMINAL_PROMPT"] = "0";
         environment["GCM_INTERACTIVE"] = "Never";
         environment["GIT_OPTIONAL_LOCKS"] = "0";

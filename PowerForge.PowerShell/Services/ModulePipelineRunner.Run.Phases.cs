@@ -102,6 +102,10 @@ public sealed partial class ModulePipelineRunner
                     UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
             }
 
+            if (state.MergeExecution.MergedModule) {
+                SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
+            }
+
             if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
                 TryRegenerateBootstrapperFromManifest(
                     buildResult,
@@ -277,6 +281,9 @@ public sealed partial class ModulePipelineRunner
         try
         {
             RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (state.MergeExecution.MergedModule) {
+                SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
+            }
         }
         catch (Exception ex)
         {
@@ -595,7 +602,8 @@ public sealed partial class ModulePipelineRunner
                     ModuleName = plan.ModuleName,
                     ManifestPath = buildResult.ManifestPath,
                     BuildSpec = plan.BuildSpec,
-                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings()
+                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings(),
+                    AuthoredHelpPayload = state.DocumentationResult?.AuthoredHelpPayload
                 });
 
                 if (state.ValidationReport.Status == CheckStatus.Fail)
@@ -817,7 +825,19 @@ public sealed partial class ModulePipelineRunner
             }
 
             if (packageWithoutScriptFolders)
-                SyncMergedPsm1WithGeneratedScripts(buildResult.ManifestPath, buildResult.StagingPath, plan.ModuleName, generated.Select(static g => g.ScriptPath));
+            {
+                var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
+                var conditionalExportDependencies = ResolveConditionalExportDependencies(
+                    plan,
+                    ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, plan.Information),
+                    exports);
+                SyncMergedPsm1WithGeneratedScripts(
+                    buildResult.ManifestPath,
+                    buildResult.StagingPath,
+                    plan.ModuleName,
+                    generated.Select(static g => g.ScriptPath),
+                    conditionalExportDependencies);
+            }
         }
         catch (Exception ex)
         {

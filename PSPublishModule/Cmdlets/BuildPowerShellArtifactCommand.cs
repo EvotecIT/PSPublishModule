@@ -1,0 +1,189 @@
+using System;
+using System.Linq;
+using System.Management.Automation;
+using PowerForge;
+
+namespace PSPublishModule;
+
+/// <summary>
+/// Builds a packaged executable, typed CLR library, or importable binary/hybrid module from PowerShell source.
+/// </summary>
+/// <example>
+/// <summary>Build a module directly from its conventional folder layout</summary>
+/// <code>Build-PowerShellArtifact -Path .\MyModule -EmitSource</code>
+/// </example>
+/// <example>
+/// <summary>Package a standalone script as a single-file executable</summary>
+/// <code>Build-PowerShellArtifact -Path .\tool.ps1</code>
+/// </example>
+/// <example>
+/// <summary>Compile several loose scripts into one typed cmdlet module</summary>
+/// <code>Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind BinaryModule</code>
+/// </example>
+[Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
+[OutputType(typeof(PowerShellCompilationBuildResult))]
+public sealed class BuildPowerShellArtifactCommand : PSCmdlet
+{
+    /// <summary>One PowerShell script/module path, or several loose .ps1 files for a typed library or strict binary module.</summary>
+    [Parameter(Mandatory = true, Position = 0)]
+    [ValidateNotNullOrEmpty]
+    public string[] Path { get; set; } = Array.Empty<string>();
+
+    /// <summary>Explicit root .ps1 application entrypoint when several script paths are supplied for an executable.</summary>
+    [Parameter]
+    public string? EntryPoint { get; set; }
+
+    /// <summary>Optional artifact shape. Defaults to Executable for .ps1 and BinaryModule for module inputs.</summary>
+    [Parameter]
+    public PowerShellCompilationArtifactKind? Kind { get; set; }
+
+    /// <summary>Destination for durable artifacts and the compilation manifest.</summary>
+    [Parameter]
+    public string? OutputDirectory { get; set; }
+
+    /// <summary>Artifact file and assembly name. Defaults to the source file name.</summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>Fallback policy. Defaults to Package for executables and Hybrid for module/library inputs. Analyze is not a build mode.</summary>
+    [Parameter]
+    public PowerShellCompilationMode? Mode { get; set; }
+
+    /// <summary>Optional payload policy. Declared includes manifest, explicit, and safely inferred resources.</summary>
+    [Parameter]
+    public PowerShellCompilationResourceMode ResourceMode { get; set; } = PowerShellCompilationResourceMode.Declared;
+
+    /// <summary>Contained resource paths or glob patterns to include beside the artifact.</summary>
+    [Parameter]
+    public string[] IncludeResource { get; set; } = Array.Empty<string>();
+
+    /// <summary>Contained resource paths or glob patterns to exclude from optional payload.</summary>
+    [Parameter]
+    public string[] ExcludeResource { get; set; } = Array.Empty<string>();
+
+    /// <summary>Generated .NET target framework.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string TargetFramework { get; set; } = "net8.0";
+
+    /// <summary>Optional runtime identifier used when publishing an executable.</summary>
+    [Parameter]
+    public string? RuntimeIdentifier { get; set; }
+
+    /// <summary>Include the .NET runtime when publishing an executable.</summary>
+    [Parameter]
+    public SwitchParameter SelfContained { get; set; }
+
+    /// <summary>Publish an executable as one file.</summary>
+    [Parameter]
+    public bool SingleFile { get; set; } = true;
+
+    /// <summary>Optional trimmed or native-AOT publication for a Strict typed executable.</summary>
+    [Parameter]
+    public PowerShellCompilationExecutableOptimization Optimization { get; set; }
+
+    /// <summary>Authenticode-sign generated signable files before integrity hashes are recorded.</summary>
+    [Parameter]
+    public SwitchParameter SignArtifact { get; set; }
+
+    /// <summary>Optional code-signing certificate thumbprint.</summary>
+    [Parameter]
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Certificate store used for Authenticode signing.</summary>
+    [Parameter]
+    public CertificateStoreLocation CertificateStoreLocation { get; set; } = CertificateStoreLocation.CurrentUser;
+
+    /// <summary>RFC3161 timestamp service used for Authenticode signing.</summary>
+    [Parameter]
+    public string TimeStampServer { get; set; } = "http://timestamp.digicert.com";
+
+    /// <summary>Maximum time allowed for Authenticode signing.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int SigningTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Retain the generated project workspace for inspection.</summary>
+    [Parameter]
+    public SwitchParameter KeepBuildWorkspace { get; set; }
+
+    /// <summary>Publish an independently buildable generated C# source project beside the artifact.</summary>
+    [Parameter]
+    public SwitchParameter EmitSource { get; set; }
+
+    /// <summary>Maximum restore and compile time in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int TimeoutSeconds { get; set; } = 300;
+
+    /// <inheritdoc />
+    protected override void ProcessRecord()
+    {
+        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
+        var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
+            ? null
+            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(EntryPoint);
+        if (Mode == PowerShellCompilationMode.Analyze)
+        {
+            ThrowTerminatingError(new ErrorRecord(
+                new ArgumentException("Analyze mode reports eligibility and does not produce artifacts."),
+                "PowerShellArtifactAnalyzeModeDoesNotBuild",
+                ErrorCategory.InvalidArgument,
+                Mode));
+            return;
+        }
+        PowerShellCompilationResolvedInput resolved;
+        try
+        {
+            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode, entryPointPath);
+        }
+        catch (Exception ex)
+        {
+            ThrowTerminatingError(new ErrorRecord(ex, "PowerShellArtifactInputResolutionFailed", ErrorCategory.InvalidArgument, requestedPaths));
+            return;
+        }
+        var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)
+            ? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved)
+            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
+        var artifactName = string.IsNullOrWhiteSpace(Name) ? resolved.ArtifactName : Name!;
+        if (!ShouldProcess(outputPath, $"Build {resolved.Kind} artifact '{artifactName}' from '{resolved.RequestedPath}'"))
+            return;
+
+        var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputPath, artifactName, resolved.Kind, resolved.Mode)
+        {
+            ModuleManifestPath = resolved.ModuleManifestPath,
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
+            RuntimeSourcePaths = resolved.SourceFiles,
+            ResourceMode = ResourceMode,
+            IncludeResource = IncludeResource,
+            ExcludeResource = ExcludeResource,
+            TargetFramework = TargetFramework,
+            RuntimeIdentifier = RuntimeIdentifier,
+            SelfContained = SelfContained.IsPresent,
+            SingleFile = SingleFile,
+            Optimization = Optimization,
+            SignArtifact = SignArtifact.IsPresent,
+            CertificateThumbprint = CertificateThumbprint,
+            CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation,
+            TimeStampServer = TimeStampServer,
+            SigningTimeoutSeconds = SigningTimeoutSeconds,
+            KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
+            EmitSource = EmitSource.IsPresent,
+            TimeoutSeconds = TimeoutSeconds
+        };
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        if (!result.Succeeded)
+        {
+            var message = result.Error ?? "PowerShell artifact build failed.";
+            if (!string.IsNullOrWhiteSpace(result.BuildOutput))
+                message += Environment.NewLine + result.BuildOutput;
+            ThrowTerminatingError(new ErrorRecord(
+                new InvalidOperationException(message),
+                "PowerShellArtifactBuildFailed",
+                ErrorCategory.InvalidResult,
+                spec));
+        }
+        WriteObject(result);
+    }
+
+}

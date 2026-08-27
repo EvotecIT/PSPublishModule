@@ -58,6 +58,9 @@ Asserts that a benchmark path exists or does not exist.
 ### [Assert-BenchmarkValue](Assert-BenchmarkValue.md)
 Asserts a benchmark value condition.
 
+### [Build-PowerShellArtifact](Build-PowerShellArtifact.md)
+Builds a packaged executable, typed CLR library, or importable binary/hybrid module from PowerShell source.
+
 ### [Complete-BenchmarkProvenanceCapture](Complete-BenchmarkProvenanceCapture.md)
 Verifies unchanged source after an external benchmark and writes a hash-bound artifact sidecar.
 

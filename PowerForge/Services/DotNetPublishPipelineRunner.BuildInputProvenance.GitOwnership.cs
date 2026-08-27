@@ -70,20 +70,58 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
-        var status = RunBuildInputEvaluationProcess(
-            "git",
-            repositoryRoot,
-            new[]
+        string temporaryRoot = Path.Combine(
+            Path.GetTempPath(),
+            "powerforge-git-index-" + Guid.NewGuid().ToString("N"));
+        string isolatedIndex = Path.Combine(temporaryRoot, "index");
+        try
+        {
+            Directory.CreateDirectory(temporaryRoot);
+            IReadOnlyList<KeyValuePair<string, string>> configuration =
+                BuildControlledGitConfiguration(filterNames);
+            var initialize = RunBuildInputEvaluationProcess(
+                "git",
+                repositoryRoot,
+                new[] { "read-tree", revision! },
+                environmentVariables: null,
+                TimeSpan.FromSeconds(30),
+                configuration,
+                isolatedIndex);
+            if (initialize.ExitCode != 0 || initialize.TimedOut)
+                return false;
+
+            var status = RunBuildInputEvaluationProcess(
+                "git",
+                repositoryRoot,
+                new[]
+                {
+                    "status",
+                    "--porcelain=v1",
+                    "-z",
+                    "--untracked-files=all"
+                },
+                environmentVariables: null,
+                TimeSpan.FromSeconds(30),
+                configuration,
+                isolatedIndex);
+            return status.ExitCode == 0 && !status.TimedOut && status.StdOut.Length == 0;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            try
             {
-                "status",
-                "--porcelain=v1",
-                "-z",
-                "--untracked-files=all"
-            },
-            environmentVariables: null,
-            TimeSpan.FromSeconds(30),
-            BuildControlledGitConfiguration(filterNames));
-        return status.ExitCode == 0 && !status.TimedOut && status.StdOut.Length == 0;
+                if (Directory.Exists(temporaryRoot))
+                    Directory.Delete(temporaryRoot, recursive: true);
+            }
+            catch
+            {
+                // Failure to remove a private temporary index does not make the source trusted.
+            }
+        }
     }
 
     private static bool HasNoGitReplacementRefs(string repositoryRoot)

@@ -140,9 +140,7 @@ public sealed class ModuleBuildPipeline
             return;
 
         var libPath = Path.Combine(stagingPath, "Lib");
-        var dlls = Directory.Exists(libPath)
-            ? Directory.GetFiles(libPath, "*.dll", SearchOption.AllDirectories)
-            : Array.Empty<string>();
+        var dlls = ModuleBinaryFileLocator.Enumerate(libPath, SearchOption.AllDirectories).ToArray();
         if (dlls.Length == 0)
         {
             throw new InvalidOperationException(
@@ -165,6 +163,11 @@ public sealed class ModuleBuildPipeline
             throw new InvalidOperationException(
                 $"SkipDotNetBuild was requested for binary module '{spec.Name}', but the existing Lib payload is missing: {string.Join(", ", missingExports)}.");
         }
+
+        ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(
+            stagingPath,
+            spec.Name,
+            spec.ExportAssemblies);
     }
 
     internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
@@ -186,6 +189,18 @@ public sealed class ModuleBuildPipeline
         if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
             _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
+        var resolvedCsprojPath = spec.RefreshManifestOnly || string.IsNullOrWhiteSpace(spec.CsprojPath)
+            ? string.Empty
+            : Path.GetFullPath(spec.CsprojPath);
+        var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
+        var rootModuleScriptWillBeReplaced = !spec.RefreshManifestOnly &&
+                                              (!string.IsNullOrWhiteSpace(resolvedCsprojPath) ||
+                                               ModuleBootstrapperGenerator.ShouldWriteBootstrapper(
+                                                   staging,
+                                                   spec.Name,
+                                                   spec.ExportAssemblies,
+                                                   forceBootstrapperWrite));
+
         var builder = new ModuleBuilder(
             _logger,
             _manifestMutator,
@@ -194,7 +209,7 @@ public sealed class ModuleBuildPipeline
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
-            CsprojPath = spec.RefreshManifestOnly || string.IsNullOrWhiteSpace(spec.CsprojPath) ? string.Empty : Path.GetFullPath(spec.CsprojPath),
+            CsprojPath = resolvedCsprojPath,
             ModuleVersion = spec.Version,
             Configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration,
             Frameworks = tfms,
@@ -217,6 +232,7 @@ public sealed class ModuleBuildPipeline
                 ? Array.Empty<string>()
                 : spec.CsprojRequiredReasons ?? Array.Empty<string>(),
             EmitBinaryConflictOwnerNotes = false,
+            RootModuleScriptWillBeReplaced = rootModuleScriptWillBeReplaced,
         };
         _ = builder.BuildInPlace(buildOptions);
 
@@ -230,7 +246,6 @@ public sealed class ModuleBuildPipeline
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly)
         {
-            var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
             ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
@@ -251,7 +266,9 @@ public sealed class ModuleBuildPipeline
             _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
         }
 
-        var buildNotes = builder.AnalyzeInstalledBinaryConflicts(buildOptions);
+        var buildNotes = spec.AnalyzeInstalledBinaryConflictsDuringBuild
+            ? builder.AnalyzeInstalledBinaryConflicts(buildOptions)
+            : Array.Empty<ModuleOwnerNote>();
         return new ModuleBuildResult(staging, psd1, exports, buildNotes);
     }
 

@@ -209,7 +209,7 @@ internal sealed class MarkdownHelpWriter
         {
             var name = p.Name.Trim();
             doc.RawLine($"### -{name}");
-            doc.RawLine(string.IsNullOrWhiteSpace(p.Description) ? $"{{{{ Fill {name} Description }}}}" : p.Description.Trim());
+            doc.RawLine(ParameterDescriptionFallback.Resolve(p.Description, name, p.Type));
             doc.BlankLine();
             doc.CodeFence("yaml", string.Join(Environment.NewLine, new[]
             {
