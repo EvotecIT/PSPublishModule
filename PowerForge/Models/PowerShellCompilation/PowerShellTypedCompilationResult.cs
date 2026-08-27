@@ -106,13 +106,21 @@ public sealed class PowerShellCompiledMethod
         bool isAdvancedFunction,
         PowerShellCompilationCommandBinding? commandBinding,
         bool requiresPowerShellRuntimeState,
-        string? declaredOutputType)
+        string? declaredOutputType,
+        int sourceColumn = 1,
+        int sourceEndLine = 0,
+        int sourceEndColumn = 0,
+        PowerShellCompilationSourceMapEntry[]? sourceMap = null)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
         ReturnType = returnType ?? string.Empty;
         Parameters = parameters ?? Array.Empty<PowerShellCompilationParameter>();
         SourceLine = sourceLine;
+        SourceColumn = sourceColumn;
+        SourceEndLine = sourceEndLine > 0 ? sourceEndLine : sourceLine;
+        SourceEndColumn = sourceEndColumn > 0 ? sourceEndColumn : sourceColumn;
+        SourceMap = sourceMap ?? Array.Empty<PowerShellCompilationSourceMapEntry>();
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
@@ -142,6 +150,18 @@ public sealed class PowerShellCompiledMethod
     /// <summary>One-based source line of the PowerShell function body.</summary>
     public int SourceLine { get; }
 
+    /// <summary>One-based source column where the PowerShell function begins.</summary>
+    public int SourceColumn { get; }
+
+    /// <summary>One-based source line where the PowerShell function ends.</summary>
+    public int SourceEndLine { get; }
+
+    /// <summary>One-based source column where the PowerShell function ends.</summary>
+    public int SourceEndColumn { get; }
+
+    /// <summary>Statement-level source spans and method-relative generated C# ranges.</summary>
+    public PowerShellCompilationSourceMapEntry[] SourceMap { get; }
+
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }
 
@@ -168,6 +188,55 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Authored comment-based help retained for the compiled command.</summary>
     public PowerShellCompilationHelp? Help { get; internal set; }
+}
+
+/// <summary>Maps one lowered PowerShell statement to a generated C# range.</summary>
+public sealed class PowerShellCompilationSourceMapEntry
+{
+    /// <summary>Creates one statement-level source-map entry.</summary>
+    public PowerShellCompilationSourceMapEntry(
+        int sourceStartLine,
+        int sourceStartColumn,
+        int sourceEndLine,
+        int sourceEndColumn,
+        int generatedStartLine,
+        int generatedStartColumn,
+        int generatedEndLine,
+        int generatedEndColumn)
+    {
+        SourceStartLine = sourceStartLine;
+        SourceStartColumn = sourceStartColumn;
+        SourceEndLine = sourceEndLine;
+        SourceEndColumn = sourceEndColumn;
+        GeneratedStartLine = generatedStartLine;
+        GeneratedStartColumn = generatedStartColumn;
+        GeneratedEndLine = generatedEndLine;
+        GeneratedEndColumn = generatedEndColumn;
+    }
+
+    /// <summary>One-based authored start line.</summary>
+    public int SourceStartLine { get; }
+
+    /// <summary>One-based authored start column.</summary>
+    public int SourceStartColumn { get; }
+
+    /// <summary>One-based authored end line.</summary>
+    public int SourceEndLine { get; }
+
+    /// <summary>One-based authored end column.</summary>
+    public int SourceEndColumn { get; }
+
+    /// <summary>One-based generated start line relative to the generated method.</summary>
+    public int GeneratedStartLine { get; }
+
+    /// <summary>One-based generated start column.</summary>
+    public int GeneratedStartColumn { get; }
+
+    /// <summary>One-based generated end line relative to the generated method.</summary>
+    public int GeneratedEndLine { get; }
+
+    /// <summary>One-based generated end column.</summary>
+    public int GeneratedEndColumn { get; }
 }
 
 /// <summary>

@@ -71,12 +71,10 @@ internal static class PowerShellGeneratedSourcePublisher
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal)
             .ToArray();
-        var map = new
+        var mappedMethods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method =>
         {
-            schemaVersion = 1,
-            rootSource = ToPortableRelativePath(sourceRoot, spec.SourcePath),
-            sourceFiles = sourcePaths.Select(path => ToPortableRelativePath(sourceRoot, path)).ToArray(),
-            methods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method => new
+            var generated = FindGeneratedMethod(sourceDirectory, method.GeneratedName);
+            return new
             {
                 powershellName = method.SourceName,
                 generatedMethod = method.GeneratedName,
@@ -84,8 +82,45 @@ internal static class PowerShellGeneratedSourcePublisher
                     sourceRoot,
                     string.IsNullOrWhiteSpace(method.SourcePath) ? spec.SourcePath : method.SourcePath),
                 sourceLine = method.SourceLine,
+                sourceRange = new
+                {
+                    startLine = method.SourceLine,
+                    startColumn = method.SourceColumn,
+                    endLine = method.SourceEndLine,
+                    endColumn = method.SourceEndColumn
+                },
+                generatedFile = generated.FileName,
+                generatedMethodLine = generated.Line,
+                statements = method.SourceMap
+                    .OrderBy(static entry => entry.SourceStartLine)
+                    .ThenBy(static entry => entry.SourceStartColumn)
+                    .ThenBy(static entry => entry.GeneratedStartLine)
+                    .Select(entry => new
+                    {
+                        sourceRange = new
+                        {
+                            startLine = entry.SourceStartLine,
+                            startColumn = entry.SourceStartColumn,
+                            endLine = entry.SourceEndLine,
+                            endColumn = entry.SourceEndColumn
+                        },
+                        generatedRange = new
+                        {
+                            startLine = generated.Line + entry.GeneratedStartLine - 1,
+                            startColumn = entry.GeneratedStartColumn,
+                            endLine = generated.Line + entry.GeneratedEndLine - 1,
+                            endColumn = entry.GeneratedEndColumn
+                        }
+                    }).ToArray(),
                 returnType = method.ReturnType
-            }).ToArray()
+            };
+        }).ToArray();
+        var map = new
+        {
+            schemaVersion = 2,
+            rootSource = ToPortableRelativePath(sourceRoot, spec.SourcePath),
+            sourceFiles = sourcePaths.Select(path => ToPortableRelativePath(sourceRoot, path)).ToArray(),
+            methods = mappedMethods
         };
         var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(
@@ -96,4 +131,37 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static string ToPortableRelativePath(string root, string path)
         => FrameworkCompatibility.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/');
+
+    private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedName)
+    {
+        var pattern = @"^\s*public\s+static\s+.*\s" +
+                      System.Text.RegularExpressions.Regex.Escape(generatedName) + @"\s*\(";
+        GeneratedMethodLocation? match = null;
+        foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)
+                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var lines = File.ReadAllLines(path);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (!System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    continue;
+                if (match is not null)
+                    throw new InvalidOperationException($"Generated method '{generatedName}' was found more than once while publishing source maps.");
+                match = new GeneratedMethodLocation(Path.GetFileName(path), index + 1);
+            }
+        }
+        return match ?? throw new InvalidOperationException($"Generated method '{generatedName}' was not found while publishing source maps.");
+    }
+
+    private sealed class GeneratedMethodLocation
+    {
+        internal GeneratedMethodLocation(string fileName, int line)
+        {
+            FileName = fileName;
+            Line = line;
+        }
+
+        internal string FileName { get; }
+        internal int Line { get; }
+    }
 }

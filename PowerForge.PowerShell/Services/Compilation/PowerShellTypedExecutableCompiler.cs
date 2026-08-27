@@ -159,7 +159,11 @@ internal static class PowerShellTypedExecutableCompiler
             isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,
             commandBinding: function.CommandBinding,
             requiresPowerShellRuntimeState: method.RequiresPowerShellRuntimeState,
-            declaredOutputType: method.DeclaredOutputType?.FullName);
+            declaredOutputType: method.DeclaredOutputType?.FullName,
+            sourceColumn: method.SourceSpan.StartColumn,
+            sourceEndLine: method.SourceSpan.EndLine,
+            sourceEndColumn: method.SourceSpan.EndColumn,
+            sourceMap: method.SourceMap);
 
     private static void ValidateCommands(
         string path,

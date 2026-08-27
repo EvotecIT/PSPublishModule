@@ -11,7 +11,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_EmitSourcePublishesHashedRebuildableProject()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-GeneratedProof { param([int] $Value) return $Value }");
+            "function Get-GeneratedProof {\n" +
+            "    param([int] $Value)\n" +
+            "    [int] $next = $Value\n" +
+            "    $next += 1\n" +
+            "    return $next\n" +
+            "}");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -37,11 +42,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(sourceMapPath));
         using (var sourceMap = JsonDocument.Parse(File.ReadAllText(sourceMapPath)))
         {
+            Assert.Equal(2, sourceMap.RootElement.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("input.ps1", sourceMap.RootElement.GetProperty("rootSource").GetString());
             var method = Assert.Single(sourceMap.RootElement.GetProperty("methods").EnumerateArray());
             Assert.Equal("Get-GeneratedProof", method.GetProperty("powershellName").GetString());
             Assert.Equal("input.ps1", method.GetProperty("sourceFile").GetString());
             Assert.Equal(1, method.GetProperty("sourceLine").GetInt32());
+            Assert.Equal("CompiledPowerShell.cs", method.GetProperty("generatedFile").GetString());
+            Assert.True(method.GetProperty("generatedMethodLine").GetInt32() > 0);
+            var methodSource = method.GetProperty("sourceRange");
+            Assert.Equal(1, methodSource.GetProperty("startLine").GetInt32());
+            Assert.Equal(6, methodSource.GetProperty("endLine").GetInt32());
+            var statements = method.GetProperty("statements").EnumerateArray().ToArray();
+            Assert.NotEmpty(statements);
+            Assert.Contains(statements, statement =>
+                statement.GetProperty("sourceRange").GetProperty("startLine").GetInt32() == 3);
+            Assert.All(statements, statement =>
+            {
+                var source = statement.GetProperty("sourceRange");
+                var generated = statement.GetProperty("generatedRange");
+                Assert.True(source.GetProperty("startColumn").GetInt32() > 0);
+                Assert.True(source.GetProperty("endColumn").GetInt32() > 0);
+                Assert.True(generated.GetProperty("startLine").GetInt32() >= method.GetProperty("generatedMethodLine").GetInt32());
+                Assert.True(generated.GetProperty("endLine").GetInt32() >= generated.GetProperty("startLine").GetInt32());
+            });
         }
         Assert.Contains(result.Manifest.Files, file => file.Role == "GeneratedSource" && file.Path.EndsWith("CompiledPowerShell.cs", StringComparison.Ordinal));
         Assert.Contains(result.Manifest.Files, file => file.Role == "GeneratedProject" && file.Path.EndsWith("GeneratedProof.csproj", StringComparison.Ordinal));
