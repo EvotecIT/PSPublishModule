@@ -529,6 +529,27 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void NamedLocalCallsPreserveAuthoredEvaluationOrderAndBoundState()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Join-Value { param([string] $First = 'default', [Parameter(Mandatory)] [string] $Second) return $First + $Second } function Get-Joined { return Join-Value -Second 'B' -First 'A' } function Get-DefaultJoined { return Join-Value -Second 'B' }",
+            TestPath("named-local-calls.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0", PowerShellCompilationCapability.BoundParameters);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var joined = Assert.IsType<PowerShellBoundInvocationExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Joined").Body.Statements)).Expression);
+        Assert.Equal(new[] { 1, 0 }, joined.AuthoredEvaluationOrder);
+        Assert.Equal(new[] { "First", "Second" }, joined.BoundParameterNames);
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Joined").Source;
+        Assert.Contains("__pf_local_argument_", source, StringComparison.Ordinal);
+        Assert.Contains("new global::System.Collections.Generic.HashSet<string>", source, StringComparison.Ordinal);
+        var defaultSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_DefaultJoined").Source;
+        Assert.Contains("{ \"Second\" }", defaultSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReversingDeclarationsPreservesSemanticAndGeneratedOrder()
     {
         var path = TestPath("declaration-order.ps1");

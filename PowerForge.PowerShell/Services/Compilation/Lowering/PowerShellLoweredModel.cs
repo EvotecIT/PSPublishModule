@@ -37,15 +37,28 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredInvocationExpression(SourceSpan span, Type clrType, PowerShellSymbolId target, PowerShellLoweredExpression[] arguments)
+    internal PowerShellLoweredInvocationExpression(
+        SourceSpan span,
+        Type clrType,
+        PowerShellSymbolId target,
+        PowerShellLoweredExpression[] arguments,
+        int[] authoredEvaluationOrder,
+        string[] boundParameterNames,
+        bool requiresBoundParameters)
         : base(span, clrType)
     {
         Target = target;
         Arguments = arguments;
+        AuthoredEvaluationOrder = authoredEvaluationOrder;
+        BoundParameterNames = boundParameterNames;
+        RequiresBoundParameters = requiresBoundParameters;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellLoweredExpression[] Arguments { get; }
+    internal int[] AuthoredEvaluationOrder { get; }
+    internal string[] BoundParameterNames { get; }
+    internal bool RequiresBoundParameters { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement

@@ -17,7 +17,10 @@ internal sealed class PowerShellSemanticBinder
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
-            .ToDictionary(static group => group.Key, static group => group.Single().Symbol, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                static group => group.Key,
+                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework),
+                StringComparer.OrdinalIgnoreCase);
         var functions = new List<PowerShellBoundFunction>();
 
         foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
@@ -88,7 +91,7 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         PowerShellSymbolId functionSymbol,
-        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework)
     {
@@ -243,7 +246,7 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         StatementAst statement,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         bool isTerminal,
         string? targetFramework)
@@ -501,7 +504,7 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         StatementBlockAst syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework)
     {
@@ -543,7 +546,7 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         Ast syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         Type? contextualType = null,
         string? targetFramework = null)
@@ -659,26 +662,23 @@ internal sealed class PowerShellSemanticBinder
                     targetFramework,
                     diagnostics);
             case CommandAst command when TryGetLocalFunction(command, functions, out var target):
-            {
-                var arguments = new List<PowerShellBoundExpression>();
-                foreach (var argument in command.CommandElements.Skip(1).OfType<ExpressionAst>())
-                {
-                    var bound = BindExpression(document, argument, symbols, functions, diagnostics, targetFramework: targetFramework);
-                    if (bound is null) return null;
-                    arguments.Add(bound);
-                }
-                return new PowerShellBoundInvocationExpression(span, target, arguments.ToArray(), PowerShellTypeFact.Unknown);
-            }
+                return PowerShellLocalCallSemanticBinder.Bind(
+                    document,
+                    command,
+                    target,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework),
+                    targetFramework,
+                    diagnostics);
             default:
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", $"Expression '{syntax.GetType().Name}' is not yet represented by the bound pipeline.", span));
                 return null;
         }
     }
 
-    private static bool IsLocalFunctionPipeline(PipelineAst pipeline, IReadOnlyDictionary<string, PowerShellSymbolId> functions)
+    private static bool IsLocalFunctionPipeline(PipelineAst pipeline, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
         => pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandAst command && TryGetLocalFunction(command, functions, out _);
 
-    private static bool TryGetLocalFunction(CommandAst command, IReadOnlyDictionary<string, PowerShellSymbolId> functions, out PowerShellSymbolId target)
+    private static bool TryGetLocalFunction(CommandAst command, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, out PowerShellLocalCallSignature target)
     {
         var name = command.GetCommandName();
         if (!string.IsNullOrWhiteSpace(name) && functions.TryGetValue(name, out target!)) return true;

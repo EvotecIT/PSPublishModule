@@ -254,10 +254,35 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredIndexExpression index => EmitIndex(index),
             PowerShellLoweredClrMemberExpression member => EmitClrMember(member),
             PowerShellLoweredClrInvocationExpression invocation => EmitClrInvocation(invocation),
-            PowerShellLoweredInvocationExpression invocation =>
-                $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
+            PowerShellLoweredInvocationExpression invocation => EmitLocalInvocation(invocation),
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
+    {
+        var arguments = invocation.Arguments.Select(EmitExpression).ToArray();
+        var authored = invocation.AuthoredEvaluationOrder;
+        var declarationOrder = authored.OrderBy(static index => index).ToArray();
+        var reordered = !authored.SequenceEqual(declarationOrder);
+        var temporaries = new Dictionary<int, string>();
+        if (reordered)
+        {
+            foreach (var parameterIndex in authored)
+                temporaries[parameterIndex] = $"__pf_local_argument_{invocation.Span.StartOffset.ToString(CultureInfo.InvariantCulture)}_{parameterIndex.ToString(CultureInfo.InvariantCulture)}";
+            foreach (var pair in temporaries) arguments[pair.Key] = pair.Value;
+        }
+        var callArguments = arguments.ToList();
+        if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
+        var call = $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
+        if (!reordered) return call;
+        var evaluations = authored.Select(parameterIndex =>
+            $"{PowerShellCSharpMethodEmitter.GetTypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");
+        return $"new global::System.Func<{PowerShellCSharpMethodEmitter.GetTypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
+    }
+
+    private static string EmitBoundParameterSet(IEnumerable<string> names)
+        => "new global::System.Collections.Generic.HashSet<string>(global::System.StringComparer.OrdinalIgnoreCase) { " +
+           string.Join(", ", names.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).Select(PowerShellCSharpLiteral.QuoteString)) + " }";
 
     private static string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
     {

@@ -219,15 +219,21 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         SourceSpan span,
         PowerShellSymbolId target,
         PowerShellBoundExpression[] arguments,
-        PowerShellTypeFact returnType)
+        PowerShellTypeFact returnType,
+        int[]? authoredEvaluationOrder = null,
+        string[]? boundParameterNames = null)
         : base(span, returnType, PowerShellValueState.Unknown)
     {
         Target = target;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
+        AuthoredEvaluationOrder = authoredEvaluationOrder ?? Enumerable.Range(0, Arguments.Length).ToArray();
+        BoundParameterNames = boundParameterNames ?? Array.Empty<string>();
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellBoundExpression[] Arguments { get; }
+    internal int[] AuthoredEvaluationOrder { get; }
+    internal string[] BoundParameterNames { get; }
 }
 
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
