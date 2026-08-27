@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace PowerForge.Web;
 
 /// <summary>Collects bounded daily end-user HTTP traffic from Cloudflare GraphQL Analytics.</summary>
-public sealed class CloudflareAnalyticsCollector
+public sealed partial class CloudflareAnalyticsCollector
 {
     /// <summary>Fleet provider kind handled by this collector.</summary>
     public const string ProviderKind = "cloudflare-analytics";
@@ -56,6 +56,15 @@ public sealed class CloudflareAnalyticsCollector
             return ProbeFailure(0, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
         }
 
+        return await ProbeWithTokenAsync(zoneId, siteHost, token, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CloudflareAnalyticsCapabilityProbeResult> ProbeWithTokenAsync(
+        string zoneId,
+        string siteHost,
+        string token,
+        CancellationToken cancellationToken)
+    {
         var zoneResponse = await GetZoneAsync(zoneId, token, cancellationToken).ConfigureAwait(false);
         if (!zoneResponse.Success)
             return ProbeFailure(1, zoneResponse.ErrorCode!, zoneResponse.ErrorMessage!);
@@ -68,25 +77,26 @@ public sealed class CloudflareAnalyticsCollector
         var response = await SendAsync<CloudflareCapabilityData>(CapabilityQuery, new { zoneTag = zoneId.ToLowerInvariant() }, token, cancellationToken)
             .ConfigureAwait(false);
         if (!response.Success)
-            return ProbeFailure(2, response.ErrorCode!, response.ErrorMessage!);
+            return ProbeFailure(2, response.ErrorCode!, response.ErrorMessage!, zoneName, zoneResponse.Value.Account?.Id);
         var zones = response.Value?.Viewer?.Zones ?? Array.Empty<CloudflareCapabilityZone>();
         if (zones.Length != 1)
-            return ProbeFailure(2, "zone-not-visible", "The configured Cloudflare zone is not visible to this credential.");
+            return ProbeFailure(2, "zone-not-visible", "The configured Cloudflare zone is not visible to this credential.", zoneName, zoneResponse.Value.Account?.Id);
         if (zones[0] is null)
-            return ProbeFailure(2, "invalid-response", "Cloudflare returned an invalid analytics capability response.");
+            return ProbeFailure(2, "invalid-response", "Cloudflare returned an invalid analytics capability response.", zoneName, zoneResponse.Value.Account?.Id);
         var settings = zones[0].Settings?.HttpRequestsAdaptiveGroups;
         if (settings?.Enabled != true)
-            return ProbeFailure(2, "dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.");
+            return ProbeFailure(2, "dataset-unavailable", "Cloudflare httpRequestsAdaptiveGroups is not enabled for this zone.", zoneName, zoneResponse.Value.Account?.Id);
         if (settings.MaxPageSize is null or <= 0)
-            return ProbeFailure(2, "invalid-response", "Cloudflare did not report a usable analytics page size.");
+            return ProbeFailure(2, "invalid-response", "Cloudflare did not report a usable analytics page size.", zoneName, zoneResponse.Value.Account?.Id);
         if (settings.MaxDuration is <= 0 || settings.NotOlderThan is <= 0)
-            return ProbeFailure(2, "invalid-response", "Cloudflare reported an invalid analytics duration or retention boundary.");
+            return ProbeFailure(2, "invalid-response", "Cloudflare reported an invalid analytics duration or retention boundary.", zoneName, zoneResponse.Value.Account?.Id);
 
         return new CloudflareAnalyticsCapabilityProbeResult
         {
             Success = true,
             DatasetEnabled = true,
             ZoneName = zoneName,
+            ZoneAccountId = zoneResponse.Value.Account?.Id,
             RequestCount = 2,
             MaxPageSize = Math.Min(settings.MaxPageSize.Value, ClientMaximumRowsPerDay),
             MaxDurationSeconds = settings.MaxDuration,
@@ -100,7 +110,22 @@ public sealed class CloudflareAnalyticsCollector
         CancellationToken cancellationToken = default)
     {
         ValidateOptions(options);
-        var probe = await ProbeAsync(options.ZoneId, options.SiteBaseUrl, cancellationToken).ConfigureAwait(false);
+        string token;
+        try
+        {
+            token = await _tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            var credentialFailure = ProbeFailure(0, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
+            return Failure(options, credentialFailure, 0, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, credentialFailure.ErrorCode!, credentialFailure.ErrorMessage!);
+        }
+
+        var probe = await ProbeWithTokenAsync(options.ZoneId, NormalizeSiteHost(options.SiteBaseUrl), token, cancellationToken).ConfigureAwait(false);
         if (!probe.Success)
             return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, probe.ErrorCode!, probe.ErrorMessage!);
 
@@ -115,20 +140,6 @@ public sealed class CloudflareAnalyticsCollector
         {
             return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate,
                 "duration-boundary", "The provider-reported query duration cannot cover a complete UTC traffic partition.");
-        }
-
-        string token;
-        try
-        {
-            token = await _tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            return Failure(options, probe, probe.RequestCount, Array.Empty<WebTrafficObservation>(), Array.Empty<DateOnly>(), options.FromDate, "credential-unavailable", "Cloudflare analytics credential resolution failed.");
         }
 
         var observations = new List<WebTrafficObservation>();
@@ -223,7 +234,9 @@ public sealed class CloudflareAnalyticsCollector
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            if (!TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var requests))
+            if (!TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var requests) ||
+                !TryScaleSampledCount(row.Sum.Visits.Value, row.Average.SampleInterval.Value, out var visits) ||
+                !TryScaleSampledCount(row.Sum.EdgeResponseBytes.Value, row.Average.SampleInterval.Value, out var edgeResponseBytes))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
@@ -246,8 +259,8 @@ public sealed class CloudflareAnalyticsCollector
                 Host = rowHost,
                 Path = dimensions.Path,
                 Requests = requests,
-                Visits = (long)row.Sum.Visits.Value,
-                EdgeResponseBytes = (long)row.Sum.EdgeResponseBytes.Value,
+                Visits = visits,
+                EdgeResponseBytes = edgeResponseBytes,
                 SampleInterval = row.Average.SampleInterval.Value,
                 EvidenceReference = options.EvidenceReference
             });
@@ -504,8 +517,15 @@ public sealed class CloudflareAnalyticsCollector
         string.Equals(host, zoneName, StringComparison.Ordinal) ||
         host.EndsWith("." + zoneName, StringComparison.Ordinal);
 
-    private static CloudflareAnalyticsCapabilityProbeResult ProbeFailure(int requestCount, string code, string message) => new()
+    private static CloudflareAnalyticsCapabilityProbeResult ProbeFailure(
+        int requestCount,
+        string code,
+        string message,
+        string? zoneName = null,
+        string? zoneAccountId = null) => new()
     {
+        ZoneName = zoneName,
+        ZoneAccountId = zoneAccountId,
         RequestCount = requestCount,
         ErrorCode = code,
         ErrorMessage = message

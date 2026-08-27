@@ -11,6 +11,9 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     private static CloudflareAnalyticsCollector CreateCollector(HttpClient client) =>
         new(client, new FakeTokenProvider(), timeProvider: new FixedTimeProvider(CompletionTime));
 
+    private static CloudflareAnalyticsCollector CreateCollector(HttpClient client, TimeProvider timeProvider) =>
+        new(client, new FakeTokenProvider(), timeProvider: timeProvider);
+
     private static CloudflareAnalyticsCollectionOptions CreateOptions() => new()
     {
         ProviderId = "cloudflare",
@@ -104,6 +107,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
     };
 
     private static HttpResponseMessage CapabilityResponse(
+        bool enabled = true,
         int maxPageSize = 1000,
         int? maxDuration = 86_400,
         int? notOlderThan = 2_678_400) => JsonResponse(new
@@ -119,7 +123,32 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
                     {
                         settings = new
                         {
-                            httpRequestsAdaptiveGroups = new { enabled = true, maxPageSize, maxDuration, notOlderThan }
+                            httpRequestsAdaptiveGroups = new { enabled, maxPageSize, maxDuration, notOlderThan }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    private static HttpResponseMessage FirewallCapabilityResponse(
+        bool enabled = true,
+        int maxPageSize = 1000,
+        int? maxDuration = 86_400,
+        int? notOlderThan = 2_678_400) => JsonResponse(new
+    {
+        errors = (object?)null,
+        data = new
+        {
+            viewer = new
+            {
+                zones = new[]
+                {
+                    new
+                    {
+                        settings = new
+                        {
+                            firewallEventsAdaptiveGroups = new { enabled, maxPageSize, maxDuration, notOlderThan }
                         }
                     }
                 }
@@ -133,11 +162,11 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         data = new { viewer = new { zones = new object?[] { null } } }
     });
 
-    private static HttpResponseMessage ZoneResponse(string name) => JsonResponse(new
+    private static HttpResponseMessage ZoneResponse(string name, string? accountId = TestAccountId) => JsonResponse(new
     {
         success = true,
         errors = Array.Empty<object>(),
-        result = new { id = ZoneId, name }
+        result = new { id = ZoneId, name, account = accountId is null ? null : new { id = accountId } }
     });
 
     private static object TrafficRow(
@@ -190,9 +219,28 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         public Task<string> GetTokenAsync(CancellationToken cancellationToken = default) => Task.FromResult("test-token");
     }
 
+    private sealed class SingleUseTokenProvider : ICloudflareAnalyticsTokenProvider
+    {
+        public int CallCount { get; private set; }
+
+        public Task<string> GetTokenAsync(CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            if (CallCount > 1)
+                throw new InvalidOperationException("The credential must be resolved only once per collection.");
+            return Task.FromResult("test-token");
+        }
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => value;
+    }
+
+    private sealed class AdvancingTimeProvider(DateTimeOffset value, TimeSpan step) : TimeProvider
+    {
+        private int _calls;
+        public override DateTimeOffset GetUtcNow() => value.AddTicks(step.Ticks * _calls++);
     }
 
     private sealed class ScriptedHandler(Func<HttpRequestMessage, int, HttpResponseMessage> responder) : HttpMessageHandler

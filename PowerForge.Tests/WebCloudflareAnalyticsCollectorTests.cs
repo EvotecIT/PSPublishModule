@@ -11,6 +11,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
 {
     private static readonly DateTimeOffset CompletionTime = new(2026, 8, 10, 12, 34, 56, TimeSpan.Zero);
     private const string ZoneId = "abcdef0123456789abcdef0123456789";
+    private const string TestAccountId = "0123456789abcdef0123456789abcdef";
 
     [Fact]
     public async Task Probe_DiscoversPlanSpecificDatasetLimitsWithoutExposingTheToken()
@@ -85,6 +86,9 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Equal([new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 2)], normalized.CollectionCoverage.CompletedDates);
         var sampled = Assert.Single(normalized.Observations, value => value.Date == new DateOnly(2026, 8, 1));
         Assert.Equal("officeimo.com", sampled.Host);
+        Assert.Equal(200, sampled.Requests);
+        Assert.Equal(50, sampled.Visits);
+        Assert.Equal(10_000, sampled.EdgeResponseBytes);
         Assert.Equal(2d, sampled.SampleInterval);
         Assert.All(handler.Requests.Skip(2), request =>
         {
@@ -93,6 +97,26 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             Assert.Contains("\"clientRequestHTTPHost\":\"officeimo.com\"", request.Body, StringComparison.Ordinal);
             Assert.Contains("\"clientRequestScheme\":\"https\"", request.Body, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task Collect_ResolvesOneCredentialForProbeAndPartitions()
+    {
+        var handler = new ScriptedHandler((_, index) => index switch
+        {
+            0 => ZoneResponse("officeimo.com"),
+            1 => CapabilityResponse(),
+            2 => TrafficResponse(),
+            _ => throw new InvalidOperationException("Unexpected request.")
+        });
+        using var client = new HttpClient(handler);
+        var tokenProvider = new SingleUseTokenProvider();
+        var collector = new CloudflareAnalyticsCollector(client, tokenProvider, timeProvider: new FixedTimeProvider(CompletionTime));
+
+        var result = await collector.CollectAsync(CreateOptions());
+
+        Assert.True(result.Success);
+        Assert.Equal(1, tokenProvider.CallCount);
     }
 
     [Fact]

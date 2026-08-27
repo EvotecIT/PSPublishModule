@@ -300,7 +300,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Value") == "Open TestimoX Monitoring"));
         Assert.NotNull(doc.Descendants(Wix + "Property").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "WixShellExecTarget" &&
-            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/"));
+            (string?)e.Attribute("Value") == "about:blank"));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "PowerForgeLaunchOnExit" &&
             (string?)e.Attribute("BinaryRef") == "Wix4UtilCA_$(sys.BUILDARCHSHORT)" &&
@@ -308,8 +308,98 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "Publish").SingleOrDefault(e =>
             (string?)e.Attribute("Dialog") == "ExitDialog" &&
             (string?)e.Attribute("Control") == "Finish" &&
+            (string?)e.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)e.Attribute("Value") == "http://127.0.0.1:9000/" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(doc.Descendants(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Dialog") == "ExitDialog" &&
+            (string?)e.Attribute("Control") == "Finish" &&
             (string?)e.Attribute("Event") == "DoAction" &&
-            (string?)e.Attribute("Value") == "PowerForgeLaunchOnExit"));
+            (string?)e.Attribute("Value") == "PowerForgeLaunchOnExit" &&
+            (string?)e.Attribute("Order") == "2"));
+    }
+
+    [Fact]
+    public void EmitSource_AssignsFormattedExitTargetFromTheExitDialog()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Launch bridge",
+            Target = "[INSTALLFOLDER]Icue.Bridge.exe"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.DoesNotContain(doc.Descendants(Wix + "Property"), element =>
+            (string?)element.Attribute("Id") == "WixShellExecTarget" &&
+            ((string?)element.Attribute("Value"))?.Contains("[INSTALLFOLDER]", StringComparison.Ordinal) == true);
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Control") == "Finish" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "[INSTALLFOLDER]Icue.Bridge.exe" &&
+            (string?)element.Attribute("Order") == "1");
+    }
+
+    [Fact]
+    public void EmitSource_PreservesLiteralIpv6UrlBracketsInFormattedExitTarget()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open local dashboard",
+            Target = "http://[::1]:9000/",
+            EscapeLiteralBrackets = true
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "http://[\\[]::1[\\]]:9000/");
+    }
+
+    [Fact]
+    public void EmitSource_EscapesAllLiteralUrlBrackets()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open filtered dashboard",
+            Target = "https://example.test/search?filter=[status]&items[value]=active",
+            EscapeLiteralBrackets = true
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "https://example.test/search?filter=[\\[]status[\\]]&items[\\[]value[\\]]=active");
+    }
+
+    [Fact]
+    public void EmitSource_PreservesMsiPropertiesInAbsoluteUrlTargetsByDefault()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open instance",
+            Target = "https://example.test/?instance=[INSTANCE]"
+        };
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+
+        Assert.Contains(doc.Descendants(Wix + "Publish"), element =>
+            (string?)element.Attribute("Dialog") == "ExitDialog" &&
+            (string?)element.Attribute("Property") == "WixShellExecTarget" &&
+            (string?)element.Attribute("Value") == "https://example.test/?instance=[INSTANCE]");
     }
 
     [Fact]
@@ -550,6 +640,38 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
             (string?)e.Attribute("Property") == "WixShellExecTarget" &&
             (string?)e.Attribute("Value") == "http://127.0.0.1:9000/" &&
+            (string?)e.Attribute("Order") == "3"));
+    }
+
+    [Fact]
+    public void EmitSource_EscapesLiteralBracketsForDialogAndRestoredUrlTargets()
+    {
+        var definition = CreateMonitoringInstaller();
+        definition.ExitLaunch = new PowerForgeInstallerExitLaunch
+        {
+            Text = "Open monitoring",
+            Target = "https://example.test/?filter=[status]",
+            EscapeLiteralBrackets = true
+        };
+        var dialog = definition.Dialogs.Single(dialog => dialog.Id == "ConfigurationDlg");
+        dialog.Actions.Add(new PowerForgeInstallerDialogAction
+        {
+            Id = "OpenStudio",
+            Text = "Open Studio",
+            Target = "https://example.test/studio?items[value]=active",
+            EscapeLiteralBrackets = true
+        });
+
+        var xml = new PowerForgeWixInstallerSourceEmitter().EmitSource(definition);
+        var doc = XDocument.Parse(xml);
+        var action = doc.Descendants(Wix + "Control").Single(e =>
+            (string?)e.Attribute("Id") == "OpenStudio");
+
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Value") == "https://example.test/studio?items[\\[]value[\\]]=active" &&
+            (string?)e.Attribute("Order") == "1"));
+        Assert.NotNull(action.Elements(Wix + "Publish").SingleOrDefault(e =>
+            (string?)e.Attribute("Value") == "https://example.test/?filter=[\\[]status[\\]]" &&
             (string?)e.Attribute("Order") == "3"));
     }
 
