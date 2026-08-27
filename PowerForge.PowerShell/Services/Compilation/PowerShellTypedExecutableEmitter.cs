@@ -1,4 +1,3 @@
-using System.Management.Automation.Language;
 using System.Text;
 
 namespace PowerForge;
@@ -17,8 +16,7 @@ internal static class PowerShellTypedExecutableEmitter
         string targetFramework)
     {
         var compilation = PowerShellTypedExecutableCompiler.Compile(sourcePath, sourcePaths, plan, targetFramework);
-        var ast = compilation.EntryPoint;
-        var scriptUnit = compilation.EntryPointUnit;
+        var contract = compilation.EntryPoint;
         var method = compilation.EntryPointMethod;
         PowerShellTypedExecutableOutputPolicy.EnsureSupported(method.ReturnType);
         var compiledSource = new StringBuilder()
@@ -34,19 +32,18 @@ internal static class PowerShellTypedExecutableEmitter
             .AppendLine("}")
             .ToString();
 
-        var parameters = ast.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>();
+        var parameters = contract.Parameters;
         foreach (var parameter in parameters)
-            PowerShellTypedExecutableParameterPolicy.EnsureSupported(parameter);
-        var analyzedParameters = scriptUnit.Parameters.ToDictionary(static parameter => parameter.Name, StringComparer.OrdinalIgnoreCase);
-        var commandBinding = PowerShellAdvancedFunctionPolicy.GetBinding(ast.ParamBlock);
-        PowerShellTypedExecutableParameterPolicy.EnsureBindingSupported(parameters, analyzedParameters.Values, commandBinding);
-        var hasExplicitPositions = analyzedParameters.Values
+            PowerShellTypedExecutableParameterPolicy.EnsureSupported(parameter.Contract.Name, parameter.ClrType);
+        var commandBinding = contract.Method.CommandBinding;
+        PowerShellTypedExecutableParameterPolicy.EnsureBindingSupported(parameters, commandBinding);
+        var hasExplicitPositions = parameters.Select(static parameter => parameter.Contract)
             .SelectMany(static parameter => parameter.Bindings)
             .Any(static binding => binding.Position.HasValue);
         var parameterSpecs = string.Join(Environment.NewLine, parameters.Select((parameter, index) =>
         {
-            var metadata = analyzedParameters[parameter.Name.VariablePath.UserPath];
-            var compiledType = GetCompiledParameterType(parameter);
+            var metadata = parameter.Contract;
+            var compiledType = parameter.ClrType;
             var acceptsRemainingArguments = metadata.Bindings.Any(static binding => binding.ValueFromRemainingArguments);
             var position = metadata.Bindings.Select(static binding => binding.Position).FirstOrDefault(static value => value.HasValue);
             if (!position.HasValue)
@@ -72,8 +69,8 @@ internal static class PowerShellTypedExecutableEmitter
                    GenerateValidations(metadata.Validations) + "),";
         }));
         var arguments = parameters.Select(parameter =>
-            "(" + PowerShellCSharpSymbolRenderer.TypeName(GetCompiledParameterType(parameter)) + ")values[" +
-            PowerShellCSharpLiteral.QuoteString(parameter.Name.VariablePath.UserPath) + "]").ToList();
+            "(" + PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType) + ")values[" +
+            PowerShellCSharpLiteral.QuoteString(parameter.Contract.Name) + "]").ToList();
         if (method.RequiresPowerShellBoundParameters)
             arguments.Add("boundParameters");
         var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + string.Join(", ", arguments) + ")";
@@ -82,19 +79,16 @@ internal static class PowerShellTypedExecutableEmitter
             : "            var result = " + invocation + ";" + Environment.NewLine +
               "            WriteResult(result);" + Environment.NewLine + "            return 0;";
         var commonParameterNames = string.Join(Environment.NewLine,
-            PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework).Select(parameter =>
+            PowerShellCommonParameterPolicy.GetAvailable(commandBinding, targetFramework).Select(parameter =>
                 "        new string[] { " + PowerShellCSharpLiteral.QuoteString(parameter.Name) + ", " +
                 PowerShellCSharpLiteral.QuoteString(parameter.Alias) + " },"));
         var programSource = ReadTemplate(ProgramTemplate)
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)
             .Replace("{{COMMON_PARAMETER_NAMES}}", commonParameterNames)
-            .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", PowerShellAdvancedFunctionPolicy.IsAdvanced(ast.ParamBlock) ? "false" : "true")
+            .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", commandBinding.IsAdvancedFunction ? "false" : "true")
             .Replace("{{INVOCATION}}", invocationSource);
         return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods);
     }
-
-    private static Type GetCompiledParameterType(ParameterAst parameter)
-        => PowerShellTypedExecutableParameterPolicy.GetCompiledType(parameter.StaticType);
 
     private static string GenerateStringArray(IEnumerable<string> values)
         => "new string[] { " + string.Join(", ", values.Select(PowerShellCSharpLiteral.QuoteString)) + " }";

@@ -74,7 +74,7 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
         var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
-        var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
+        var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, capabilities);
         if (parameters is null) return null;
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -134,6 +134,8 @@ internal sealed partial class PowerShellSemanticBinder
             locals,
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
+            PowerShellAdvancedFunctionPolicy.GetAliases(function),
+            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
             declaredOutputType,
             body,
             PowerShellTypeFact.Unknown,
@@ -148,9 +150,11 @@ internal sealed partial class PowerShellSemanticBinder
         FunctionDefinitionAst function,
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         var parameters = new List<PowerShellBoundParameter>();
+        var invalid = false;
         foreach (var parameter in function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
         {
             var name = parameter.Name.VariablePath.UserPath;
@@ -165,6 +169,31 @@ internal sealed partial class PowerShellSemanticBinder
             var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;
+            if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(clrType, targetFramework, capabilities))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.ParameterType,
+                    $"Parameter '${name}' has CLR type '{parameter.StaticType.FullName}' that requires a target capability unavailable to this compilation.",
+                    span));
+                invalid = true;
+            }
+            if (contract.Bindings.Any(static binding => binding.ValueFromPipeline || binding.ValueFromPipelineByPropertyName) &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.ParameterMetadata,
+                    $"Parameter '${name}' declares pipeline binding metadata that requires a pipeline-capable generated command host.",
+                    span));
+                invalid = true;
+            }
+            if (parameter.DefaultValue is not null && contract.DefaultValue is null)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellCompilationFeatureIds.ParameterDefault,
+                    $"Parameter '${name}' has a runtime-evaluated default value that cannot be lowered into the typed parameter contract.",
+                    PowerShellSourceParser.GetSpan(document, parameter.DefaultValue.Extent)));
+                invalid = true;
+            }
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
             var type = clrType == typeof(object) && !hasAuthoredType
                 ? PowerShellTypeFact.Unknown
@@ -179,7 +208,20 @@ internal sealed partial class PowerShellSemanticBinder
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
         }
-        return parameters.ToArray();
+        foreach (var collision in parameters
+                     .SelectMany(static parameter => parameter.Contract.Aliases
+                         .Append(parameter.Contract.Name)
+                         .Select(name => new { Name = name, Parameter = parameter.Contract.Name }))
+                     .GroupBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+                     .Where(static group => group.Select(item => item.Parameter).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.ParameterBinding,
+                $"Parameter name or alias '{collision.Key}' is ambiguous between {string.Join(", ", collision.Select(static item => "$" + item.Parameter).Distinct(StringComparer.OrdinalIgnoreCase))}.",
+                PowerShellSourceParser.GetSpan(document, function.Extent)));
+            invalid = true;
+        }
+        return invalid ? null : parameters.ToArray();
     }
 
     private static PowerShellBoundLocal[] DeclareLocals(
@@ -796,6 +838,15 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities,
                     diagnostics);
+            case CommandAst command:
+                var commandName = command.GetCommandName();
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    commandName is null ? PowerShellCompilationFeatureIds.DynamicCommand : PowerShellCompilationFeatureIds.ForCommand(commandName),
+                    commandName is null
+                        ? "Dynamic command invocation requires PowerShell runtime command discovery."
+                        : $"Command invocation '{commandName}' requires a registered semantic provider or a hosted PowerShell command region.",
+                    span));
+                return null;
             default:
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", $"Expression '{syntax.GetType().Name}' is not yet represented by the bound pipeline.", span));
                 return null;

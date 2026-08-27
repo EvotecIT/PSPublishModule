@@ -99,14 +99,13 @@ public sealed partial class PowerShellCompilationAnalyzer
             function.Symbol.Declaration.StartOffset == target.DeclarationOffset);
         if (lowered is not null)
         {
-            var frontEndDiagnostics = unit.Diagnostics.Where(IsRetainedFrontEndContractDiagnostic).ToArray();
             return new PowerShellCompilationUnitPlan(
                 unit.Name,
                 unit.Kind,
                 unit.StartLine,
                 lowered.ReturnType.FullName ?? lowered.ReturnType.Name,
                 lowered.Parameters.Select(static parameter => parameter.Contract).ToArray(),
-                frontEndDiagnostics);
+                Array.Empty<PowerShellCompilationDiagnostic>());
         }
 
         var analyzed = semantic.Analyzed.Functions.FirstOrDefault(function =>
@@ -125,23 +124,15 @@ public sealed partial class PowerShellCompilationAnalyzer
         if (analyzedFallback is not null)
         {
             var fallbackFeatureId = analyzedFallback.ReasonCode ?? PowerShellCompilationFeatureIds.FunctionGraph;
-            var matchingSemanticDiagnostic = semanticDiagnostics.FirstOrDefault(diagnostic =>
-                FindStructuralDiagnostic(unit, diagnostic)?.FeatureId.Equals(fallbackFeatureId, StringComparison.Ordinal) == true);
-            var matchingStructuralDiagnostic = matchingSemanticDiagnostic is null
-                ? unit.Diagnostics.FirstOrDefault(diagnostic => diagnostic.FeatureId.Equals(fallbackFeatureId, StringComparison.Ordinal))
-                : FindStructuralDiagnostic(unit, matchingSemanticDiagnostic);
             blockers.Add(new PowerShellCompilationDiagnostic(
-                matchingStructuralDiagnostic?.Code ?? PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
                 analyzedFallback.Explanation,
                 filePath,
-                target.Synthetic ? unit.StartLine : matchingSemanticDiagnostic?.Span.StartLine ?? unit.StartLine,
-                target.Synthetic ? 1 : matchingSemanticDiagnostic?.Span.StartColumn ?? 1,
+                unit.StartLine,
+                1,
                 fallbackFeatureId));
         }
-        var retained = unit.Diagnostics.Where(diagnostic =>
-                IsRetainedFrontEndContractDiagnostic(diagnostic) ||
-                diagnostic.Code == PowerShellCompilationDiagnosticCode.ScriptBlock)
-            .Concat(blockers)
+        var retained = blockers
             .GroupBy(static item => item.FeatureId + "\0" + item.Line + "\0" + item.Column, StringComparer.Ordinal)
             .Select(static group => group.First())
             .ToArray();
@@ -160,30 +151,28 @@ public sealed partial class PowerShellCompilationAnalyzer
         SemanticUnitTarget target,
         PowerShellSemanticDiagnostic semanticDiagnostic)
     {
-        var structural = FindStructuralDiagnostic(unit, semanticDiagnostic);
+        var code = GetPublicDiagnosticCode(semanticDiagnostic);
         return new PowerShellCompilationDiagnostic(
-            structural?.Code ?? PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-            CombineDiagnosticMessages(semanticDiagnostic.Message, structural?.Message),
+            code,
+            semanticDiagnostic.Message,
             filePath,
             target.Synthetic ? unit.StartLine : semanticDiagnostic.Span.StartLine,
             target.Synthetic ? 1 : semanticDiagnostic.Span.StartColumn,
-            structural?.FeatureId ?? semanticDiagnostic.Code);
+            semanticDiagnostic.Code);
     }
 
-    private static string CombineDiagnosticMessages(string semanticMessage, string? structuralMessage)
-        => string.IsNullOrWhiteSpace(structuralMessage) ||
-           semanticMessage.Contains(structuralMessage, StringComparison.OrdinalIgnoreCase)
-            ? semanticMessage
-            : semanticMessage.TrimEnd() + " " + structuralMessage;
-
-    private static PowerShellCompilationDiagnostic? FindStructuralDiagnostic(
-        PowerShellCompilationUnitPlan unit,
-        PowerShellSemanticDiagnostic semanticDiagnostic)
-        => unit.Diagnostics
-            .Where(static diagnostic => !IsRetainedFrontEndContractDiagnostic(diagnostic))
-            .OrderBy(diagnostic => Math.Abs(diagnostic.Line - semanticDiagnostic.Span.StartLine))
-            .ThenBy(diagnostic => Math.Abs(diagnostic.Column - semanticDiagnostic.Span.StartColumn))
-            .FirstOrDefault();
+    private static PowerShellCompilationDiagnosticCode GetPublicDiagnosticCode(PowerShellSemanticDiagnostic diagnostic)
+    {
+        if (diagnostic.Code.Equals(PowerShellCompilationFeatureIds.ParameterType, StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.UnsupportedParameterType;
+        if (diagnostic.Code.Equals(PowerShellCompilationFeatureIds.DynamicCommand, StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.DynamicCommandInvocation;
+        if (diagnostic.Code.StartsWith("command.", StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.CommandInvocation;
+        if (diagnostic.Code.Equals("PSB0001", StringComparison.Ordinal))
+            return PowerShellCompilationDiagnosticCode.ParseError;
+        return PowerShellCompilationDiagnosticCode.UnsupportedSyntax;
+    }
 
     private static PowerShellCompilationUnitPlan ReplaceWithSemanticDiagnostic(
         PowerShellCompilationUnitPlan unit,
@@ -202,22 +191,6 @@ public sealed partial class PowerShellCompilationAnalyzer
                 column,
                 featureId)
         });
-
-    private static bool IsRetainedFrontEndContractDiagnostic(PowerShellCompilationDiagnostic diagnostic)
-        => diagnostic.FeatureId is
-               PowerShellCompilationFeatureIds.ParameterType or
-               PowerShellCompilationFeatureIds.ParameterDefault or
-               PowerShellCompilationFeatureIds.ParameterMetadata or
-               PowerShellCompilationFeatureIds.ParameterBinding or
-               PowerShellCompilationFeatureIds.AutomaticVariableAssignment or
-               PowerShellCompilationFeatureIds.RuntimeUsing or
-               PowerShellCompilationFeatureIds.RequiresDirective or
-               PowerShellCompilationFeatureIds.FunctionNameCollision or
-               PowerShellCompilationFeatureIds.FilterFunction or
-               PowerShellCompilationFeatureIds.PipelineLifecycle or
-               PowerShellCompilationFeatureIds.BinaryCmdletShape ||
-           diagnostic.Message.Contains("break must be inside", StringComparison.OrdinalIgnoreCase) ||
-           diagnostic.Message.Contains("Labeled break", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTopLevelDotSource(StatementAst statement)
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&

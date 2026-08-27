@@ -137,6 +137,8 @@ internal sealed class PowerShellTypedLowerer
                 function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType, parameter.Contract)).ToArray(),
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
+                function.Aliases.ToArray(),
+                function.CommandBinding,
                 function.DeclaredOutputType,
                 boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),

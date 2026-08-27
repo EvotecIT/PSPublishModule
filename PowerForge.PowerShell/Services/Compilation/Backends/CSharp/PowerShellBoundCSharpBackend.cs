@@ -95,7 +95,9 @@ internal sealed class PowerShellBoundCSharpBackend
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             help: function.Help?.ToPublicModel(),
-            declaredOutputType: function.DeclaredOutputType);
+            declaredOutputType: function.DeclaredOutputType,
+            aliases: function.Aliases.ToArray(),
+            commandBinding: function.CommandBinding);
     }
 
     private static void EmitStatement(StringBuilder builder, PowerShellLoweredStatement statement, int indent, Func<string, string> getTemporaryIdentifier)

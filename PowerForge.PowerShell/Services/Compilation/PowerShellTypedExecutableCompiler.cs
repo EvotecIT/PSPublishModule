@@ -64,15 +64,17 @@ internal static class PowerShellTypedExecutableCompiler
                 item.Function.Symbol.Name.Equals(definition.Function.Name, StringComparison.OrdinalIgnoreCase));
             if (emitted is null) throw CreateSemanticFailure(semantic, $"local function '{definition.Function.Name}'");
             localMethods.Add(emitted.Emission);
-            descriptions.Add(CreateMethodDescription(definition.Unit, emitted.Emission, definition.Path));
+            descriptions.Add(CreateMethodDescription(definition.Unit, emitted.Function, emitted.Emission, definition.Path));
         }
 
         var entryUnit = plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
             .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
-        descriptions.Add(CreateMethodDescription(entryUnit, entry.Emission, entryPoint));
+        var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        descriptions.Add(entryDescription);
         return new PowerShellTypedExecutableCompilation(
-            entrySource.Ast,
-            entryUnit,
+            new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
+                .Select(static parameter => new PowerShellTypedExecutableParameter(parameter.ClrType, parameter.Contract))
+                .ToArray()),
             entry.Emission,
             localMethods.ToArray(),
             descriptions.ToArray());
@@ -140,6 +142,7 @@ internal static class PowerShellTypedExecutableCompiler
 
     private static PowerShellCompiledMethod CreateMethodDescription(
         PowerShellCompilationUnitPlan unit,
+        PowerShellLoweredFunction function,
         PowerShellCSharpMethodEmission method,
         string sourcePath)
         => new(
@@ -151,10 +154,10 @@ internal static class PowerShellTypedExecutableCompiler
             sourcePath,
             requiresPowerShellStreams: false,
             requiresPowerShellCommandRegions: false,
-            aliases: null,
+            aliases: function.Aliases.ToArray(),
             requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
-            isAdvancedFunction: false,
-            commandBinding: null,
+            isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,
+            commandBinding: function.CommandBinding,
             requiresPowerShellRuntimeState: method.RequiresPowerShellRuntimeState,
             declaredOutputType: method.DeclaredOutputType?.FullName);
 
@@ -253,22 +256,45 @@ internal static class PowerShellTypedExecutableCompiler
 internal sealed class PowerShellTypedExecutableCompilation
 {
     internal PowerShellTypedExecutableCompilation(
-        ScriptBlockAst entryPoint,
-        PowerShellCompilationUnitPlan entryPointUnit,
+        PowerShellTypedExecutableContract entryPoint,
         PowerShellCSharpMethodEmission entryPointMethod,
         PowerShellCSharpMethodEmission[] localMethods,
         PowerShellCompiledMethod[] methods)
     {
         EntryPoint = entryPoint;
-        EntryPointUnit = entryPointUnit;
         EntryPointMethod = entryPointMethod;
         LocalMethods = localMethods;
         Methods = methods;
     }
 
-    internal ScriptBlockAst EntryPoint { get; }
-    internal PowerShellCompilationUnitPlan EntryPointUnit { get; }
+    internal PowerShellTypedExecutableContract EntryPoint { get; }
     internal PowerShellCSharpMethodEmission EntryPointMethod { get; }
     internal PowerShellCSharpMethodEmission[] LocalMethods { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
+}
+
+internal sealed class PowerShellTypedExecutableContract
+{
+    internal PowerShellTypedExecutableContract(
+        PowerShellCompiledMethod method,
+        PowerShellTypedExecutableParameter[] parameters)
+    {
+        Method = method;
+        Parameters = parameters ?? Array.Empty<PowerShellTypedExecutableParameter>();
+    }
+
+    internal PowerShellCompiledMethod Method { get; }
+    internal PowerShellTypedExecutableParameter[] Parameters { get; }
+}
+
+internal sealed class PowerShellTypedExecutableParameter
+{
+    internal PowerShellTypedExecutableParameter(Type clrType, PowerShellCompilationParameter contract)
+    {
+        ClrType = clrType;
+        Contract = contract;
+    }
+
+    internal Type ClrType { get; }
+    internal PowerShellCompilationParameter Contract { get; }
 }

@@ -173,6 +173,8 @@ internal sealed class PowerShellLoweredFunction
         PowerShellLoweredParameter[] parameters,
         PowerShellLoweredLocal[] locals,
         PowerShellBoundHelpMetadata? help,
+        string[] aliases,
+        PowerShellCompilationCommandBinding commandBinding,
         Type? declaredOutputType,
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
@@ -187,6 +189,8 @@ internal sealed class PowerShellLoweredFunction
         Parameters = parameters;
         Locals = locals;
         Help = help;
+        Aliases = aliases ?? Array.Empty<string>();
+        CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
@@ -202,6 +206,8 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellImmutableArray<PowerShellLoweredParameter> Parameters { get; }
     internal PowerShellImmutableArray<PowerShellLoweredLocal> Locals { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
+    internal PowerShellImmutableArray<string> Aliases { get; }
+    internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }

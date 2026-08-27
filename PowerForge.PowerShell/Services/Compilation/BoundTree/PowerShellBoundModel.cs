@@ -435,6 +435,8 @@ internal sealed class PowerShellBoundFunction
         PowerShellBoundLocal[] locals,
         PowerShellLexicalScope scope,
         PowerShellBoundHelpMetadata? help,
+        string[] aliases,
+        PowerShellCompilationCommandBinding commandBinding,
         Type? declaredOutputType,
         PowerShellBoundBlock body,
         PowerShellTypeFact returnType,
@@ -448,6 +450,8 @@ internal sealed class PowerShellBoundFunction
         Locals = locals ?? Array.Empty<PowerShellBoundLocal>();
         Scope = scope;
         Help = help;
+        Aliases = aliases ?? Array.Empty<string>();
+        CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         Body = body;
         ReturnType = returnType;
@@ -462,6 +466,8 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellImmutableArray<PowerShellBoundLocal> Locals { get; }
     internal PowerShellLexicalScope Scope { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
+    internal PowerShellImmutableArray<string> Aliases { get; }
+    internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
@@ -476,7 +482,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument
