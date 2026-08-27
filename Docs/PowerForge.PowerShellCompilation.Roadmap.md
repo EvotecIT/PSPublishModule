@@ -902,10 +902,13 @@ This is the first new module-surface feature after migration because it proves t
 
 Completion evidence for Milestones 1–7 on 2026-08-27:
 
-- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PowerShellCompilation"` passed 715/715 tests, including generated artifacts, differential behavior, help/MAML, source maps, ABI, dependency closure, trimming, and NativeAOT contracts.
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PowerShellCompilation"` passed 729/729 tests, including generated artifacts, differential behavior, help/MAML, source maps, ABI, dependency closure, trimming, and NativeAOT contracts.
 - the portable generic Hybrid corpus remains at 5/6 emitted functions (83.33%) with zero eligible functions dropped after graph or binary-cmdlet shaping; its intentional runtime-scope function remains fallback;
-- the refreshed exact-pinned six-product lane reports 114/1,235 emitted functions (9.23%), 173 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
-- per-product emitted/total coverage is PowerInfoBlox 3/57, PSSharedGoods 11/281, PSWriteHTML 29/238, O365Essentials 61/282, ADEssentials 7/247, and PSWriteWord 3/130;
+- the refreshed exact-pinned six-product lane reports 123/1,235 emitted functions (9.96%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
+- per-product emitted/total coverage is PowerInfoBlox 3/57, PSSharedGoods 12/281, PSWriteHTML 31/238, O365Essentials 62/282, ADEssentials 12/247, and PSWriteWord 3/130;
+- closure review confirmed that semantic lowering, not the legacy structural analyzer, owns eligibility; public diagnostics remain stable without restoring the old veto path;
+- semantic IR collections take immutable snapshots, document identities are relocation-stable and filesystem-case-aware, loop variables retain PowerShell function scope, and generated literals cover control characters plus non-finite floating-point values;
+- typed targets reject native-process effects before emission, while strict dependency verification rejects managed `System.Diagnostics.Process.Start` references before runtime-free certification;
 - the former 139/1,235 result is retained in the companion guide as a historical snapshot of the deleted direct AST emitter, not represented as current all-IR coverage;
 - the C# backend has no reference to `System.Management.Automation.Language`, and the direct AST-to-C# emitter files and compatibility path are absent.
 

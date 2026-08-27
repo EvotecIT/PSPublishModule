@@ -10,7 +10,7 @@ internal static class PowerShellCompilationLiteralPolicy
     internal static bool TryResolve(ExpressionAst expression, Type targetType, out PowerShellCompilationLiteral? literal)
     {
         literal = null;
-        return TryResolveValue(expression, targetType, out var converted) && TryEncode(converted, targetType, out literal);
+        return TryResolveValue(expression, targetType, out var converted) && TryEncodeValue(converted, targetType, out literal);
     }
 
     internal static bool TryResolveValue(ExpressionAst expression, Type targetType, out object? converted)
@@ -37,7 +37,7 @@ internal static class PowerShellCompilationLiteralPolicy
         }
     }
 
-    private static bool TryEncode(object? value, Type targetType, out PowerShellCompilationLiteral? literal)
+    internal static bool TryEncodeValue(object? value, Type targetType, out PowerShellCompilationLiteral? literal)
     {
         if (value is null)
         {
@@ -56,7 +56,7 @@ internal static class PowerShellCompilationLiteralPolicy
             var elements = new List<PowerShellCompilationLiteral>(array.Length);
             foreach (var item in array)
             {
-                if (!TryEncode(item, elementType, out var element) || element is null)
+                if (!TryEncodeValue(item, elementType, out var element) || element is null)
                 {
                     literal = null;
                     return false;

@@ -21,6 +21,6 @@ internal sealed class PowerShellLoweredPowerShellObjectExpression : PowerShellLo
         Temporary = temporary;
     }
 
-    internal PowerShellLoweredNoteProperty[] Properties { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredNoteProperty> Properties { get; }
     internal string Temporary { get; }
 }

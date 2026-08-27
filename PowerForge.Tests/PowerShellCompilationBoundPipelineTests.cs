@@ -156,7 +156,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.IsType<PowerShellBoundBinaryExpression>(Assert.Single(conditional.Clauses).Condition);
         Assert.IsType<PowerShellBoundWhileStatement>(Assert.Single(conditional.ElseBlock!.Statements, static statement => statement is PowerShellBoundWhileStatement));
         var lowered = Assert.IsType<PowerShellLoweredIfStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements));
-        Assert.IsType<PowerShellLoweredWhileStatement>(Assert.Single(lowered.ElseStatements!, static statement => statement is PowerShellLoweredWhileStatement));
+        Assert.IsType<PowerShellLoweredWhileStatement>(Assert.Single(lowered.ElseStatements!.Value, static statement => statement is PowerShellLoweredWhileStatement));
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("if ((Value > 0", source, StringComparison.Ordinal);
         Assert.Contains("while (Repeat)", source, StringComparison.Ordinal);
@@ -197,9 +197,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(PowerShellBoundMutationOperator.Assign, loop.Initializer!.Operation);
         Assert.Equal(PowerShellBoundMutationOperator.PostIncrement, loop.Iterator!.Operation);
         var lowered = Assert.IsType<PowerShellLoweredForStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForStatement));
-        Assert.True(lowered.DeclareInitializer);
+        Assert.False(lowered.DeclareInitializer);
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("for (int index = 0; (index < Count); index++)", source, StringComparison.Ordinal);
+        Assert.Contains("int index = default!;", source, StringComparison.Ordinal);
+        Assert.Contains("for (index = 0; (index < Count); index++)", source, StringComparison.Ordinal);
         Assert.Contains("total = checked((int)(total + index));", source, StringComparison.Ordinal);
     }
 
@@ -239,7 +240,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), !loop.ScalarString);
         Assert.IsType<PowerShellLoweredForEachStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("foreach (string value in", source, StringComparison.Ordinal);
+        Assert.Contains("string value = default!;", source, StringComparison.Ordinal);
+        Assert.Contains("foreach (string __foreachItem_", source, StringComparison.Ordinal);
+        Assert.Contains("value = __foreachItem_", source, StringComparison.Ordinal);
         Assert.Contains(expectedEnumerable, source, StringComparison.Ordinal);
     }
 

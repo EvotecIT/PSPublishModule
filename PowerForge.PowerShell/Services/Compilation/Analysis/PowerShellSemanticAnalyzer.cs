@@ -9,7 +9,7 @@ internal interface IPowerShellSemanticPass
 /// <summary>
 /// Runs semantic passes in canonical identity order and rejects duplicate owners.
 /// </summary>
-internal sealed class PowerShellSemanticAnalyzer
+internal sealed partial class PowerShellSemanticAnalyzer
 {
     private readonly IPowerShellSemanticPass[] _passes;
 
@@ -392,6 +392,13 @@ internal sealed class PowerShellSemanticAnalyzer
                         PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"),
                         "Typed dictionaries are lookup-only locals and cannot escape through the current public CLR return contract."));
                 }
+                if (IsMutuallyRecursive(function.Symbol, program.CallGraph))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.FunctionGraph,
+                        $"Function '{function.Symbol.Name}' participates in a mutually recursive local-call cycle, which is not supported by the typed ABI."));
+                }
                 if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
                     return function.WithAnalysis(disposition: IsRecursive(function.Symbol, program.CallGraph)
                         ? new PowerShellExecutionDisposition(
@@ -470,26 +477,6 @@ internal sealed class PowerShellSemanticAnalyzer
                 _ => false
             };
 
-        private static bool IsRecursive(PowerShellSymbolId start, IReadOnlyList<PowerShellCallGraphEdge> edges)
-        {
-            var targets = edges.GroupBy(static edge => edge.Caller.StableKey, StringComparer.Ordinal)
-                .ToDictionary(
-                    static group => group.Key,
-                    static group => group.Select(static edge => edge.Callee.StableKey).Distinct(StringComparer.Ordinal).ToArray(),
-                    StringComparer.Ordinal);
-            var pending = new Stack<string>();
-            var visited = new HashSet<string>(StringComparer.Ordinal);
-            if (targets.TryGetValue(start.StableKey, out var direct))
-                foreach (var target in direct) pending.Push(target);
-            while (pending.Count > 0)
-            {
-                var current = pending.Pop();
-                if (current.Equals(start.StableKey, StringComparison.Ordinal)) return true;
-                if (!visited.Add(current) || !targets.TryGetValue(current, out var nested)) continue;
-                foreach (var target in nested) pending.Push(target);
-            }
-            return false;
-        }
     }
 
     private static PowerShellBoundProgram Propagate(

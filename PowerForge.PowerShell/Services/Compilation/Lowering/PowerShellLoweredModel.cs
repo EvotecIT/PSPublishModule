@@ -75,10 +75,10 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     }
 
     internal PowerShellSymbolId Target { get; }
-    internal PowerShellLoweredExpression[] Arguments { get; }
-    internal int[] AuthoredEvaluationOrder { get; }
-    internal string[] BoundParameterNames { get; }
-    internal string?[] EvaluationTemporaryNames { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredExpression> Arguments { get; }
+    internal PowerShellImmutableArray<int> AuthoredEvaluationOrder { get; }
+    internal PowerShellImmutableArray<string> BoundParameterNames { get; }
+    internal PowerShellImmutableArray<string?> EvaluationTemporaryNames { get; }
     internal bool RequiresBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
@@ -199,15 +199,15 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellSymbolId Symbol { get; }
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
-    internal PowerShellLoweredParameter[] Parameters { get; }
-    internal PowerShellLoweredLocal[] Locals { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredParameter> Parameters { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredLocal> Locals { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal SourceSpan Span { get; }
 }
 
@@ -235,7 +235,7 @@ internal sealed class PowerShellLoweredProgram
         TargetCapabilities = targetCapabilities;
     }
 
-    internal PowerShellLoweredFunction[] Functions { get; }
-    internal PowerShellSemanticDiagnostic[] Diagnostics { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredFunction> Functions { get; }
+    internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
     internal PowerShellCompilationCapability TargetCapabilities { get; }
 }

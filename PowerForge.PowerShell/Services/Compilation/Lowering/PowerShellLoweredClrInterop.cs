@@ -54,8 +54,8 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
     internal PowerShellClrInvocationKind InvocationKind { get; }
     internal PowerShellLoweredExpression? Receiver { get; }
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
-    internal PowerShellLoweredExpression[] Arguments { get; }
-    internal Type[] ParameterTypes { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredExpression> Arguments { get; }
+    internal PowerShellImmutableArray<Type> ParameterTypes { get; }
 }
 
 internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShellLoweredStatement

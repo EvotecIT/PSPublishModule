@@ -16,14 +16,16 @@ internal sealed class PowerShellBoundArrayExpression : PowerShellBoundExpression
         : base(
             span,
             new PowerShellTypeFact(arrayType, PowerShellTypeFactProvenance.Inferred, "The bound array element contract selects one CLR array representation."),
-            PowerShellValueState.Known)
+            PowerShellValueState.Known,
+            elements?.Aggregate(PowerShellSemanticEffect.None, static (effects, element) => effects | element.Effects) ?? PowerShellSemanticEffect.None,
+            elements?.Aggregate(PowerShellRequiredCapability.None, static (capabilities, element) => capabilities | element.Capabilities) ?? PowerShellRequiredCapability.None)
     {
         Kind = kind;
         Elements = elements;
     }
 
     internal PowerShellBoundArrayKind Kind { get; }
-    internal PowerShellBoundExpression[] Elements { get; }
+    internal PowerShellImmutableArray<PowerShellBoundExpression> Elements { get; }
 }
 
 internal enum PowerShellBoundDictionaryKind
@@ -65,7 +67,7 @@ internal sealed class PowerShellBoundDictionaryExpression : PowerShellBoundExpre
     }
 
     internal PowerShellBoundDictionaryKind Kind { get; }
-    internal PowerShellBoundDictionaryEntry[] Entries { get; }
+    internal PowerShellImmutableArray<PowerShellBoundDictionaryEntry> Entries { get; }
 }
 
 internal enum PowerShellBoundIndexKind

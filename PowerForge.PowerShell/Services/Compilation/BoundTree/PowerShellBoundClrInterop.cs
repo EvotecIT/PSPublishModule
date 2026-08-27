@@ -66,8 +66,8 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
             span,
             type,
             invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown,
-            arguments.Aggregate(receiver?.Effects ?? PowerShellSemanticEffect.None, static (effects, argument) => effects | argument.Effects),
-            arguments.Aggregate(receiver?.Capabilities ?? PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
+            arguments.Aggregate(GetDirectEffects(declaringType, memberName, receiver), static (effects, argument) => effects | argument.Effects),
+            arguments.Aggregate(GetDirectCapabilities(declaringType, memberName, receiver), static (capabilities, argument) => capabilities | argument.Capabilities))
     {
         DeclaringType = declaringType;
         MemberName = memberName;
@@ -83,8 +83,20 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     internal PowerShellClrInvocationKind InvocationKind { get; }
     internal PowerShellBoundExpression? Receiver { get; }
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
-    internal PowerShellBoundExpression[] Arguments { get; }
-    internal Type[] ParameterTypes { get; }
+    internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
+    internal PowerShellImmutableArray<Type> ParameterTypes { get; }
+
+    private static PowerShellSemanticEffect GetDirectEffects(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
+        => (receiver?.Effects ?? PowerShellSemanticEffect.None) |
+           (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None);
+
+    private static PowerShellRequiredCapability GetDirectCapabilities(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
+        => (receiver?.Capabilities ?? PowerShellRequiredCapability.None) |
+           (IsProcessStart(declaringType, memberName) ? PowerShellRequiredCapability.NativeProcess : PowerShellRequiredCapability.None);
+
+    private static bool IsProcessStart(Type declaringType, string memberName)
+        => declaringType == typeof(System.Diagnostics.Process) &&
+           memberName.Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal);
 }
 
 internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBoundStatement

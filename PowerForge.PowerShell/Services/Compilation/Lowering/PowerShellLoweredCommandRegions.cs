@@ -18,7 +18,7 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
     }
 
     internal string Source { get; }
-    internal PowerShellLoweredCommandRegionArgument[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
 }
 
 internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLoweredStatement
@@ -43,5 +43,5 @@ internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLower
     internal Type TargetType { get; }
     internal bool Declare { get; }
     internal string Source { get; }
-    internal PowerShellLoweredCommandRegionArgument[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredCommandRegionArgument> Arguments { get; }
 }

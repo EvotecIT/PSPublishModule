@@ -20,7 +20,8 @@ internal static class PowerShellTypedExecutableCompiler
             .Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         ValidateSourceClosure(entryPoint, requestedSources);
 
-        var parsed = requestedSources.Select(Parse)
+        var identityRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+        var parsed = requestedSources.Select(path => Parse(path, identityRoot))
             .ToDictionary(static source => source.Path, PowerShellCompilationPathSafety.PathComparer);
         if (!parsed.TryGetValue(entryPoint, out var entrySource))
             throw new InvalidOperationException("The typed executable entrypoint is not present in its compilation source closure.");
@@ -39,7 +40,7 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray() ?? Array.Empty<StatementAst>();
         ValidateCommands(entrySource.Path, statements, byName);
 
-        var entryDocument = CreateEntryDocument(entrySource, statements);
+        var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
         var semantic = new PowerShellSemanticCompilationPipeline().Compile(
             parsed.Values.Select(static source => source.Document).Append(entryDocument),
             targetFramework,
@@ -118,12 +119,12 @@ internal static class PowerShellTypedExecutableCompiler
         }
     }
 
-    private static ParsedSourceDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements)
+    private static ParsedSourceDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
     {
         var parameterBlock = entrySource.Ast.ParamBlock?.Extent.Text ?? string.Empty;
         var body = string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var source = $"function Invoke {{{Environment.NewLine}{parameterBlock}{Environment.NewLine}{body}{Environment.NewLine}}}";
-        return PowerShellSourceParser.Parse(source, entrySource.Path + ".powerforge-entry.ps1");
+        return PowerShellSourceParser.Parse(source, entrySource.Path + ".powerforge-entry.ps1", identityRoot);
     }
 
     private static InvalidOperationException CreateSemanticFailure(PowerShellSemanticCompilationResult result, string owner)
@@ -172,10 +173,10 @@ internal static class PowerShellTypedExecutableCompiler
         }
     }
 
-    private static ParsedSource Parse(string path)
+    private static ParsedSource Parse(string path, string identityRoot)
     {
         var fullPath = Path.GetFullPath(path);
-        var document = PowerShellSourceParser.ParseFile(fullPath);
+        var document = PowerShellSourceParser.ParseFile(fullPath, identityRoot);
         if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Typed executable source '{fullPath}' could not be parsed.");
         return new ParsedSource(fullPath, document);

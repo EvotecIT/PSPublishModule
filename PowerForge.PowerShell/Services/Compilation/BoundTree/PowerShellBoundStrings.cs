@@ -27,5 +27,5 @@ internal sealed class PowerShellBoundInterpolatedStringExpression : PowerShellBo
         Parts = parts;
     }
 
-    internal PowerShellBoundInterpolatedStringPart[] Parts { get; }
+    internal PowerShellImmutableArray<PowerShellBoundInterpolatedStringPart> Parts { get; }
 }

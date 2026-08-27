@@ -128,7 +128,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, analysisTargetFramework, capabilities);
+            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities);
         return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 
@@ -182,26 +182,4 @@ public sealed partial class PowerShellCompilationAnalyzer
             ((exclusion.Equals("bin", StringComparison.OrdinalIgnoreCase) || exclusion.Equals("obj", StringComparison.OrdinalIgnoreCase)) &&
              directory.StartsWith(exclusion + "-", StringComparison.OrdinalIgnoreCase)));
 
-    private static bool RequiresArtifactGraphEmission(
-        IEnumerable<StatementAst> statements,
-        PowerShellCompilationCapability capabilities,
-        ISet<string>? localFunctionNames)
-    {
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) || localFunctionNames is null)
-            return false;
-
-        var materialized = statements as StatementAst[] ?? statements.ToArray();
-        if (materialized.Any(static statement =>
-                statement is PipelineAst { PipelineElements.Count: > 0 } pipeline &&
-                pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Dot }))
-            return true;
-
-        return materialized
-            .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
-            .OfType<CommandAst>()
-            .Any(command =>
-                command.InvocationOperator == TokenKind.Unknown &&
-                command.GetCommandName() is { } name &&
-                localFunctionNames.Contains(name));
-    }
 }

@@ -72,10 +72,36 @@ internal static class PowerShellStrictDependencyClosureVerifier
                     throw new InvalidOperationException($"Strict runtime-free managed dependency '{path}' references forbidden PowerShell assembly '{name}'.");
                 }
             }
+
+            foreach (var memberHandle in reader.MemberReferences)
+            {
+                var member = reader.GetMemberReference(memberHandle);
+                if (!reader.GetString(member.Name).Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal) ||
+                    !IsProcessType(reader, member.Parent))
+                    continue;
+                throw new InvalidOperationException($"Strict runtime-free managed dependency '{path}' contains a native-process launch reference.");
+            }
         }
         catch (BadImageFormatException)
         {
             // Native executables and platform files can share managed extensions.
         }
+    }
+
+    private static bool IsProcessType(MetadataReader reader, EntityHandle handle)
+    {
+        if (handle.Kind == HandleKind.TypeReference)
+        {
+            var type = reader.GetTypeReference((TypeReferenceHandle)handle);
+            return reader.GetString(type.Namespace).Equals("System.Diagnostics", StringComparison.Ordinal) &&
+                   reader.GetString(type.Name).Equals(nameof(System.Diagnostics.Process), StringComparison.Ordinal);
+        }
+        if (handle.Kind == HandleKind.TypeDefinition)
+        {
+            var type = reader.GetTypeDefinition((TypeDefinitionHandle)handle);
+            return reader.GetString(type.Namespace).Equals("System.Diagnostics", StringComparison.Ordinal) &&
+                   reader.GetString(type.Name).Equals(nameof(System.Diagnostics.Process), StringComparison.Ordinal);
+        }
+        return false;
     }
 }

@@ -14,7 +14,7 @@ internal static class PowerShellObjectSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, conversion.Extent);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) || conversion.Child is not HashtableAst hashtable)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2901", "[pscustomobject] literals require a generated binary-module host.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2901", "[pscustomobject] literals require PowerShell runtime support through a generated binary-module host.", span));
             return null;
         }
         var properties = new List<PowerShellBoundNoteProperty>();

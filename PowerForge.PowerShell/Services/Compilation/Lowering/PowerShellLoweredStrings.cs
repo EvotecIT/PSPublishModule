@@ -17,5 +17,5 @@ internal sealed class PowerShellLoweredInterpolatedStringExpression : PowerShell
     internal PowerShellLoweredInterpolatedStringExpression(SourceSpan span, PowerShellLoweredInterpolatedStringPart[] parts)
         : base(span, typeof(string)) => Parts = parts;
 
-    internal PowerShellLoweredInterpolatedStringPart[] Parts { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredInterpolatedStringPart> Parts { get; }
 }

@@ -22,7 +22,7 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
     }
 
     internal string Source { get; }
-    internal PowerShellBoundCommandRegionArgument[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
 }
 
 internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundStatement
@@ -44,5 +44,5 @@ internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundSt
     internal PowerShellSymbolId Target { get; }
     internal Type TargetType { get; }
     internal string Source { get; }
-    internal PowerShellBoundCommandRegionArgument[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
 }

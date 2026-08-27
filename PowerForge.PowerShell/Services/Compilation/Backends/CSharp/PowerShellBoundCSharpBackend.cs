@@ -12,7 +12,7 @@ internal sealed class PowerShellBoundCSharpBackend
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         var methods = program.Functions.Select(function => EmitFunction(function, program.TargetCapabilities)).ToArray();
-        return new PowerShellBoundCSharpResult(methods, program.Diagnostics);
+        return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
 
     private static PowerShellCSharpMethodEmission EmitFunction(
@@ -189,11 +189,17 @@ internal sealed class PowerShellBoundCSharpBackend
                 var enumerable = loop.ScalarString
                     ? $"new[] {{ {collection} }}"
                     : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)}>())";
+                var iterationVariable = getTemporaryIdentifier("foreachItem");
                 builder.Append(prefix).Append("foreach (")
                     .Append(PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)).Append(' ')
-                    .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" in ")
+                    .Append(iterationVariable).Append(" in ")
                     .Append(enumerable).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier);
+                builder.Append(prefix).AppendLine("{");
+                builder.Append(prefix).Append("    ")
+                    .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
+                    .Append(iterationVariable).AppendLine(";");
+                foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier);
+                builder.Append(prefix).AppendLine("}");
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
                 EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier);
@@ -672,7 +678,7 @@ internal sealed class PowerShellBoundCSharpBackend
         return $"({symbol}{EmitExpression(expression.Operand)})";
     }
 
-    private static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
+    internal static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
     {
         if (literal.Value is null) return "null";
         var nullableType = Nullable.GetUnderlyingType(literal.ClrType);
@@ -693,9 +699,15 @@ internal sealed class PowerShellBoundCSharpBackend
         if (literal.Value is bool boolean) return boolean ? "true" : "false";
         if (literal.Value is System.Management.Automation.SwitchParameter switchParameter)
             return $"new global::System.Management.Automation.SwitchParameter({(switchParameter.IsPresent ? "true" : "false")})";
-        if (literal.Value is char character) return $"'{character.ToString().Replace("'", "\\'")}'";
-        if (literal.Value is float single) return single.ToString("R", CultureInfo.InvariantCulture) + "f";
-        if (literal.Value is double doubleValue) return doubleValue.ToString("R", CultureInfo.InvariantCulture) + "d";
+        if (literal.Value is char character) return PowerShellCSharpLiteral.QuoteChar(character);
+        if (literal.Value is float single)
+            return float.IsNaN(single) || float.IsInfinity(single)
+                ? EmitCanonicalLiteral(literal)
+                : single.ToString("R", CultureInfo.InvariantCulture) + "f";
+        if (literal.Value is double doubleValue)
+            return double.IsNaN(doubleValue) || double.IsInfinity(doubleValue)
+                ? EmitCanonicalLiteral(literal)
+                : doubleValue.ToString("R", CultureInfo.InvariantCulture) + "d";
         if (literal.Value is decimal decimalValue) return decimalValue.ToString(CultureInfo.InvariantCulture) + "m";
         if (literal.Value is long longValue) return longValue.ToString(CultureInfo.InvariantCulture) + "L";
         if (literal.Value is ulong unsignedLong) return unsignedLong.ToString(CultureInfo.InvariantCulture) + "UL";
@@ -713,6 +725,13 @@ internal sealed class PowerShellBoundCSharpBackend
             return $"global::System.Numerics.BigInteger.Parse({PowerShellCSharpLiteral.QuoteString(bigInteger.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)";
         }
         return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
+    }
+
+    private static string EmitCanonicalLiteral(PowerShellLoweredLiteralExpression literal)
+    {
+        if (!PowerShellCompilationLiteralPolicy.TryEncodeValue(literal.Value, literal.ClrType, out var encoded) || encoded is null)
+            throw new InvalidOperationException($"Literal value for '{literal.ClrType.FullName}' has no canonical C# encoding.");
+        return PowerShellCSharpLiteral.Emit(encoded, literal.ClrType, PowerShellCSharpSymbolRenderer.TypeName);
     }
 }
 

@@ -26,7 +26,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
 
     internal PowerShellRuntimeStateIntrinsicKind Kind { get; }
     internal string TargetFramework { get; }
-    internal PowerShellBoundExpression[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
     internal bool RequiresHostBinding => KindRequiresHostBinding(Kind);
 
     private static bool KindRequiresHostBinding(PowerShellRuntimeStateIntrinsicKind kind)

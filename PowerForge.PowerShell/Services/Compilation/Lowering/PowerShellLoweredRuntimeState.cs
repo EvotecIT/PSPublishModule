@@ -17,5 +17,5 @@ internal sealed class PowerShellLoweredRuntimeStateExpression : PowerShellLowere
 
     internal PowerShellRuntimeStateIntrinsicKind Kind { get; }
     internal string TargetFramework { get; }
-    internal PowerShellLoweredExpression[] Arguments { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredExpression> Arguments { get; }
 }

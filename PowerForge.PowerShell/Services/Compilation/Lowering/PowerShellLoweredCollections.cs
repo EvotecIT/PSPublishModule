@@ -10,7 +10,7 @@ internal sealed class PowerShellLoweredArrayExpression : PowerShellLoweredExpres
     }
 
     internal PowerShellBoundArrayKind Kind { get; }
-    internal PowerShellLoweredExpression[] Elements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredExpression> Elements { get; }
 }
 
 internal sealed class PowerShellLoweredDictionaryEntry
@@ -35,7 +35,7 @@ internal sealed class PowerShellLoweredDictionaryExpression : PowerShellLoweredE
     }
 
     internal PowerShellBoundDictionaryKind Kind { get; }
-    internal PowerShellLoweredDictionaryEntry[] Entries { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredDictionaryEntry> Entries { get; }
 }
 
 internal sealed class PowerShellLoweredIndexExpression : PowerShellLoweredExpression

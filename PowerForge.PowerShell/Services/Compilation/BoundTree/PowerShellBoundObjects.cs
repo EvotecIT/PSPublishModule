@@ -25,5 +25,5 @@ internal sealed class PowerShellBoundPowerShellObjectExpression : PowerShellBoun
         Properties = properties;
     }
 
-    internal PowerShellBoundNoteProperty[] Properties { get; }
+    internal PowerShellImmutableArray<PowerShellBoundNoteProperty> Properties { get; }
 }

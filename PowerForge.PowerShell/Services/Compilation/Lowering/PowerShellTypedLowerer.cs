@@ -95,6 +95,14 @@ internal sealed class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.NativeProcess))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1008",
+                    "Native process creation is not available to typed compilation targets and cannot be certified runtime-free.",
+                    function.Symbol.Declaration));
+                continue;
+            }
 
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
@@ -104,11 +112,12 @@ internal sealed class PowerShellTypedLowerer
             var names = new LoweredNameAllocator(function.Parameters.Select(static parameter => parameter.Symbol.Name)
                 .Concat(function.Locals.Select(static local => local.Symbol.Name)));
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
-                .Select(static assignment => assignment.Target.StableKey)
-                .ToHashSet(StringComparer.Ordinal);
+                .GroupBy(static assignment => assignment.Target.StableKey, StringComparer.Ordinal)
+                .ToDictionary(static group => group.Key, static group => group.Min(assignment => assignment.Span.StartOffset), StringComparer.Ordinal);
             var predeclared = EnumerateNestedAssignments(function.Body)
-                .Where(localTypes.ContainsKey)
-                .Where(key => !topLevelAssignments.Contains(key))
+                .Where(item => localTypes.ContainsKey(item.Key))
+                .Where(item => !topLevelAssignments.TryGetValue(item.Key, out var topLevelOffset) || item.Offset < topLevelOffset)
+                .Select(static item => item.Key)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static key => key, StringComparer.Ordinal)
                 .ToArray();
@@ -317,7 +326,7 @@ internal sealed class PowerShellTypedLowerer
             _ => false
         };
 
-    private static IEnumerable<string> EnumerateNestedAssignments(PowerShellBoundBlock block)
+    private static IEnumerable<(string Key, int Offset)> EnumerateNestedAssignments(PowerShellBoundBlock block)
     {
         foreach (var statement in block.Statements)
         {
@@ -338,11 +347,13 @@ internal sealed class PowerShellTypedLowerer
             }
             else if (statement is PowerShellBoundForStatement forLoop)
             {
+                if (forLoop.Initializer is not null) yield return (forLoop.Initializer.Target.StableKey, forLoop.Span.StartOffset);
                 foreach (var assignment in EnumerateAssignments(forLoop.Body)) yield return assignment;
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
-                foreach (var assignment in EnumerateAssignments(forEachLoop.Body).Where(key => key != forEachLoop.Variable.StableKey)) yield return assignment;
+                yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
+                foreach (var assignment in EnumerateAssignments(forEachLoop.Body).Where(item => item.Key != forEachLoop.Variable.StableKey)) yield return assignment;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)
             {
@@ -366,11 +377,11 @@ internal sealed class PowerShellTypedLowerer
         }
     }
 
-    private static IEnumerable<string> EnumerateAssignments(PowerShellBoundBlock block)
+    private static IEnumerable<(string Key, int Offset)> EnumerateAssignments(PowerShellBoundBlock block)
     {
         foreach (var statement in block.Statements)
         {
-            if (statement is PowerShellBoundAssignmentStatement assignment) yield return assignment.Target.StableKey;
+            if (statement is PowerShellBoundAssignmentStatement assignment) yield return (assignment.Target.StableKey, assignment.Span.StartOffset);
             if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
@@ -386,10 +397,12 @@ internal sealed class PowerShellTypedLowerer
             }
             else if (statement is PowerShellBoundForStatement forLoop)
             {
+                if (forLoop.Initializer is not null) yield return (forLoop.Initializer.Target.StableKey, forLoop.Span.StartOffset);
                 foreach (var nested in EnumerateAssignments(forLoop.Body)) yield return nested;
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
+                yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
                 foreach (var nested in EnumerateAssignments(forEachLoop.Body)) yield return nested;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)
@@ -492,7 +505,7 @@ internal sealed class PowerShellTypedLowerer
                 tryStatement.Span,
                 LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 tryStatement.Catches.Select(clause => new PowerShellLoweredCatchClause(
-                    clause.ExceptionTypes,
+                    clause.ExceptionTypes.ToArray(),
                     LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
@@ -694,15 +707,15 @@ internal sealed class PowerShellTypedLowerer
                 invocation.Receiver is null ? null : LowerExpression(invocation.Receiver, functions, names, targetCapabilities),
                 invocation.ReceiverBehavior,
                 invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
-                invocation.ParameterTypes),
+                invocation.ParameterTypes.ToArray()),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
                     target.Function.ReturnType.ClrType,
                     invocation.Target,
                     invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
-                    invocation.AuthoredEvaluationOrder,
-                    invocation.BoundParameterNames,
+                    invocation.AuthoredEvaluationOrder.ToArray(),
+                    invocation.BoundParameterNames.ToArray(),
                     CreateEvaluationTemporaryNames(invocation, names),
                     target.RequiresPowerShellBoundParameters,
                     target.RequiresPowerShellStreams,

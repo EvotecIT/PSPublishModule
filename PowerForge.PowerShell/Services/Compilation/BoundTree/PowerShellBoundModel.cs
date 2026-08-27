@@ -262,15 +262,16 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
     }
 
     internal PowerShellSymbolId Target { get; }
-    internal PowerShellBoundExpression[] Arguments { get; }
-    internal int[] AuthoredEvaluationOrder { get; }
-    internal string[] BoundParameterNames { get; }
+    internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
+    internal PowerShellImmutableArray<int> AuthoredEvaluationOrder { get; }
+    internal PowerShellImmutableArray<string> BoundParameterNames { get; }
 }
 
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue = true)
         : base(span,
+            (expression?.Effects ?? PowerShellSemanticEffect.None) |
             (expression is null || !emitsValue ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
             (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
             expression?.Capabilities ?? PowerShellRequiredCapability.None)
@@ -287,6 +288,7 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
 {
     internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput)
         : base(span,
+            expression.Effects |
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
             (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
             expression.Capabilities)
@@ -362,7 +364,7 @@ internal sealed class PowerShellLexicalScope
     }
 
     internal PowerShellSymbolId Owner { get; }
-    internal PowerShellSymbolId[] Symbols { get; }
+    internal PowerShellImmutableArray<PowerShellSymbolId> Symbols { get; }
 }
 
 internal sealed class PowerShellBoundHelpMetadata
@@ -391,10 +393,10 @@ internal sealed class PowerShellBoundHelpMetadata
     internal string Description { get; }
     internal string Notes { get; }
     internal IReadOnlyDictionary<string, string> Parameters { get; }
-    internal string[] Examples { get; }
-    internal string[] Links { get; }
-    internal string[] Inputs { get; }
-    internal string[] Outputs { get; }
+    internal PowerShellImmutableArray<string> Examples { get; }
+    internal PowerShellImmutableArray<string> Links { get; }
+    internal PowerShellImmutableArray<string> Inputs { get; }
+    internal PowerShellImmutableArray<string> Outputs { get; }
 
     internal PowerShellCompilationHelp ToPublicModel()
         => new()
@@ -420,7 +422,7 @@ internal sealed class PowerShellBoundBlock
     }
 
     internal SourceSpan Span { get; }
-    internal PowerShellBoundStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellBoundStatement> Statements { get; }
     internal PowerShellSemanticEffect Effects => Statements.Aggregate(PowerShellSemanticEffect.None, static (value, statement) => value | statement.Effects);
     internal PowerShellRequiredCapability Capabilities => Statements.Aggregate(PowerShellRequiredCapability.None, static (value, statement) => value | statement.Capabilities);
 }
@@ -456,8 +458,8 @@ internal sealed class PowerShellBoundFunction
     }
 
     internal PowerShellSymbolId Symbol { get; }
-    internal PowerShellBoundParameter[] Parameters { get; }
-    internal PowerShellBoundLocal[] Locals { get; }
+    internal PowerShellImmutableArray<PowerShellBoundParameter> Parameters { get; }
+    internal PowerShellImmutableArray<PowerShellBoundLocal> Locals { get; }
     internal PowerShellLexicalScope Scope { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
@@ -474,7 +476,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters, Locals, Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument
@@ -490,7 +492,7 @@ internal sealed class PowerShellBoundSourceDocument
     internal string DocumentId { get; }
     internal string Path { get; }
     internal SourceSpan Span { get; }
-    internal PowerShellSymbolId[] Functions { get; }
+    internal PowerShellImmutableArray<PowerShellSymbolId> Functions { get; }
 }
 
 internal sealed class PowerShellBoundProgram
@@ -507,15 +509,15 @@ internal sealed class PowerShellBoundProgram
         CallGraph = callGraph ?? Array.Empty<PowerShellCallGraphEdge>();
     }
 
-    internal PowerShellBoundSourceDocument[] Documents { get; }
-    internal PowerShellBoundFunction[] Functions { get; }
-    internal PowerShellSemanticDiagnostic[] Diagnostics { get; }
-    internal PowerShellCallGraphEdge[] CallGraph { get; }
-    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents, functions, Diagnostics, CallGraph);
-    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents, Functions, diagnostics, CallGraph);
-    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents, Functions, Diagnostics, callGraph);
+    internal PowerShellImmutableArray<PowerShellBoundSourceDocument> Documents { get; }
+    internal PowerShellImmutableArray<PowerShellBoundFunction> Functions { get; }
+    internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
+    internal PowerShellImmutableArray<PowerShellCallGraphEdge> CallGraph { get; }
+    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray());
+    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray());
+    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph);
     internal PowerShellBoundProgram WithAnalysis(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
-        => new(Documents, functions, diagnostics, CallGraph);
+        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray());
 }
 
 internal sealed class PowerShellCallGraphEdge

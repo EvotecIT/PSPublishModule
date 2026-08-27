@@ -365,17 +365,18 @@ public sealed class PowerShellCompilationAnalyzerTests
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(18, plan.RuntimeFallbackUnits);
-        Assert.All(Assert.Single(plan.Files).Units, static unit => Assert.False(unit.IsCompilable));
+        Assert.Equal(17, plan.RuntimeFallbackUnits);
+        var units = Assert.Single(plan.Files).Units;
+        Assert.True(units.Single(static unit => unit.Name == "Get-LoopLeak").IsCompilable);
+        Assert.All(units.Where(static unit => unit.Name != "Get-LoopLeak"), static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
         Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("promote on overflow", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("function scope", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("may remain unassigned", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("must end with an explicit return", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("collides with another function", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("outside the loop scope", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("not an implicit CLR conversion", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("runtime conversion semantics", messages, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("language-conversion runtime", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("branch-specific runtime types", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Labeled break", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("break must be inside", messages, StringComparison.OrdinalIgnoreCase);

@@ -9,7 +9,7 @@ internal sealed class PowerShellLoweredConditionalClause
     }
 
     internal PowerShellLoweredExpression Condition { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
 
 internal sealed class PowerShellLoweredIfStatement : PowerShellLoweredStatement
@@ -18,11 +18,11 @@ internal sealed class PowerShellLoweredIfStatement : PowerShellLoweredStatement
         : base(span)
     {
         Clauses = clauses;
-        ElseStatements = elseStatements;
+        ElseStatements = elseStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(elseStatements);
     }
 
-    internal PowerShellLoweredConditionalClause[] Clauses { get; }
-    internal PowerShellLoweredStatement[]? ElseStatements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredConditionalClause> Clauses { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement>? ElseStatements { get; }
 }
 
 internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStatement
@@ -35,7 +35,7 @@ internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStateme
     }
 
     internal PowerShellLoweredExpression Condition { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
 
 internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
@@ -59,7 +59,7 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
     internal PowerShellLoweredMutationExpression? Initializer { get; }
     internal PowerShellLoweredExpression? Condition { get; }
     internal PowerShellLoweredMutationExpression? Iterator { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareInitializer { get; }
 }
 
@@ -85,7 +85,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
     internal Type ElementType { get; }
     internal PowerShellLoweredExpression Collection { get; }
     internal bool ScalarString { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause
@@ -97,7 +97,7 @@ internal sealed class PowerShellLoweredSwitchClause
     }
 
     internal PowerShellLoweredExpression Value { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatement
@@ -112,13 +112,13 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
     {
         Value = value;
         Clauses = clauses;
-        DefaultStatements = defaultStatements;
+        DefaultStatements = defaultStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(defaultStatements);
         CaseSensitive = caseSensitive;
     }
 
     internal PowerShellLoweredExpression Value { get; }
-    internal PowerShellLoweredSwitchClause[] Clauses { get; }
-    internal PowerShellLoweredStatement[]? DefaultStatements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredSwitchClause> Clauses { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement>? DefaultStatements { get; }
     internal bool CaseSensitive { get; }
 }
 
@@ -136,8 +136,8 @@ internal sealed class PowerShellLoweredCatchClause
         Statements = statements;
     }
 
-    internal Type[] ExceptionTypes { get; }
-    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellImmutableArray<Type> ExceptionTypes { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
 
 internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
@@ -151,12 +151,12 @@ internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
     {
         Statements = statements;
         Catches = catches;
-        FinallyStatements = finallyStatements;
+        FinallyStatements = finallyStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(finallyStatements);
     }
 
-    internal PowerShellLoweredStatement[] Statements { get; }
-    internal PowerShellLoweredCatchClause[] Catches { get; }
-    internal PowerShellLoweredStatement[]? FinallyStatements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredCatchClause> Catches { get; }
+    internal PowerShellImmutableArray<PowerShellLoweredStatement>? FinallyStatements { get; }
 }
 
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement

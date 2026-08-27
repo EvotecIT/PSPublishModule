@@ -24,7 +24,7 @@ internal sealed class PowerShellBoundIfStatement : PowerShellBoundStatement
         ElseBlock = elseBlock;
     }
 
-    internal PowerShellBoundConditionalClause[] Clauses { get; }
+    internal PowerShellImmutableArray<PowerShellBoundConditionalClause> Clauses { get; }
     internal PowerShellBoundBlock? ElseBlock { get; }
 }
 
@@ -51,7 +51,11 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
         PowerShellBoundBlock body)
         : base(
             span,
-            PowerShellSemanticEffect.Mutation | body.Effects,
+            PowerShellSemanticEffect.Mutation |
+            (initializer?.Effects ?? PowerShellSemanticEffect.None) |
+            (condition?.Effects ?? PowerShellSemanticEffect.None) |
+            (iterator?.Effects ?? PowerShellSemanticEffect.None) |
+            body.Effects,
             (initializer?.Capabilities ?? PowerShellRequiredCapability.None) |
             (condition?.Capabilities ?? PowerShellRequiredCapability.None) |
             (iterator?.Capabilities ?? PowerShellRequiredCapability.None) |
@@ -126,7 +130,7 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
     }
 
     internal PowerShellBoundExpression Value { get; }
-    internal PowerShellBoundSwitchClause[] Clauses { get; }
+    internal PowerShellImmutableArray<PowerShellBoundSwitchClause> Clauses { get; }
     internal PowerShellBoundBlock? DefaultBlock { get; }
     internal bool CaseSensitive { get; }
 }
@@ -151,7 +155,7 @@ internal sealed class PowerShellBoundCatchClause
         Body = body;
     }
 
-    internal Type[] ExceptionTypes { get; }
+    internal PowerShellImmutableArray<Type> ExceptionTypes { get; }
     internal PowerShellBoundBlock Body { get; }
 }
 
@@ -173,7 +177,7 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
     }
 
     internal PowerShellBoundBlock Body { get; }
-    internal PowerShellBoundCatchClause[] Catches { get; }
+    internal PowerShellImmutableArray<PowerShellBoundCatchClause> Catches { get; }
     internal PowerShellBoundBlock? FinallyBlock { get; }
 }
 

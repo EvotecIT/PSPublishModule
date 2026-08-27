@@ -41,23 +41,23 @@ public sealed class PowerShellCompilationCoverageV2Tests
     }
 
     [Fact]
-    public void Run_ReportsAnalyzerEligibleFunctionsDroppedByGraphShaping()
+    public void Run_ReportsSemanticGraphFallbackWithoutDroppedEligibleFunctions()
     {
         var root = CreateRoot();
         var source = Path.Combine(root, "Recursive.psm1");
         File.WriteAllText(
             source,
-            "function Get-Even { param([int] $Value) if ($Value -le 0) { return $true }; return Get-Odd -Value ($Value - 1) }; " +
-            "function Get-Odd { param([int] $Value) if ($Value -le 0) { return $false }; return Get-Even -Value ($Value - 1) }");
+            "function Get-Even { param([int] $Value) if ($Value -le 0) { return $true }; $Value -= 1; return Get-Odd -Value $Value }; " +
+            "function Get-Odd { param([int] $Value) if ($Value -le 0) { return $false }; $Value -= 1; return Get-Even -Value $Value }");
         try
         {
             var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
             var product = Assert.Single(result.Products);
 
             Assert.Equal(2, product.Coverage.TotalFunctions);
-            Assert.Equal(2, product.Coverage.AnalyzerEligibleFunctions);
+            Assert.Equal(0, product.Coverage.AnalyzerEligibleFunctions);
             Assert.Equal(0, product.Coverage.EmittedFunctions);
-            Assert.Equal(2, product.Coverage.DroppedEligibleFunctions);
+            Assert.Equal(0, product.Coverage.DroppedEligibleFunctions);
             Assert.Equal(2, product.Coverage.FallbackFunctions);
             var graph = Assert.Single(result.FunctionFrontier, impact =>
                 impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);

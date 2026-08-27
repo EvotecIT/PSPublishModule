@@ -93,8 +93,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_OutputTypesDoNotPermitMutuallyRecursiveGraph()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Even { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $true }; return Get-Odd -Number ($Number - [long] 1) }; " +
-            "function Get-Odd { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $false }; return Get-Even -Number ($Number - [long] 1) }",
+            "function Get-Even { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $true }; $Number -= [long] 1; return Get-Odd -Number $Number }; " +
+            "function Get-Odd { [OutputType([bool])] param([long] $Number) if ($Number -le [long] 0) { return $false }; $Number -= [long] 1; return Get-Even -Number $Number }",
             ".psm1");
 
         var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(

@@ -76,14 +76,6 @@ internal sealed partial class PowerShellSemanticBinder
         var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
-        if (FindForInitializerScopeLeak(function.Body) is { } scopeLeak)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB1202",
-                $"Local '${scopeLeak.VariablePath.UserPath}' is declared in a for initializer and then used outside the loop scope; it must be declared at function scope before typed compilation.",
-                PowerShellSourceParser.GetSpan(document, scopeLeak.Extent)));
-            return null;
-        }
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
@@ -287,26 +279,6 @@ internal sealed partial class PowerShellSemanticBinder
         return PowerShellTypeFact.Unknown;
     }
 
-    private static VariableExpressionAst? FindForInitializerScopeLeak(ScriptBlockAst body)
-    {
-        foreach (var loop in body.FindAll(static node => node is ForStatementAst, searchNestedScriptBlocks: false).OfType<ForStatementAst>())
-        {
-            if (loop.Initializer is not AssignmentStatementAst initializer ||
-                PowerShellAssignmentTargetPolicy.FindDirectVariable(initializer.Left) is not { } declared)
-                continue;
-            var leak = body.FindAll(node =>
-                    node is VariableExpressionAst variable &&
-                    variable.Extent.StartOffset > loop.Extent.EndOffset &&
-                    variable.VariablePath.UserPath.Equals(declared.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) &&
-                    !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
-                    searchNestedScriptBlocks: false)
-                .OfType<VariableExpressionAst>()
-                .FirstOrDefault();
-            if (leak is not null) return leak;
-        }
-        return null;
-    }
-
     private static PowerShellBoundStatement? BindStatement(
         ParsedSourceDocument document,
         StatementAst statement,
@@ -430,10 +402,9 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement is ForEachStatementAst forEachStatement)
         {
             var variableSpan = PowerShellSourceParser.GetSpan(document, forEachStatement.Variable.Extent);
-            if (!symbols.TryGetValue(forEachStatement.Variable.VariablePath.UserPath, out var target) ||
-                target.Symbol.Declaration.StartOffset != variableSpan.StartOffset)
+            if (!symbols.TryGetValue(forEachStatement.Variable.VariablePath.UserPath, out var target))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${forEachStatement.Variable.VariablePath.UserPath}' cannot reuse another function-scope variable on the conservative compilation path.", variableSpan));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${forEachStatement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));
                 return null;
             }
             var collection = BindExpression(document, forEachStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);

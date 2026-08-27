@@ -91,7 +91,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             ParseError[] parseErrors;
             var ast = Parser.ParseFile(fullPath, out tokens, out parseErrors);
             if (parseErrors.Length == 0)
-                parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath)));
+                parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath, basePath)));
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
