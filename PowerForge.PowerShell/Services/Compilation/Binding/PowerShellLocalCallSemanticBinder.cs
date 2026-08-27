@@ -18,18 +18,25 @@ internal sealed class PowerShellLocalCallParameter
 
 internal sealed class PowerShellLocalCallSignature
 {
-    internal PowerShellLocalCallSignature(PowerShellSymbolId symbol, PowerShellLocalCallParameter[] parameters, bool isAdvanced, PowerShellCompilationCommandBinding commandBinding)
+    internal PowerShellLocalCallSignature(
+        PowerShellSymbolId symbol,
+        PowerShellLocalCallParameter[] parameters,
+        bool isAdvanced,
+        PowerShellCompilationCommandBinding commandBinding,
+        Type? declaredReturnType)
     {
         Symbol = symbol;
         Parameters = parameters;
         IsAdvanced = isAdvanced;
         CommandBinding = commandBinding;
+        DeclaredReturnType = declaredReturnType;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellLocalCallParameter[] Parameters { get; }
     internal bool IsAdvanced { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
+    internal Type? DeclaredReturnType { get; }
 }
 
 /// <summary>Applies deterministic local-function parameter binding before call-graph analysis.</summary>
@@ -39,7 +46,8 @@ internal static class PowerShellLocalCallSemanticBinder
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         PowerShellSymbolId symbol,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         var parameters = (function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
             .Select(parameter =>
@@ -51,11 +59,19 @@ internal static class PowerShellLocalCallSemanticBinder
                 return new PowerShellLocalCallParameter(parameterSymbol, type, PowerShellParameterContractBinder.Bind(parameter, targetFramework));
             })
             .ToArray();
+        PowerShellOutputTypeSemanticPolicy.TryResolve(
+            function.Body,
+            targetFramework,
+            capabilities,
+            out var declaredReturnType,
+            out _,
+            out _);
         return new PowerShellLocalCallSignature(
             symbol,
             parameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
-            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock));
+            PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
+            declaredReturnType);
     }
 
     internal static PowerShellBoundInvocationExpression? Bind(
@@ -131,11 +147,14 @@ internal static class PowerShellLocalCallSemanticBinder
                 return Reject(diagnostics, "PSB2809", $"Mandatory local function parameter '-{parameter.Contract.Name}' was not supplied.", span);
             arguments[index] = DefaultValue(span, parameter.Type);
         }
+        var returnType = signature.DeclaredReturnType is null
+            ? PowerShellTypeFact.Unknown
+            : new PowerShellTypeFact(signature.DeclaredReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type.");
         return new PowerShellBoundInvocationExpression(
             span,
             signature.Symbol,
             arguments,
-            PowerShellTypeFact.Unknown,
+            returnType,
             authoredOrder.ToArray(),
             bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray());
     }

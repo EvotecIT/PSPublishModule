@@ -8,7 +8,10 @@ namespace PowerForge;
 /// </summary>
 internal sealed class PowerShellSemanticBinder
 {
-    internal PowerShellBoundProgram Bind(IEnumerable<ParsedSourceDocument> documents, string? targetFramework = null)
+    internal PowerShellBoundProgram Bind(
+        IEnumerable<ParsedSourceDocument> documents,
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
@@ -19,14 +22,14 @@ internal sealed class PowerShellSemanticBinder
             .Where(static group => group.Count() == 1)
             .ToDictionary(
                 static group => group.Key,
-                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework),
+                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
                 StringComparer.OrdinalIgnoreCase);
         var functions = new List<PowerShellBoundFunction>();
 
         foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
         {
             if (declaration.Document.Errors.Length > 0 || !functionsByName.ContainsKey(declaration.Syntax.Name)) continue;
-            var bound = BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName, diagnostics, targetFramework);
+            var bound = BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName, diagnostics, targetFramework, capabilities);
             if (bound is not null) functions.Add(bound);
         }
 
@@ -93,8 +96,23 @@ internal sealed class PowerShellSemanticBinder
         PowerShellSymbolId functionSymbol,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
+        if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
+                function.Body,
+                targetFramework,
+                capabilities,
+                out var declaredOutputType,
+                out var outputTypeErrorNode,
+                out var outputTypeError))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB1201",
+                outputTypeError!,
+                PowerShellSourceParser.GetSpan(document, outputTypeErrorNode!.Extent)));
+            return null;
+        }
         var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework);
         if (parameters is null) return null;
@@ -135,6 +153,7 @@ internal sealed class PowerShellSemanticBinder
             locals,
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
             PowerShellCommentHelpBinder.Bind(function),
+            declaredOutputType,
             body,
             PowerShellTypeFact.Unknown,
             PowerShellSemanticEffect.None,

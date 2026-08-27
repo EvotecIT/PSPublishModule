@@ -32,7 +32,7 @@ internal sealed class PowerShellSemanticCompilationPipeline
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
-        var bound = _binder.Bind(documents, targetFramework);
+        var bound = _binder.Bind(documents, targetFramework, capabilities);
         var analyzed = _analyzer.Analyze(bound);
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);

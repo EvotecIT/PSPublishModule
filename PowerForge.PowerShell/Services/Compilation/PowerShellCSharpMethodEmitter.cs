@@ -228,25 +228,15 @@ internal sealed partial class PowerShellCSharpMethodEmitter
 
     private Type? GetDeclaredOutputType()
     {
-        var attributes = _body.ParamBlock?.Attributes
-            .OfType<AttributeAst>()
-            .Where(static attribute =>
-                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
-                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase))
-            .ToArray() ?? Array.Empty<AttributeAst>();
-        if (attributes.Length == 0)
-            return null;
-        if (attributes.Length != 1 ||
-            attributes[0].NamedArguments.Count != 0 ||
-            attributes[0].PositionalArguments.Count != 1 ||
-            attributes[0].PositionalArguments[0] is not TypeExpressionAst typeExpression ||
-            typeExpression.TypeName.GetReflectionType() is not { } declared ||
-            declared == typeof(void) ||
-            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, _targetFramework, _capabilities))
-        {
-            throw Error(attributes[0], "OutputType metadata must declare one statically resolvable target-compatible CLR type.");
-        }
-        return declared;
+        if (PowerShellOutputTypeSemanticPolicy.TryResolve(
+                _body,
+                _targetFramework,
+                _capabilities,
+                out var outputType,
+                out var errorNode,
+                out var error))
+            return outputType;
+        throw Error(errorNode!, error!);
     }
 
     private void EmitParameterPrologue()

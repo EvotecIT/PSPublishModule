@@ -439,11 +439,6 @@ public sealed class PowerShellTypedCompilationTranspiler
         FunctionSource source,
         IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions)
     {
-        if (source.Function.Body.ParamBlock?.Attributes.OfType<AttributeAst>().Any(static attribute =>
-                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
-                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase)) == true)
-            return null;
-
         return boundEmissions.TryGetValue(
             GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
             out var emitted)

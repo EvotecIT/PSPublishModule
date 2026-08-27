@@ -13,19 +13,14 @@ internal static class PowerShellRecursiveFunctionPolicy
         out Type? returnType)
     {
         returnType = null;
-        var attributes = function.Body.ParamBlock?.Attributes
-            .OfType<AttributeAst>()
-            .Where(static attribute =>
-                attribute.TypeName.Name.Equals("OutputType", StringComparison.OrdinalIgnoreCase) ||
-                attribute.TypeName.Name.Equals("OutputTypeAttribute", StringComparison.OrdinalIgnoreCase))
-            .ToArray() ?? Array.Empty<AttributeAst>();
-        if (attributes.Length != 1 ||
-            attributes[0].NamedArguments.Count != 0 ||
-            attributes[0].PositionalArguments.Count != 1 ||
-            attributes[0].PositionalArguments[0] is not TypeExpressionAst typeExpression ||
-            typeExpression.TypeName.GetReflectionType() is not { } declared ||
-            declared == typeof(void) ||
-            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, targetFramework, capabilities) ||
+        if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
+                function.Body,
+                targetFramework,
+                capabilities,
+                out var declared,
+                out _,
+                out _) ||
+            declared is null ||
             unit.Parameters.Any(static parameter => parameter.DefaultValue is not null || parameter.Validations.Length > 0))
             return false;
 

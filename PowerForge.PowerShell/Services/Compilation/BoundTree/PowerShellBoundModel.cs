@@ -392,6 +392,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellBoundLocal[] locals,
         PowerShellLexicalScope scope,
         PowerShellBoundHelpMetadata? help,
+        Type? declaredOutputType,
         PowerShellBoundBlock body,
         PowerShellTypeFact returnType,
         PowerShellSemanticEffect effects,
@@ -403,6 +404,7 @@ internal sealed class PowerShellBoundFunction
         Locals = locals ?? Array.Empty<PowerShellBoundLocal>();
         Scope = scope;
         Help = help;
+        DeclaredOutputType = declaredOutputType;
         Body = body;
         ReturnType = returnType;
         Effects = effects;
@@ -415,6 +417,7 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellBoundLocal[] Locals { get; }
     internal PowerShellLexicalScope Scope { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
+    internal Type? DeclaredOutputType { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
     internal PowerShellSemanticEffect Effects { get; }
@@ -426,7 +429,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters, Locals, Scope, Help, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters, Locals, Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument

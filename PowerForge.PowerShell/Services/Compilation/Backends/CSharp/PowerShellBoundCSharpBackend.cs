@@ -72,7 +72,8 @@ internal sealed class PowerShellBoundCSharpBackend
             function.ReturnType,
             builder.ToString(),
             requiresPowerShellBoundParameters: requiresBoundParameters,
-            help: function.Help?.ToPublicModel());
+            help: function.Help?.ToPublicModel(),
+            declaredOutputType: function.DeclaredOutputType);
     }
 
     private static void EmitStatement(StringBuilder builder, PowerShellLoweredStatement statement, int indent, Func<string, string> getTemporaryIdentifier)

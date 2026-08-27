@@ -529,6 +529,27 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void DeclaredOutputTypeSeedsRecursiveCallGraphFixedPoint()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Countdown { [OutputType([long])] param([long] $Number) if ($Number -le [long] 0) { return $Number }; $Number -= [long] 1; return Get-Countdown -Number $Number }",
+            TestPath("recursive-output-type.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net8.0",
+            PowerShellCompilationCapability.LocalFunctionCalls);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Equal(typeof(long), function.DeclaredOutputType);
+        Assert.Equal(typeof(long), function.ReturnType.ClrType);
+        var method = Assert.Single(result.Emitted.Methods);
+        Assert.Equal(typeof(long), method.DeclaredOutputType);
+        Assert.Contains("return Get_Countdown(Number);", method.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NamedLocalCallsPreserveAuthoredEvaluationOrderAndBoundState()
     {
         var document = PowerShellSourceParser.Parse(
