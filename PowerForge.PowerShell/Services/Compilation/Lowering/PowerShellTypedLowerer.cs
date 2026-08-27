@@ -29,28 +29,19 @@ internal sealed class PowerShellTypedLowerer
             var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
-            foreach (var statement in function.Body.Statements)
+            var predeclared = EnumerateNestedAssignments(function.Body)
+                .Where(localTypes.ContainsKey)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static key => key, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var key in predeclared)
             {
-                switch (statement)
-                {
-                    case PowerShellBoundAssignmentStatement assignment:
-                        statements.Add(new PowerShellLoweredAssignmentStatement(
-                            assignment.Span,
-                            assignment.Target,
-                            symbolTypes[assignment.Target.StableKey],
-                            LowerExpression(assignment.Value, bySymbol),
-                            localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey)));
-                        break;
-                    case PowerShellBoundReturnStatement returned:
-                        statements.Add(new PowerShellLoweredReturnStatement(returned.Span, returned.Expression is null ? null : LowerExpression(returned.Expression, bySymbol)));
-                        break;
-                    case PowerShellBoundExpressionStatement expression:
-                        statements.Add(new PowerShellLoweredReturnStatement(expression.Span, LowerExpression(expression.Expression, bySymbol)));
-                        break;
-                    default:
-                        throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.");
-                }
+                var local = function.Locals.Single(candidate => candidate.Symbol.StableKey == key);
+                statements.Add(new PowerShellLoweredLocalDeclarationStatement(local.Symbol.Declaration, local.Symbol, localTypes[key]));
+                declared.Add(key);
             }
+            foreach (var statement in function.Body.Statements)
+                statements.Add(LowerStatement(statement, bySymbol, symbolTypes, localTypes, declared));
 
             functions.Add(new PowerShellLoweredFunction(
                 function.Symbol,
@@ -71,6 +62,92 @@ internal sealed class PowerShellTypedLowerer
                 .ToArray(),
             targetCapabilities);
     }
+
+    private static IEnumerable<string> EnumerateNestedAssignments(PowerShellBoundBlock block)
+    {
+        foreach (var statement in block.Statements)
+        {
+            if (statement is PowerShellBoundIfStatement conditional)
+            {
+                foreach (var clause in conditional.Clauses)
+                {
+                    foreach (var assignment in EnumerateAssignments(clause.Body)) yield return assignment;
+                }
+                if (conditional.ElseBlock is not null)
+                {
+                    foreach (var assignment in EnumerateAssignments(conditional.ElseBlock)) yield return assignment;
+                }
+            }
+            else if (statement is PowerShellBoundWhileStatement loop)
+            {
+                foreach (var assignment in EnumerateAssignments(loop.Body)) yield return assignment;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateAssignments(PowerShellBoundBlock block)
+    {
+        foreach (var statement in block.Statements)
+        {
+            if (statement is PowerShellBoundAssignmentStatement assignment) yield return assignment.Target.StableKey;
+            if (statement is PowerShellBoundIfStatement conditional)
+            {
+                foreach (var clause in conditional.Clauses)
+                foreach (var nested in EnumerateAssignments(clause.Body))
+                    yield return nested;
+                if (conditional.ElseBlock is not null)
+                foreach (var nested in EnumerateAssignments(conditional.ElseBlock))
+                    yield return nested;
+            }
+            else if (statement is PowerShellBoundWhileStatement loop)
+            {
+                foreach (var nested in EnumerateAssignments(loop.Body)) yield return nested;
+            }
+        }
+    }
+
+    private static PowerShellLoweredStatement LowerStatement(
+        PowerShellBoundStatement statement,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, Type> symbolTypes,
+        IReadOnlyDictionary<string, Type> localTypes,
+        ISet<string> declared)
+        => statement switch
+        {
+            PowerShellBoundAssignmentStatement assignment => new PowerShellLoweredAssignmentStatement(
+                assignment.Span,
+                assignment.Target,
+                symbolTypes[assignment.Target.StableKey],
+                LowerExpression(assignment.Value, functions),
+                localTypes.ContainsKey(assignment.Target.StableKey) && declared.Add(assignment.Target.StableKey)),
+            PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
+                returned.Span,
+                returned.Expression is null ? null : LowerExpression(returned.Expression, functions)),
+            PowerShellBoundExpressionStatement expression => new PowerShellLoweredReturnStatement(
+                expression.Span,
+                LowerExpression(expression.Expression, functions)),
+            PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
+                conditional.Span,
+                conditional.Clauses.Select(clause => new PowerShellLoweredConditionalClause(
+                    LowerExpression(clause.Condition, functions),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared))).ToArray(),
+                conditional.ElseBlock is null ? null : LowerStatements(conditional.ElseBlock, functions, symbolTypes, localTypes, declared)),
+            PowerShellBoundWhileStatement loop => new PowerShellLoweredWhileStatement(
+                loop.Span,
+                LowerExpression(loop.Condition, functions),
+                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared)),
+            PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
+            PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
+            _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
+        };
+
+    private static PowerShellLoweredStatement[] LowerStatements(
+        PowerShellBoundBlock block,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, Type> symbolTypes,
+        IReadOnlyDictionary<string, Type> localTypes,
+        ISet<string> declared)
+        => block.Statements.Select(statement => LowerStatement(statement, functions, symbolTypes, localTypes, declared)).ToArray();
 
     private static PowerShellLoweredExpression LowerExpression(
         PowerShellBoundExpression expression,

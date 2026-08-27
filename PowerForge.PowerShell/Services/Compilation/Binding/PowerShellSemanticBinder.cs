@@ -234,6 +234,44 @@ internal sealed class PowerShellSemanticBinder
                 ? new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, returnStatement.Extent), expression)
                 : null;
         }
+        if (statement is IfStatementAst ifStatement)
+        {
+            var clauses = new List<PowerShellBoundConditionalClause>();
+            foreach (var clause in ifStatement.Clauses)
+            {
+                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics);
+                if (condition is null) return null;
+                if (condition.Type.ClrType != typeof(bool))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
+                    return null;
+                }
+                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics);
+                if (body is null) return null;
+                clauses.Add(new PowerShellBoundConditionalClause(condition, body));
+            }
+            var elseBlock = ifStatement.ElseClause is null
+                ? null
+                : BindBlock(document, ifStatement.ElseClause, symbols, functions, diagnostics);
+            if (ifStatement.ElseClause is not null && elseBlock is null) return null;
+            return new PowerShellBoundIfStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), clauses.ToArray(), elseBlock);
+        }
+        if (statement is WhileStatementAst whileStatement)
+        {
+            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics);
+            if (condition is null) return null;
+            if (condition.Type.ClrType != typeof(bool))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
+                return null;
+            }
+            var body = BindBlock(document, whileStatement.Body, symbols, functions, diagnostics);
+            return body is null ? null : new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), condition, body);
+        }
+        if (statement is BreakStatementAst { Label: null } breakStatement && HasAncestor<WhileStatementAst>(breakStatement))
+            return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
+        if (statement is ContinueStatementAst { Label: null } continueStatement && HasAncestor<WhileStatementAst>(continueStatement))
+            return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is PipelineAst pipeline && (isTerminal || IsLocalFunctionPipeline(pipeline, functions)))
         {
             var expression = BindExpression(document, pipeline, symbols, functions, diagnostics);
@@ -242,6 +280,39 @@ internal sealed class PowerShellSemanticBinder
                 : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression);
         }
         return null;
+    }
+
+    private static PowerShellBoundBlock? BindBlock(
+        ParsedSourceDocument document,
+        StatementBlockAst syntax,
+        IReadOnlyDictionary<string, SymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var statements = new List<PowerShellBoundStatement>();
+        foreach (var statement in syntax.Statements)
+        {
+            var diagnosticCount = diagnostics.Count;
+            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal: false);
+            if (bound is null)
+            {
+                if (diagnostics.Count == diagnosticCount)
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2001", $"Statement '{statement.GetType().Name}' is not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
+                return null;
+            }
+            statements.Add(bound);
+        }
+        return new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, syntax.Extent), statements.ToArray());
+    }
+
+    private static bool HasAncestor<TAst>(Ast syntax) where TAst : Ast
+    {
+        for (var parent = syntax.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is TAst) return true;
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst) return false;
+        }
+        return false;
     }
 
     private static PowerShellBoundExpression? BindExpression(

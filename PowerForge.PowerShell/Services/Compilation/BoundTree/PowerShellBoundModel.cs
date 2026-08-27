@@ -161,8 +161,12 @@ internal abstract class PowerShellBoundNode
 
 internal abstract class PowerShellBoundStatement : PowerShellBoundNode
 {
-    protected PowerShellBoundStatement(SourceSpan span, PowerShellSemanticEffect effects)
-        : base(span, new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Statements do not produce a CLR value."), PowerShellValueState.Known, PowerShellOutputCardinality.None, effects, PowerShellRequiredCapability.None, PowerShellExecutionDisposition.Typed)
+    protected PowerShellBoundStatement(
+        SourceSpan span,
+        PowerShellSemanticEffect effects,
+        PowerShellRequiredCapability capabilities = PowerShellRequiredCapability.None,
+        PowerShellExecutionDisposition? disposition = null)
+        : base(span, new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "Statements do not produce a CLR value."), PowerShellValueState.Known, PowerShellOutputCardinality.None, effects, capabilities, disposition ?? PowerShellExecutionDisposition.Typed)
     {
     }
 }
@@ -357,6 +361,8 @@ internal sealed class PowerShellBoundBlock
 
     internal SourceSpan Span { get; }
     internal PowerShellBoundStatement[] Statements { get; }
+    internal PowerShellSemanticEffect Effects => Statements.Aggregate(PowerShellSemanticEffect.None, static (value, statement) => value | statement.Effects);
+    internal PowerShellRequiredCapability Capabilities => Statements.Aggregate(PowerShellRequiredCapability.None, static (value, statement) => value | statement.Capabilities);
 }
 
 internal sealed class PowerShellBoundFunction

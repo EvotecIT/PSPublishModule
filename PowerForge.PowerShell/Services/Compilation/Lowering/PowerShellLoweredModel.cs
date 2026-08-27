@@ -71,6 +71,19 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
     internal bool Declare { get; }
 }
 
+internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredLocalDeclarationStatement(SourceSpan span, PowerShellSymbolId symbol, Type clrType)
+        : base(span)
+    {
+        Symbol = symbol;
+        ClrType = clrType;
+    }
+
+    internal PowerShellSymbolId Symbol { get; }
+    internal Type ClrType { get; }
+}
+
 internal sealed class PowerShellLoweredParameter
 {
     internal PowerShellLoweredParameter(PowerShellSymbolId symbol, Type clrType, PowerShellCompilationParameter contract)

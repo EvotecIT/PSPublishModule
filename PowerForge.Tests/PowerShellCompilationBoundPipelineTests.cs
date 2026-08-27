@@ -135,6 +135,73 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ConditionalAndLoopControlFlowUseNestedBoundBlocks()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Sign { param([double] $Value, [bool] $Repeat) if ($Value -gt 0.0) { return 1.0 } else { while ($Repeat) { break }; return -1.0 } }",
+            TestPath("control-flow.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Equal(typeof(double), function.ReturnType.ClrType);
+        var conditional = Assert.IsType<PowerShellBoundIfStatement>(Assert.Single(function.Body.Statements));
+        Assert.IsType<PowerShellBoundBinaryExpression>(Assert.Single(conditional.Clauses).Condition);
+        Assert.IsType<PowerShellBoundWhileStatement>(Assert.Single(conditional.ElseBlock!.Statements, static statement => statement is PowerShellBoundWhileStatement));
+        var lowered = Assert.IsType<PowerShellLoweredIfStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements));
+        Assert.IsType<PowerShellLoweredWhileStatement>(Assert.Single(lowered.ElseStatements!, static statement => statement is PowerShellLoweredWhileStatement));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("if ((Value > 0", source, StringComparison.Ordinal);
+        Assert.Contains("while (Repeat)", source, StringComparison.Ordinal);
+        Assert.Contains("break;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BranchAssignmentsArePredeclaredAfterDefiniteAssignmentAnalysis()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Choice { param([bool] $Condition) if ($Condition) { [string] $result = 'yes' } else { [string] $result = 'no' }; return $result }",
+            TestPath("branch-assignment.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var statements = Assert.Single(result.Lowered.Functions).Statements;
+        Assert.IsType<PowerShellLoweredLocalDeclarationStatement>(statements[0]);
+        Assert.IsType<PowerShellLoweredIfStatement>(statements[1]);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("string result = default!;", source, StringComparison.Ordinal);
+        Assert.Contains("result = \"yes\";", source, StringComparison.Ordinal);
+        Assert.Contains("result = \"no\";", source, StringComparison.Ordinal);
+        Assert.Contains("return result;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PublicTranspilerUsesBoundConditionalPlan()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "condition.ps1");
+        try
+        {
+            File.WriteAllText(path, "function Get-Sign { param([double] $Value) if ($Value -gt 0.0) { return 1.0 }; return -1.0 }");
+
+            var result = new PowerShellTypedCompilationTranspiler().Transpile(path);
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+            var semantic = new PowerShellSemanticCompilationPipeline().Compile(new[] { PowerShellSourceParser.ParseFile(path) });
+            Assert.Contains(Assert.Single(semantic.Emitted.Methods).Source, result.SourceCode, StringComparison.Ordinal);
+            Assert.Contains("if ((Value > 0", result.SourceCode, StringComparison.Ordinal);
+            Assert.Contains("return -1", result.SourceCode, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void FileAndDeclarationOrderDoNotChangeSemanticOrEmissionOrder()
     {
         var first = PowerShellSourceParser.Parse("function Get-Zulu { return 2 }", TestPath("z.ps1"));

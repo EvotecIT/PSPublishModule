@@ -63,31 +63,7 @@ internal sealed class PowerShellBoundCSharpBackend
                 builder.Append("            ").AppendLine(line);
         }
 
-        foreach (var statement in function.Statements)
-        {
-            switch (statement)
-            {
-                case PowerShellLoweredAssignmentStatement assignment:
-                    builder.Append("            ");
-                    if (assignment.Declare)
-                    {
-                        builder.Append(PowerShellCSharpMethodEmitter.GetTypeName(assignment.ClrType)).Append(' ');
-                    }
-                    builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(assignment.Target.Name))
-                        .Append(" = ")
-                        .Append(EmitExpression(assignment.Value))
-                        .AppendLine(";");
-                    break;
-                case PowerShellLoweredReturnStatement { Expression: null }:
-                    builder.AppendLine("            return;");
-                    break;
-                case PowerShellLoweredReturnStatement returned:
-                    builder.Append("            return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
-                    break;
-                default:
-                    throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
-            }
-        }
+        foreach (var statement in function.Statements) EmitStatement(builder, statement, 3);
 
         builder.AppendLine("        }").Append("    }");
         return new PowerShellCSharpMethodEmission(
@@ -96,6 +72,62 @@ internal sealed class PowerShellBoundCSharpBackend
             builder.ToString(),
             requiresPowerShellBoundParameters: requiresBoundParameters,
             help: function.Help?.ToPublicModel());
+    }
+
+    private static void EmitStatement(StringBuilder builder, PowerShellLoweredStatement statement, int indent)
+    {
+        var prefix = new string(' ', indent * 4);
+        switch (statement)
+        {
+            case PowerShellLoweredLocalDeclarationStatement declaration:
+                builder.Append(prefix).Append(PowerShellCSharpMethodEmitter.GetTypeName(declaration.ClrType)).Append(' ')
+                    .Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(declaration.Symbol.Name)).AppendLine(" = default!;");
+                return;
+            case PowerShellLoweredAssignmentStatement assignment:
+                builder.Append(prefix);
+                if (assignment.Declare) builder.Append(PowerShellCSharpMethodEmitter.GetTypeName(assignment.ClrType)).Append(' ');
+                builder.Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(assignment.Target.Name)).Append(" = ").Append(EmitExpression(assignment.Value)).AppendLine(";");
+                return;
+            case PowerShellLoweredReturnStatement { Expression: null }:
+                builder.Append(prefix).AppendLine("return;");
+                return;
+            case PowerShellLoweredReturnStatement returned:
+                builder.Append(prefix).Append("return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
+                return;
+            case PowerShellLoweredIfStatement conditional:
+                for (var index = 0; index < conditional.Clauses.Length; index++)
+                {
+                    var clause = conditional.Clauses[index];
+                    builder.Append(prefix).Append(index == 0 ? "if (" : "else if (").Append(EmitExpression(clause.Condition)).AppendLine(")");
+                    EmitBlock(builder, clause.Statements, indent);
+                }
+                if (conditional.ElseStatements is not null)
+                {
+                    builder.Append(prefix).AppendLine("else");
+                    EmitBlock(builder, conditional.ElseStatements, indent);
+                }
+                return;
+            case PowerShellLoweredWhileStatement loop:
+                builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
+                EmitBlock(builder, loop.Statements, indent);
+                return;
+            case PowerShellLoweredBreakStatement:
+                builder.Append(prefix).AppendLine("break;");
+                return;
+            case PowerShellLoweredContinueStatement:
+                builder.Append(prefix).AppendLine("continue;");
+                return;
+            default:
+                throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
+        }
+    }
+
+    private static void EmitBlock(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements, int indent)
+    {
+        var prefix = new string(' ', indent * 4);
+        builder.Append(prefix).AppendLine("{");
+        foreach (var statement in statements) EmitStatement(builder, statement, indent + 1);
+        builder.Append(prefix).AppendLine("}");
     }
 
     private static string EmitExpression(PowerShellLoweredExpression expression)

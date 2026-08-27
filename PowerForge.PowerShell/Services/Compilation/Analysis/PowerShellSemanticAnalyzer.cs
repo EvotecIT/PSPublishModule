@@ -50,27 +50,71 @@ internal sealed class PowerShellSemanticAnalyzer
             {
                 var assigned = function.Parameters.Select(static parameter => parameter.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
                 var locals = function.Locals.Select(static local => local.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
-                foreach (var statement in function.Body.Statements)
-                {
-                    var expression = GetExpression(statement);
-                    if (expression is not null)
-                    {
-                        foreach (var read in EnumerateVariableReads(expression).Where(read => locals.Contains(read.Symbol.StableKey)))
-                        {
-                            if (!assigned.Contains(read.Symbol.StableKey))
-                            {
-                                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                                    "PSD1001",
-                                    $"Local variable '${read.Symbol.Name}' is read before its first definite assignment.",
-                                    read.Span));
-                            }
-                        }
-                    }
-                    if (statement is PowerShellBoundAssignmentStatement assignment)
-                        assigned.Add(assignment.Target.StableKey);
-                }
+                AnalyzeDefiniteAssignment(function.Body, assigned, locals, diagnostics);
             }
             return program.WithDiagnostics(OrderDiagnostics(diagnostics));
+        }
+
+        private static void AnalyzeDefiniteAssignment(
+            PowerShellBoundBlock block,
+            ISet<string> assigned,
+            ISet<string> locals,
+            ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        {
+            foreach (var statement in block.Statements)
+            {
+                if (statement is PowerShellBoundIfStatement conditional)
+                {
+                    foreach (var clause in conditional.Clauses) ReportReads(clause.Condition, assigned, locals, diagnostics);
+                    var branchStates = conditional.Clauses.Select(clause =>
+                    {
+                        var state = assigned.ToHashSet(StringComparer.Ordinal);
+                        AnalyzeDefiniteAssignment(clause.Body, state, locals, diagnostics);
+                        return state;
+                    }).ToList();
+                    if (conditional.ElseBlock is null)
+                        branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
+                    else
+                    {
+                        var elseState = assigned.ToHashSet(StringComparer.Ordinal);
+                        AnalyzeDefiniteAssignment(conditional.ElseBlock, elseState, locals, diagnostics);
+                        branchStates.Add(elseState);
+                    }
+                    if (branchStates.Count > 0)
+                    {
+                        var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
+                        assigned.Clear();
+                        assigned.UnionWith(definitelyAssigned);
+                    }
+                    continue;
+                }
+                if (statement is PowerShellBoundWhileStatement loop)
+                {
+                    ReportReads(loop.Condition, assigned, locals, diagnostics);
+                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
+                    AnalyzeDefiniteAssignment(loop.Body, loopState, locals, diagnostics);
+                    continue;
+                }
+                var expression = GetExpression(statement);
+                if (expression is not null) ReportReads(expression, assigned, locals, diagnostics);
+                if (statement is PowerShellBoundAssignmentStatement assignment) assigned.Add(assignment.Target.StableKey);
+            }
+        }
+
+        private static void ReportReads(
+            PowerShellBoundExpression expression,
+            ISet<string> assigned,
+            ISet<string> locals,
+            ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        {
+            foreach (var read in EnumerateVariableReads(expression).Where(read => locals.Contains(read.Symbol.StableKey)))
+            {
+                if (assigned.Contains(read.Symbol.StableKey)) continue;
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSD1001",
+                    $"Local variable '${read.Symbol.Name}' is read before its first definite assignment.",
+                    read.Span));
+            }
         }
     }
 
@@ -101,10 +145,8 @@ internal sealed class PowerShellSemanticAnalyzer
 
         public PowerShellBoundProgram Run(PowerShellBoundProgram program)
         {
-            var edges = program.Functions.SelectMany(function => function.Body.Statements
-                    .Select(GetExpression)
-                    .Where(static expression => expression is not null)
-                    .Cast<PowerShellBoundExpression>()
+            var edges = program.Functions.SelectMany(function => EnumerateStatements(function.Body)
+                    .SelectMany(EnumerateDirectExpressions)
                     .SelectMany(EnumerateInvocations)
                     .Select(invocation => new PowerShellCallGraphEdge(function.Symbol, invocation.Target, invocation.Span)))
                 .OrderBy(static edge => edge.StableKey, StringComparer.Ordinal)
@@ -143,7 +185,7 @@ internal sealed class PowerShellSemanticAnalyzer
             PowerShellBoundFunction function,
             IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
         {
-            var expressions = function.Body.Statements.Select(GetSuccessOutputExpression).Where(static expression => expression is not null).Cast<PowerShellBoundExpression>().ToArray();
+            var expressions = EnumerateStatements(function.Body).Select(GetSuccessOutputExpression).Where(static expression => expression is not null).Cast<PowerShellBoundExpression>().ToArray();
             if (expressions.Length == 0)
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "The function has no success output."));
             var facts = expressions.Select(expression => ResolveType(expression, functions)).ToArray();
@@ -243,9 +285,7 @@ internal sealed class PowerShellSemanticAnalyzer
     private static IEnumerable<PowerShellBoundFunction> GetCallees(
         PowerShellBoundFunction function,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
-        => function.Body.Statements.Select(GetExpression)
-            .Where(static expression => expression is not null)
-            .Cast<PowerShellBoundExpression>()
+        => EnumerateStatements(function.Body).SelectMany(EnumerateDirectExpressions)
             .SelectMany(EnumerateInvocations)
             .Select(invocation => functions.TryGetValue(invocation.Target.StableKey, out var callee) ? callee : null)
             .Where(static callee => callee is not null)
@@ -277,6 +317,41 @@ internal sealed class PowerShellSemanticAnalyzer
             _ => null
         };
 
+    private static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
+    {
+        foreach (var statement in block.Statements)
+        {
+            yield return statement;
+            if (statement is PowerShellBoundIfStatement conditional)
+            {
+                foreach (var clause in conditional.Clauses)
+                foreach (var nested in EnumerateStatements(clause.Body))
+                    yield return nested;
+                if (conditional.ElseBlock is not null)
+                foreach (var nested in EnumerateStatements(conditional.ElseBlock))
+                    yield return nested;
+            }
+            else if (statement is PowerShellBoundWhileStatement loop)
+            {
+                foreach (var nested in EnumerateStatements(loop.Body)) yield return nested;
+            }
+        }
+    }
+
+    private static IEnumerable<PowerShellBoundExpression> EnumerateDirectExpressions(PowerShellBoundStatement statement)
+    {
+        var expression = GetExpression(statement);
+        if (expression is not null) yield return expression;
+        if (statement is PowerShellBoundIfStatement conditional)
+        {
+            foreach (var clause in conditional.Clauses) yield return clause.Condition;
+        }
+        else if (statement is PowerShellBoundWhileStatement loop)
+        {
+            yield return loop.Condition;
+        }
+    }
+
     private static IEnumerable<PowerShellBoundVariableExpression> EnumerateVariableReads(PowerShellBoundExpression expression)
     {
         if (expression is PowerShellBoundVariableExpression variable) yield return variable;
@@ -289,6 +364,15 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var argument in invocation.Arguments)
             foreach (var read in EnumerateVariableReads(argument))
                 yield return read;
+        }
+        if (expression is PowerShellBoundBinaryExpression binary)
+        {
+            foreach (var read in EnumerateVariableReads(binary.Left)) yield return read;
+            foreach (var read in EnumerateVariableReads(binary.Right)) yield return read;
+        }
+        if (expression is PowerShellBoundUnaryExpression unary)
+        {
+            foreach (var read in EnumerateVariableReads(unary.Operand)) yield return read;
         }
     }
 
@@ -304,6 +388,15 @@ internal sealed class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             foreach (var nested in EnumerateInvocations(conversion.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundBinaryExpression binary)
+        {
+            foreach (var nested in EnumerateInvocations(binary.Left)) yield return nested;
+            foreach (var nested in EnumerateInvocations(binary.Right)) yield return nested;
+        }
+        if (expression is PowerShellBoundUnaryExpression unary)
+        {
+            foreach (var nested in EnumerateInvocations(unary.Operand)) yield return nested;
         }
     }
 
