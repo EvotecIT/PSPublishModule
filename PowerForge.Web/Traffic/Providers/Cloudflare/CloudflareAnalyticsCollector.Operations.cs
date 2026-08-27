@@ -64,14 +64,6 @@ public sealed partial class CloudflareAnalyticsCollector
         result.Hours = CombineBuckets(http.Buckets, firewall.Buckets);
         result.Success = result.Http.Success;
 
-        if (string.Equals(result.Http.ErrorCode, "retention-boundary", StringComparison.Ordinal) &&
-            string.Equals(result.Firewall.ErrorCode, "retention-boundary", StringComparison.Ordinal))
-        {
-            if (result.Rum.Requested)
-                result.Rum = FailedRum("not-attempted", "RUM inspection was not attempted because the requested operational range is outside provider retention.");
-            return CompleteOperationalResult(result);
-        }
-
         if (!string.IsNullOrWhiteSpace(options.AccountId))
         {
             if (string.IsNullOrWhiteSpace(probe.ZoneAccountId))
@@ -266,7 +258,8 @@ public sealed partial class CloudflareAnalyticsCollector
                 row.Sum.EdgeResponseBytes.Value > long.MaxValue || row.Dimensions?.HourUtc is null ||
                 row.Dimensions.EdgeResponseStatus is null || string.IsNullOrWhiteSpace(row.Dimensions.CacheStatus) ||
                 !IsValidSampleInterval(row.Average.SampleInterval.Value) ||
-                !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count))
+                !TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var count) ||
+                !TryScaleSampledCount(row.Sum.EdgeResponseBytes.Value, row.Average.SampleInterval.Value, out var edgeResponseBytes))
             { error = "Cloudflare returned an invalid HTTP operational row."; return false; }
             if (!TryValidateOperationalHour(row.Dimensions.HourUtc.Value, fromUtc, throughUtc, out var hour))
             { error = "Cloudflare returned an HTTP operational row outside the requested hourly window."; return false; }
@@ -277,7 +270,7 @@ public sealed partial class CloudflareAnalyticsCollector
             try
             {
                 bucket.Requests = checked(bucket.Requests + count);
-                bucket.EdgeResponseBytes = checked(bucket.EdgeResponseBytes + (long)row.Sum.EdgeResponseBytes.Value);
+                bucket.EdgeResponseBytes = checked(bucket.EdgeResponseBytes + edgeResponseBytes);
                 bucket.MaximumSampleInterval = Math.Max(bucket.MaximumSampleInterval, row.Average.SampleInterval.Value);
                 if (IsCached(row.Dimensions.CacheStatus)) bucket.CachedRequests = checked(bucket.CachedRequests + count);
                 if (row.Dimensions.EdgeResponseStatus is >= 400 and <= 499) bucket.ClientErrors = checked(bucket.ClientErrors + count);

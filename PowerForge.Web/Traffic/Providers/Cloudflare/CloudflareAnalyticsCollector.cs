@@ -224,7 +224,9 @@ public sealed partial class CloudflareAnalyticsCollector
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
             }
-            if (!TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var requests))
+            if (!TryScaleSampledCount(row.Count.Value, row.Average.SampleInterval.Value, out var requests) ||
+                !TryScaleSampledCount(row.Sum.Visits.Value, row.Average.SampleInterval.Value, out var visits) ||
+                !TryScaleSampledCount(row.Sum.EdgeResponseBytes.Value, row.Average.SampleInterval.Value, out var edgeResponseBytes))
             {
                 observations = Array.Empty<WebTrafficObservation>();
                 return false;
@@ -247,8 +249,8 @@ public sealed partial class CloudflareAnalyticsCollector
                 Host = rowHost,
                 Path = dimensions.Path,
                 Requests = requests,
-                Visits = (long)row.Sum.Visits.Value,
-                EdgeResponseBytes = (long)row.Sum.EdgeResponseBytes.Value,
+                Visits = visits,
+                EdgeResponseBytes = edgeResponseBytes,
                 SampleInterval = row.Average.SampleInterval.Value,
                 EvidenceReference = options.EvidenceReference
             });

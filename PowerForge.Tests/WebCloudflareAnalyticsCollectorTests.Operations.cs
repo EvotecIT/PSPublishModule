@@ -46,6 +46,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Equal(25, first.Requests);
         Assert.Equal(22, first.CachedRequests);
         Assert.Equal(3, first.ClientErrors);
+        Assert.Equal(2_500, first.EdgeResponseBytes);
         Assert.Equal(12, first.FirewallEvents);
         Assert.Equal(11, first.FirewallMitigated);
         Assert.Equal(2, first.MaximumSampleInterval);
@@ -162,6 +163,7 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
             0 => ZoneResponse("officeimo.com"),
             1 => CapabilityResponse(notOlderThan: 3600),
             2 => FirewallCapabilityResponse(notOlderThan: 3600),
+            3 => RumSitesResponse(enabled: true, autoInstall: true),
             _ => throw new InvalidOperationException("Operational queries must not run outside provider retention.")
         });
         using var client = new HttpClient(handler);
@@ -171,8 +173,10 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.False(result.Success);
         Assert.Equal("retention-boundary", result.Http.ErrorCode);
         Assert.Equal("retention-boundary", result.Firewall.ErrorCode);
-        Assert.Equal("not-attempted", result.Rum.ErrorCode);
-        Assert.Equal(3, result.RequestCount);
+        Assert.True(result.Rum.Configured);
+        Assert.True(result.Rum.Enabled);
+        Assert.True(result.Rum.AutoInstall);
+        Assert.Equal(4, result.RequestCount);
     }
 
     [Fact]

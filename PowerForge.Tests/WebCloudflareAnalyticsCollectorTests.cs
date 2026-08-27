@@ -86,6 +86,9 @@ public sealed partial class WebCloudflareAnalyticsCollectorTests
         Assert.Equal([new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 2)], normalized.CollectionCoverage.CompletedDates);
         var sampled = Assert.Single(normalized.Observations, value => value.Date == new DateOnly(2026, 8, 1));
         Assert.Equal("officeimo.com", sampled.Host);
+        Assert.Equal(200, sampled.Requests);
+        Assert.Equal(50, sampled.Visits);
+        Assert.Equal(10_000, sampled.EdgeResponseBytes);
         Assert.Equal(2d, sampled.SampleInterval);
         Assert.All(handler.Requests.Skip(2), request =>
         {
