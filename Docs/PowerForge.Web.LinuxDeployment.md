@@ -102,6 +102,15 @@ Validate the installed file with `visudo -cf`. Sites upgrading from the earlier
 one-shot action must install these rules before repinning the action; retaining only
 the old promotion rule will reject the deferred verification protocol.
 
+The generated Apache virtual hosts keep override classes disabled with
+`AllowOverride None` and use `AllowOverrideList` to permit only the directives emitted
+by PowerForge: custom error documents, rewrite rules, response headers, and Markdown
+content types. This avoids granting unrelated `FileInfo` capabilities such as handler
+selection. Generated redirect artifacts also bypass ACME HTTP-01 challenges and the
+PowerForge deployment marker before evaluating site redirects. Existing hosts created
+with only `AllowOverride None` must add the generated `AllowOverrideList` line and
+reload Apache before declared aliases can work in production.
+
 The promoter rejects path traversal, links, special files, checksum mismatches,
 unconfigured site ids, mutable site configuration, and workflow staging files owned
 by another account. It atomically promotes a timestamped release, purges Cloudflare

@@ -371,6 +371,13 @@ public partial class WebSiteAuditOptimizeBuildTests
                         From = "/legacy?id=2",
                         To = "/newer/",
                         Status = 302
+                    },
+                    new RedirectSpec
+                    {
+                        From = "/*",
+                        To = "/archive/{path}",
+                        Status = 301,
+                        MatchType = RedirectMatchType.Wildcard
                     }
                 },
                 Collections = new[]
@@ -393,6 +400,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             var apache = File.ReadAllText(Path.Combine(result.OutputPath, ".htaccess"));
             Assert.Contains("docs/api", apache, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/api/$1", apache, StringComparison.OrdinalIgnoreCase);
+            AssertOperationalPathsBypassRedirects(apache);
 
             var nginx = File.ReadAllText(Path.Combine(result.OutputPath, "nginx.redirects.conf"));
             Assert.Contains("location ~ ^/docs/api", nginx, StringComparison.OrdinalIgnoreCase);
@@ -414,6 +422,21 @@ public partial class WebSiteAuditOptimizeBuildTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    private static void AssertOperationalPathsBypassRedirects(string apache)
+    {
+        const string bypass = "RewriteCond %{REQUEST_URI} !^/(?:\\.well-known/acme-challenge(?:/|$)|_powerforge/deployment\\.json$) [NC]";
+        var bypassIndex = apache.IndexOf(bypass, StringComparison.Ordinal);
+        var generatedRedirectIndex = apache.IndexOf("[R=", StringComparison.Ordinal);
+        var bypassCount = apache.Split(bypass, StringSplitOptions.None).Length - 1;
+        var generatedRedirectCount = apache.Split('\n').Count(static line =>
+            line.StartsWith("RewriteRule ", StringComparison.Ordinal) && line.Contains("[R=", StringComparison.Ordinal));
+
+        Assert.True(bypassIndex >= 0, "The Apache artifact must exempt operational endpoints.");
+        Assert.True(generatedRedirectIndex > bypassIndex, "Operational endpoint bypasses must precede every generated redirect, including catch-all rules.");
+        Assert.Equal(generatedRedirectCount, bypassCount);
+        Assert.DoesNotContain("RewriteRule ^ - [END]", apache, StringComparison.Ordinal);
     }
 
     [Fact]

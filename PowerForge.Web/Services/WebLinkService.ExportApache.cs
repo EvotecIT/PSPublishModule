@@ -110,6 +110,7 @@ public static partial class WebLinkService
 
             AppendHostCondition(lines, rule.SourceHost);
             AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
+            WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
             lines.Add($"RewriteRule {gonePattern} - [G,L]");
             lines.Add(string.Empty);
             return true;
@@ -124,6 +125,7 @@ public static partial class WebLinkService
 
         AppendHostCondition(lines, rule.SourceHost);
         AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
+        WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
 
         var hasSourceQuery = HasSourceQuerySelector(rule);
         var flags = new List<string>

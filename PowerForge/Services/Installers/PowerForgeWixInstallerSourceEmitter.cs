@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -252,7 +253,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
             new XElement(
                 WixNamespace + "Property",
                 new XAttribute("Id", "WixShellExecTarget"),
-                new XAttribute("Value", exitLaunch.Target)),
+                new XAttribute("Value", "about:blank")),
             new XElement(
                 WixNamespace + "CustomAction",
                 new XAttribute("Id", "PowerForgeLaunchOnExit"),
@@ -315,15 +316,54 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return ui;
     }
 
-    private static XElement EmitExitLaunchPublish(PowerForgeInstallerExitLaunch exitLaunch)
+    private static IEnumerable<XElement> EmitExitLaunchPublish(PowerForgeInstallerExitLaunch exitLaunch)
     {
-        return new XElement(
-            WixNamespace + "Publish",
-            new XAttribute("Dialog", "ExitDialog"),
-            new XAttribute("Control", "Finish"),
-            new XAttribute("Event", "DoAction"),
-            new XAttribute("Value", "PowerForgeLaunchOnExit"),
-            new XAttribute("Condition", exitLaunch.Condition));
+        return new[]
+        {
+            new XElement(
+                WixNamespace + "Publish",
+                new XAttribute("Dialog", "ExitDialog"),
+                new XAttribute("Control", "Finish"),
+                new XAttribute("Property", "WixShellExecTarget"),
+                new XAttribute("Value", FormatShellTarget(exitLaunch.Target, exitLaunch.EscapeLiteralBrackets)),
+                new XAttribute("Order", "1"),
+                new XAttribute("Condition", exitLaunch.Condition)),
+            new XElement(
+                WixNamespace + "Publish",
+                new XAttribute("Dialog", "ExitDialog"),
+                new XAttribute("Control", "Finish"),
+                new XAttribute("Event", "DoAction"),
+                new XAttribute("Value", "PowerForgeLaunchOnExit"),
+                new XAttribute("Order", "2"),
+                new XAttribute("Condition", exitLaunch.Condition))
+        };
+    }
+
+    private static string FormatShellTarget(string target, bool escapeLiteralBrackets)
+    {
+        if (!escapeLiteralBrackets)
+        {
+            return target;
+        }
+
+        var formatted = new StringBuilder(target.Length);
+        for (var index = 0; index < target.Length; index++)
+        {
+            if (target[index] == '[')
+            {
+                formatted.Append("[\\[]");
+            }
+            else if (target[index] == ']')
+            {
+                formatted.Append("[\\]]");
+            }
+            else
+            {
+                formatted.Append(target[index]);
+            }
+        }
+
+        return formatted.ToString();
     }
 
     private static string BuildRequiredInputDialogId(int index)
@@ -552,7 +592,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
                 new XElement(
                     WixNamespace + "Publish",
                     new XAttribute("Property", "WixShellExecTarget"),
-                    new XAttribute("Value", action.Target),
+                    new XAttribute("Value", FormatShellTarget(action.Target, action.EscapeLiteralBrackets)),
                     new XAttribute("Order", "1"),
                     new XAttribute("Condition", action.Condition)),
                 new XElement(
@@ -578,7 +618,7 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         return new XElement(
             WixNamespace + "Publish",
             new XAttribute("Property", "WixShellExecTarget"),
-            new XAttribute("Value", exitLaunch.Target),
+            new XAttribute("Value", FormatShellTarget(exitLaunch.Target, exitLaunch.EscapeLiteralBrackets)),
             new XAttribute("Order", "3"),
             new XAttribute("Condition", string.IsNullOrWhiteSpace(condition) ? "1" : condition));
     }

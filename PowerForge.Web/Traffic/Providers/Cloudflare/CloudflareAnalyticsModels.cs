@@ -39,6 +39,8 @@ public sealed class CloudflareAnalyticsCapabilityProbeResult
     public bool DatasetEnabled { get; set; }
     /// <summary>Canonical zone name verified against the owning fleet site.</summary>
     public string? ZoneName { get; set; }
+    /// <summary>Owning account identifier returned by the zone lookup, when available.</summary>
+    public string? ZoneAccountId { get; set; }
     /// <summary>Number of Cloudflare HTTP requests attempted by the probe.</summary>
     public int RequestCount { get; set; }
     /// <summary>Effective maximum rows requested by the collector.</summary>
@@ -112,6 +114,15 @@ internal sealed class CloudflareZoneDetails
 
     [JsonPropertyName("name")]
     public string? Name { get; set; }
+
+    [JsonPropertyName("account")]
+    public CloudflareZoneAccount? Account { get; set; }
+}
+
+internal sealed class CloudflareZoneAccount
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
 }
 
 internal sealed class CloudflareCapabilityData
@@ -136,6 +147,9 @@ internal sealed class CloudflareAnalyticsSettings
 {
     [JsonPropertyName("httpRequestsAdaptiveGroups")]
     public CloudflareDatasetSettings? HttpRequestsAdaptiveGroups { get; set; }
+
+    [JsonPropertyName("firewallEventsAdaptiveGroups")]
+    public CloudflareDatasetSettings? FirewallEventsAdaptiveGroups { get; set; }
 }
 
 internal sealed class CloudflareDatasetSettings

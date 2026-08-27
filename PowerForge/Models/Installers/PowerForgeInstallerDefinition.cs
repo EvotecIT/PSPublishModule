@@ -142,6 +142,11 @@ public sealed class PowerForgeInstallerExitLaunch
     public string Target { get; set; } = string.Empty;
 
     /// <summary>
+    /// Whether square brackets in <see cref="Target"/> are literal URL characters rather than MSI property references.
+    /// </summary>
+    public bool EscapeLiteralBrackets { get; set; }
+
+    /// <summary>
     /// WiX condition controlling the launch action.
     /// </summary>
     public string Condition { get; set; } = "WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed";
@@ -461,6 +466,11 @@ public sealed class PowerForgeInstallerDialogAction
     /// Shell target to open, for example an HTTP URL, folder, or executable path.
     /// </summary>
     public string Target { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether square brackets in <see cref="Target"/> are literal URL characters rather than MSI property references.
+    /// </summary>
+    public bool EscapeLiteralBrackets { get; set; }
 
     /// <summary>
     /// MSI condition controlling whether the action runs.
