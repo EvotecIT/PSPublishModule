@@ -404,6 +404,12 @@ internal static class PowerShellCommandIslandPolicy
     }
 
     private static bool IsStreamCommand(CommandAst command, PowerShellCommandSemanticRegistry? registry = null)
-        => TryGetStreamCommand(command, out _, out _, registry);
+    {
+        if (TryGetStreamCommand(command, out _, out _, registry))
+            return true;
+        var contract = (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName()).Contract;
+        return contract?.Family == PowerShellCompilationCommandFamily.Stream &&
+               !contract.Stream.Equals("Success", StringComparison.Ordinal);
+    }
 
 }

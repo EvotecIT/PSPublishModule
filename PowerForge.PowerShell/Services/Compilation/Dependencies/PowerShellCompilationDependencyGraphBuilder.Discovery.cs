@@ -60,11 +60,12 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 targetFramework,
                 runtimeIdentifier);
             var identity = _nodes[nodeId].Identity;
+            var maximumVersion = GetOptionalModuleSpecificationText(module, "MaximumVersion");
             identity.Name = module.Name;
-            identity.Version = module.RequiredVersion?.ToString() ?? module.Version?.ToString() ?? module.MaximumVersion ?? string.Empty;
+            identity.Version = module.RequiredVersion?.ToString() ?? module.Version?.ToString() ?? maximumVersion;
             identity.MinimumVersion = module.Version?.ToString() ?? string.Empty;
             identity.RequiredVersion = module.RequiredVersion?.ToString() ?? string.Empty;
-            identity.MaximumVersion = module.MaximumVersion ?? string.Empty;
+            identity.MaximumVersion = maximumVersion;
             identity.Guid = module.Guid?.ToString("D") ?? string.Empty;
             identity.Provenance = "ScriptRequirementsModuleSpecification";
             AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiresModule, module.ToString());
@@ -110,6 +111,11 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.NativeLoad, match.Value);
         }
     }
+
+    private static string GetOptionalModuleSpecificationText(
+        Microsoft.PowerShell.Commands.ModuleSpecification specification,
+        string propertyName)
+        => specification.GetType().GetProperty(propertyName)?.GetValue(specification)?.ToString() ?? string.Empty;
 
     private void DiscoverCommandEdge(
         CommandAst command,
