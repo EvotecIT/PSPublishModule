@@ -296,6 +296,52 @@ internal sealed class PowerShellLexicalScope
     internal PowerShellSymbolId[] Symbols { get; }
 }
 
+internal sealed class PowerShellBoundHelpMetadata
+{
+    internal PowerShellBoundHelpMetadata(
+        string synopsis,
+        string description,
+        string notes,
+        IReadOnlyDictionary<string, string> parameters,
+        string[] examples,
+        string[] links,
+        string[] inputs,
+        string[] outputs)
+    {
+        Synopsis = synopsis ?? string.Empty;
+        Description = description ?? string.Empty;
+        Notes = notes ?? string.Empty;
+        Parameters = parameters ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        Examples = examples ?? Array.Empty<string>();
+        Links = links ?? Array.Empty<string>();
+        Inputs = inputs ?? Array.Empty<string>();
+        Outputs = outputs ?? Array.Empty<string>();
+    }
+
+    internal string Synopsis { get; }
+    internal string Description { get; }
+    internal string Notes { get; }
+    internal IReadOnlyDictionary<string, string> Parameters { get; }
+    internal string[] Examples { get; }
+    internal string[] Links { get; }
+    internal string[] Inputs { get; }
+    internal string[] Outputs { get; }
+
+    internal PowerShellCompilationHelp ToPublicModel()
+        => new()
+        {
+            Synopsis = Synopsis,
+            Description = Description,
+            Notes = Notes,
+            Parameters = Parameters.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.OrdinalIgnoreCase),
+            Examples = Examples.ToArray(),
+            Links = Links.ToArray(),
+            Inputs = Inputs.ToArray(),
+            Outputs = Outputs.ToArray()
+        };
+}
+
 internal sealed class PowerShellBoundBlock
 {
     internal PowerShellBoundBlock(SourceSpan span, PowerShellBoundStatement[] statements)
@@ -315,6 +361,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellBoundParameter[] parameters,
         PowerShellBoundLocal[] locals,
         PowerShellLexicalScope scope,
+        PowerShellBoundHelpMetadata? help,
         PowerShellBoundBlock body,
         PowerShellTypeFact returnType,
         PowerShellSemanticEffect effects,
@@ -325,6 +372,7 @@ internal sealed class PowerShellBoundFunction
         Parameters = parameters ?? Array.Empty<PowerShellBoundParameter>();
         Locals = locals ?? Array.Empty<PowerShellBoundLocal>();
         Scope = scope;
+        Help = help;
         Body = body;
         ReturnType = returnType;
         Effects = effects;
@@ -336,6 +384,7 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellBoundParameter[] Parameters { get; }
     internal PowerShellBoundLocal[] Locals { get; }
     internal PowerShellLexicalScope Scope { get; }
+    internal PowerShellBoundHelpMetadata? Help { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
     internal PowerShellSemanticEffect Effects { get; }
@@ -347,7 +396,7 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters, Locals, Scope, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters, Locals, Scope, Help, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument

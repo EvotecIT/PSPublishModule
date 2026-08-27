@@ -245,6 +245,20 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     artifactName,
                     dependencyPlan,
                     stagedArtifact.Files));
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && typed is not null)
+                {
+                    var externalHelpPath = PowerShellCompiledHelpWriter.WriteExternalHelp(
+                        artifactName,
+                        Path.GetDirectoryName(stagedArtifact.PrimaryPath)!,
+                        typed.Methods);
+                    if (externalHelpPath is not null)
+                    {
+                        stagedArtifact = stagedArtifact.WithAdditionalFiles(new[]
+                        {
+                            CreateArtifactFile(externalHelpPath, "ExternalHelp")
+                        });
+                    }
+                }
                 string? stagedGeneratedSourcePath = null;
                 if (spec.EmitSource)
                 {

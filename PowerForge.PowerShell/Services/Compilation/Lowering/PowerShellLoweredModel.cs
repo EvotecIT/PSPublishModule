@@ -91,6 +91,7 @@ internal sealed class PowerShellLoweredFunction
         Type returnType,
         PowerShellLoweredParameter[] parameters,
         PowerShellLoweredLocal[] locals,
+        PowerShellBoundHelpMetadata? help,
         PowerShellLoweredStatement[] statements,
         SourceSpan span)
     {
@@ -99,6 +100,7 @@ internal sealed class PowerShellLoweredFunction
         ReturnType = returnType;
         Parameters = parameters;
         Locals = locals;
+        Help = help;
         Statements = statements;
         Span = span;
     }
@@ -108,6 +110,7 @@ internal sealed class PowerShellLoweredFunction
     internal Type ReturnType { get; }
     internal PowerShellLoweredParameter[] Parameters { get; }
     internal PowerShellLoweredLocal[] Locals { get; }
+    internal PowerShellBoundHelpMetadata? Help { get; }
     internal PowerShellLoweredStatement[] Statements { get; }
     internal SourceSpan Span { get; }
 }

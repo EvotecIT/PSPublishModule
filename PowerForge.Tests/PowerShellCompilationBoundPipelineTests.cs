@@ -198,6 +198,24 @@ public sealed class PowerShellCompilationBoundPipelineTests
         }
     }
 
+    [Fact]
+    public void CommentHelpFlowsThroughBoundLoweredAndPublicMetadata()
+    {
+        var source = "function Get-Helped {\n<#\n.SYNOPSIS\nBound help synopsis.\n.DESCRIPTION\nBound help description.\n.PARAMETER Name\nBound parameter help.\n.EXAMPLE\nGet-Helped -Name Ada\n.NOTES\nBound note.\n.LINK\nhttps://example.com/bound\n.INPUTS\nSystem.String\n.OUTPUTS\nSystem.Int32\n#>\nparam([string] $Name)\nreturn 7\n}";
+        var document = PowerShellSourceParser.Parse(source, TestPath("help.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        var help = Assert.Single(result.Analyzed.Functions).Help;
+        Assert.NotNull(help);
+        Assert.Equal("Bound help synopsis.", help.Synopsis);
+        Assert.Equal("Bound parameter help.", help.Parameters["Name"]);
+        var emittedHelp = Assert.Single(result.Emitted.Methods).Help;
+        Assert.NotNull(emittedHelp);
+        Assert.Equal(help.Examples, emittedHelp.Examples);
+        Assert.Equal(help.Outputs, emittedHelp.Outputs);
+    }
+
     private static string TestPath(string fileName)
         => Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", fileName);
 

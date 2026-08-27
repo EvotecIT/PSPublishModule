@@ -278,7 +278,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_HybridModuleRetainsCommentBasedHelpOnFallbackFunction()
+    public void Build_HybridModuleCompilesCommentBasedHelpAndGeneratesExternalHelp()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nRetained description.\n#>\nreturn 7\n}; " +
@@ -292,10 +292,9 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("comment-based help", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+        Assert.Contains(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
@@ -308,10 +307,10 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_StrictBinaryModuleRejectsCommentBasedHelpWithoutGeneratedExternalHelp()
+    public void Build_StrictBinaryModulePreservesCommentBasedHelpWithGeneratedExternalHelp()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n#>\nreturn 7\n}; " +
+            "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nFull compiled help description.\n.PARAMETER Name\nName parameter help.\n.EXAMPLE\nGet-HelpedValue -Name Ada\n.NOTES\nCompiled help note.\n.LINK\nhttps://example.com/help\n.INPUTS\nSystem.String\n.OUTPUTS\nSystem.Int32\n#>\nparam([string] $Name)\nreturn 7\n}; " +
             "Export-ModuleMember -Function Get-HelpedValue",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -321,9 +320,55 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict));
 
-        Assert.False(result.Succeeded);
-        Assert.Null(result.Manifest);
-        Assert.Contains("No PowerShell functions were eligible", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("comment-based help", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
+        var helpFile = Assert.Single(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
+        var maml = File.ReadAllText(helpFile.Path);
+        Assert.Contains("Full compiled help description.", maml, StringComparison.Ordinal);
+        Assert.Contains("Name parameter help.", maml, StringComparison.Ordinal);
+        Assert.Contains("Get-HelpedValue -Name Ada", maml, StringComparison.Ordinal);
+        Assert.Contains("Compiled help note.", maml, StringComparison.Ordinal);
+        Assert.Contains("https://example.com/help", maml, StringComparison.Ordinal);
+        Assert.Contains("System.String", maml, StringComparison.Ordinal);
+        Assert.Contains("System.Int32", maml, StringComparison.Ordinal);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; $h = Get-Help Get-HelpedValue -Full; $h.Synopsis; ($h.Parameters.Parameter | Where-Object Name -eq 'Name').Description.Text");
+        Assert.Equal((0, "Authored compiler help synopsis." + Environment.NewLine + "Name parameter help.", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridModulePreservesHelpAcrossTypedAndRetainedCommands()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedHelp {\n<#\n.SYNOPSIS\nTyped command help.\n#>\nreturn 3\n}; " +
+            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\nreturn (Get-Date).Year\n}; " +
+            "Export-ModuleMember -Function @('Get-TypedHelp', 'Get-RetainedHelp')",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.MixedHelp",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; (Get-Command Get-TypedHelp).CommandType; (Get-Help Get-TypedHelp).Synopsis; (Get-Command Get-RetainedHelp).CommandType; (Get-Help Get-RetainedHelp).Synopsis");
+        Assert.Equal((0, "Cmdlet" + Environment.NewLine + "Typed command help." + Environment.NewLine + "Function" + Environment.NewLine + "Retained command help.", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 }

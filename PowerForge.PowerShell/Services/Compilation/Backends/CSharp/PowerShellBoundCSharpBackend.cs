@@ -58,7 +58,7 @@ internal sealed class PowerShellBoundCSharpBackend
         }
 
         builder.AppendLine("        }").Append("    }");
-        return new PowerShellCSharpMethodEmission(function.GeneratedName, function.ReturnType, builder.ToString());
+        return new PowerShellCSharpMethodEmission(function.GeneratedName, function.ReturnType, builder.ToString(), help: function.Help?.ToPublicModel());
     }
 
     private static string EmitExpression(PowerShellLoweredExpression expression)

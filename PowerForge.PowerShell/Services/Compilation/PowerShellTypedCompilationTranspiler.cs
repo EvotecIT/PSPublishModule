@@ -476,7 +476,8 @@ public sealed class PowerShellTypedCompilationTranspiler
     }
 
     private static PowerShellCompiledMethod CreateCompiledMethod(FunctionSource source, PowerShellCSharpMethodEmission emitted)
-        => new(
+    {
+        var method = new PowerShellCompiledMethod(
             source.Function.Name,
             emitted.GeneratedName,
             emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
@@ -491,6 +492,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             PowerShellAdvancedFunctionPolicy.GetBinding(source.Function.Body.ParamBlock),
             emitted.RequiresPowerShellRuntimeState,
             emitted.DeclaredOutputType?.FullName ?? string.Empty);
+        method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
+        return method;
+    }
 
     private static PowerShellLocalFunctionSignature CreateSignature(
         FunctionSource source,
@@ -698,7 +702,8 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellRuntimeState = false,
-        Type? declaredOutputType = null)
+        Type? declaredOutputType = null,
+        PowerShellCompilationHelp? help = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -708,6 +713,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         DeclaredOutputType = declaredOutputType;
+        Help = help;
     }
 
     internal string GeneratedName { get; }
@@ -718,4 +724,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
     internal Type? DeclaredOutputType { get; }
+    internal PowerShellCompilationHelp? Help { get; }
 }

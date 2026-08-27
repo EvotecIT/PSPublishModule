@@ -165,6 +165,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Advanced-function and positional binding behavior preserved for the generated command.</summary>
     public PowerShellCompilationCommandBinding CommandBinding { get; }
+
+    /// <summary>Authored comment-based help retained for the compiled command.</summary>
+    public PowerShellCompilationHelp? Help { get; internal set; }
 }
 
 /// <summary>

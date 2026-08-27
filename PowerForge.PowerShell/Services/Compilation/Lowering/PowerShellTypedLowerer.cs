@@ -56,6 +56,7 @@ internal sealed class PowerShellTypedLowerer
                 function.ReturnType.ClrType,
                 function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType)).ToArray(),
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
+                function.Help,
                 statements.ToArray(),
                 function.Body.Span));
         }

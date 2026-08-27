@@ -127,6 +127,7 @@ internal sealed class PowerShellSemanticBinder
             parameters,
             locals,
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
+            PowerShellCommentHelpBinder.Bind(function),
             body,
             PowerShellTypeFact.Unknown,
             PowerShellSemanticEffect.None,
