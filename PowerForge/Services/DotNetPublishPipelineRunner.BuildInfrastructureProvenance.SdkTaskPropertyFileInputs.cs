@@ -60,7 +60,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedValues))
+                    out string[] expandedValues,
+                    consumingElement: property))
             {
                 return false;
             }

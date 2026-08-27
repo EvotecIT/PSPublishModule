@@ -45,7 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedTargets))
+                    out string[] expandedTargets,
+                    consumingElement: callTarget))
             {
                 return false;
             }

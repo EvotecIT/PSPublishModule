@@ -55,7 +55,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         taskInputBaseDirectory,
                         relatedDocuments,
                         evaluatedGlobalProperties,
-                        out string[] expandedValues))
+                        out string[] expandedValues,
+                        consumingElement: item))
                 {
                     return false;
                 }
@@ -138,7 +139,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         taskInputBaseDirectory,
                         relatedDocuments,
                         evaluatedGlobalProperties,
-                        out string[] expandedValues) ||
+                        out string[] expandedValues,
+                        consumingElement: item) ||
                     expandedValues.Any(value => !IsControlledPublishRelativePath(value)))
                 {
                     return false;
@@ -208,7 +210,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedValues))
+                    out string[] expandedValues,
+                    consumingElement: item))
             {
                 return false;
             }

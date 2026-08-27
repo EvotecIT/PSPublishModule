@@ -275,6 +275,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ProjectRoot = root,
                 SourceRevision = revision,
                 Configuration = "Release",
+                NoBuildInPublish = true,
                 Targets =
                 [
                     new DotNetPublishTargetPlan

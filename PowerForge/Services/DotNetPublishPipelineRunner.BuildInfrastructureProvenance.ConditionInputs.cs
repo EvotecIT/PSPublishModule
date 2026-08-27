@@ -15,20 +15,21 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
         Func<string, bool>? isControlledInput)
     {
-        foreach (string condition in document.Descendants()
+        foreach (XAttribute conditionAttribute in document.Descendants()
                      .SelectMany(element => element.Attributes())
                      .Where(attribute => attribute.Name.LocalName.Equals(
                          "Condition",
-                         StringComparison.OrdinalIgnoreCase))
-                     .Select(attribute => DecodeMsBuildEscapes(attribute.Value)))
+                         StringComparison.OrdinalIgnoreCase)))
         {
+            string condition = DecodeMsBuildEscapes(conditionAttribute.Value);
             if (!TryExpandControlledTaskInputValues(
                     condition,
                     declaringPath,
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedConditions))
+                    out string[] expandedConditions,
+                    consumingElement: conditionAttribute.Parent))
             {
                 return false;
             }
@@ -44,7 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             taskInputBaseDirectory,
                             relatedDocuments,
                             evaluatedGlobalProperties,
-                            out string[] expandedValues) ||
+                            out string[] expandedValues,
+                            consumingElement: conditionAttribute.Parent) ||
                         expandedValues.Length == 0)
                     {
                         return false;

@@ -29,7 +29,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedSources))
+                    out string[] expandedSources,
+                    consumingElement: task))
             {
                 return false;
             }
@@ -90,7 +91,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedValues) ||
+                    out string[] expandedValues,
+                    consumingElement: task) ||
                 expandedValues.Length != 1 ||
                 !bool.TryParse(DecodeMsBuildEscapes(expandedValues[0]).Trim(), out bool enabled) ||
                 !enabled)

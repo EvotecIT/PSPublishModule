@@ -457,7 +457,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 controlledProjectDirectory,
                                 documents,
                                 evaluatedGlobalProperties,
-                                out string[] expandedValues))
+                                out string[] expandedValues,
+                                consumingElement: item))
                         {
                             return false;
                         }

@@ -114,15 +114,21 @@ public sealed partial class DotNetPublishPipelineRunner
                             // Bind provenance to the project-reference bytes available immediately
                             // after BeforeTargetPublish hooks and make the real no-build publish consume
                             // private snapshots of the bytes proven by the detached rebuild.
-                            SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan);
+                            bool requiresPublishProvenance = plan.NoBuildInPublish ||
+                                (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Any(target =>
+                                    target is not null &&
+                                    target.Name.Equals(step.TargetName, StringComparison.OrdinalIgnoreCase) &&
+                                    target.Publish?.Sign?.Enabled == true);
                             using NoBuildPublishInputSnapshot? inputSnapshot =
-                                CreateNoBuildPublishInputSnapshot(
-                                    plan,
-                                    step.TargetName!,
-                                    step.Framework ?? string.Empty,
-                                    step.Runtime!,
-                                    step.Style,
-                                    provenance);
+                                requiresPublishProvenance
+                                    ? CreateNoBuildPublishInputSnapshot(
+                                        plan,
+                                        step.TargetName!,
+                                        step.Framework ?? string.Empty,
+                                        step.Runtime!,
+                                        step.Style,
+                                        ReadPortableInventorySourceProvenance(plan))
+                                    : null;
                             artefacts.Add(Publish(
                                 plan,
                                 step.TargetName!,

@@ -353,7 +353,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         private static string EscapeMsBuildConditionLiteral(string value)
-            => value.Replace("%", "%25").Replace("'", "%27");
+            => EscapeMsBuildPropertyValue(value).Replace("'", "%27");
 
         private static void TryDeleteSnapshotRoot(string root)
         {

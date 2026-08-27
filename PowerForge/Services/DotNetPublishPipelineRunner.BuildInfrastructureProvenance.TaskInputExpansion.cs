@@ -27,7 +27,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputBaseDirectory,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
-        out string[] expandedValues)
+        out string[] expandedValues,
+        XElement? consumingElement = null)
     {
         var pending = new Queue<string>();
         var inspected = new HashSet<string>(StringComparer.Ordinal);
@@ -72,7 +73,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         evaluatedGlobalProperties,
                         out string effectiveValue,
-                        out bool found))
+                        out bool found,
+                        consumingElement))
                 {
                     expandedValues = Array.Empty<string>();
                     return false;
@@ -176,7 +178,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
         out string effectiveValue,
-        out bool found)
+        out bool found,
+        XElement? consumingElement)
     {
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (evaluatedGlobalProperties is not null)
@@ -192,6 +195,9 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (XElement propertyGroup in relatedDocument.Descendants().Where(element =>
                          element.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
             {
+                if (!IsControlledPropertyGroupVisibleBeforeConsumer(propertyGroup, consumingElement))
+                    continue;
+
                 bool groupConditionKnown = TryIsControlledPropertyBranchActive(
                     propertyGroup,
                     properties,
@@ -279,6 +285,23 @@ public sealed partial class DotNetPublishPipelineRunner
             ? value
             : string.Empty;
         return true;
+    }
+
+    private static bool IsControlledPropertyGroupVisibleBeforeConsumer(
+        XElement propertyGroup,
+        XElement? consumingElement)
+    {
+        XElement? declaringTarget = propertyGroup.Ancestors().FirstOrDefault(element =>
+            element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+        if (declaringTarget is null)
+            return true;
+        if (consumingElement is null)
+            return false;
+
+        XElement? consumingTarget = consumingElement.AncestorsAndSelf().FirstOrDefault(element =>
+            element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+        return ReferenceEquals(declaringTarget, consumingTarget) &&
+            XNode.DocumentOrderComparer.Compare(propertyGroup, consumingElement) < 0;
     }
 
     private static bool TryIsControlledPropertyAssignmentActive(

@@ -31,7 +31,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
-                    out string[] expandedFileValues) ||
+                    out string[] expandedFileValues,
+                    consumingElement: task) ||
                 expandedFileValues.Length == 0)
             {
                 return false;
