@@ -31,6 +31,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion, manifest.SemanticProfile.Version);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeAbiVersion, manifest.SemanticProfile.CompilerRuntimeAbiVersion);
         Assert.True(manifest.SemanticProfile.RuntimeFree);
+        Assert.False(manifest.SemanticProfile.HasRuntimeSubstrate);
+        Assert.Equal("None", manifest.SemanticProfile.RuntimeSubstrate);
         Assert.False(manifest.RequiresPowerShellRuntime);
         Assert.False(manifest.UsesPowerShellRuntimeFallback);
         Assert.False(manifest.ContainsEmbeddedPowerShellSource);
@@ -39,6 +41,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(64, manifest.GeneratedSourceSha256.Length);
 
         var abi = Assert.IsType<PowerShellCompilationAbiManifest>(manifest.PublicAbi);
+        Assert.Equal(2, abi.SchemaVersion);
         Assert.Equal("PowerForge.Compiled", abi.NamespaceName);
         Assert.Equal("ContractProofMethods", abi.TypeName);
         Assert.Equal(64, abi.Sha256.Length);
@@ -53,6 +56,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("Value", parameter.ClrName);
         Assert.True(parameter.Required);
         Assert.False(parameter.Nullable);
+        Assert.Equal(new[] { "v" }, parameter.Aliases);
+        Assert.False(parameter.CompilerAdded);
+        Assert.True(Assert.Single(parameter.Bindings).Mandatory);
 
         var contractSource = Path.Combine(result.GeneratedSourcePath!, "PowerForgeRuntimeFreeContract.g.cs");
         Assert.True(File.Exists(contractSource));
@@ -138,5 +144,71 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "Get-Alpha", "Get-Zeta" }, ordered.Methods.Select(static method => method.PowerShellName));
         Assert.Equal("@class", Assert.Single(ordered.Methods[0].Parameters).ClrName);
         Assert.Equal("_9_name", PowerShellClrSymbolMapper.MapIdentifier("9-name"));
+    }
+
+    [Fact]
+    public void AbiHashCoversPowerShellBindingAndCompilerAddedClrParameters()
+    {
+        var firstContract = new PowerShellCompilationParameter(
+            "Mode",
+            "System.String",
+            hasDefaultValue: true,
+            isMandatory: false,
+            isSwitch: false,
+            aliases: new[] { "m" },
+            allowNull: false,
+            validations: new[] { new PowerShellCompilationValidation(PowerShellCompilationValidationKind.Set, new[] { "A", "B" }) },
+            bindings: new[] { new PowerShellCompilationParameterBinding("ByMode", position: 0, valueFromRemainingArguments: true) },
+            defaultValue: new PowerShellCompilationLiteral(PowerShellCompilationLiteralKind.String, "System.String", "A"));
+        var secondContract = new PowerShellCompilationParameter(
+            "Mode",
+            "System.String",
+            hasDefaultValue: true,
+            isMandatory: false,
+            isSwitch: false,
+            aliases: new[] { "m" },
+            allowNull: false,
+            validations: new[] { new PowerShellCompilationValidation(PowerShellCompilationValidationKind.Set, new[] { "A", "B" }) },
+            bindings: new[] { new PowerShellCompilationParameterBinding("ByMode", position: 1, valueFromRemainingArguments: true) },
+            defaultValue: new PowerShellCompilationLiteral(PowerShellCompilationLiteralKind.String, "System.String", "A"));
+        var binding = new PowerShellCompilationCommandBinding(
+            isAdvancedFunction: true,
+            positionalBinding: false,
+            defaultParameterSetName: "ByMode",
+            supportsShouldProcess: true,
+            confirmImpact: "High");
+        var first = new PowerShellCompiledMethod(
+            "Invoke-Proof", "Invoke_Proof", "System.String", new[] { firstContract }, 1, null,
+            false, false, new[] { "ip" }, true, true, binding, false, "System.String");
+        var second = new PowerShellCompiledMethod(
+            "Invoke-Proof", "Invoke_Proof", "System.String", new[] { secondContract }, 1, null,
+            false, false, new[] { "ip" }, true, true, binding, false, "System.String");
+
+        var firstAbi = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { first });
+        var secondAbi = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { second });
+
+        Assert.NotEqual(firstAbi.Sha256, secondAbi.Sha256);
+        var method = Assert.Single(firstAbi.Methods);
+        Assert.True(method.IsAdvancedFunction);
+        Assert.False(method.PositionalBinding);
+        Assert.Equal("ByMode", method.DefaultParameterSetName);
+        Assert.True(method.SupportsShouldProcess);
+        Assert.Equal("High", method.ConfirmImpact);
+        Assert.Equal(new[] { "ip" }, method.Aliases);
+        Assert.Collection(
+            method.Parameters,
+            authored =>
+            {
+                Assert.False(authored.CompilerAdded);
+                Assert.True(authored.HasDefaultValue);
+                Assert.Equal("A", authored.DefaultValue?.Value);
+                Assert.True(Assert.Single(authored.Bindings).ValueFromRemainingArguments);
+            },
+            generated =>
+            {
+                Assert.True(generated.CompilerAdded);
+                Assert.Equal("__boundParameters", generated.ClrName);
+                Assert.Equal("BoundParameterNames", generated.CompilerPurpose);
+            });
     }
 }

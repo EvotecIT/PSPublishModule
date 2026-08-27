@@ -11,10 +11,10 @@ public sealed class PowerShellCompilationSemanticProfile
     public const string RuntimeFreeStrictName = "PowerForge.PowerShell.Strict.RuntimeFree";
 
     /// <summary>Current semantic profile version.</summary>
-    public const string RuntimeFreeStrictVersion = "1.0";
+    public const string RuntimeFreeStrictVersion = "1.1";
 
     /// <summary>Current compiler/runtime ABI version.</summary>
-    public const string RuntimeFreeAbiVersion = "1";
+    public const string RuntimeFreeAbiVersion = "2";
 
     /// <summary>Profile name.</summary>
     public string Name { get; set; } = RuntimeFreeStrictName;
@@ -27,6 +27,12 @@ public sealed class PowerShellCompilationSemanticProfile
 
     /// <summary>Whether the profile excludes a PowerShell runtime and dynamic source evaluation.</summary>
     public bool RuntimeFree { get; set; } = true;
+
+    /// <summary>Whether emitted code depends on a separately versioned compiler runtime substrate.</summary>
+    public bool HasRuntimeSubstrate { get; set; }
+
+    /// <summary>Runtime substrate identity, or <c>None</c> when helpers are emitted into the artifact itself.</summary>
+    public string RuntimeSubstrate { get; set; } = "None";
 }
 
 /// <summary>
@@ -35,7 +41,7 @@ public sealed class PowerShellCompilationSemanticProfile
 public sealed class PowerShellCompilationAbiManifest
 {
     /// <summary>ABI schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>Generated CLR namespace.</summary>
     public string NamespaceName { get; set; } = string.Empty;
@@ -74,6 +80,24 @@ public sealed class PowerShellCompilationAbiMethod
     /// <summary>Exception surface exposed to direct CLR callers.</summary>
     public string ExceptionContract { get; set; } = "ClrDirect";
 
+    /// <summary>Command aliases participating in PowerShell binding.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
+
+    /// <summary>Whether the source declares advanced-function binding.</summary>
+    public bool IsAdvancedFunction { get; set; }
+
+    /// <summary>Whether source-order positional binding is enabled.</summary>
+    public bool PositionalBinding { get; set; } = true;
+
+    /// <summary>Default parameter-set name, or empty when none is declared.</summary>
+    public string DefaultParameterSetName { get; set; } = string.Empty;
+
+    /// <summary>Whether the command advertises ShouldProcess support.</summary>
+    public bool SupportsShouldProcess { get; set; }
+
+    /// <summary>Declared ConfirmImpact value, or empty when the default applies.</summary>
+    public string ConfirmImpact { get; set; } = string.Empty;
+
     /// <summary>Ordered CLR parameters.</summary>
     public PowerShellCompilationAbiParameter[] Parameters { get; set; } = Array.Empty<PowerShellCompilationAbiParameter>();
 }
@@ -98,4 +122,37 @@ public sealed class PowerShellCompilationAbiParameter
 
     /// <summary>Whether omitted and explicitly bound values are distinguished.</summary>
     public bool TracksBoundState { get; set; }
+
+    /// <summary>Whether this CLR parameter was added by the compiler rather than authored in PowerShell.</summary>
+    public bool CompilerAdded { get; set; }
+
+    /// <summary>Stable purpose of a compiler-added parameter.</summary>
+    public string CompilerPurpose { get; set; } = string.Empty;
+
+    /// <summary>Whether the source parameter is a PowerShell switch.</summary>
+    public bool IsSwitch { get; set; }
+
+    /// <summary>PowerShell aliases accepted by the binder.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
+
+    /// <summary>Whether source declares a default value.</summary>
+    public bool HasDefaultValue { get; set; }
+
+    /// <summary>Canonical supported default value, or null when no default is declared.</summary>
+    public PowerShellCompilationLiteral? DefaultValue { get; set; }
+
+    /// <summary>Authored parameter-set and pipeline binding contracts.</summary>
+    public PowerShellCompilationParameterBinding[] Bindings { get; set; } = Array.Empty<PowerShellCompilationParameterBinding>();
+
+    /// <summary>Authored validation contracts.</summary>
+    public PowerShellCompilationValidation[] Validations { get; set; } = Array.Empty<PowerShellCompilationValidation>();
+
+    /// <summary>Whether an empty string is allowed.</summary>
+    public bool AllowEmptyString { get; set; }
+
+    /// <summary>Whether an empty collection is allowed.</summary>
+    public bool AllowEmptyCollection { get; set; }
+
+    /// <summary>Whether wildcard syntax is part of the parameter contract.</summary>
+    public bool SupportsWildcards { get; set; }
 }
