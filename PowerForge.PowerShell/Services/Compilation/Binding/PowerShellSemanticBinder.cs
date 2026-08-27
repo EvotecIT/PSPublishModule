@@ -513,6 +513,16 @@ internal sealed class PowerShellSemanticBinder
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is ContinueStatementAst { Label: null } continueStatement && HasContinuableAncestor(continueStatement))
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
+        if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
+            streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+            PowerShellCommandIslandPolicy.TryGetStreamCommand(streamCommand, out var streamKind, out var messageSyntax))
+        {
+            var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, typeof(string), targetFramework, capabilities);
+            return message is null
+                ? null
+                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, message);
+        }
         if (statement is PipelineAst pipeline)
         {
             var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);

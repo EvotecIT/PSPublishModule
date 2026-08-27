@@ -12,7 +12,15 @@ internal sealed class PowerShellTypedLowerer
         if (program is null) throw new ArgumentNullException(nameof(program));
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
         var functions = new List<PowerShellLoweredFunction>();
-        var bySymbol = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
+        var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
+        var bySymbol = program.Functions.ToDictionary(
+            static function => function.Symbol.StableKey,
+            function => new LoweringFunctionContext(
+                function,
+                streamBindings.Contains(function.Symbol.StableKey),
+                runtimeStateBindings.Contains(function.Symbol.StableKey)),
+            StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
             if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed)
@@ -93,7 +101,8 @@ internal sealed class PowerShellTypedLowerer
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
                 function.DeclaredOutputType,
-                RequiresRuntimeStateHostBinding(function.Body),
+                streamBindings.Contains(function.Symbol.StableKey),
+                runtimeStateBindings.Contains(function.Symbol.StableKey),
                 statements.ToArray(),
                 function.Body.Span));
         }
@@ -106,6 +115,45 @@ internal sealed class PowerShellTypedLowerer
                 .ToArray(),
             targetCapabilities);
     }
+
+    private static HashSet<string> PropagateHostRequirement(
+        PowerShellBoundProgram program,
+        Func<PowerShellBoundFunction, bool> hasDirectRequirement)
+    {
+        var required = program.Functions.Where(hasDirectRequirement)
+            .Select(static function => function.Symbol.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var edge in program.CallGraph)
+            {
+                if (required.Contains(edge.Callee.StableKey) && required.Add(edge.Caller.StableKey)) changed = true;
+            }
+        } while (changed);
+        return required;
+    }
+
+    private static bool ContainsPowerShellStreamWrite(PowerShellBoundBlock block)
+        => block.Statements.Any(StatementContainsPowerShellStreamWrite);
+
+    private static bool StatementContainsPowerShellStreamWrite(PowerShellBoundStatement statement)
+        => statement switch
+        {
+            PowerShellBoundStreamWriteStatement => true,
+            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
+                (conditional.ElseBlock is not null && ContainsPowerShellStreamWrite(conditional.ElseBlock)),
+            PowerShellBoundWhileStatement loop => ContainsPowerShellStreamWrite(loop.Body),
+            PowerShellBoundForStatement loop => ContainsPowerShellStreamWrite(loop.Body),
+            PowerShellBoundForEachStatement loop => ContainsPowerShellStreamWrite(loop.Body),
+            PowerShellBoundSwitchStatement switchStatement => switchStatement.Clauses.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
+                (switchStatement.DefaultBlock is not null && ContainsPowerShellStreamWrite(switchStatement.DefaultBlock)),
+            PowerShellBoundTryStatement tryStatement => ContainsPowerShellStreamWrite(tryStatement.Body) ||
+                tryStatement.Catches.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
+                (tryStatement.FinallyBlock is not null && ContainsPowerShellStreamWrite(tryStatement.FinallyBlock)),
+            _ => false
+        };
 
     private static bool RequiresRuntimeStateHostBinding(PowerShellBoundBlock block)
         => block.Statements.Any(StatementRequiresRuntimeStateHostBinding);
@@ -271,7 +319,7 @@ internal sealed class PowerShellTypedLowerer
 
     private static PowerShellLoweredStatement LowerStatement(
         PowerShellBoundStatement statement,
-        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
@@ -311,6 +359,10 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundExpressionStatement expression => new PowerShellLoweredExpressionStatement(
                 expression.Span,
                 LowerExpression(expression.Expression, functions, names, targetCapabilities)),
+            PowerShellBoundStreamWriteStatement stream => new PowerShellLoweredStreamWriteStatement(
+                stream.Span,
+                stream.Kind,
+                LowerExpression(stream.Message, functions, names, targetCapabilities)),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
                 conditional.Clauses.Select(clause => new PowerShellLoweredConditionalClause(
@@ -348,7 +400,7 @@ internal sealed class PowerShellTypedLowerer
 
     private static PowerShellLoweredForStatement LowerFor(
         PowerShellBoundForStatement loop,
-        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
@@ -369,7 +421,7 @@ internal sealed class PowerShellTypedLowerer
 
     private static PowerShellLoweredForEachStatement LowerForEach(
         PowerShellBoundForEachStatement loop,
-        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
@@ -388,7 +440,7 @@ internal sealed class PowerShellTypedLowerer
 
     private static PowerShellLoweredStatement[] LowerStatements(
         PowerShellBoundBlock block,
-        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
@@ -398,7 +450,7 @@ internal sealed class PowerShellTypedLowerer
 
     private static PowerShellLoweredExpression LowerExpression(
         PowerShellBoundExpression expression,
-        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
         LoweredNameAllocator names,
         PowerShellCompilationCapability targetCapabilities)
         => expression switch
@@ -506,15 +558,17 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
-                    target.ReturnType.ClrType,
+                    target.Function.ReturnType.ClrType,
                     invocation.Target,
                     invocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                     invocation.AuthoredEvaluationOrder,
                     invocation.BoundParameterNames,
                     CreateEvaluationTemporaryNames(invocation, names),
-                    target.Parameters.Any(parameter =>
+                    target.Function.Parameters.Any(parameter =>
                         parameter.Contract.DefaultValue is not null ||
-                        !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 && targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters))),
+                        !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 && targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)),
+                    target.RequiresPowerShellStreams,
+                    target.RequiresPowerShellRuntimeState),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 
@@ -546,5 +600,22 @@ internal sealed class PowerShellTypedLowerer
             do { candidate = $"__{prefix}_{_index++}"; } while (!_used.Add(candidate));
             return candidate;
         }
+    }
+
+    private sealed class LoweringFunctionContext
+    {
+        internal LoweringFunctionContext(
+            PowerShellBoundFunction function,
+            bool requiresPowerShellStreams,
+            bool requiresPowerShellRuntimeState)
+        {
+            Function = function;
+            RequiresPowerShellStreams = requiresPowerShellStreams;
+            RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        }
+
+        internal PowerShellBoundFunction Function { get; }
+        internal bool RequiresPowerShellStreams { get; }
+        internal bool RequiresPowerShellRuntimeState { get; }
     }
 }

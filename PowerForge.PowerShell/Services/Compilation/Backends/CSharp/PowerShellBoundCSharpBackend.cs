@@ -26,6 +26,12 @@ internal sealed class PowerShellBoundCSharpBackend
             parameter.Contract.DefaultValue is not null ||
             !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
             targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
+        if (function.RequiresPowerShellStreams)
+        {
+            parameterParts.Add("global::System.Action<string> __writeVerbose");
+            parameterParts.Add("global::System.Action<string> __writeDebug");
+            parameterParts.Add("global::System.Action<string> __writeWarning");
+        }
         if (function.RequiresPowerShellRuntimeState)
         {
             parameterParts.Add("global::System.Func<string, bool> __shouldProcessTarget");
@@ -78,6 +84,7 @@ internal sealed class PowerShellBoundCSharpBackend
             function.GeneratedName,
             function.ReturnType,
             builder.ToString(),
+            requiresPowerShellStreams: function.RequiresPowerShellStreams,
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             help: function.Help?.ToPublicModel(),
@@ -123,6 +130,19 @@ internal sealed class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredExpressionStatement expression:
                 builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
+                return;
+            case PowerShellLoweredStreamWriteStatement stream:
+                var sink = stream.Kind switch
+                {
+                    PowerShellStreamCommandKind.Verbose => "__writeVerbose",
+                    PowerShellStreamCommandKind.Debug => "__writeDebug",
+                    PowerShellStreamCommandKind.Warning => "__writeWarning",
+                    _ => throw new InvalidOperationException($"Stream kind '{stream.Kind}' has no C# host binding.")
+                };
+                builder.Append(prefix).Append(sink)
+                    .Append("(global::System.Convert.ToString(")
+                    .Append(EmitExpression(stream.Message))
+                    .AppendLine(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty);");
                 return;
             case PowerShellLoweredIfStatement conditional:
                 for (var index = 0; index < conditional.Clauses.Length; index++)
@@ -301,6 +321,10 @@ internal sealed class PowerShellBoundCSharpBackend
             foreach (var pair in temporaries) arguments[pair.Key] = pair.Value;
         }
         var callArguments = arguments.ToList();
+        if (invocation.RequiresPowerShellStreams)
+            callArguments.AddRange(new[] { "__writeVerbose", "__writeDebug", "__writeWarning" });
+        if (invocation.RequiresPowerShellRuntimeState)
+            callArguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference" });
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
         var call = $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
         if (!reordered) return call;

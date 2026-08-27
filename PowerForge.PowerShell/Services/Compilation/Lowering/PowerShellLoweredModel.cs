@@ -45,7 +45,9 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         int[] authoredEvaluationOrder,
         string[] boundParameterNames,
         string?[] evaluationTemporaryNames,
-        bool requiresBoundParameters)
+        bool requiresBoundParameters,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellRuntimeState)
         : base(span, clrType)
     {
         Target = target;
@@ -54,6 +56,8 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         BoundParameterNames = boundParameterNames;
         EvaluationTemporaryNames = evaluationTemporaryNames;
         RequiresBoundParameters = requiresBoundParameters;
+        RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -62,6 +66,8 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal string[] BoundParameterNames { get; }
     internal string?[] EvaluationTemporaryNames { get; }
     internal bool RequiresBoundParameters { get; }
+    internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresPowerShellRuntimeState { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
@@ -153,6 +159,7 @@ internal sealed class PowerShellLoweredFunction
         PowerShellLoweredLocal[] locals,
         PowerShellBoundHelpMetadata? help,
         Type? declaredOutputType,
+        bool requiresPowerShellStreams,
         bool requiresPowerShellRuntimeState,
         PowerShellLoweredStatement[] statements,
         SourceSpan span)
@@ -164,6 +171,7 @@ internal sealed class PowerShellLoweredFunction
         Locals = locals;
         Help = help;
         DeclaredOutputType = declaredOutputType;
+        RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         Statements = statements;
         Span = span;
@@ -176,6 +184,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellLoweredLocal[] Locals { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
+    internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
     internal PowerShellLoweredStatement[] Statements { get; }
     internal SourceSpan Span { get; }
