@@ -163,6 +163,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             EmitFunctionGraph(
                 functionSources,
                 declaredFunctionNames,
+                boundEmissions,
                 duplicateFunctions,
                 collidingFunctions,
                 excludedMethods,
@@ -217,6 +218,7 @@ public sealed class PowerShellTypedCompilationTranspiler
     private static void EmitFunctionGraph(
         IReadOnlyList<FunctionSource> sources,
         ISet<string> knownNames,
+        IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions,
         ISet<string> duplicateFunctions,
         ISet<string> collidingFunctions,
         ISet<string>? excludedMethods,
@@ -253,6 +255,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 source,
                 knownNames,
                 candidates,
+                boundEmissions,
                 signatures,
                 states,
                 provisionalSignatures,
@@ -270,6 +273,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         FunctionSource source,
         ISet<string> knownNames,
         IReadOnlyDictionary<string, FunctionSource> candidates,
+        IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions,
         Dictionary<string, PowerShellLocalFunctionSignature> signatures,
         Dictionary<string, FunctionVisitState> states,
         ISet<string> provisionalSignatures,
@@ -317,7 +321,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 continue;
             if (command.InvocationOperator == TokenKind.Unknown && candidates.TryGetValue(dependencyName, out var dependency))
             {
-                if (TryEmitGraphFunction(dependency, knownNames, candidates, signatures, states, provisionalSignatures,
+                if (TryEmitGraphFunction(dependency, knownNames, candidates, boundEmissions, signatures, states, provisionalSignatures,
                         traversal, recursiveCycleFunctions, targetFramework, capabilities, methods, methodSources, diagnostics))
                     continue;
                 if (recursiveCycleFunctions.Contains(name))
@@ -350,13 +354,17 @@ public sealed class PowerShellTypedCompilationTranspiler
 
         try
         {
-            var emitted = new PowerShellCSharpMethodEmitter(
-                source.Parsed.Path,
-                source.Function,
-                targetFramework,
-                capabilities,
-                signatures,
-                source.Unit.Parameters).Emit();
+            var emitted = boundEmissions.TryGetValue(
+                GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
+                out var boundEmission)
+                ? boundEmission
+                : new PowerShellCSharpMethodEmitter(
+                    source.Parsed.Path,
+                    source.Function,
+                    targetFramework,
+                    capabilities,
+                    signatures,
+                    source.Unit.Parameters).Emit();
             EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != emitted.ReturnType)
                 throw new PowerShellCSharpEmissionException(
