@@ -109,6 +109,14 @@ internal sealed class PowerShellSemanticAnalyzer
                     if (forLoop.Iterator is not null) ReportReads(forLoop.Iterator, loopState, locals, diagnostics);
                     continue;
                 }
+                if (statement is PowerShellBoundForEachStatement forEachLoop)
+                {
+                    ReportReads(forEachLoop.Collection, assigned, locals, diagnostics);
+                    var loopState = assigned.ToHashSet(StringComparer.Ordinal);
+                    loopState.Add(forEachLoop.Variable.StableKey);
+                    AnalyzeDefiniteAssignment(forEachLoop.Body, loopState, locals, diagnostics);
+                    continue;
+                }
                 var expression = GetExpression(statement);
                 if (expression is not null) ReportReads(expression, assigned, locals, diagnostics);
                 if (statement is PowerShellBoundAssignmentStatement assignment)
@@ -365,6 +373,10 @@ internal sealed class PowerShellSemanticAnalyzer
             {
                 foreach (var nested in EnumerateStatements(forLoop.Body)) yield return nested;
             }
+            else if (statement is PowerShellBoundForEachStatement forEachLoop)
+            {
+                foreach (var nested in EnumerateStatements(forEachLoop.Body)) yield return nested;
+            }
         }
     }
 
@@ -385,6 +397,10 @@ internal sealed class PowerShellSemanticAnalyzer
             if (forLoop.Initializer is not null) yield return forLoop.Initializer;
             if (forLoop.Condition is not null) yield return forLoop.Condition;
             if (forLoop.Iterator is not null) yield return forLoop.Iterator;
+        }
+        else if (statement is PowerShellBoundForEachStatement forEachLoop)
+        {
+            yield return forEachLoop.Collection;
         }
     }
 
@@ -418,6 +434,12 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(mutation.Value))
                 yield return read;
         }
+        if (expression is PowerShellBoundArrayExpression array)
+        {
+            foreach (var element in array.Elements)
+            foreach (var read in EnumerateVariableReads(element))
+                yield return read;
+        }
     }
 
     private static IEnumerable<PowerShellBoundInvocationExpression> EnumerateInvocations(PowerShellBoundExpression expression)
@@ -445,6 +467,12 @@ internal sealed class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
         {
             foreach (var nested in EnumerateInvocations(mutation.Value)) yield return nested;
+        }
+        if (expression is PowerShellBoundArrayExpression array)
+        {
+            foreach (var element in array.Elements)
+            foreach (var nested in EnumerateInvocations(element))
+                yield return nested;
         }
     }
 

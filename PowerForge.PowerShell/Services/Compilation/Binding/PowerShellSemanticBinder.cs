@@ -192,6 +192,31 @@ internal sealed class PowerShellSemanticBinder
             symbols.Add(name, new SymbolBinding(symbol, type));
             locals.Add(local);
         }
+        var loops = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
+            .SelectMany(static statement => statement.FindAll(static node => node is ForEachStatementAst, searchNestedScriptBlocks: false))
+            .Cast<ForEachStatementAst>()
+            .OrderBy(static loop => loop.Extent.StartOffset);
+        foreach (var loop in loops)
+        {
+            var name = loop.Variable.VariablePath.UserPath;
+            if (symbols.ContainsKey(name)) continue;
+            var condition = UnwrapExpression(loop.Condition);
+            Type? collectionType = condition switch
+            {
+                VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var binding) => binding.Type.ClrType,
+                ExpressionAst expression when expression.StaticType != typeof(object) => expression.StaticType,
+                _ => null
+            };
+            var elementType = collectionType is { IsArray: true } && collectionType.GetArrayRank() == 1
+                ? collectionType.GetElementType()
+                : collectionType == typeof(string) ? typeof(string) : null;
+            if (elementType is null) continue;
+            var span = PowerShellSourceParser.GetSpan(document, loop.Variable.Extent);
+            var type = new PowerShellTypeFact(elementType, PowerShellTypeFactProvenance.Inferred, "The foreach collection provides one stable CLR element type.");
+            var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);
+            symbols.Add(name, new SymbolBinding(symbol, type));
+            locals.Add(new PowerShellBoundLocal(symbol, type));
+        }
         return locals.ToArray();
     }
 
@@ -292,6 +317,30 @@ internal sealed class PowerShellSemanticBinder
             var body = BindBlock(document, forStatement.Body, symbols, functions, diagnostics);
             return body is null ? null : new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
         }
+        if (statement is ForEachStatementAst forEachStatement)
+        {
+            var variableSpan = PowerShellSourceParser.GetSpan(document, forEachStatement.Variable.Extent);
+            if (!symbols.TryGetValue(forEachStatement.Variable.VariablePath.UserPath, out var target) ||
+                target.Symbol.Declaration.StartOffset != variableSpan.StartOffset)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${forEachStatement.Variable.VariablePath.UserPath}' cannot reuse another function-scope variable on the conservative compilation path.", variableSpan));
+                return null;
+            }
+            var collection = BindExpression(document, forEachStatement.Condition, symbols, functions, diagnostics);
+            if (collection is null) return null;
+            var collectionType = collection.Type.ClrType;
+            var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
+            var elementType = collectionType.IsArray && collectionType.GetArrayRank() == 1
+                ? collectionType.GetElementType()
+                : scalarString ? typeof(string) : null;
+            if (elementType is null || elementType != target.Type.ClrType)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2303", "foreach requires a statically typed one-dimensional array or explicitly typed scalar string.", collection.Span));
+                return null;
+            }
+            var body = BindBlock(document, forEachStatement.Body, symbols, functions, diagnostics);
+            return body is null ? null : new PowerShellBoundForEachStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), target.Symbol, elementType, collection, scalarString, body);
+        }
         if (statement is BreakStatementAst { Label: null } breakStatement && HasBreakableAncestor(breakStatement))
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is ContinueStatementAst { Label: null } continueStatement && HasContinuableAncestor(continueStatement))
@@ -352,7 +401,8 @@ internal sealed class PowerShellSemanticBinder
         Ast syntax,
         IReadOnlyDictionary<string, SymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        Type? contextualType = null)
     {
         syntax = UnwrapExpression(syntax);
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -362,6 +412,24 @@ internal sealed class PowerShellSemanticBinder
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);
             case ConstantExpressionAst constant:
                 return new PowerShellBoundLiteralExpression(span, constant.Value, LiteralType(constant.Value?.GetType() ?? typeof(object), "Literal syntax determines the CLR representation."), constant.Value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
+            case ArrayLiteralAst array:
+                return BindArray(document, array, array.Elements, PowerShellBoundArrayKind.Literal, contextualType, symbols, functions, diagnostics);
+            case ArrayExpressionAst array:
+            {
+                var elements = new List<ExpressionAst>();
+                foreach (var statement in array.SubExpression.Statements)
+                {
+                    if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                        pipeline.PipelineElements[0] is not CommandExpressionAst command)
+                    {
+                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2501", "Typed @() expressions accept only side-effect-free expression statements.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
+                        return null;
+                    }
+                    if (command.Expression is ArrayLiteralAst literal) elements.AddRange(literal.Elements);
+                    else elements.Add(command.Expression);
+                }
+                return BindArray(document, array, elements, PowerShellBoundArrayKind.CollectedExpression, contextualType, symbols, functions, diagnostics);
+            }
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, true, LiteralType(typeof(bool), "$true is a Boolean literal."), PowerShellValueState.Known);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase):
@@ -409,6 +477,48 @@ internal sealed class PowerShellSemanticBinder
         }
     }
 
+    private static PowerShellBoundExpression? BindArray(
+        ParsedSourceDocument document,
+        Ast syntax,
+        IReadOnlyList<ExpressionAst> elementSyntax,
+        PowerShellBoundArrayKind kind,
+        Type? contextualType,
+        IReadOnlyDictionary<string, SymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellSymbolId> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var arrayType = contextualType is { IsArray: true } && contextualType.GetArrayRank() == 1
+            ? contextualType
+            : elementSyntax.Count == 0
+                ? null
+                : typeof(object[]);
+        if (arrayType is null)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2502", "Empty array expressions require an explicit one-dimensional array type on the assignment target.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+            return null;
+        }
+        var elementType = arrayType.GetElementType()!;
+        var elements = new List<PowerShellBoundExpression>();
+        foreach (var item in elementSyntax)
+        {
+            var element = BindExpression(document, item, symbols, functions, diagnostics, elementType);
+            if (element is null) return null;
+            if (kind == PowerShellBoundArrayKind.CollectedExpression &&
+                (element.Type.ClrType.IsArray || element.ValueState == PowerShellValueState.Null))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2503", "Typed @() expressions do not accept array-valued or null pipeline output.", element.Span));
+                return null;
+            }
+            if (arrayType != typeof(object[]) && !PowerShellClrTypeSemantics.CanAssign(elementType, element.Type.ClrType))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2504", $"Array element type '{element.Type.ClrType.FullName}' cannot be assigned to explicit element type '{elementType.FullName}' without PowerShell runtime conversion.", element.Span));
+                return null;
+            }
+            elements.Add(element);
+        }
+        return new PowerShellBoundArrayExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent), arrayType, kind, elements.ToArray());
+    }
+
     private static PowerShellBoundMutationExpression? BindAssignment(
         ParsedSourceDocument document,
         AssignmentStatementAst syntax,
@@ -418,8 +528,6 @@ internal sealed class PowerShellSemanticBinder
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left);
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target)) return null;
-        var value = BindExpression(document, syntax.Right, symbols, functions, diagnostics);
-        if (value is null) return null;
         var operation = syntax.Operator.ToString() switch
         {
             "Equals" => PowerShellBoundMutationOperator.Assign,
@@ -432,6 +540,8 @@ internal sealed class PowerShellSemanticBinder
         };
         if (operation is null) return null;
         var targetType = target.Type.ClrType;
+        var value = BindExpression(document, syntax.Right, symbols, functions, diagnostics, targetType);
+        if (value is null) return null;
         if (operation == PowerShellBoundMutationOperator.Assign && !PowerShellClrTypeSemantics.CanAssign(targetType, value.Type.ClrType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2401", $"Assignment requires PowerShell conversion from '{value.Type.ClrType.FullName}' to '{targetType.FullName}', which is not an implicit CLR conversion.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));

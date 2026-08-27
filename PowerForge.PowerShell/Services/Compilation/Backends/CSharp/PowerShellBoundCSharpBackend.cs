@@ -126,6 +126,17 @@ internal sealed class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
                 EmitBlock(builder, loop.Statements, indent);
                 return;
+            case PowerShellLoweredForEachStatement loop:
+                var collection = EmitExpression(loop.Collection);
+                var enumerable = loop.ScalarString
+                    ? $"new[] {{ {collection} }}"
+                    : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(loop.ElementType)}>())";
+                builder.Append(prefix).Append("foreach (")
+                    .Append(PowerShellCSharpMethodEmitter.GetTypeName(loop.ElementType)).Append(' ')
+                    .Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(loop.Variable.Name)).Append(" in ")
+                    .Append(enumerable).AppendLine(")");
+                EmitBlock(builder, loop.Statements, indent);
+                return;
             case PowerShellLoweredBreakStatement:
                 builder.Append(prefix).AppendLine("break;");
                 return;
@@ -161,10 +172,18 @@ internal sealed class PowerShellBoundCSharpBackend
                 mutation.Value,
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
+            PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredInvocationExpression invocation =>
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitArray(PowerShellLoweredArrayExpression array)
+    {
+        var elementType = array.ClrType.GetElementType()!;
+        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(elementType)}>()";
+        return $"new {PowerShellCSharpMethodEmitter.GetTypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
+    }
 
     private static string EmitMutation(
         PowerShellSymbolId target,

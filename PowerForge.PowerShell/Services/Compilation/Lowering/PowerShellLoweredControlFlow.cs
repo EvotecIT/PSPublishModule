@@ -63,6 +63,31 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
     internal bool DeclareInitializer { get; }
 }
 
+internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredForEachStatement(
+        SourceSpan span,
+        PowerShellSymbolId variable,
+        Type elementType,
+        PowerShellLoweredExpression collection,
+        bool scalarString,
+        PowerShellLoweredStatement[] statements)
+        : base(span)
+    {
+        Variable = variable;
+        ElementType = elementType;
+        Collection = collection;
+        ScalarString = scalarString;
+        Statements = statements;
+    }
+
+    internal PowerShellSymbolId Variable { get; }
+    internal Type ElementType { get; }
+    internal PowerShellLoweredExpression Collection { get; }
+    internal bool ScalarString { get; }
+    internal PowerShellLoweredStatement[] Statements { get; }
+}
+
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
     internal PowerShellLoweredBreakStatement(SourceSpan span) : base(span) { }

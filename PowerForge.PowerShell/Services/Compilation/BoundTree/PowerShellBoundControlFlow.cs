@@ -69,6 +69,31 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock Body { get; }
 }
 
+internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundForEachStatement(
+        SourceSpan span,
+        PowerShellSymbolId variable,
+        Type elementType,
+        PowerShellBoundExpression collection,
+        bool scalarString,
+        PowerShellBoundBlock body)
+        : base(span, PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects, collection.Capabilities | body.Capabilities)
+    {
+        Variable = variable;
+        ElementType = elementType;
+        Collection = collection;
+        ScalarString = scalarString;
+        Body = body;
+    }
+
+    internal PowerShellSymbolId Variable { get; }
+    internal Type ElementType { get; }
+    internal PowerShellBoundExpression Collection { get; }
+    internal bool ScalarString { get; }
+    internal PowerShellBoundBlock Body { get; }
+}
+
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundBreakStatement(SourceSpan span) : base(span, PowerShellSemanticEffect.None) { }

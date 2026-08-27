@@ -197,6 +197,44 @@ public sealed class PowerShellCompilationBoundPipelineTests
         Assert.Contains("total = checked((int)(total + index));", source, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("[int[]] $values = 1, 2, 3", "new int[] { 1, 2, 3 }")]
+    [InlineData("[string[]] $values = @('one'; 'two')", "new string[] { \"one\", \"two\" }")]
+    [InlineData("[string[]] $values = @()", "System.Array.Empty<string>()")]
+    public void ArraysCarryContextualElementContractsThroughLowering(string assignment, string expectedSource)
+    {
+        var document = PowerShellSourceParser.Parse(
+            $"function Get-Values {{ {assignment}; return $values }}",
+            TestPath("arrays.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var boundAssignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundAssignmentStatement));
+        Assert.IsType<PowerShellBoundArrayExpression>(boundAssignment.Value);
+        Assert.Contains(expectedSource, Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[string[]] $Values", "Values ?? global::System.Array.Empty<string>()")]
+    [InlineData("[string] $Values", "new[] { Values }")]
+    public void ForeachCollectionShapeIsSelectedDuringBinding(string parameter, string expectedEnumerable)
+    {
+        var document = PowerShellSourceParser.Parse(
+            $"function Get-Last {{ param({parameter}) [string] $last = ''; foreach ($value in $Values) {{ $last = $value }}; return $last }}",
+            TestPath("foreach.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), !loop.ScalarString);
+        Assert.IsType<PowerShellLoweredForEachStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("foreach (string value in", source, StringComparison.Ordinal);
+        Assert.Contains(expectedEnumerable, source, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void PublicTranspilerUsesBoundConditionalPlan()
     {

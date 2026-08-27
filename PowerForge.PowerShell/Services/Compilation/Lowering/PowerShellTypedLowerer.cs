@@ -90,6 +90,10 @@ internal sealed class PowerShellTypedLowerer
             {
                 foreach (var assignment in EnumerateAssignments(forLoop.Body)) yield return assignment;
             }
+            else if (statement is PowerShellBoundForEachStatement forEachLoop)
+            {
+                foreach (var assignment in EnumerateAssignments(forEachLoop.Body).Where(key => key != forEachLoop.Variable.StableKey)) yield return assignment;
+            }
         }
     }
 
@@ -114,6 +118,10 @@ internal sealed class PowerShellTypedLowerer
             else if (statement is PowerShellBoundForStatement forLoop)
             {
                 foreach (var nested in EnumerateAssignments(forLoop.Body)) yield return nested;
+            }
+            else if (statement is PowerShellBoundForEachStatement forEachLoop)
+            {
+                foreach (var nested in EnumerateAssignments(forEachLoop.Body)) yield return nested;
             }
         }
     }
@@ -152,6 +160,7 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(loop.Condition, functions),
                 LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared)),
             PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared),
+            PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
@@ -174,6 +183,23 @@ internal sealed class PowerShellTypedLowerer
             loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions),
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared),
             declareInitializer);
+    }
+
+    private static PowerShellLoweredForEachStatement LowerForEach(
+        PowerShellBoundForEachStatement loop,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, Type> symbolTypes,
+        IReadOnlyDictionary<string, Type> localTypes,
+        ISet<string> declared)
+    {
+        declared.Add(loop.Variable.StableKey);
+        return new PowerShellLoweredForEachStatement(
+            loop.Span,
+            loop.Variable,
+            loop.ElementType,
+            LowerExpression(loop.Collection, functions),
+            loop.ScalarString,
+            LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared));
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(
@@ -215,6 +241,11 @@ internal sealed class PowerShellTypedLowerer
                 mutation.Value is null ? null : LowerExpression(mutation.Value, functions),
                 mutation.NormalizeNullString,
                 mutation.CheckedIntegral),
+            PowerShellBoundArrayExpression array => new PowerShellLoweredArrayExpression(
+                array.Span,
+                array.Type.ClrType,
+                array.Kind,
+                array.Elements.Select(element => LowerExpression(element, functions)).ToArray()),
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) =>
                 new PowerShellLoweredInvocationExpression(
                     invocation.Span,
