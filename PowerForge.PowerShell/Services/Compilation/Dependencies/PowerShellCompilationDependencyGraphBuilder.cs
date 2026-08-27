@@ -130,7 +130,14 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             Edges = edges,
             Cycles = cycles,
             Conflicts = conflicts,
-            LockSha256 = ComputeLockHash(nodes, edges, cycles, conflicts)
+            LockSha256 = PowerShellCompilationDependencyLockHasher.ComputeSha256(new PowerShellCompilationDependencyGraph
+            {
+                RootNodeId = rootId,
+                Nodes = nodes,
+                Edges = edges,
+                Cycles = cycles,
+                Conflicts = conflicts
+            })
         };
     }
 
@@ -181,6 +188,12 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             var existing = _nodes[existingId];
             existing.Roles |= roles;
             existing.Disposition = MergeDisposition(existing.Disposition, disposition);
+            existing.Policy.Redistribution = existing.Disposition == PowerShellCompilationDependencyGraphDisposition.Bundled
+                ? "Unverified"
+                : "NotApplicable";
+            existing.Policy.Servicing = existing.Disposition == PowerShellCompilationDependencyGraphDisposition.External
+                ? "TargetEnvironment"
+                : "ArtifactOwner";
             return existingId;
         }
 

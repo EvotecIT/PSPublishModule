@@ -193,6 +193,12 @@ public sealed class PowerShellCompilationBuildSpec
 
     /// <summary>Maximum time allowed for restore and compilation.</summary>
     public int TimeoutSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Optional dependency graph reviewed before the build. When supplied, the build fails unless
+    /// the newly resolved graph and every hashed local input exactly match this lock.
+    /// </summary>
+    public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
 }
 
 /// <summary>

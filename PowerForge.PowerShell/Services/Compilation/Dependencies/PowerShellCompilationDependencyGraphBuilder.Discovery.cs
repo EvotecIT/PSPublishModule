@@ -5,9 +5,6 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellCompilationDependencyGraphBuilder
 {
-    private static readonly Regex RequiresModulePattern = new(
-        @"(?im)^\s*#requires\s+(?:-(?:modules?|pssnapin)\s+)(?<value>[^\r\n]+)$",
-        RegexOptions.CultureInvariant);
     private static readonly Regex DllImportPattern = new(
         @"(?i)\[(?:System\.Runtime\.InteropServices\.)?DllImport\s*\(\s*['""](?<value>[^'""]+)['""]",
         RegexOptions.CultureInvariant);
@@ -51,20 +48,26 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 usingStatement.Extent.Text.Trim());
         }
 
-        foreach (Match match in RequiresModulePattern.Matches(text))
+        foreach (var module in (IEnumerable<Microsoft.PowerShell.Commands.ModuleSpecification>?)ast.ScriptRequirements?.RequiredModules ??
+                     Array.Empty<Microsoft.PowerShell.Commands.ModuleSpecification>())
         {
-            foreach (var module in match.Groups["value"].Value.Split(',').Select(TrimLiteral).Where(static item => item.Length > 0))
-            {
-                var nodeId = AddExternalNode(
-                    module,
-                    PowerShellCompilationDependencyNodeKind.ExternalModule,
-                    HostedOrRejected(),
-                    "Static #requires module declaration.",
-                    string.Empty,
-                    targetFramework,
-                    runtimeIdentifier);
-                AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiresModule, match.Value.Trim());
-            }
+            var nodeId = AddReference(
+                module.Name,
+                directory,
+                PowerShellCompilationDependencyNodeKind.ExternalModule,
+                HostedOrRejected(),
+                "Static #requires module specification parsed by the PowerShell front end.",
+                targetFramework,
+                runtimeIdentifier);
+            var identity = _nodes[nodeId].Identity;
+            identity.Name = module.Name;
+            identity.Version = module.RequiredVersion?.ToString() ?? module.Version?.ToString() ?? module.MaximumVersion ?? string.Empty;
+            identity.MinimumVersion = module.Version?.ToString() ?? string.Empty;
+            identity.RequiredVersion = module.RequiredVersion?.ToString() ?? string.Empty;
+            identity.MaximumVersion = module.MaximumVersion ?? string.Empty;
+            identity.Guid = module.Guid?.ToString("D") ?? string.Empty;
+            identity.Provenance = "ScriptRequirementsModuleSpecification";
+            AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiresModule, module.ToString());
         }
 
         foreach (var command in ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
@@ -72,6 +75,14 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                      .OrderBy(static item => item.Extent.StartOffset))
         {
             DiscoverCommandEdge(command, sourceId, directory, targetFramework, runtimeIdentifier);
+        }
+
+        foreach (var invocation in ast.FindAll(static node => node is InvokeMemberExpressionAst, searchNestedScriptBlocks: true)
+                     .Cast<InvokeMemberExpressionAst>()
+                     .Where(static invocation => invocation.Static)
+                     .OrderBy(static invocation => invocation.Extent.StartOffset))
+        {
+            DiscoverComActivation(invocation, sourceId, targetFramework);
         }
 
         foreach (Match match in DllImportPattern.Matches(text))
@@ -160,21 +171,54 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         if (commandName.Equals("New-Object", StringComparison.OrdinalIgnoreCase) &&
             TryGetNamedLiteral(command, new[] { "ComObject" }, out var progId))
         {
-            var disposition = _mode == PowerShellCompilationMode.Strict
-                ? PowerShellCompilationDependencyGraphDisposition.Rejected
-                : PowerShellCompilationDependencyGraphDisposition.Hosted;
-            var nodeId = AddExternalNode(
-                progId!,
-                PowerShellCompilationDependencyNodeKind.ComObject,
-                disposition,
-                _mode == PowerShellCompilationMode.Strict
-                    ? "Strict compilation rejects COM activation until a typed COM adapter exists."
-                    : "COM activation remains hosted by Windows PowerShell semantics.",
-                string.Empty,
-                targetFramework,
-                "win");
-            AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.RuntimeAsset, command.Extent.Text);
+            AddComActivation(progId!, isClsid: false, "PowerShell.NewObject.ComObject", command.Extent.Text, sourceId, targetFramework);
         }
+    }
+
+    private void DiscoverComActivation(
+        InvokeMemberExpressionAst invocation,
+        string sourceId,
+        string? targetFramework)
+    {
+        if (invocation.Expression is not TypeExpressionAst type ||
+            !type.TypeName.FullName.Equals("type", StringComparison.OrdinalIgnoreCase) ||
+            invocation.Arguments.Count == 0)
+            return;
+        var member = invocation.Member.Extent.Text.Trim('\'', '"');
+        var isProgId = member.Equals("GetTypeFromProgID", StringComparison.OrdinalIgnoreCase);
+        var isClsid = member.Equals("GetTypeFromCLSID", StringComparison.OrdinalIgnoreCase);
+        if ((!isProgId && !isClsid) || !TryGetExpressionLiteral(invocation.Arguments[0], out var value))
+            return;
+        AddComActivation(value!, isClsid, "System.Type." + member, invocation.Extent.Text, sourceId, targetFramework);
+    }
+
+    private void AddComActivation(
+        string identityValue,
+        bool isClsid,
+        string adapter,
+        string evidence,
+        string sourceId,
+        string? targetFramework)
+    {
+        var disposition = _mode == PowerShellCompilationMode.Strict
+            ? PowerShellCompilationDependencyGraphDisposition.Rejected
+            : PowerShellCompilationDependencyGraphDisposition.Hosted;
+        var nodeId = AddExternalNode(
+            identityValue,
+            PowerShellCompilationDependencyNodeKind.ComObject,
+            disposition,
+            _mode == PowerShellCompilationMode.Strict
+                ? "Strict compilation rejects COM activation until a typed COM adapter owns activation, apartment state, errors, and cleanup."
+                : "COM activation is owned by the hosted Windows adapter; the invoking host supplies apartment state and cleanup.",
+            string.Empty,
+            targetFramework,
+            "win");
+        var identity = _nodes[nodeId].Identity;
+        identity.Guid = isClsid ? identityValue : string.Empty;
+        identity.InteropAdapter = adapter;
+        identity.ApartmentState = "HostThread";
+        identity.Provenance = isClsid ? "StaticComClsid" : "StaticComProgId";
+        AddEdge(sourceId, nodeId, PowerShellCompilationDependencyEdgeKind.ComActivation, evidence);
     }
 
     private void AddProcessEdge(
@@ -262,6 +306,20 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         {
             StringConstantExpressionAst literal => literal.Value,
             ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 => expandable.Value,
+            _ => null
+        };
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetExpressionLiteral(ExpressionAst expression, out string? value)
+    {
+        if (expression is ConvertExpressionAst conversion)
+            expression = conversion.Child;
+        value = expression switch
+        {
+            StringConstantExpressionAst literal => literal.Value,
+            ExpandableStringExpressionAst expandable when expandable.NestedExpressions.Count == 0 => expandable.Value,
+            ConstantExpressionAst constant when constant.Value is Guid guid => guid.ToString("D"),
             _ => null
         };
         return !string.IsNullOrWhiteSpace(value);

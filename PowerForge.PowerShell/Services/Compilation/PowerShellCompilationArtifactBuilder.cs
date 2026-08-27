@@ -63,6 +63,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
+            ValidateExpectedDependencyLock(spec, dependencyGraph);
             if (dependencyGraph.Conflicts.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains incompatible identities: " + string.Join(" ", dependencyGraph.Conflicts));
             if (dependencyGraph.Cycles.Length > 0)
@@ -279,6 +280,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
+            VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
 
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try

@@ -13,12 +13,14 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var script = fixture.Write(
             "Demo.ps1",
             """
-            #requires -Modules External.Tools
+            #requires -Modules @{ ModuleName='External.Tools'; ModuleVersion='1.0.0'; MaximumVersion='2.0.0'; Guid='00000000-0000-0000-0000-000000000123' }, @{ ModuleName='Exact.Tools'; RequiredVersion='3.0.0' }
             using assembly './Managed.dll'
             Import-Module ActiveDirectory
             Add-Type -Path './Managed.dll'
             Start-Process 'tool.exe'
             New-Object -ComObject 'Scripting.FileSystemObject'
+            [type]::GetTypeFromProgID('Shell.Application')
+            [type]::GetTypeFromCLSID([guid]'0D43FE01-F093-11CF-8940-00A0C9054228')
             $nativeSignature = "[DllImport('native-demo')]"
             """);
 
@@ -37,15 +39,20 @@ public sealed class PowerShellCompilationDependencyGraphTests
         });
         Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ManagedLibrary && node.Identity.Provenance == "ManagedMetadataReadOnly");
         Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ExternalModule && node.Identity.Name == "ActiveDirectory" && node.Disposition == PowerShellCompilationDependencyGraphDisposition.Rejected);
+        Assert.Contains(repeated.Nodes, node => node.Identity.Name == "External.Tools" && node.Identity.MinimumVersion == "1.0.0" && node.Identity.MaximumVersion == "2.0.0" && node.Identity.Guid == "00000000-0000-0000-0000-000000000123");
+        Assert.Contains(repeated.Nodes, node => node.Identity.Name == "Exact.Tools" && node.Identity.RequiredVersion == "3.0.0");
         Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.NativeLibrary && node.Identity.Name == "native-demo");
         Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ExternalProcess && node.Disposition == PowerShellCompilationDependencyGraphDisposition.Rejected);
         Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject && node.Disposition == PowerShellCompilationDependencyGraphDisposition.Rejected);
+        Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject && node.Identity.InteropAdapter == "System.Type.GetTypeFromProgID" && node.Identity.ApartmentState == "HostThread");
+        Assert.Contains(repeated.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject && node.Identity.Guid == "0D43FE01-F093-11CF-8940-00A0C9054228");
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.UsingAssembly);
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.RequiresModule);
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.ImportModule);
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.ManagedReference);
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.NativeLoad);
         Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.ProcessTarget);
+        Assert.Contains(repeated.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.ComActivation);
     }
 
     [Fact]
@@ -91,7 +98,8 @@ public sealed class PowerShellCompilationDependencyGraphTests
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict)
         {
-            TargetFramework = "net8.0"
+            TargetFramework = "net8.0",
+            ExpectedDependencyLock = expected
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -101,16 +109,79 @@ public sealed class PowerShellCompilationDependencyGraphTests
     }
 
     [Fact]
+    public void Build_RejectsReviewedDependencyLockAfterSourceDrift()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("Demo.ps1", "function Get-Demo { return 1 }");
+        var input = new PowerShellCompilationInputResolver().Resolve(
+            script,
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict);
+        var expected = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(
+            input,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0");
+        File.WriteAllText(script, "function Get-Demo { return 2 }");
+        var output = Path.Combine(fixture.Root, "out");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            script,
+            output,
+            "Dependency.Graph.Drift",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net8.0",
+            ExpectedDependencyLock = expected
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dependency lock drifted", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
+    public void Build_RejectsReviewedDependencyLockWhoseContentHashWasTampered()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("Demo.ps1", "function Get-Demo { return 1 }");
+        var expected = new PowerShellCompilationInputResolver().Resolve(
+            script,
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict).DependencyGraph;
+        expected.Nodes[0].Identity.Name = "tampered-after-review";
+        var output = Path.Combine(fixture.Root, "out");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            script,
+            output,
+            "Dependency.Graph.Tampered",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict)
+        {
+            ExpectedDependencyLock = expected
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("invalid content hash", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
     public void Resolve_RecordsTransitiveManifestIdentityHooksAndCycle()
     {
         using var fixture = new GraphFixture();
         fixture.Write("Demo.psm1", "function Get-Demo { return 1 }");
         fixture.Write(
             "Demo.psd1",
-            "@{ RootModule='Demo.psm1'; ModuleVersion='1.2.3'; RequiredModules=@(@{ModuleName='External.One';RequiredVersion='2.0.0'}); NestedModules=@('Nested/Nested.psd1'); ScriptsToProcess=@('Initialize.ps1'); TypesToProcess=@('Demo.Types.ps1xml') }");
+            "@{ RootModule='Demo.psm1'; ModuleVersion='1.2.3'; RequiredModules=@(@{ModuleName='External.One';RequiredVersion='2.0.0'},@{ModuleName='./Child/Child.psd1';RequiredVersion='2.1.0'}); NestedModules=@('Nested/Nested.psd1'); ScriptsToProcess=@('Initialize.ps1'); TypesToProcess=@('Demo.Types.ps1xml') }");
         fixture.Write("Initialize.ps1", "$script:initialized = $true");
         fixture.Write("Demo.Types.ps1xml", "<Types />");
         fixture.Write("Nested/Nested.psd1", "@{ RootModule='../Demo.psd1'; ModuleVersion='1.0.0' }");
+        fixture.Write("Child/Child.psm1", "function Get-Child { return 1 }");
+        fixture.Write("Child/Child.psd1", "@{ RootModule='Child.psm1'; ModuleVersion='2.1.0'; RequiredModules=@(@{ModuleName='../Grand/Grand.psd1';RequiredVersion='4.0.0'}) }");
+        fixture.Write("Grand/Grand.psm1", "function Get-Grand { return 1 }");
+        fixture.Write("Grand/Grand.psd1", "@{ RootModule='Grand.psm1'; ModuleVersion='4.0.0' }");
 
         var input = new PowerShellCompilationInputResolver().Resolve(
             fixture.Root,
@@ -119,6 +190,8 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var graph = input.DependencyGraph;
 
         Assert.Contains(graph.Nodes, node => node.Identity.Name == "External.One" && node.Identity.Version == "2.0.0");
+        Assert.Contains(graph.Nodes, node => node.Identity.Name == "./Child/Child.psd1" && node.Identity.RequiredVersion == "2.1.0");
+        Assert.Contains(graph.Nodes, node => node.Identity.Name == "../Grand/Grand.psd1" && node.Identity.RequiredVersion == "4.0.0");
         Assert.Contains(graph.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.ModuleInitialization);
         Assert.Contains(graph.Edges, edge => edge.Kind == PowerShellCompilationDependencyEdgeKind.Metadata);
         Assert.NotEmpty(graph.Cycles);

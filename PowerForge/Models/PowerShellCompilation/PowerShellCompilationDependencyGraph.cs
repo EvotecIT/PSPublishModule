@@ -83,7 +83,9 @@ public enum PowerShellCompilationDependencyEdgeKind
     /// <summary>Literal external-process target.</summary>
     ProcessTarget,
     /// <summary>Runtime asset or ordinary payload.</summary>
-    RuntimeAsset
+    RuntimeAsset,
+    /// <summary>Windows COM activation API.</summary>
+    ComActivation
 }
 
 /// <summary>Artifact treatment assigned to every dependency graph node.</summary>
@@ -112,6 +114,14 @@ public sealed class PowerShellCompilationDependencyIdentity
     public string Name { get; set; } = string.Empty;
     /// <summary>Exact or constrained version text.</summary>
     public string Version { get; set; } = string.Empty;
+    /// <summary>Minimum accepted module version.</summary>
+    public string MinimumVersion { get; set; } = string.Empty;
+    /// <summary>Exact required module version.</summary>
+    public string RequiredVersion { get; set; } = string.Empty;
+    /// <summary>Maximum accepted module version.</summary>
+    public string MaximumVersion { get; set; } = string.Empty;
+    /// <summary>Required module or COM class GUID.</summary>
+    public string Guid { get; set; } = string.Empty;
     /// <summary>SHA-256 for a local dependency.</summary>
     public string Sha256 { get; set; } = string.Empty;
     /// <summary>Resolved source path or repository/source identity.</summary>
@@ -126,6 +136,10 @@ public sealed class PowerShellCompilationDependencyIdentity
     public string Architecture { get; set; } = string.Empty;
     /// <summary>Provenance statement.</summary>
     public string Provenance { get; set; } = string.Empty;
+    /// <summary>Interop adapter that owns activation or invocation.</summary>
+    public string InteropAdapter { get; set; } = string.Empty;
+    /// <summary>Apartment-state requirement for COM activation.</summary>
+    public string ApartmentState { get; set; } = string.Empty;
 }
 
 /// <summary>Non-technical delivery constraints kept separate from dependency resolution.</summary>
@@ -185,7 +199,7 @@ public sealed class PowerShellCompilationDependencyEdge
 public sealed class PowerShellCompilationDependencyGraph
 {
     /// <summary>Graph schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     /// <summary>Root input node identity.</summary>
     public string RootNodeId { get; set; } = string.Empty;
     /// <summary>Stable graph nodes.</summary>

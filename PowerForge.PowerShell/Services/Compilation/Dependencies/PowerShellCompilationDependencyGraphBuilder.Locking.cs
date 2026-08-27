@@ -1,6 +1,3 @@
-using System.Text;
-using System.Security.Cryptography;
-
 namespace PowerForge;
 
 internal sealed partial class PowerShellCompilationDependencyGraphBuilder
@@ -40,19 +37,30 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         {
             foreach (var module in modules.OrderBy(static item => item.ModuleName, StringComparer.OrdinalIgnoreCase))
             {
-                var version = module.RequiredVersion ?? module.ModuleVersion ??
-                    (string.IsNullOrWhiteSpace(module.MaximumVersion) ? string.Empty : "<=" + module.MaximumVersion);
-                var nodeId = AddExternalNode(
-                    module.ModuleName,
-                    PowerShellCompilationDependencyNodeKind.ExternalModule,
-                    HostedOrRejected(),
-                    "RequiredModules identity is locked but acquisition remains an explicit restore operation.",
-                    version ?? string.Empty,
-                    targetFramework,
-                    runtimeIdentifier);
-                if (!string.IsNullOrWhiteSpace(module.Guid))
-                    _nodes[nodeId].Identity.Provenance = "ManifestRequiredModule;Guid=" + module.Guid;
+                var localManifest = TryResolveRequiredModuleManifest(directory, module);
+                if (localManifest is not null)
+                    ValidateResolvedModuleIdentity(localManifest, module);
+                var nodeId = localManifest is null
+                    ? AddExternalNode(
+                        module.ModuleName,
+                        PowerShellCompilationDependencyNodeKind.ExternalModule,
+                        HostedOrRejected(),
+                        "RequiredModules identity is locked; unresolved acquisition remains an explicit restore operation.",
+                        module.RequiredVersion ?? module.ModuleVersion ?? module.MaximumVersion ?? string.Empty,
+                        targetFramework,
+                        runtimeIdentifier)
+                    : AddLocalNode(
+                        localManifest,
+                        PowerShellCompilationDependencyNodeKind.ModuleManifest,
+                        PowerShellCompilationDependencyGraphRole.Dependency | PowerShellCompilationDependencyGraphRole.Deployment,
+                        HostedOrRejected(),
+                        "RequiredModules resolved transitively from a local read-only manifest.",
+                        targetFramework,
+                        runtimeIdentifier);
+                ApplyModuleIdentity(_nodes[nodeId].Identity, module);
                 AddEdge(manifestId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiredModule, module.ModuleName);
+                if (localManifest is not null)
+                    DiscoverManifestEdges(localManifest, nodeId, targetFramework, runtimeIdentifier, visited);
             }
         }
 
@@ -71,6 +79,57 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             foreach (var value in values)
                 AddManifestTarget(manifestId, directory, value, edgeKind, targetFramework, runtimeIdentifier, visited);
         }
+    }
+
+    private string? TryResolveRequiredModuleManifest(string directory, RequiredModuleReference module)
+    {
+        var name = module.ModuleName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        var fileName = Path.GetFileNameWithoutExtension(name);
+        var version = module.RequiredVersion ?? module.ModuleVersion;
+        var candidates = new List<string>();
+        if (name.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+            candidates.Add(Path.Combine(directory, name));
+        candidates.Add(Path.Combine(directory, fileName + ".psd1"));
+        candidates.Add(Path.Combine(directory, fileName, fileName + ".psd1"));
+        candidates.Add(Path.Combine(_moduleRoot, fileName, fileName + ".psd1"));
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            candidates.Add(Path.Combine(directory, fileName, version!, fileName + ".psd1"));
+            candidates.Add(Path.Combine(_moduleRoot, fileName, version!, fileName + ".psd1"));
+        }
+        return candidates.Select(Path.GetFullPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .FirstOrDefault(File.Exists);
+    }
+
+    private static void ApplyModuleIdentity(
+        PowerShellCompilationDependencyIdentity identity,
+        RequiredModuleReference module)
+    {
+        identity.Name = module.ModuleName;
+        identity.Version = module.RequiredVersion ?? module.ModuleVersion ?? module.MaximumVersion ?? string.Empty;
+        identity.MinimumVersion = module.ModuleVersion ?? string.Empty;
+        identity.RequiredVersion = module.RequiredVersion ?? string.Empty;
+        identity.MaximumVersion = module.MaximumVersion ?? string.Empty;
+        identity.Guid = module.Guid ?? string.Empty;
+        identity.Provenance = "ManifestRequiredModule";
+    }
+
+    private static void ValidateResolvedModuleIdentity(string manifestPath, RequiredModuleReference module)
+    {
+        var actualText = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion") ?? string.Empty;
+        if (!Version.TryParse(actualText, out var actual))
+            throw new InvalidOperationException($"Resolved RequiredModules manifest '{manifestPath}' has no valid literal ModuleVersion.");
+        if (Version.TryParse(module.RequiredVersion, out var required) && actual != required)
+            throw new InvalidOperationException($"Resolved RequiredModules manifest '{manifestPath}' version {actual} does not match required version {required}.");
+        if (Version.TryParse(module.ModuleVersion, out var minimum) && actual < minimum)
+            throw new InvalidOperationException($"Resolved RequiredModules manifest '{manifestPath}' version {actual} is below minimum version {minimum}.");
+        if (Version.TryParse(module.MaximumVersion, out var maximum) && actual > maximum)
+            throw new InvalidOperationException($"Resolved RequiredModules manifest '{manifestPath}' version {actual} exceeds maximum version {maximum}.");
+        if (!Guid.TryParse(module.Guid, out var requiredGuid)) return;
+        var actualGuid = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "GUID");
+        if (!Guid.TryParse(actualGuid, out var parsedGuid) || parsedGuid != requiredGuid)
+            throw new InvalidOperationException($"Resolved RequiredModules manifest '{manifestPath}' GUID does not match required GUID {requiredGuid:D}.");
     }
 
     private static PowerShellCompilationDependencyNodeKind ClassifyManifestModule(
@@ -198,36 +257,4 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             .OrderBy(static conflict => conflict, StringComparer.Ordinal)
             .ToArray();
 
-    private static string ComputeLockHash(
-        IEnumerable<PowerShellCompilationDependencyNode> nodes,
-        IEnumerable<PowerShellCompilationDependencyEdge> edges,
-        IEnumerable<string[]> cycles,
-        IEnumerable<string> conflicts)
-    {
-        var builder = new StringBuilder();
-        foreach (var node in nodes.OrderBy(static item => item.Id, StringComparer.Ordinal))
-        {
-            Append("node", node.Id, node.Kind, node.Roles, node.Disposition, node.Exists,
-                node.Identity.Name, node.Identity.Version, node.Identity.Sha256, node.Identity.Source,
-                node.Identity.Edition, node.Identity.TargetFramework, node.Identity.RuntimeIdentifier,
-                node.Identity.Architecture, node.Identity.Provenance, node.Policy.Redistribution,
-                node.Policy.Publisher, node.Policy.Signature, node.Policy.Servicing, node.Policy.License);
-        }
-        foreach (var edge in edges.OrderBy(static item => item.FromId, StringComparer.Ordinal).ThenBy(static item => item.Order))
-            Append("edge", edge.FromId, edge.ToId, edge.Kind, edge.Evidence);
-        foreach (var cycle in cycles) Append("cycle", string.Join("->", cycle));
-        foreach (var conflict in conflicts) Append("conflict", conflict);
-        using var sha = SHA256.Create();
-        return ToHex(sha.ComputeHash(Encoding.UTF8.GetBytes(builder.ToString())));
-
-        void Append(params object[] values)
-        {
-            foreach (var value in values)
-            {
-                var text = value?.ToString() ?? string.Empty;
-                builder.Append(text.Length).Append(':').Append(text);
-            }
-            builder.AppendLine();
-        }
-    }
 }
