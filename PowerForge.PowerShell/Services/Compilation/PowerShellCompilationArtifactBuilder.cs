@@ -80,7 +80,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             int runtimeRoutedUnits;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
-            var dependencyClosureVerified = false;
+            PowerShellCompilationDependencyClosure? dependencyClosure = null;
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
                 : Array.Empty<string>();
@@ -296,8 +296,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                                         ? "GeneratedPackagedSource"
                                         : "GeneratedSource")));
                 }
-                if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime)
-                    dependencyClosureVerified = PowerShellStrictDependencyClosureVerifier.Verify(stagedArtifact.Files);
                 var signing = PowerShellCompilationArtifactSigner.Sign(spec, stagedArtifact.Files);
                 if (signing is not null)
                 {
@@ -307,6 +305,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         file.SizeBytes = new FileInfo(file.Path).Length;
                     }
                 }
+                if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime)
+                    dependencyClosure = PowerShellStrictDependencyClosureVerifier.Verify(stagedArtifact.Files);
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
                 var generatedSourcePath = stagedGeneratedSourcePath is null
                     ? null
@@ -336,7 +336,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ContainsEmbeddedPowerShellSource = stagedArtifact.Files.Any(static file =>
                         PowerShellStrictDependencyClosureVerifier.IsPowerShellSource(file.Path)),
                     AllowsPowerShellRuntimeEvaluation = requiresPowerShellRuntime || usesPowerShellRuntimeFallback,
-                    DependencyClosureVerified = dependencyClosureVerified,
+                    DependencyClosureVerified = dependencyClosure?.Verified == true,
+                    DependencyClosure = dependencyClosure,
                     SelfContained = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SelfContained,
                     SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
                     Optimization = spec.Optimization,

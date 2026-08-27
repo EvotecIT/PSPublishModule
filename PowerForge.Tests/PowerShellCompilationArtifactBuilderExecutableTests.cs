@@ -80,6 +80,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(result.Manifest.ContainsEmbeddedPowerShellSource);
         Assert.False(result.Manifest.AllowsPowerShellRuntimeEvaluation);
         Assert.True(result.Manifest.DependencyClosureVerified);
+        Assert.NotNull(result.Manifest.DependencyClosure);
+        Assert.StartsWith("DotNetSingleFile/", result.Manifest.DependencyClosure.ArtifactFormat, StringComparison.Ordinal);
+        Assert.True(result.Manifest.DependencyClosure.BundledEntries > 0);
+        Assert.Empty(result.Manifest.DependencyClosure.Limitations);
         Assert.Equal(64, result.Manifest.GeneratedSourceSha256.Length);
         Assert.Equal(1, result.Manifest.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);

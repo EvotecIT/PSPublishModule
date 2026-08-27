@@ -25,7 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var manifest = Assert.IsType<PowerShellCompilationArtifactManifest>(result.Manifest);
-        Assert.Equal(2, manifest.SchemaVersion);
+        Assert.Equal(3, manifest.SchemaVersion);
         Assert.NotNull(manifest.SemanticProfile);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictName, manifest.SemanticProfile.Name);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion, manifest.SemanticProfile.Version);
@@ -38,6 +38,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(manifest.ContainsEmbeddedPowerShellSource);
         Assert.False(manifest.AllowsPowerShellRuntimeEvaluation);
         Assert.True(manifest.DependencyClosureVerified);
+        Assert.NotNull(manifest.DependencyClosure);
+        Assert.True(manifest.DependencyClosure.Verified);
+        Assert.True(manifest.DependencyClosure.InspectedFiles > 0);
+        Assert.True(manifest.DependencyClosure.ManagedAssemblies > 0);
+        Assert.Empty(manifest.DependencyClosure.Limitations);
         Assert.Equal(64, manifest.GeneratedSourceSha256.Length);
 
         var abi = Assert.IsType<PowerShellCompilationAbiManifest>(manifest.PublicAbi);
@@ -63,6 +68,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var contractSource = Path.Combine(result.GeneratedSourcePath!, "PowerForgeRuntimeFreeContract.g.cs");
         Assert.True(File.Exists(contractSource));
         Assert.Contains(abi.Sha256, File.ReadAllText(contractSource), StringComparison.Ordinal);
+        var generatedProject = Assert.Single(Directory.EnumerateFiles(result.GeneratedSourcePath!, "*.csproj"));
+        var generatedProjectText = File.ReadAllText(generatedProject);
+        Assert.Contains("<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", generatedProjectText, StringComparison.Ordinal);
+        Assert.DoesNotContain("IL2026", generatedProjectText, StringComparison.Ordinal);
 
         using var assemblyStream = File.OpenRead(result.ArtifactPath!);
         var loadContext = new AssemblyLoadContext("PowerForgeRuntimeFreeContractProof", isCollectible: true);

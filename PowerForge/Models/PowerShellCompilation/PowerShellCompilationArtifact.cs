@@ -201,7 +201,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -247,6 +247,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Whether the final managed dependency closure was mechanically checked.</summary>
     public bool DependencyClosureVerified { get; set; }
+
+    /// <summary>Delivered artifact-set inspection evidence for runtime-free Strict output.</summary>
+    public PowerShellCompilationDependencyClosure? DependencyClosure { get; set; }
 
     /// <summary>Whether the .NET runtime is included with the artifact.</summary>
     public bool SelfContained { get; set; }
@@ -301,6 +304,31 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Source diagnostics retained as honest fallback evidence.</summary>
     public PowerShellCompilationDiagnostic[] Diagnostics { get; set; } = Array.Empty<PowerShellCompilationDiagnostic>();
+}
+
+/// <summary>Delivered artifact-set inspection evidence for runtime-free Strict output.</summary>
+public sealed class PowerShellCompilationDependencyClosure
+{
+    /// <summary>Closure evidence schema version.</summary>
+    public int SchemaVersion { get; set; } = 1;
+
+    /// <summary>Whether every executable dependency format was understood and passed inspection.</summary>
+    public bool Verified { get; set; }
+
+    /// <summary>Detected primary artifact container format.</summary>
+    public string ArtifactFormat { get; set; } = "ManagedAssembly";
+
+    /// <summary>Number of delivered files whose existence, size, hash, or content was inspected.</summary>
+    public int InspectedFiles { get; set; }
+
+    /// <summary>Number of managed assemblies whose CLR metadata was inspected.</summary>
+    public int ManagedAssemblies { get; set; }
+
+    /// <summary>Number of entries read from a .NET single-file manifest.</summary>
+    public int BundledEntries { get; set; }
+
+    /// <summary>Formats or dependencies that prevented fail-closed certification.</summary>
+    public List<string> Limitations { get; set; } = new();
 }
 
 /// <summary>

@@ -16,6 +16,6 @@
     <IsAotCompatible>true</IsAotCompatible>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
-    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2050;IL2060;IL2062;IL2063;IL2064;IL2065;IL2067;IL2068;IL2069;IL2070;IL2072;IL2075;IL2077;IL2078;IL2090;IL2091;IL2092;IL2093;IL2094;IL3000;IL3001;IL3002;IL3003;IL3050</WarningsAsErrors>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

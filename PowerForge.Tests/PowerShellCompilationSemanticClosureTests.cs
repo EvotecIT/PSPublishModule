@@ -37,6 +37,30 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void StrictClosureVerifierFailsClosedForUnknownExecutableFormat()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Closure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "unknown.exe");
+            File.WriteAllBytes(path, new byte[] { 1, 2, 3, 4 });
+
+            var result = PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            {
+                new PowerShellCompilationArtifactFile { Path = path, Role = "Primary", SizeBytes = 4 }
+            });
+
+            Assert.False(result.Verified);
+            Assert.Contains(result.Limitations, static value => value.Contains("not currently certifiable", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ArrayAndForHeaderNodesPropagateNestedProcessEffects()
     {
         var processStart = new PowerShellBoundClrInvocationExpression(
