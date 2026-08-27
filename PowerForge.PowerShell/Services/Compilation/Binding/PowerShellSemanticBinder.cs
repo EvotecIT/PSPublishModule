@@ -20,6 +20,7 @@ internal sealed class PowerShellSemanticBinder
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
+            .Where(static group => HasTypedEndBlockShape(group.Single().Syntax.Body))
             .ToDictionary(
                 static group => group.Key,
                 group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
@@ -47,6 +48,15 @@ internal sealed class PowerShellSemanticBinder
             functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
             OrderDiagnostics(diagnostics));
     }
+
+    private static bool HasTypedEndBlockShape(ScriptBlockAst body)
+        => body.DynamicParamBlock is null &&
+           body.BeginBlock is null &&
+           body.ProcessBlock is null &&
+           GetCleanBlock(body) is null;
+
+    private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
+        => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;
 
     private static FunctionDeclaration[] DeclareFunctions(
         IEnumerable<ParsedSourceDocument> documents,
@@ -203,7 +213,8 @@ internal sealed class PowerShellSemanticBinder
             var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;
-            var type = clrType == typeof(object)
+            var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            var type = clrType == typeof(object) && !hasAuthoredType
                 ? PowerShellTypeFact.Unknown
                 : new PowerShellTypeFact(clrType, PowerShellTypeFactProvenance.Explicit, $"Parameter '${name}' has an authored type constraint.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
@@ -229,6 +240,11 @@ internal sealed class PowerShellSemanticBinder
             var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
             if (variable is null) continue;
             var name = variable.VariablePath.UserPath;
+            if (name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals(PowerShellBoundParametersPolicy.VariableName, StringComparison.OrdinalIgnoreCase))
+                continue;
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = ResolveAssignmentType(assignment);
@@ -267,7 +283,7 @@ internal sealed class PowerShellSemanticBinder
 
     private static PowerShellTypeFact ResolveAssignmentType(AssignmentStatementAst assignment)
     {
-        if (assignment.Left is ConvertExpressionAst typedLeft && typedLeft.StaticType != typeof(object))
+        if (assignment.Left is ConvertExpressionAst typedLeft)
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
         var expression = UnwrapExpression(assignment.Right);
         if (expression is HashtableAst)
@@ -293,6 +309,19 @@ internal sealed class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } discarded &&
+                discarded.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
+            {
+                if (assignment.Operator.ToString() != "Equals")
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2405", "The $null discard target supports simple '=' assignment only.", PowerShellSourceParser.GetSpan(document, assignment.Extent)));
+                    return null;
+                }
+                var discardedValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+                return discardedValue is null
+                    ? null
+                    : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, assignment.Extent), discardedValue, emitsOutput: false);
+            }
             if (assignment.Left is IndexExpressionAst index)
             {
                 return PowerShellDictionarySemanticBinder.BindAssignment(
@@ -300,6 +329,7 @@ internal sealed class PowerShellSemanticBinder
                     assignment,
                     index,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             }
             if (assignment.Left is MemberExpressionAst member)
@@ -310,6 +340,7 @@ internal sealed class PowerShellSemanticBinder
                     member,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    capabilities,
                     diagnostics);
             }
             var mutation = PowerShellMutationSemanticBinder.BindAssignment(
@@ -496,9 +527,12 @@ internal sealed class PowerShellSemanticBinder
                 foreach (var constraint in clause.CatchTypes)
                 {
                     var type = constraint.TypeName.GetReflectionType();
-                    if (type is null || !typeof(Exception).IsAssignableFrom(type) || !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
+                    var supportedPowerShellRuntimeException = type == typeof(System.Management.Automation.RuntimeException) &&
+                                                               capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+                    if (type is null || !typeof(Exception).IsAssignableFrom(type) ||
+                        !supportedPowerShellRuntimeException && !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
                     {
-                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2310", $"Typed catch '{constraint.TypeName.FullName}' is not a statically resolvable target-compatible CLR exception type.", PowerShellSourceParser.GetSpan(document, constraint.Extent)));
+                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2310", $"Typed catch '{constraint.TypeName.FullName}' is outside the generated project reference set.", PowerShellSourceParser.GetSpan(document, constraint.Extent)));
                         return null;
                     }
                     types.Add(type);
@@ -665,12 +699,20 @@ internal sealed class PowerShellSemanticBinder
                     ordered: true,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     diagnostics);
+            case ConvertExpressionAst conversion when PowerShellObjectConstructionPolicy.IsLiteral(conversion):
+                return PowerShellObjectSemanticBinder.Bind(
+                    document,
+                    conversion,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
+                    diagnostics);
             case ConvertExpressionAst conversion:
                 return PowerShellConversionSemanticBinder.Bind(
                     document,
                     conversion,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    capabilities,
                     diagnostics);
             case BinaryExpressionAst binary:
                 return PowerShellOperatorSemanticBinder.BindBinary(
@@ -678,7 +720,8 @@ internal sealed class PowerShellSemanticBinder
                     span,
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities),
                     diagnostics,
-                    targetFramework);
+                    targetFramework,
+                    capabilities);
             case UnaryExpressionAst unary:
                 if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(
@@ -698,13 +741,17 @@ internal sealed class PowerShellSemanticBinder
                     document,
                     index,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
+            case InvokeMemberExpressionAst invocation when PowerShellBoundParametersPolicy.TryGetContainsKey(invocation, out var parameterName):
+                return new PowerShellBoundParameterPresenceExpression(span, parameterName);
             case InvokeMemberExpressionAst invocation:
                 return PowerShellClrMemberSemanticBinder.BindInvocation(
                     document,
                     invocation,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    capabilities,
                     diagnostics);
             case MemberExpressionAst member:
                 return PowerShellClrMemberSemanticBinder.BindMember(
@@ -712,6 +759,7 @@ internal sealed class PowerShellSemanticBinder
                     member,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    capabilities,
                     diagnostics);
             case CommandAst command when TryGetLocalFunction(command, functions, out var target):
                 return PowerShellLocalCallSemanticBinder.Bind(

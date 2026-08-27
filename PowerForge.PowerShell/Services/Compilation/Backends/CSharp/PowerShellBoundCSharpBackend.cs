@@ -22,7 +22,7 @@ internal sealed class PowerShellBoundCSharpBackend
         var builder = new StringBuilder();
         var parameterParts = function.Parameters.Select(parameter =>
             $"{PowerShellCSharpMethodEmitter.GetTypeName(parameter.ClrType)} {PowerShellCSharpMethodEmitter.SanitizeIdentifier(parameter.Symbol.Name)}").ToList();
-        var requiresBoundParameters = function.Parameters.Any(parameter =>
+        var requiresBoundParameters = function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
             parameter.Contract.DefaultValue is not null ||
             !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
             targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
@@ -121,8 +121,7 @@ internal sealed class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");
                 return;
             case PowerShellLoweredClrMemberAssignmentStatement assignment:
-                builder.Append(prefix).Append('(').Append(EmitExpression(assignment.Receiver)).Append(").")
-                    .Append(assignment.MemberName).Append(" = ").Append(EmitExpression(assignment.Value)).AppendLine(";");
+                builder.Append(prefix).Append(EmitClrMemberAssignment(assignment)).AppendLine(";");
                 return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
@@ -306,14 +305,16 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpMethodEmitter.SanitizeIdentifier(variable.Symbol.Name),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
-            PowerShellLoweredConversionExpression conversion =>
-                $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
+            PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
+            PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
             PowerShellLoweredTypeTestExpression typeTest => EmitTypeTest(typeTest),
             PowerShellLoweredRegexExpression regex => EmitRegex(regex),
             PowerShellLoweredWildcardExpression wildcard => EmitWildcard(wildcard),
             PowerShellLoweredMembershipExpression membership => EmitMembership(membership),
+            PowerShellLoweredStringSplitExpression split => EmitStringSplit(split),
+            PowerShellLoweredStringJoinExpression join => EmitStringJoin(join),
             PowerShellLoweredMutationExpression mutation => EmitMutation(
                 mutation.Target,
                 mutation.TargetClrType,
@@ -323,6 +324,7 @@ internal sealed class PowerShellBoundCSharpBackend
                 mutation.CheckedIntegral),
             PowerShellLoweredArrayExpression array => EmitArray(array),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
+            PowerShellLoweredPowerShellObjectExpression powerShellObject => EmitPowerShellObject(powerShellObject),
             PowerShellLoweredIndexExpression index => EmitIndex(index),
             PowerShellLoweredClrMemberExpression member => EmitClrMember(member),
             PowerShellLoweredClrInvocationExpression invocation => EmitClrInvocation(invocation),
@@ -337,6 +339,14 @@ internal sealed class PowerShellBoundCSharpBackend
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction)
             return $"__shouldProcessAction({EmitExpression(expression.Arguments[0])}, {EmitExpression(expression.Arguments[1])})";
         return PowerShellRuntimeStateIntrinsicPolicy.EmitStatic(expression.Kind, expression.TargetFramework);
+    }
+
+    private static string EmitConversion(PowerShellLoweredConversionExpression conversion)
+    {
+        var type = PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType);
+        return conversion.UsePowerShellLanguageRuntime
+            ? $"({type})global::System.Management.Automation.LanguagePrimitives.ConvertTo((object?)({EmitExpression(conversion.Operand)}), typeof({type}), global::System.Globalization.CultureInfo.InvariantCulture)!"
+            : $"({type})({EmitExpression(conversion.Operand)})";
     }
 
     private static string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
@@ -424,6 +434,29 @@ internal sealed class PowerShellBoundCSharpBackend
             : $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}";
     }
 
+    private static string EmitPowerShellObject(PowerShellLoweredPowerShellObjectExpression powerShellObject)
+    {
+        var statements = new List<string>
+        {
+            $"var {powerShellObject.Temporary} = new global::System.Management.Automation.PSObject();"
+        };
+        statements.AddRange(powerShellObject.Properties.Select(property =>
+            $"{powerShellObject.Temporary}.Properties.Add(new global::System.Management.Automation.PSNoteProperty({PowerShellCSharpLiteral.QuoteString(property.Name)}, {EmitExpression(property.Value)}));"));
+        statements.Add($"return {powerShellObject.Temporary};");
+        return "new global::System.Func<global::System.Management.Automation.PSObject>(() => { " + string.Join(" ", statements) + " })()";
+    }
+
+    private static string EmitStringSplit(PowerShellLoweredStringSplitExpression split)
+    {
+        var options = split.IgnoreCase
+            ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"
+            : "global::System.Text.RegularExpressions.RegexOptions.None";
+        return $"global::System.Text.RegularExpressions.Regex.Split(({EmitExpression(split.Input)} ?? string.Empty), ({EmitExpression(split.Pattern)} ?? string.Empty), {options})";
+    }
+
+    private static string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
+        => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
+
     private static string EmitIndex(PowerShellLoweredIndexExpression index)
     {
         var target = EmitExpression(index.Target);
@@ -433,7 +466,9 @@ internal sealed class PowerShellBoundCSharpBackend
         if (index.Kind is PowerShellBoundIndexKind.OrderedStringDictionary or PowerShellBoundIndexKind.ObjectDictionary)
             return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";
         if (index.Kind == PowerShellBoundIndexKind.String) target = $"({target} ?? string.Empty)";
-        else target = $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        else target = index.UsePowerShellRuntimeErrors
+            ? $"({target} ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
+            : $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
         var normalized = $"(({key}) < 0 ? {target}.Length + ({key}) : ({key}))";
         return $"({normalized} < 0 || {normalized} >= {target}.Length ? null : (object){target}[{normalized}])";
     }
@@ -445,10 +480,27 @@ internal sealed class PowerShellBoundCSharpBackend
         var value = EmitExpression(assignment.Value);
         if (assignment.Kind != PowerShellBoundIndexKind.Array)
             return $"{target}[{index}] = {value}";
-        var checkedTarget = $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
+        var checkedTarget = assignment.UsePowerShellRuntimeErrors
+            ? $"({target} ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
+            : $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
         var normalized = $"(({index}) < 0 ? {checkedTarget}.Length + ({index}) : ({index}))";
-        var checkedIndex = $"({normalized} >= 0 && {normalized} < {checkedTarget}.Length ? {normalized} : throw new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\"))";
+        var indexException = assignment.UsePowerShellRuntimeErrors
+            ? "new global::System.Management.Automation.RuntimeException(\"Index was outside the bounds of the array.\")"
+            : "new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\")";
+        var checkedIndex = $"({normalized} >= 0 && {normalized} < {checkedTarget}.Length ? {normalized} : throw {indexException})";
         return $"{checkedTarget}[{checkedIndex}] = {value}";
+    }
+
+    private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
+    {
+        var receiver = EmitExpression(assignment.Receiver);
+        if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
+        {
+            var message = PowerShellCSharpLiteral.QuoteString($"The property '{assignment.MemberName}' cannot be found on this object. Verify that the property exists and can be set.");
+            receiver = $"({receiver} ?? throw new global::System.Management.Automation.RuntimeException({message}))";
+        }
+        else receiver = $"({receiver})";
+        return $"{receiver}.{assignment.MemberName} = {EmitExpression(assignment.Value)}";
     }
 
     private static string EmitClrMember(PowerShellLoweredClrMemberExpression member)
@@ -463,6 +515,8 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
                 $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpMethodEmitter.GetTypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
             PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
+            PowerShellClrReceiverBehavior.PowerShellAdapter =>
+                $"new global::System.Func<int>(() => {{ var __pf_adapted_value = (object?)({receiver}); if (__pf_adapted_value is null) return 0; var __pf_count = global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[\"Count\"]?.Value; return __pf_count is null ? 1 : (int)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__pf_count, typeof(int), global::System.Globalization.CultureInfo.InvariantCulture)!; }})()",
             _ => $"({receiver}).{member.MemberName}"
         };
     }
@@ -478,6 +532,8 @@ internal sealed class PowerShellBoundCSharpBackend
         var receiver = EmitExpression(invocation.Receiver);
         if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.NormalizeNullString)
             receiver = $"({receiver} ?? string.Empty)";
+        else if (invocation.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
+            receiver = $"({receiver} ?? throw new global::System.Management.Automation.RuntimeException(\"You cannot call a method on a null-valued expression.\"))";
         else
             receiver = $"({receiver})";
         return $"{receiver}.{invocation.MemberName}({arguments})";
@@ -601,6 +657,8 @@ internal sealed class PowerShellBoundCSharpBackend
         }
         if (literal.Value is string text) return PowerShellCSharpLiteral.QuoteString(text);
         if (literal.Value is bool boolean) return boolean ? "true" : "false";
+        if (literal.Value is System.Management.Automation.SwitchParameter switchParameter)
+            return $"new global::System.Management.Automation.SwitchParameter({(switchParameter.IsPresent ? "true" : "false")})";
         if (literal.Value is char character) return $"'{character.ToString().Replace("'", "\\'")}'";
         if (literal.Value is float single) return single.ToString("R", CultureInfo.InvariantCulture) + "f";
         if (literal.Value is double doubleValue) return doubleValue.ToString("R", CultureInfo.InvariantCulture) + "d";

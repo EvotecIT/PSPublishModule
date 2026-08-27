@@ -40,32 +40,36 @@ internal sealed class PowerShellLoweredDictionaryExpression : PowerShellLoweredE
 
 internal sealed class PowerShellLoweredIndexExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredIndexExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellBoundIndexKind kind)
+    internal PowerShellLoweredIndexExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellBoundIndexKind kind, bool usePowerShellRuntimeErrors)
         : base(span, clrType)
     {
         Target = target;
         Index = index;
         Kind = kind;
+        UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
     }
 
     internal PowerShellLoweredExpression Target { get; }
     internal PowerShellLoweredExpression Index { get; }
     internal PowerShellBoundIndexKind Kind { get; }
+    internal bool UsePowerShellRuntimeErrors { get; }
 }
 
 internal sealed class PowerShellLoweredIndexAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredIndexAssignmentStatement(SourceSpan span, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellLoweredExpression value, PowerShellBoundIndexKind kind)
+    internal PowerShellLoweredIndexAssignmentStatement(SourceSpan span, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellLoweredExpression value, PowerShellBoundIndexKind kind, bool usePowerShellRuntimeErrors)
         : base(span)
     {
         Target = target;
         Index = index;
         Value = value;
         Kind = kind;
+        UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
     }
 
     internal PowerShellLoweredExpression Target { get; }
     internal PowerShellLoweredExpression Index { get; }
     internal PowerShellLoweredExpression Value { get; }
     internal PowerShellBoundIndexKind Kind { get; }
+    internal bool UsePowerShellRuntimeErrors { get; }
 }

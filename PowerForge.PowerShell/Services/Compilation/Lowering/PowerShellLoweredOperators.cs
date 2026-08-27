@@ -126,3 +126,35 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
     internal string RightTemporary { get; }
     internal string ItemTemporary { get; }
 }
+
+internal sealed class PowerShellLoweredStringSplitExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredStringSplitExpression(SourceSpan span, PowerShellLoweredExpression input, PowerShellLoweredExpression pattern, bool ignoreCase)
+        : base(span, typeof(string[]))
+    {
+        Input = input;
+        Pattern = pattern;
+        IgnoreCase = ignoreCase;
+    }
+
+    internal PowerShellLoweredExpression Input { get; }
+    internal PowerShellLoweredExpression Pattern { get; }
+    internal bool IgnoreCase { get; }
+}
+
+internal sealed class PowerShellLoweredStringJoinExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredStringJoinExpression(SourceSpan span, PowerShellLoweredExpression values, PowerShellLoweredExpression separator, string valuesTemporary, string separatorTemporary)
+        : base(span, typeof(string))
+    {
+        Values = values;
+        Separator = separator;
+        ValuesTemporary = valuesTemporary;
+        SeparatorTemporary = separatorTemporary;
+    }
+
+    internal PowerShellLoweredExpression Values { get; }
+    internal PowerShellLoweredExpression Separator { get; }
+    internal string ValuesTemporary { get; }
+    internal string SeparatorTemporary { get; }
+}

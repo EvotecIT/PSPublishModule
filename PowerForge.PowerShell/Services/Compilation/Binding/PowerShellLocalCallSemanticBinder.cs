@@ -66,12 +66,65 @@ internal static class PowerShellLocalCallSemanticBinder
             out var declaredReturnType,
             out _,
             out _);
+        declaredReturnType ??= InferReturnType(function, parameters);
         return new PowerShellLocalCallSignature(
             symbol,
             parameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
             PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
             declaredReturnType);
+    }
+
+    private static Type? InferReturnType(FunctionDefinitionAst function, IReadOnlyList<PowerShellLocalCallParameter> parameters)
+    {
+        var parameterTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        var output = function.Body.EndBlock?.Statements
+            .SelectMany(static statement => statement.FindAll(
+                static node => node is ReturnStatementAst || node is PipelineAst && node.Parent is NamedBlockAst,
+                searchNestedScriptBlocks: false))
+            .Select(node => node switch
+            {
+                ReturnStatementAst { Pipeline: not null } returned => InferExpressionType(Unwrap(returned.Pipeline), parameterTypes),
+                PipelineAst pipeline => InferExpressionType(Unwrap(pipeline), parameterTypes),
+                _ => null
+            })
+            .Where(static type => type is not null && type != typeof(void))
+            .Cast<Type>()
+            .Distinct()
+            .ToArray() ?? Array.Empty<Type>();
+        return output.Length == 1 ? output[0] : null;
+    }
+
+    private static Type? InferExpressionType(Ast syntax, IReadOnlyDictionary<string, Type> parameterTypes)
+        => syntax switch
+        {
+            StringConstantExpressionAst => typeof(string),
+            ConstantExpressionAst constant => constant.Value?.GetType() ?? typeof(object),
+            VariableExpressionAst variable when parameterTypes.TryGetValue(variable.VariablePath.UserPath, out var type) => type,
+            ConvertExpressionAst conversion when conversion.StaticType != typeof(object) => conversion.StaticType,
+            ArrayLiteralAst array => InferArrayType(array.Elements, parameterTypes),
+            ArrayExpressionAst array => InferArrayType(
+                array.SubExpression.Statements
+                    .OfType<PipelineAst>()
+                    .SelectMany(static pipeline => pipeline.PipelineElements.OfType<CommandExpressionAst>())
+                    .Select(static expression => expression.Expression),
+                parameterTypes),
+            _ => syntax is ExpressionAst expression && expression.StaticType != typeof(object) ? expression.StaticType : null
+        };
+
+    private static Type? InferArrayType(IEnumerable<ExpressionAst> elements, IReadOnlyDictionary<string, Type> parameterTypes)
+    {
+        var types = elements.Select(element => InferExpressionType(Unwrap(element), parameterTypes)).Distinct().ToArray();
+        return types.Length == 1 && types[0] is not null ? types[0]!.MakeArrayType() : null;
+    }
+
+    private static Ast Unwrap(Ast syntax)
+    {
+        while (syntax is PipelineAst { PipelineElements.Count: 1 } pipeline)
+            syntax = pipeline.PipelineElements[0];
+        while (syntax is CommandExpressionAst command) syntax = command.Expression;
+        while (syntax is ParenExpressionAst parenthesized) syntax = parenthesized.Pipeline;
+        return syntax;
     }
 
     internal static PowerShellBoundInvocationExpression? Bind(

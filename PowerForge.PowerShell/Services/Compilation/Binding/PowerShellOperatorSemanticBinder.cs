@@ -10,11 +10,12 @@ internal static class PowerShellOperatorSemanticBinder
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework = null)
+        string? targetFramework = null,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var operation = syntax.Operator.ToString();
         if (operation is "Is" or "IsNot")
-            return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework);
+            return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
         if (operation is "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch")
             return BindRegexMatch(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Replace" or "Ireplace" or "Creplace")
@@ -24,6 +25,10 @@ internal static class PowerShellOperatorSemanticBinder
         if (operation is "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
             "Iin" or "Cin" or "Inotin" or "Cnotin")
             return BindMembership(syntax, span, operation, bindOperand, diagnostics);
+        if (operation is "Isplit" or "Csplit")
+            return BindStringSplit(syntax, span, operation, bindOperand, diagnostics);
+        if (operation == "Join")
+            return BindStringJoin(syntax, span, bindOperand, diagnostics);
 
         var left = bindOperand(syntax.Left);
         var right = bindOperand(syntax.Right);
@@ -129,11 +134,12 @@ internal static class PowerShellOperatorSemanticBinder
         bool negate,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         if (syntax.Right is not TypeExpressionAst typeExpression ||
             typeExpression.TypeName.GetReflectionType() is not { } targetType ||
-            !PowerShellGeneratedTypePolicy.IsSupported(targetType, targetFramework))
+            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
             return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable target-compatible CLR type.");
         var operand = bindOperand(syntax.Left);
         return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate);
@@ -245,6 +251,35 @@ internal static class PowerShellOperatorSemanticBinder
             collectionOnRight,
             ignoreCase: operation.StartsWith("I", StringComparison.Ordinal),
             negate: operation.Contains("not", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static PowerShellBoundExpression? BindStringSplit(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        string operation,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var input = bindOperand(syntax.Left);
+        var pattern = bindOperand(syntax.Right);
+        if (input is null || pattern is null) return null;
+        if (input.Type.ClrType != typeof(string) || pattern.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2228", $"Operator '-{operation.ToLowerInvariant()}' requires scalar String operands.");
+        return new PowerShellBoundStringSplitExpression(span, input, pattern, operation == "Isplit");
+    }
+
+    private static PowerShellBoundExpression? BindStringJoin(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var values = bindOperand(syntax.Left);
+        var separator = bindOperand(syntax.Right);
+        if (values is null || separator is null) return null;
+        if (values.Type.ClrType != typeof(string[]) || separator.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2229", "Operator '-join' requires a String array and scalar String separator.");
+        return new PowerShellBoundStringJoinExpression(span, values, separator);
     }
 
     private static bool ObservesMatchesAutomaticVariable(Ast syntax)

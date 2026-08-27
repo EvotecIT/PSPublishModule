@@ -78,17 +78,20 @@ internal sealed class PowerShellBoundIndexExpression : PowerShellBoundExpression
         PowerShellBoundExpression target,
         PowerShellBoundExpression index,
         PowerShellBoundIndexKind kind,
+        bool usePowerShellRuntimeErrors,
         PowerShellTypeFact type)
         : base(span, type, PowerShellValueState.Unknown, target.Effects | index.Effects, target.Capabilities | index.Capabilities)
     {
         Target = target;
         Index = index;
         Kind = kind;
+        UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
     }
 
     internal PowerShellBoundExpression Target { get; }
     internal PowerShellBoundExpression Index { get; }
     internal PowerShellBoundIndexKind Kind { get; }
+    internal bool UsePowerShellRuntimeErrors { get; }
 }
 
 internal sealed class PowerShellBoundIndexAssignmentStatement : PowerShellBoundStatement
@@ -98,7 +101,8 @@ internal sealed class PowerShellBoundIndexAssignmentStatement : PowerShellBoundS
         PowerShellBoundExpression target,
         PowerShellBoundExpression index,
         PowerShellBoundExpression value,
-        PowerShellBoundIndexKind kind)
+        PowerShellBoundIndexKind kind,
+        bool usePowerShellRuntimeErrors)
         : base(
             span,
             PowerShellSemanticEffect.Mutation | target.Effects | index.Effects | value.Effects,
@@ -108,10 +112,12 @@ internal sealed class PowerShellBoundIndexAssignmentStatement : PowerShellBoundS
         Index = index;
         Value = value;
         Kind = kind;
+        UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
     }
 
     internal PowerShellBoundExpression Target { get; }
     internal PowerShellBoundExpression Index { get; }
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellBoundIndexKind Kind { get; }
+    internal bool UsePowerShellRuntimeErrors { get; }
 }

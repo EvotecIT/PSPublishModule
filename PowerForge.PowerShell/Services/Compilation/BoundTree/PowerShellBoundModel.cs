@@ -108,7 +108,8 @@ internal enum PowerShellRequiredCapability
     PowerShellLanguageOperators = 128,
     RuntimeStateIntrinsics = 256,
     PowerShellHostTypes = 512,
-    PowerShellStreams = 1024
+    PowerShellStreams = 1024,
+    PowerShellLanguageConversions = 2048
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -213,13 +214,20 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
 
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundConversionExpression(SourceSpan span, PowerShellTypeFact targetType, PowerShellBoundExpression operand)
-        : base(span, targetType, operand.ValueState, operand.Effects, operand.Capabilities)
+    internal PowerShellBoundConversionExpression(SourceSpan span, PowerShellTypeFact targetType, PowerShellBoundExpression operand, bool usePowerShellLanguageRuntime = false)
+        : base(
+            span,
+            targetType,
+            operand.ValueState,
+            operand.Effects,
+            operand.Capabilities | (usePowerShellLanguageRuntime ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
     {
         Operand = operand;
+        UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
     }
 
     internal PowerShellBoundExpression Operand { get; }
+    internal bool UsePowerShellLanguageRuntime { get; }
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression

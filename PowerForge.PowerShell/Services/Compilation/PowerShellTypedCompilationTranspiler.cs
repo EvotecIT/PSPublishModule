@@ -95,7 +95,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics);
-        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities);
+        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics);
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -332,18 +332,20 @@ public sealed class PowerShellTypedCompilationTranspiler
                     return false;
                 }
             }
-            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
-                continue;
-            else
+            else if (boundEmissions.ContainsKey(
+                         GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber)))
             {
-                diagnostics.Add(CreateDiagnostic(
-                    source,
-                    command,
-                    $"Function '{name}' depends on local function '{dependencyName}', which is not eligible for the same typed function graph."));
-                states[name] = FunctionVisitState.Failed;
-                traversal.RemoveAt(traversal.Count - 1);
-                return false;
+                // The semantic binder deliberately represented this retained local function call as a hosted
+                // command region. Its source-level name remains local, but it is no longer a typed dependency.
+                continue;
             }
+            diagnostics.Add(CreateDiagnostic(
+                source,
+                command,
+                $"Function '{name}' depends on local function '{dependencyName}', which is not eligible for the same typed function graph."));
+            states[name] = FunctionVisitState.Failed;
+            traversal.RemoveAt(traversal.Count - 1);
+            return false;
         }
 
         if (states.TryGetValue(name, out state) && state == FunctionVisitState.Failed)
@@ -354,17 +356,10 @@ public sealed class PowerShellTypedCompilationTranspiler
 
         try
         {
-            var emitted = boundEmissions.TryGetValue(
-                GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
-                out var boundEmission)
-                ? boundEmission
-                : new PowerShellCSharpMethodEmitter(
-                    source.Parsed.Path,
-                    source.Function,
-                    targetFramework,
-                    capabilities,
-                    signatures,
-                    source.Unit.Parameters).Emit();
+            if (!boundEmissions.TryGetValue(
+                    GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
+                    out var emitted))
+                throw new PowerShellCSharpEmissionException(source.Function, $"Function '{name}' is not eligible in the shared semantic compilation result.");
             EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             if (provisionalSignatures.Contains(name) && signatures[name].ReturnType != emitted.ReturnType)
                 throw new PowerShellCSharpEmissionException(
@@ -419,12 +414,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         try
         {
             var emitted = TryEmitBoundIndependent(source, boundEmissions) ??
-                          new PowerShellCSharpMethodEmitter(
-                              source.Parsed.Path,
-                              source.Function,
-                              targetFramework,
-                              capabilities,
-                              parameterMetadata: source.Unit.Parameters).Emit();
+                          throw new PowerShellCSharpEmissionException(source.Function, $"Function '{source.Function.Name}' is not eligible in the shared semantic compilation result.");
             EnsureBasicFunctionBinarySurfacePreserved(source, emitted, capabilities);
             methodSources.Add(emitted.Source);
             methods.Add(CreateCompiledMethod(source, emitted));
@@ -449,13 +439,36 @@ public sealed class PowerShellTypedCompilationTranspiler
     private static IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> CreateBoundEmissionIndex(
         IReadOnlyList<ParsedSource> sources,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        ICollection<PowerShellCompilationDiagnostic> diagnostics)
     {
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             sources.Select(static source => source.Document),
             targetFramework,
             capabilities);
         var paths = sources.ToDictionary(static source => source.Document.DocumentId, static source => source.Path, StringComparer.Ordinal);
+        foreach (var diagnostic in result.Lowered.Diagnostics
+                     .Where(static diagnostic => diagnostic.Code != "PSB1002")
+                     .GroupBy(static item => item.Code + "\0" + item.Message + "\0" + item.Span.DocumentId + "\0" + item.Span.StartOffset, StringComparer.Ordinal)
+                     .Select(static group => group.First()))
+        {
+            var path = paths.TryGetValue(diagnostic.Span.DocumentId, out var resolvedPath)
+                ? resolvedPath
+                : diagnostic.Span.DocumentId;
+            if (diagnostics.Any(existing =>
+                    existing.Message.Equals(diagnostic.Message, StringComparison.Ordinal) &&
+                    PowerShellCompilationPathSafety.PathEquals(existing.FilePath, path) &&
+                    existing.Line == diagnostic.Span.StartLine &&
+                    existing.Column == diagnostic.Span.StartColumn))
+                continue;
+            diagnostics.Add(new PowerShellCompilationDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                diagnostic.Message,
+                path,
+                diagnostic.Span.StartLine,
+                diagnostic.Span.StartColumn,
+                diagnostic.Code));
+        }
         var emissions = new Dictionary<string, PowerShellCSharpMethodEmission>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < result.Lowered.Functions.Length && index < result.Emitted.Methods.Length; index++)
         {

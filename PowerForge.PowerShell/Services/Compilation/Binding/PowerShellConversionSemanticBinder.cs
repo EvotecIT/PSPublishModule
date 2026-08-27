@@ -10,11 +10,12 @@ internal static class PowerShellConversionSemanticBinder
         ConvertExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         var targetType = syntax.StaticType;
-        if (targetType == typeof(void) || !PowerShellGeneratedTypePolicy.IsSupported(targetType, targetFramework))
+        if (targetType == typeof(void) || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201", $"Conversion target '{targetType.FullName}' is not available in the generated target contract.", span));
             return null;
@@ -25,7 +26,8 @@ internal static class PowerShellConversionSemanticBinder
 
         var operand = bindExpression(syntax.Child, targetType);
         if (operand is null) return null;
-        if (!PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType))
+        var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);
+        if (usePowerShellLanguageRuntime && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2202",
@@ -37,7 +39,8 @@ internal static class PowerShellConversionSemanticBinder
         return new PowerShellBoundConversionExpression(
             span,
             new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Explicit, "An authored conversion selects a CLR-compatible representation."),
-            operand);
+            operand,
+            usePowerShellLanguageRuntime);
     }
 
     private static PowerShellBoundExpression BindResolvedLiteral(SourceSpan span, Type targetType, object? value)

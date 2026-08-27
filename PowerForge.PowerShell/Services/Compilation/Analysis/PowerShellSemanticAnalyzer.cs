@@ -319,7 +319,23 @@ internal sealed class PowerShellSemanticAnalyzer
             {
                 if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
                 if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
+                    return function.WithAnalysis(disposition: IsRecursive(function.Symbol, program.CallGraph)
+                        ? new PowerShellExecutionDisposition(
+                            PowerShellExecutionDispositionKind.Fallback,
+                            PowerShellCompilationFeatureIds.FunctionGraph,
+                            $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract.")
+                        : new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
+                var unresolvedCall = EnumerateStatements(function.Body)
+                    .SelectMany(EnumerateDirectExpressions)
+                    .SelectMany(EnumerateInvocations)
+                    .FirstOrDefault(invocation => !lookup.ContainsKey(invocation.Target.StableKey));
+                if (unresolvedCall is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.binding.unavailable",
+                        $"Local function '{unresolvedCall.Target.Name}' did not produce a bound function contract."));
+                }
                 var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
                 if (shouldProcessTarget is not null)
                 {
@@ -336,12 +352,44 @@ internal sealed class PowerShellSemanticAnalyzer
                         "call.validation.binding-exception",
                         $"Local function '{validationTarget.Symbol.Name}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity must remain on the PowerShell command path."));
                 }
+                var consumedTarget = GetConsumedCollectionOrHostedCall(function, lookup);
+                if (consumedTarget is not null)
+                {
+                    var hosted = consumedTarget.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        hosted ? "call.command-region.cardinality" : "call.collection.cardinality",
+                        hosted
+                            ? $"Local function '{consumedTarget.Symbol.Name}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed."
+                            : $"Local function '{consumedTarget.Symbol.Name}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed."));
+                }
                 var blocked = GetCallees(function, lookup).FirstOrDefault(static callee => callee.Disposition.Kind != PowerShellExecutionDispositionKind.Typed);
                 return blocked is null
                     ? function
                     : function.WithAnalysis(disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "call.fallback", $"Local function '{blocked.Symbol.Name}' requires fallback."));
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+        }
+
+        private static bool IsRecursive(PowerShellSymbolId start, IReadOnlyList<PowerShellCallGraphEdge> edges)
+        {
+            var targets = edges.GroupBy(static edge => edge.Caller.StableKey, StringComparer.Ordinal)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => group.Select(static edge => edge.Callee.StableKey).Distinct(StringComparer.Ordinal).ToArray(),
+                    StringComparer.Ordinal);
+            var pending = new Stack<string>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            if (targets.TryGetValue(start.StableKey, out var direct))
+                foreach (var target in direct) pending.Push(target);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (current.Equals(start.StableKey, StringComparison.Ordinal)) return true;
+                if (!visited.Add(current) || !targets.TryGetValue(current, out var nested)) continue;
+                foreach (var target in nested) pending.Push(target);
+            }
+            return false;
         }
     }
 
@@ -409,6 +457,27 @@ internal sealed class PowerShellSemanticAnalyzer
         return null;
     }
 
+    private static PowerShellBoundFunction? GetConsumedCollectionOrHostedCall(
+        PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+    {
+        foreach (var statement in EnumerateStatements(function.Body))
+        {
+            foreach (var root in EnumerateDirectExpressions(statement))
+            {
+                foreach (var invocation in EnumerateInvocations(root))
+                {
+                    if (ReferenceEquals(root, invocation) && statement is PowerShellBoundReturnStatement or PowerShellBoundExpressionStatement { EmitsOutput: true })
+                        continue;
+                    if (functions.TryGetValue(invocation.Target.StableKey, out var target) &&
+                        (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion)))
+                        return target;
+                }
+            }
+        }
+        return null;
+    }
+
     private static bool ContainsShouldProcess(PowerShellBoundFunction function)
         => EnumerateStatements(function.Body)
             .SelectMany(EnumerateDirectExpressions)
@@ -429,9 +498,12 @@ internal sealed class PowerShellSemanticAnalyzer
             PowerShellBoundRegexExpression regex => new[] { regex.Input, regex.Pattern }.Concat(regex.Replacement is null ? Array.Empty<PowerShellBoundExpression>() : new[] { regex.Replacement }),
             PowerShellBoundWildcardExpression wildcard => new[] { wildcard.Input, wildcard.Pattern },
             PowerShellBoundMembershipExpression membership => new[] { membership.Left, membership.Right },
+            PowerShellBoundStringSplitExpression split => new[] { split.Input, split.Pattern },
+            PowerShellBoundStringJoinExpression join => new[] { join.Values, join.Separator },
             PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
             PowerShellBoundArrayExpression array => array.Elements,
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
+            PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Select(static property => property.Value),
             PowerShellBoundIndexExpression index => new[] { index.Target, index.Index },
             PowerShellBoundClrMemberExpression { Receiver: not null } member => new[] { member.Receiver },
             PowerShellBoundClrInvocationExpression invocation => (invocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { invocation.Receiver }).Concat(invocation.Arguments),
@@ -604,6 +676,16 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(membership.Left)) yield return read;
             foreach (var read in EnumerateVariableReads(membership.Right)) yield return read;
         }
+        if (expression is PowerShellBoundStringSplitExpression split)
+        {
+            foreach (var read in EnumerateVariableReads(split.Input)) yield return read;
+            foreach (var read in EnumerateVariableReads(split.Pattern)) yield return read;
+        }
+        if (expression is PowerShellBoundStringJoinExpression join)
+        {
+            foreach (var read in EnumerateVariableReads(join.Values)) yield return read;
+            foreach (var read in EnumerateVariableReads(join.Separator)) yield return read;
+        }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
             if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
@@ -625,6 +707,12 @@ internal sealed class PowerShellSemanticAnalyzer
                 foreach (var read in EnumerateVariableReads(entry.Key)) yield return read;
                 foreach (var read in EnumerateVariableReads(entry.Value)) yield return read;
             }
+        }
+        if (expression is PowerShellBoundPowerShellObjectExpression powerShellObject)
+        {
+            foreach (var property in powerShellObject.Properties)
+            foreach (var read in EnumerateVariableReads(property.Value))
+                yield return read;
         }
         if (expression is PowerShellBoundIndexExpression index)
         {
@@ -690,6 +778,16 @@ internal sealed class PowerShellSemanticAnalyzer
             foreach (var nested in EnumerateInvocations(membership.Left)) yield return nested;
             foreach (var nested in EnumerateInvocations(membership.Right)) yield return nested;
         }
+        if (expression is PowerShellBoundStringSplitExpression split)
+        {
+            foreach (var nested in EnumerateInvocations(split.Input)) yield return nested;
+            foreach (var nested in EnumerateInvocations(split.Pattern)) yield return nested;
+        }
+        if (expression is PowerShellBoundStringJoinExpression join)
+        {
+            foreach (var nested in EnumerateInvocations(join.Values)) yield return nested;
+            foreach (var nested in EnumerateInvocations(join.Separator)) yield return nested;
+        }
         if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
         {
             foreach (var nested in EnumerateInvocations(mutation.Value)) yield return nested;
@@ -707,6 +805,12 @@ internal sealed class PowerShellSemanticAnalyzer
                 foreach (var nested in EnumerateInvocations(entry.Key)) yield return nested;
                 foreach (var nested in EnumerateInvocations(entry.Value)) yield return nested;
             }
+        }
+        if (expression is PowerShellBoundPowerShellObjectExpression powerShellObject)
+        {
+            foreach (var property in powerShellObject.Properties)
+            foreach (var nested in EnumerateInvocations(property.Value))
+                yield return nested;
         }
         if (expression is PowerShellBoundIndexExpression index)
         {

@@ -15,6 +15,7 @@ internal static class PowerShellClrMemberSemanticBinder
         MemberExpressionAst memberSyntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -25,7 +26,10 @@ internal static class PowerShellClrMemberSemanticBinder
         }
         if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)
             return null;
-        if (!target.Type.IsValueType && !target.IsKnownNonNull)
+        var receiverBehavior = PowerShellClrReceiverBehavior.None;
+        if (!target.Type.IsValueType && !target.IsKnownNonNull && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+            receiverBehavior = PowerShellClrReceiverBehavior.PowerShellRuntimeException;
+        else if (!target.Type.IsValueType && !target.IsKnownNonNull)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime error identity.", span));
             return null;
@@ -59,7 +63,7 @@ internal static class PowerShellClrMemberSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2618", $"Member assignment value is not assignable to '{memberType.FullName}'.", value?.Span ?? span));
             return null;
         }
-        return new PowerShellBoundClrMemberAssignmentStatement(span, target.Receiver!, target.Type, members[0].Name, value);
+        return new PowerShellBoundClrMemberAssignmentStatement(span, target.Receiver!, target.Type, members[0].Name, receiverBehavior, value);
     }
 
     internal static PowerShellBoundExpression? BindMember(
@@ -67,6 +71,7 @@ internal static class PowerShellClrMemberSemanticBinder
         MemberExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -86,6 +91,20 @@ internal static class PowerShellClrMemberSemanticBinder
                 _ => false
             })
             .ToArray();
+        if (members.Length == 0 &&
+            !target.IsStatic &&
+            name.Equals("Count", StringComparison.OrdinalIgnoreCase) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+        {
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                name,
+                false,
+                target.Receiver,
+                PowerShellClrReceiverBehavior.PowerShellAdapter,
+                new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Inferred, "PowerShell's adapted Count member is evaluated by the hosted runtime."));
+        }
         if (members.Length != 1)
             return Reject(diagnostics, "PSB2602", members.Length == 0
                 ? $"CLR member '{target.Type.FullName}.{name}' was not found as one target-compatible readable field or property."
@@ -117,6 +136,7 @@ internal static class PowerShellClrMemberSemanticBinder
         InvokeMemberExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -170,7 +190,7 @@ internal static class PowerShellClrMemberSemanticBinder
 
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2607", $"CLR invocation returns target-incompatible type '{resultType.FullName}'.", span);
-        if (!TrySelectInvocationBehavior(target, out var receiverBehavior))
+        if (!TrySelectInvocationBehavior(target, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects), out var receiverBehavior))
             return Reject(diagnostics, "PSB2608", $"CLR method invocation '{target.Type.FullName}.{selected.Name}' on a potentially null receiver requires PowerShell runtime error identity.", span);
 
         var parameters = selected.GetParameters();
@@ -295,13 +315,18 @@ internal static class PowerShellClrMemberSemanticBinder
         return false;
     }
 
-    private static bool TrySelectInvocationBehavior(Target target, out PowerShellClrReceiverBehavior behavior)
+    private static bool TrySelectInvocationBehavior(Target target, bool allowPowerShellRuntimeErrors, out PowerShellClrReceiverBehavior behavior)
     {
         behavior = PowerShellClrReceiverBehavior.None;
         if (target.IsStatic || target.Type.IsValueType || target.IsKnownNonNull) return true;
         if (target.Type == typeof(string) && target.Receiver?.Type.Provenance == PowerShellTypeFactProvenance.Explicit)
         {
             behavior = PowerShellClrReceiverBehavior.NormalizeNullString;
+            return true;
+        }
+        if (allowPowerShellRuntimeErrors)
+        {
+            behavior = PowerShellClrReceiverBehavior.PowerShellRuntimeException;
             return true;
         }
         return false;

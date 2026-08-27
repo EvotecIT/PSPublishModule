@@ -12,6 +12,13 @@ internal sealed class PowerShellTypedLowerer
         if (program is null) throw new ArgumentNullException(nameof(program));
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
         var functions = new List<PowerShellLoweredFunction>();
+        var boundParameterBindings = PropagateHostRequirement(program, function =>
+            ContainsBoundParameterPresence(function.Body) ||
+            function.Parameters.Any(parameter =>
+                parameter.Contract.DefaultValue is not null ||
+                !parameter.Contract.IsMandatory &&
+                parameter.Contract.Validations.Length > 0 &&
+                targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)));
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
@@ -19,6 +26,7 @@ internal sealed class PowerShellTypedLowerer
             static function => function.Symbol.StableKey,
             function => new LoweringFunctionContext(
                 function,
+                boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey)),
@@ -39,6 +47,15 @@ internal sealed class PowerShellTypedLowerer
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSL1002",
                     "PowerShell wildcard or membership semantics require the PowerShell language-operator target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellLanguageConversions) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1007",
+                    "PowerShell language conversions require the PowerShell language-conversion target capability.",
                     function.Symbol.Declaration));
                 continue;
             }
@@ -112,6 +129,7 @@ internal sealed class PowerShellTypedLowerer
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
                 function.DeclaredOutputType,
+                boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
@@ -146,6 +164,51 @@ internal sealed class PowerShellTypedLowerer
         } while (changed);
         return required;
     }
+
+    private static bool ContainsBoundParameterPresence(PowerShellBoundBlock block)
+        => block.Statements.Any(StatementContainsBoundParameterPresence);
+
+    private static bool StatementContainsBoundParameterPresence(PowerShellBoundStatement statement)
+        => statement switch
+        {
+            PowerShellBoundAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Value),
+            PowerShellBoundIndexAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Target) || ExpressionContainsBoundParameterPresence(assignment.Index) || ExpressionContainsBoundParameterPresence(assignment.Value),
+            PowerShellBoundClrMemberAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Receiver) || ExpressionContainsBoundParameterPresence(assignment.Value),
+            PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionContainsBoundParameterPresence(returned.Expression),
+            PowerShellBoundExpressionStatement expression => ExpressionContainsBoundParameterPresence(expression.Expression),
+            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Condition) || ContainsBoundParameterPresence(clause.Body)) || conditional.ElseBlock is not null && ContainsBoundParameterPresence(conditional.ElseBlock),
+            PowerShellBoundWhileStatement loop => ExpressionContainsBoundParameterPresence(loop.Condition) || ContainsBoundParameterPresence(loop.Body),
+            PowerShellBoundForStatement loop => (loop.Initializer is not null && ExpressionContainsBoundParameterPresence(loop.Initializer)) || (loop.Condition is not null && ExpressionContainsBoundParameterPresence(loop.Condition)) || (loop.Iterator is not null && ExpressionContainsBoundParameterPresence(loop.Iterator)) || ContainsBoundParameterPresence(loop.Body),
+            PowerShellBoundForEachStatement loop => ExpressionContainsBoundParameterPresence(loop.Collection) || ContainsBoundParameterPresence(loop.Body),
+            PowerShellBoundSwitchStatement switchStatement => ExpressionContainsBoundParameterPresence(switchStatement.Value) || switchStatement.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Value) || ContainsBoundParameterPresence(clause.Body)) || switchStatement.DefaultBlock is not null && ContainsBoundParameterPresence(switchStatement.DefaultBlock),
+            PowerShellBoundThrowStatement thrown => thrown.Expression is not null && ExpressionContainsBoundParameterPresence(thrown.Expression),
+            PowerShellBoundTryStatement tryStatement => ContainsBoundParameterPresence(tryStatement.Body) || tryStatement.Catches.Any(clause => ContainsBoundParameterPresence(clause.Body)) || tryStatement.FinallyBlock is not null && ContainsBoundParameterPresence(tryStatement.FinallyBlock),
+            _ => false
+        };
+
+    private static bool ExpressionContainsBoundParameterPresence(PowerShellBoundExpression expression)
+        => expression switch
+        {
+            PowerShellBoundParameterPresenceExpression => true,
+            PowerShellBoundConversionExpression conversion => ExpressionContainsBoundParameterPresence(conversion.Operand),
+            PowerShellBoundBinaryExpression binary => ExpressionContainsBoundParameterPresence(binary.Left) || ExpressionContainsBoundParameterPresence(binary.Right),
+            PowerShellBoundUnaryExpression unary => ExpressionContainsBoundParameterPresence(unary.Operand),
+            PowerShellBoundTypeTestExpression typeTest => ExpressionContainsBoundParameterPresence(typeTest.Operand),
+            PowerShellBoundRegexExpression regex => ExpressionContainsBoundParameterPresence(regex.Input) || ExpressionContainsBoundParameterPresence(regex.Pattern) || regex.Replacement is not null && ExpressionContainsBoundParameterPresence(regex.Replacement),
+            PowerShellBoundWildcardExpression wildcard => ExpressionContainsBoundParameterPresence(wildcard.Input) || ExpressionContainsBoundParameterPresence(wildcard.Pattern),
+            PowerShellBoundMembershipExpression membership => ExpressionContainsBoundParameterPresence(membership.Left) || ExpressionContainsBoundParameterPresence(membership.Right),
+            PowerShellBoundStringSplitExpression split => ExpressionContainsBoundParameterPresence(split.Input) || ExpressionContainsBoundParameterPresence(split.Pattern),
+            PowerShellBoundStringJoinExpression join => ExpressionContainsBoundParameterPresence(join.Values) || ExpressionContainsBoundParameterPresence(join.Separator),
+            PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionContainsBoundParameterPresence(mutation.Value),
+            PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionContainsBoundParameterPresence),
+            PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry => ExpressionContainsBoundParameterPresence(entry.Key) || ExpressionContainsBoundParameterPresence(entry.Value)),
+            PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionContainsBoundParameterPresence(property.Value)),
+            PowerShellBoundIndexExpression index => ExpressionContainsBoundParameterPresence(index.Target) || ExpressionContainsBoundParameterPresence(index.Index),
+            PowerShellBoundClrMemberExpression member => member.Receiver is not null && ExpressionContainsBoundParameterPresence(member.Receiver),
+            PowerShellBoundClrInvocationExpression invocation => invocation.Receiver is not null && ExpressionContainsBoundParameterPresence(invocation.Receiver) || invocation.Arguments.Any(ExpressionContainsBoundParameterPresence),
+            PowerShellBoundInvocationExpression invocation => invocation.Arguments.Any(ExpressionContainsBoundParameterPresence),
+            _ => false
+        };
 
     private static bool ContainsPowerShellStreamWrite(PowerShellBoundBlock block)
         => block.Statements.Any(StatementContainsPowerShellStreamWrite);
@@ -243,6 +306,7 @@ internal sealed class PowerShellTypedLowerer
             PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionRequiresRuntimeStateHostBinding),
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry =>
                 ExpressionRequiresRuntimeStateHostBinding(entry.Key) || ExpressionRequiresRuntimeStateHostBinding(entry.Value)),
+            PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionRequiresRuntimeStateHostBinding(property.Value)),
             PowerShellBoundIndexExpression index => ExpressionRequiresRuntimeStateHostBinding(index.Target) || ExpressionRequiresRuntimeStateHostBinding(index.Index),
             PowerShellBoundClrMemberExpression member => member.Receiver is not null && ExpressionRequiresRuntimeStateHostBinding(member.Receiver),
             PowerShellBoundClrInvocationExpression invocation =>
@@ -373,12 +437,14 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(assignment.Target, functions, names, targetCapabilities),
                 LowerExpression(assignment.Index, functions, names, targetCapabilities),
                 LowerExpression(assignment.Value, functions, names, targetCapabilities),
-                assignment.Kind),
+                assignment.Kind,
+                assignment.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement assignment => new PowerShellLoweredClrMemberAssignmentStatement(
                 assignment.Span,
                 LowerExpression(assignment.Receiver, functions, names, targetCapabilities),
                 assignment.DeclaringType,
                 assignment.MemberName,
+                assignment.ReceiverBehavior,
                 LowerExpression(assignment.Value, functions, names, targetCapabilities)),
             PowerShellBoundReturnStatement returned => new PowerShellLoweredReturnStatement(
                 returned.Span,
@@ -500,10 +566,12 @@ internal sealed class PowerShellTypedLowerer
                 runtime.Kind,
                 runtime.TargetFramework,
                 runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray()),
+            PowerShellBoundParameterPresenceExpression presence => new PowerShellLoweredParameterPresenceExpression(presence.Span, presence.ParameterName),
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(
                 conversion.Span,
                 conversion.Type.ClrType,
-                LowerExpression(conversion.Operand, functions, names, targetCapabilities)),
+                LowerExpression(conversion.Operand, functions, names, targetCapabilities),
+                conversion.UsePowerShellLanguageRuntime),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,
@@ -534,8 +602,8 @@ internal sealed class PowerShellTypedLowerer
                 LowerExpression(wildcard.Pattern, functions, names, targetCapabilities),
                 wildcard.IgnoreCase,
                 wildcard.Negate,
-                names.Allocate("wildcard_left"),
-                names.Allocate("wildcard_right")),
+                names.Allocate("pf_wildcard_left"),
+                names.Allocate("pf_wildcard_right")),
             PowerShellBoundMembershipExpression membership => new PowerShellLoweredMembershipExpression(
                 membership.Span,
                 LowerExpression(membership.Left, functions, names, targetCapabilities),
@@ -544,9 +612,20 @@ internal sealed class PowerShellTypedLowerer
                 membership.CollectionOnRight,
                 membership.IgnoreCase,
                 membership.Negate,
-                names.Allocate("membership_left"),
-                names.Allocate("membership_right"),
-                names.Allocate("membership_item")),
+                names.Allocate("pf_membership_left"),
+                names.Allocate("pf_membership_right"),
+                names.Allocate("pf_membership_item")),
+            PowerShellBoundStringSplitExpression split => new PowerShellLoweredStringSplitExpression(
+                split.Span,
+                LowerExpression(split.Input, functions, names, targetCapabilities),
+                LowerExpression(split.Pattern, functions, names, targetCapabilities),
+                split.IgnoreCase),
+            PowerShellBoundStringJoinExpression join => new PowerShellLoweredStringJoinExpression(
+                join.Span,
+                LowerExpression(join.Values, functions, names, targetCapabilities),
+                LowerExpression(join.Separator, functions, names, targetCapabilities),
+                names.Allocate("pf_join_left"),
+                names.Allocate("pf_join_right")),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
                 mutation.Type.ClrType,
@@ -568,12 +647,19 @@ internal sealed class PowerShellTypedLowerer
                 dictionary.Entries.Select(entry => new PowerShellLoweredDictionaryEntry(
                     LowerExpression(entry.Key, functions, names, targetCapabilities),
                     LowerExpression(entry.Value, functions, names, targetCapabilities))).ToArray()),
+            PowerShellBoundPowerShellObjectExpression powerShellObject => new PowerShellLoweredPowerShellObjectExpression(
+                powerShellObject.Span,
+                powerShellObject.Properties.Select(property => new PowerShellLoweredNoteProperty(
+                    property.Name,
+                    LowerExpression(property.Value, functions, names, targetCapabilities))).ToArray(),
+                names.Allocate("object")),
             PowerShellBoundIndexExpression index => new PowerShellLoweredIndexExpression(
                 index.Span,
                 index.Type.ClrType,
                 LowerExpression(index.Target, functions, names, targetCapabilities),
                 LowerExpression(index.Index, functions, names, targetCapabilities),
-                index.Kind),
+                index.Kind,
+                index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberExpression member => new PowerShellLoweredClrMemberExpression(
                 member.Span,
                 member.Type.ClrType,
@@ -601,9 +687,7 @@ internal sealed class PowerShellTypedLowerer
                     invocation.AuthoredEvaluationOrder,
                     invocation.BoundParameterNames,
                     CreateEvaluationTemporaryNames(invocation, names),
-                    target.Function.Parameters.Any(parameter =>
-                        parameter.Contract.DefaultValue is not null ||
-                        !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 && targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)),
+                    target.RequiresPowerShellBoundParameters,
                     target.RequiresPowerShellStreams,
                     target.RequiresPowerShellCommandRegions,
                     target.RequiresPowerShellRuntimeState),
@@ -656,17 +740,20 @@ internal sealed class PowerShellTypedLowerer
     {
         internal LoweringFunctionContext(
             PowerShellBoundFunction function,
+            bool requiresPowerShellBoundParameters,
             bool requiresPowerShellStreams,
             bool requiresPowerShellCommandRegions,
             bool requiresPowerShellRuntimeState)
         {
             Function = function;
+            RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
             RequiresPowerShellStreams = requiresPowerShellStreams;
             RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
             RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         }
 
         internal PowerShellBoundFunction Function { get; }
+        internal bool RequiresPowerShellBoundParameters { get; }
         internal bool RequiresPowerShellStreams { get; }
         internal bool RequiresPowerShellCommandRegions { get; }
         internal bool RequiresPowerShellRuntimeState { get; }

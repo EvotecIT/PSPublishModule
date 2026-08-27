@@ -46,6 +46,7 @@ internal static class PowerShellDictionarySemanticBinder
         ParsedSourceDocument document,
         IndexExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         if (!IsDirectReturnValue(syntax))
@@ -81,7 +82,8 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2707", "Typed indexing requires a side-effect-free variable or constant index.", index.Span));
             return null;
         }
-        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax))
+        var usePowerShellRuntimeErrors = kind == PowerShellBoundIndexKind.Array && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2708", "Array indexing inside a typed try/catch cannot preserve PowerShell runtime-error identity without a PowerShell host.", target.Span));
             return null;
@@ -91,6 +93,7 @@ internal static class PowerShellDictionarySemanticBinder
             target,
             index,
             kind,
+            usePowerShellRuntimeErrors,
             new PowerShellTypeFact(resultType, PowerShellTypeFactProvenance.Inferred, "The indexed target selects one conservative missing-value contract."));
     }
 
@@ -99,6 +102,7 @@ internal static class PowerShellDictionarySemanticBinder
         AssignmentStatementAst syntax,
         IndexExpressionAst indexSyntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -138,12 +142,13 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2712", $"Indexed assignment value must be assignable to '{valueType.FullName}'.", value?.Span ?? span));
             return null;
         }
-        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax))
+        var usePowerShellRuntimeErrors = kind == PowerShellBoundIndexKind.Array && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+        if (kind == PowerShellBoundIndexKind.Array && IsInsideTypeDiscriminatingTry(syntax) && !usePowerShellRuntimeErrors)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2708", "Array mutation inside a typed try/catch cannot preserve PowerShell runtime-error identity without a PowerShell host.", target.Span));
             return null;
         }
-        return new PowerShellBoundIndexAssignmentStatement(span, target, index, value, kind);
+        return new PowerShellBoundIndexAssignmentStatement(span, target, index, value, kind, usePowerShellRuntimeErrors);
     }
 
     internal static bool IsOrderedHashtableConversion(ConvertExpressionAst syntax)
@@ -187,7 +192,7 @@ internal static class PowerShellDictionarySemanticBinder
     {
         Ast current = index;
         while (current.Parent is CommandExpressionAst or ParenExpressionAst or PipelineAst) current = current.Parent;
-        return current.Parent is ReturnStatementAst;
+        return current.Parent is ReturnStatementAst or AssignmentStatementAst;
     }
 
     private static bool IsInsideTypeDiscriminatingTry(Ast node)

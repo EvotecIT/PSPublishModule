@@ -182,3 +182,41 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
     internal bool IgnoreCase { get; }
     internal bool Negate { get; }
 }
+
+internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundStringSplitExpression(SourceSpan span, PowerShellBoundExpression input, PowerShellBoundExpression pattern, bool ignoreCase)
+        : base(
+            span,
+            new PowerShellTypeFact(typeof(string[]), PowerShellTypeFactProvenance.Inferred, "The string split operator binds one Regex.Split operation."),
+            PowerShellValueState.Known,
+            input.Effects | pattern.Effects,
+            input.Capabilities | pattern.Capabilities)
+    {
+        Input = input;
+        Pattern = pattern;
+        IgnoreCase = ignoreCase;
+    }
+
+    internal PowerShellBoundExpression Input { get; }
+    internal PowerShellBoundExpression Pattern { get; }
+    internal bool IgnoreCase { get; }
+}
+
+internal sealed class PowerShellBoundStringJoinExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundStringJoinExpression(SourceSpan span, PowerShellBoundExpression values, PowerShellBoundExpression separator)
+        : base(
+            span,
+            new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "The string join operator binds one String.Join operation."),
+            PowerShellValueState.Known,
+            values.Effects | separator.Effects,
+            values.Capabilities | separator.Capabilities)
+    {
+        Values = values;
+        Separator = separator;
+    }
+
+    internal PowerShellBoundExpression Values { get; }
+    internal PowerShellBoundExpression Separator { get; }
+}

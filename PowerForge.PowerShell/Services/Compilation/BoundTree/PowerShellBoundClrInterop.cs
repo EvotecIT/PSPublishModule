@@ -5,7 +5,9 @@ internal enum PowerShellClrReceiverBehavior
     None,
     NormalizeNullString,
     NormalizeNullArrayLength,
-    PropagateNull
+    PropagateNull,
+    PowerShellAdapter,
+    PowerShellRuntimeException
 }
 
 internal enum PowerShellClrInvocationKind
@@ -92,17 +94,20 @@ internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBo
         PowerShellBoundExpression receiver,
         Type declaringType,
         string memberName,
+        PowerShellClrReceiverBehavior receiverBehavior,
         PowerShellBoundExpression value)
         : base(span, PowerShellSemanticEffect.Mutation | receiver.Effects | value.Effects, receiver.Capabilities | value.Capabilities)
     {
         Receiver = receiver;
         DeclaringType = declaringType;
         MemberName = memberName;
+        ReceiverBehavior = receiverBehavior;
         Value = value;
     }
 
     internal PowerShellBoundExpression Receiver { get; }
     internal Type DeclaringType { get; }
     internal string MemberName { get; }
+    internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
     internal PowerShellBoundExpression Value { get; }
 }

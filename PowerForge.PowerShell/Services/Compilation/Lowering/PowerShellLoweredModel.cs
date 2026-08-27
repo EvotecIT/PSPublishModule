@@ -31,8 +31,13 @@ internal sealed class PowerShellLoweredVariableExpression : PowerShellLoweredExp
 
 internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredConversionExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression operand) : base(span, clrType) => Operand = operand;
+    internal PowerShellLoweredConversionExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression operand, bool usePowerShellLanguageRuntime) : base(span, clrType)
+    {
+        Operand = operand;
+        UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
+    }
     internal PowerShellLoweredExpression Operand { get; }
+    internal bool UsePowerShellLanguageRuntime { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression
@@ -162,6 +167,7 @@ internal sealed class PowerShellLoweredFunction
         PowerShellLoweredLocal[] locals,
         PowerShellBoundHelpMetadata? help,
         Type? declaredOutputType,
+        bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
@@ -175,6 +181,7 @@ internal sealed class PowerShellLoweredFunction
         Locals = locals;
         Help = help;
         DeclaredOutputType = declaredOutputType;
+        RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
@@ -189,6 +196,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellLoweredLocal[] Locals { get; }
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal Type? DeclaredOutputType { get; }
+    internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
