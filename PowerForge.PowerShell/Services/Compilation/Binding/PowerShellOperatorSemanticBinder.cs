@@ -9,12 +9,20 @@ internal static class PowerShellOperatorSemanticBinder
         BinaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework = null)
     {
+        var operation = syntax.Operator.ToString();
+        if (operation is "Is" or "IsNot")
+            return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework);
+        if (operation is "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch")
+            return BindRegexMatch(syntax, span, operation, bindOperand, diagnostics);
+        if (operation is "Replace" or "Ireplace" or "Creplace")
+            return BindRegexReplace(syntax, span, operation, bindOperand, diagnostics);
+
         var left = bindOperand(syntax.Left);
         var right = bindOperand(syntax.Right);
         if (left is null || right is null) return null;
-        var operation = syntax.Operator.ToString();
         var leftType = left.Type.ClrType;
         var rightType = right.Type.ClrType;
 
@@ -108,6 +116,92 @@ internal static class PowerShellOperatorSemanticBinder
         }
 
         return null;
+    }
+
+    private static PowerShellBoundExpression? BindTypeTest(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        bool negate,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework)
+    {
+        if (syntax.Right is not TypeExpressionAst typeExpression ||
+            typeExpression.TypeName.GetReflectionType() is not { } targetType ||
+            !PowerShellGeneratedTypePolicy.IsSupported(targetType, targetFramework))
+            return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable target-compatible CLR type.");
+        var operand = bindOperand(syntax.Left);
+        return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate);
+    }
+
+    private static PowerShellBoundExpression? BindRegexMatch(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        string operation,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        if (ObservesMatchesAutomaticVariable(syntax))
+            return Reject(diagnostics, span, "PSB2221", "Regex matching whose $Matches automatic-variable state is observed requires PowerShell runtime semantics.");
+        var input = bindOperand(syntax.Left);
+        var pattern = bindOperand(syntax.Right);
+        if (input is null || pattern is null) return null;
+        if (input.Type.ClrType != typeof(string) || pattern.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2222", $"Operator '-{operation.ToLowerInvariant()}' requires scalar String operands.");
+        return new PowerShellBoundRegexExpression(
+            span,
+            operation.Contains("not", StringComparison.OrdinalIgnoreCase) ? PowerShellBoundRegexOperation.NotMatch : PowerShellBoundRegexOperation.Match,
+            input,
+            pattern,
+            null,
+            !operation.StartsWith("C", StringComparison.Ordinal));
+    }
+
+    private static PowerShellBoundExpression? BindRegexReplace(
+        BinaryExpressionAst syntax,
+        SourceSpan span,
+        string operation,
+        Func<Ast, PowerShellBoundExpression?> bindOperand,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var input = bindOperand(syntax.Left);
+        if (input is null) return null;
+        if (input.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2223", $"Operator '-{operation.ToLowerInvariant()}' requires a scalar String input.");
+
+        PowerShellBoundExpression? pattern;
+        PowerShellBoundExpression? replacement;
+        if (syntax.Right is ArrayLiteralAst { Elements.Count: 2 } arguments)
+        {
+            pattern = bindOperand(arguments.Elements[0]);
+            replacement = bindOperand(arguments.Elements[1]);
+        }
+        else
+        {
+            pattern = bindOperand(syntax.Right);
+            replacement = new PowerShellBoundLiteralExpression(span, string.Empty, new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "Omitted regex replacement binds to the empty string."), PowerShellValueState.Known);
+        }
+        if (pattern is null || replacement is null) return null;
+        if (pattern.Type.ClrType != typeof(string) || replacement.Type.ClrType != typeof(string))
+            return Reject(diagnostics, span, "PSB2224", $"Operator '-{operation.ToLowerInvariant()}' requires a String pattern and optional String replacement.");
+        return new PowerShellBoundRegexExpression(
+            span,
+            PowerShellBoundRegexOperation.Replace,
+            input,
+            pattern,
+            replacement,
+            !operation.StartsWith("C", StringComparison.Ordinal));
+    }
+
+    private static bool ObservesMatchesAutomaticVariable(Ast syntax)
+    {
+        var root = syntax;
+        while (root.Parent is not null && root is not FunctionDefinitionAst) root = root.Parent;
+        return root.FindAll(
+            static node => node is VariableExpressionAst variable &&
+                           variable.VariablePath.UserPath.Equals("Matches", StringComparison.OrdinalIgnoreCase) &&
+                           !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
+            searchNestedScriptBlocks: false).Any();
     }
 
     internal static PowerShellBoundExpression? BindUnary(

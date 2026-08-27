@@ -622,7 +622,8 @@ internal sealed class PowerShellSemanticBinder
                     binary,
                     span,
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework),
-                    diagnostics);
+                    diagnostics,
+                    targetFramework);
             case UnaryExpressionAst unary:
                 if (PowerShellMutationSemanticBinder.TryBindIncrement(document, unary, symbols, out var mutation, diagnostics)) return mutation;
                 return PowerShellOperatorSemanticBinder.BindUnary(

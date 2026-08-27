@@ -510,6 +510,18 @@ internal sealed class PowerShellSemanticAnalyzer
         {
             foreach (var read in EnumerateVariableReads(unary.Operand)) yield return read;
         }
+        if (expression is PowerShellBoundTypeTestExpression typeTest)
+        {
+            foreach (var read in EnumerateVariableReads(typeTest.Operand)) yield return read;
+        }
+        if (expression is PowerShellBoundRegexExpression regex)
+        {
+            foreach (var read in EnumerateVariableReads(regex.Input)) yield return read;
+            foreach (var read in EnumerateVariableReads(regex.Pattern)) yield return read;
+            if (regex.Replacement is not null)
+            foreach (var read in EnumerateVariableReads(regex.Replacement))
+                yield return read;
+        }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
             if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
@@ -573,6 +585,18 @@ internal sealed class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundUnaryExpression unary)
         {
             foreach (var nested in EnumerateInvocations(unary.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundTypeTestExpression typeTest)
+        {
+            foreach (var nested in EnumerateInvocations(typeTest.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundRegexExpression regex)
+        {
+            foreach (var nested in EnumerateInvocations(regex.Input)) yield return nested;
+            foreach (var nested in EnumerateInvocations(regex.Pattern)) yield return nested;
+            if (regex.Replacement is not null)
+            foreach (var nested in EnumerateInvocations(regex.Replacement))
+                yield return nested;
         }
         if (expression is PowerShellBoundMutationExpression { Value: not null } mutation)
         {

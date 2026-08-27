@@ -300,6 +300,19 @@ internal sealed class PowerShellTypedLowerer
                 unary.Type.ClrType,
                 unary.Operation,
                 LowerExpression(unary.Operand, functions)),
+            PowerShellBoundTypeTestExpression typeTest => new PowerShellLoweredTypeTestExpression(
+                typeTest.Span,
+                LowerExpression(typeTest.Operand, functions),
+                typeTest.TargetType,
+                typeTest.Negate),
+            PowerShellBoundRegexExpression regex => new PowerShellLoweredRegexExpression(
+                regex.Span,
+                regex.Type.ClrType,
+                regex.Operation,
+                LowerExpression(regex.Input, functions),
+                LowerExpression(regex.Pattern, functions),
+                regex.Replacement is null ? null : LowerExpression(regex.Replacement, functions),
+                regex.IgnoreCase),
             PowerShellBoundMutationExpression mutation => new PowerShellLoweredMutationExpression(
                 mutation.Span,
                 mutation.Type.ClrType,

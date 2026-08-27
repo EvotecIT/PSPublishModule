@@ -240,6 +240,8 @@ internal sealed class PowerShellBoundCSharpBackend
                 $"({PowerShellCSharpMethodEmitter.GetTypeName(conversion.ClrType)})({EmitExpression(conversion.Operand)})",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
+            PowerShellLoweredTypeTestExpression typeTest => EmitTypeTest(typeTest),
+            PowerShellLoweredRegexExpression regex => EmitRegex(regex),
             PowerShellLoweredMutationExpression mutation => EmitMutation(
                 mutation.Target,
                 mutation.TargetClrType,
@@ -256,6 +258,31 @@ internal sealed class PowerShellBoundCSharpBackend
                 $"{PowerShellCSharpMethodEmitter.SanitizeIdentifier(invocation.Target.Name)}({string.Join(", ", invocation.Arguments.Select(EmitExpression))})",
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
+    {
+        var operand = EmitExpression(expression.Operand);
+        if (Nullable.GetUnderlyingType(expression.TargetType) is not null)
+            return $"new global::System.Func<bool>(() => {{ _ = (object?)({operand}); return {(expression.Negate ? "true" : "false")}; }})()";
+        var test = $"((object?)({operand}) is {PowerShellCSharpMethodEmitter.GetTypeName(expression.TargetType)})";
+        return expression.Negate ? $"!{test}" : test;
+    }
+
+    private static string EmitRegex(PowerShellLoweredRegexExpression expression)
+    {
+        var input = EmitExpression(expression.Input);
+        var pattern = EmitExpression(expression.Pattern);
+        var options = expression.IgnoreCase
+            ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"
+            : "global::System.Text.RegularExpressions.RegexOptions.None";
+        if (expression.Operation == PowerShellBoundRegexOperation.Replace)
+        {
+            var replacement = EmitExpression(expression.Replacement!);
+            return $"global::System.Text.RegularExpressions.Regex.Replace(({input} ?? string.Empty), ({pattern} ?? string.Empty), ({replacement} ?? string.Empty), {options})";
+        }
+        var match = $"global::System.Text.RegularExpressions.Regex.IsMatch(({input} ?? string.Empty), ({pattern} ?? string.Empty), {options})";
+        return expression.Operation == PowerShellBoundRegexOperation.NotMatch ? $"!({match})" : match;
+    }
 
     private static string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {

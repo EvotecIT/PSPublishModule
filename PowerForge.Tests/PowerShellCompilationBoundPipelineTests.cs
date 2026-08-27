@@ -464,6 +464,26 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void TypeTestsAndRegexOperatorsAreResolvedBeforeLowering()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Test-Text { param([string] $Value) return $Value -match '^a' } function Update-Text { param([string] $Value) return $Value -creplace 'a', 'b' } function Test-Type { param([object] $Value) return $Value -is [string] }",
+            TestPath("language-operators.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var match = Assert.IsType<PowerShellBoundRegexExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Test-Text").Body.Statements)).Expression);
+        Assert.True(match.IgnoreCase);
+        var replace = Assert.IsType<PowerShellBoundRegexExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Update-Text").Body.Statements)).Expression);
+        Assert.False(replace.IgnoreCase);
+        Assert.IsType<PowerShellBoundTypeTestExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Test-Type").Body.Statements)).Expression);
+        Assert.Contains("Regex.IsMatch", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Test_Text").Source, StringComparison.Ordinal);
+        Assert.Contains("Regex.Replace", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Update_Text").Source, StringComparison.Ordinal);
+        Assert.Contains(" is string", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Test_Type").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RuntimeLanguageConversionRemainsOutsideTheRuntimeFreeBoundPath()
     {
         var document = PowerShellSourceParser.Parse(
