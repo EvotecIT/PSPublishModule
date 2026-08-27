@@ -185,6 +185,71 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void VerifiedPackageCatalog_AllowsMissingAssetsOnlySdkArchiveWithoutTrustingIt()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(root, "src")).FullName;
+            string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+            File.WriteAllText(projectPath, "<Project />");
+            string objDirectory = Directory.CreateDirectory(Path.Combine(projectDirectory, "obj")).FullName;
+            File.WriteAllText(
+                Path.Combine(objDirectory, "project.assets.json"),
+                """
+                {
+                  "project": {
+                    "frameworks": {
+                      "net8.0": {
+                        "dependencies": {
+                          "Runtime.Pack": { "autoReferenced": true }
+                        }
+                      }
+                    }
+                  },
+                  "libraries": {
+                    "Runtime.Pack/1.0.0": {
+                      "type": "package",
+                      "sha512": "sha512-assets-only"
+                    }
+                  }
+                }
+                """);
+            using JsonDocument propertiesDocument = JsonDocument.Parse("{}");
+            Type runnerType = typeof(DotNetPublishPipelineRunner);
+            Type catalogType = runnerType.GetNestedType("VerifiedPackageInputCatalog", BindingFlags.NonPublic)!;
+            Type cacheType = runnerType.GetNestedType("VerifiedPackageArchiveCache", BindingFlags.NonPublic)!;
+            object cache = Activator.CreateInstance(cacheType, nonPublic: true)!;
+            try
+            {
+                MethodInfo create = catalogType.GetMethod("TryCreate", BindingFlags.Static | BindingFlags.NonPublic)!;
+                object?[] arguments = [projectPath, propertiesDocument.RootElement, new[] { packageRoot }, cache, null];
+
+                Assert.True((bool)create.Invoke(null, arguments)!);
+                Assert.NotNull(arguments[4]);
+                object catalog = arguments[4]!;
+                var archivesByPackageKey = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+                    catalogType.GetField("_archivePathsByPackageKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .GetValue(catalog));
+                var sdkManagedArchives = Assert.IsAssignableFrom<IReadOnlyCollection<string>>(
+                    catalogType.GetField("_sdkManagedArchivePaths", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .GetValue(catalog));
+                Assert.Empty(archivesByPackageKey);
+                Assert.Empty(sdkManagedArchives);
+            }
+            finally
+            {
+                (cache as IDisposable)?.Dispose();
+            }
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void SdkManagedPackageKey_RequiresMatchingCommittedLockHash()
     {
         Type runnerType = typeof(DotNetPublishPipelineRunner);

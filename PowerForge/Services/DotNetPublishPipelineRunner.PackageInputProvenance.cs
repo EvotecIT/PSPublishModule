@@ -435,13 +435,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 return !hasCommittedLock && hashes.Count == 0;
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
-                    hashes,
+                    committedPackageHashes,
                     archives,
                     out Dictionary<string, string> archivePathsByPackageKey))
             {
                 return false;
             }
-
             catalog = new VerifiedPackageInputCatalog(
                 allRoots,
                 hashes,

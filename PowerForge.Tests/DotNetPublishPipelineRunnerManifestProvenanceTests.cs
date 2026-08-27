@@ -2290,10 +2290,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 $"<MSBuildProjectExtensionsPath>{intermediateRoot}\\$(MSBuildProjectName)\\</MSBuildProjectExtensionsPath>" +
                 "</PropertyGroup></Project>");
             File.WriteAllText(parentProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks><RuntimeIdentifiers>win-x64</RuntimeIdentifiers></PropertyGroup>" +
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>" +
                 "<ItemGroup><ProjectReference Include=\"Child/Child.csproj\" /></ItemGroup></Project>");
             File.WriteAllText(childProject,
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks><RuntimeIdentifiers>win-x64</RuntimeIdentifiers></PropertyGroup>" +
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>" +
                 "<ItemGroup Condition=\"'$(TargetFramework)' == 'net10.0'\">" +
                 "<Content Include=\"net10-only.json\" CopyToOutputDirectory=\"Always\" /></ItemGroup></Project>");
             File.WriteAllText(Path.Combine(root, ".gitignore"),
@@ -2301,7 +2301,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "init");
             RunGit(root, "config user.name \"PowerForge Tests\"");
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
-            RunDotNet(root, $"restore \"{parentProject}\" --use-lock-file -r win-x64");
+            RunDotNet(root, $"restore \"{parentProject}\" --use-lock-file");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"tracked project graph\"");
             File.WriteAllText(Path.Combine(childDirectory, "net10-only.json"), "ignored selected-framework input");
@@ -2313,8 +2313,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var combination = new DotNetPublishTargetCombination
             {
                 Framework = "net8.0",
-                Runtime = "win-x64",
-                Style = DotNetPublishStyle.PortableCompat
+                Runtime = string.Empty,
+                Style = DotNetPublishStyle.FrameworkDependent
             };
             var plan = new DotNetPublishPlan
             {
@@ -2335,8 +2335,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Category = DotNetPublishArtefactCategory.Publish,
                 Target = "Sample",
                 Framework = "net8.0",
-                Runtime = "win-x64",
-                Style = DotNetPublishStyle.PortableCompat,
+                Runtime = string.Empty,
+                Style = DotNetPublishStyle.FrameworkDependent,
                 PublishDir = outputDirectory,
                 OutputDir = outputDirectory,
                 ExePath = executablePath,
@@ -2350,8 +2350,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 RunGit(root, "status --porcelain=v1"));
 
             InvokeWriteManifests(plan, artifacts);
-            using (JsonDocument net8Manifest = JsonDocument.Parse(File.ReadAllText(manifestPath)))
-                Assert.False(net8Manifest.RootElement[0].GetProperty("SourceDirty").GetBoolean());
+            string net8ManifestJson = File.ReadAllText(manifestPath);
+            using (JsonDocument net8Manifest = JsonDocument.Parse(net8ManifestJson))
+                Assert.False(net8Manifest.RootElement[0].GetProperty("SourceDirty").GetBoolean(), net8ManifestJson);
 
             combination.Framework = "net10.0";
             artifact.Framework = "net10.0";
