@@ -94,6 +94,89 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock Body { get; }
 }
 
+internal sealed class PowerShellBoundSwitchClause
+{
+    internal PowerShellBoundSwitchClause(PowerShellBoundExpression value, PowerShellBoundBlock body)
+    {
+        Value = value;
+        Body = body;
+    }
+
+    internal PowerShellBoundExpression Value { get; }
+    internal PowerShellBoundBlock Body { get; }
+}
+
+internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundSwitchStatement(
+        SourceSpan span,
+        PowerShellBoundExpression value,
+        PowerShellBoundSwitchClause[] clauses,
+        PowerShellBoundBlock? defaultBlock,
+        bool caseSensitive)
+        : base(
+            span,
+            clauses.Aggregate(value.Effects | (defaultBlock?.Effects ?? PowerShellSemanticEffect.None), static (effects, clause) => effects | clause.Value.Effects | clause.Body.Effects),
+            clauses.Aggregate(value.Capabilities | (defaultBlock?.Capabilities ?? PowerShellRequiredCapability.None), static (capabilities, clause) => capabilities | clause.Value.Capabilities | clause.Body.Capabilities))
+    {
+        Value = value;
+        Clauses = clauses;
+        DefaultBlock = defaultBlock;
+        CaseSensitive = caseSensitive;
+    }
+
+    internal PowerShellBoundExpression Value { get; }
+    internal PowerShellBoundSwitchClause[] Clauses { get; }
+    internal PowerShellBoundBlock? DefaultBlock { get; }
+    internal bool CaseSensitive { get; }
+}
+
+internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundThrowStatement(SourceSpan span, PowerShellBoundExpression? expression)
+        : base(span, PowerShellSemanticEffect.TerminatingError)
+    {
+        Expression = expression;
+    }
+
+    internal PowerShellBoundExpression? Expression { get; }
+    internal bool IsRethrow => Expression is null;
+}
+
+internal sealed class PowerShellBoundCatchClause
+{
+    internal PowerShellBoundCatchClause(Type[] exceptionTypes, PowerShellBoundBlock body)
+    {
+        ExceptionTypes = exceptionTypes;
+        Body = body;
+    }
+
+    internal Type[] ExceptionTypes { get; }
+    internal PowerShellBoundBlock Body { get; }
+}
+
+internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundTryStatement(
+        SourceSpan span,
+        PowerShellBoundBlock body,
+        PowerShellBoundCatchClause[] catches,
+        PowerShellBoundBlock? finallyBlock)
+        : base(
+            span,
+            catches.Aggregate(body.Effects | (finallyBlock?.Effects ?? PowerShellSemanticEffect.None), static (effects, clause) => effects | clause.Body.Effects),
+            catches.Aggregate(body.Capabilities | (finallyBlock?.Capabilities ?? PowerShellRequiredCapability.None), static (capabilities, clause) => capabilities | clause.Body.Capabilities))
+    {
+        Body = body;
+        Catches = catches;
+        FinallyBlock = finallyBlock;
+    }
+
+    internal PowerShellBoundBlock Body { get; }
+    internal PowerShellBoundCatchClause[] Catches { get; }
+    internal PowerShellBoundBlock? FinallyBlock { get; }
+}
+
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundBreakStatement(SourceSpan span) : base(span, PowerShellSemanticEffect.None) { }

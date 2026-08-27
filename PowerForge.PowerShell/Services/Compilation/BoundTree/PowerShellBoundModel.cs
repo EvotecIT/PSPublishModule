@@ -90,7 +90,8 @@ internal enum PowerShellSemanticEffect
     FileSystem = 8,
     Network = 16,
     Process = 32,
-    Host = 64
+    Host = 64,
+    TerminatingError = 128
 }
 
 [Flags]

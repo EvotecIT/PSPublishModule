@@ -94,6 +94,25 @@ internal sealed class PowerShellTypedLowerer
             {
                 foreach (var assignment in EnumerateAssignments(forEachLoop.Body).Where(key => key != forEachLoop.Variable.StableKey)) yield return assignment;
             }
+            else if (statement is PowerShellBoundSwitchStatement switchStatement)
+            {
+                foreach (var clause in switchStatement.Clauses)
+                foreach (var assignment in EnumerateAssignments(clause.Body))
+                    yield return assignment;
+                if (switchStatement.DefaultBlock is not null)
+                foreach (var assignment in EnumerateAssignments(switchStatement.DefaultBlock))
+                    yield return assignment;
+            }
+            else if (statement is PowerShellBoundTryStatement tryStatement)
+            {
+                foreach (var assignment in EnumerateAssignments(tryStatement.Body)) yield return assignment;
+                foreach (var clause in tryStatement.Catches)
+                foreach (var assignment in EnumerateAssignments(clause.Body))
+                    yield return assignment;
+                if (tryStatement.FinallyBlock is not null)
+                foreach (var assignment in EnumerateAssignments(tryStatement.FinallyBlock))
+                    yield return assignment;
+            }
         }
     }
 
@@ -122,6 +141,25 @@ internal sealed class PowerShellTypedLowerer
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
                 foreach (var nested in EnumerateAssignments(forEachLoop.Body)) yield return nested;
+            }
+            else if (statement is PowerShellBoundSwitchStatement switchStatement)
+            {
+                foreach (var clause in switchStatement.Clauses)
+                foreach (var nested in EnumerateAssignments(clause.Body))
+                    yield return nested;
+                if (switchStatement.DefaultBlock is not null)
+                foreach (var nested in EnumerateAssignments(switchStatement.DefaultBlock))
+                    yield return nested;
+            }
+            else if (statement is PowerShellBoundTryStatement tryStatement)
+            {
+                foreach (var nested in EnumerateAssignments(tryStatement.Body)) yield return nested;
+                foreach (var clause in tryStatement.Catches)
+                foreach (var nested in EnumerateAssignments(clause.Body))
+                    yield return nested;
+                if (tryStatement.FinallyBlock is not null)
+                foreach (var nested in EnumerateAssignments(tryStatement.FinallyBlock))
+                    yield return nested;
             }
         }
     }
@@ -161,6 +199,24 @@ internal sealed class PowerShellTypedLowerer
                 LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared)),
             PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared),
             PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared),
+            PowerShellBoundSwitchStatement switchStatement => new PowerShellLoweredSwitchStatement(
+                switchStatement.Span,
+                LowerExpression(switchStatement.Value, functions),
+                switchStatement.Clauses.Select(clause => new PowerShellLoweredSwitchClause(
+                    LowerExpression(clause.Value, functions),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared))).ToArray(),
+                switchStatement.DefaultBlock is null ? null : LowerStatements(switchStatement.DefaultBlock, functions, symbolTypes, localTypes, declared),
+                switchStatement.CaseSensitive),
+            PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
+                thrown.Span,
+                thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions)),
+            PowerShellBoundTryStatement tryStatement => new PowerShellLoweredTryStatement(
+                tryStatement.Span,
+                LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared),
+                tryStatement.Catches.Select(clause => new PowerShellLoweredCatchClause(
+                    clause.ExceptionTypes,
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared))).ToArray(),
+                tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared)),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")

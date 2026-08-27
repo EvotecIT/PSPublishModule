@@ -117,6 +117,51 @@ internal sealed class PowerShellSemanticAnalyzer
                     AnalyzeDefiniteAssignment(forEachLoop.Body, loopState, locals, diagnostics);
                     continue;
                 }
+                if (statement is PowerShellBoundSwitchStatement switchStatement)
+                {
+                    ReportReads(switchStatement.Value, assigned, locals, diagnostics);
+                    foreach (var clause in switchStatement.Clauses) ReportReads(clause.Value, assigned, locals, diagnostics);
+                    var branchStates = switchStatement.Clauses.Select(clause =>
+                    {
+                        var state = assigned.ToHashSet(StringComparer.Ordinal);
+                        AnalyzeDefiniteAssignment(clause.Body, state, locals, diagnostics);
+                        return state;
+                    }).ToList();
+                    if (switchStatement.DefaultBlock is null)
+                        branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
+                    else
+                    {
+                        var defaultState = assigned.ToHashSet(StringComparer.Ordinal);
+                        AnalyzeDefiniteAssignment(switchStatement.DefaultBlock, defaultState, locals, diagnostics);
+                        branchStates.Add(defaultState);
+                    }
+                    if (branchStates.Count > 0)
+                    {
+                        var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
+                        assigned.Clear();
+                        assigned.UnionWith(definitelyAssigned);
+                    }
+                    continue;
+                }
+                if (statement is PowerShellBoundTryStatement tryStatement)
+                {
+                    var branchStates = new List<HashSet<string>>();
+                    var tryState = assigned.ToHashSet(StringComparer.Ordinal);
+                    AnalyzeDefiniteAssignment(tryStatement.Body, tryState, locals, diagnostics);
+                    branchStates.Add(tryState);
+                    foreach (var clause in tryStatement.Catches)
+                    {
+                        var catchState = assigned.ToHashSet(StringComparer.Ordinal);
+                        AnalyzeDefiniteAssignment(clause.Body, catchState, locals, diagnostics);
+                        branchStates.Add(catchState);
+                    }
+                    var definitelyAssigned = branchStates.Aggregate((left, right) => left.Intersect(right, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal));
+                    if (tryStatement.FinallyBlock is not null)
+                        AnalyzeDefiniteAssignment(tryStatement.FinallyBlock, definitelyAssigned, locals, diagnostics);
+                    assigned.Clear();
+                    assigned.UnionWith(definitelyAssigned);
+                    continue;
+                }
                 var expression = GetExpression(statement);
                 if (expression is not null) ReportReads(expression, assigned, locals, diagnostics);
                 if (statement is PowerShellBoundAssignmentStatement assignment)
@@ -377,6 +422,25 @@ internal sealed class PowerShellSemanticAnalyzer
             {
                 foreach (var nested in EnumerateStatements(forEachLoop.Body)) yield return nested;
             }
+            else if (statement is PowerShellBoundSwitchStatement switchStatement)
+            {
+                foreach (var clause in switchStatement.Clauses)
+                foreach (var nested in EnumerateStatements(clause.Body))
+                    yield return nested;
+                if (switchStatement.DefaultBlock is not null)
+                foreach (var nested in EnumerateStatements(switchStatement.DefaultBlock))
+                    yield return nested;
+            }
+            else if (statement is PowerShellBoundTryStatement tryStatement)
+            {
+                foreach (var nested in EnumerateStatements(tryStatement.Body)) yield return nested;
+                foreach (var clause in tryStatement.Catches)
+                foreach (var nested in EnumerateStatements(clause.Body))
+                    yield return nested;
+                if (tryStatement.FinallyBlock is not null)
+                foreach (var nested in EnumerateStatements(tryStatement.FinallyBlock))
+                    yield return nested;
+            }
         }
     }
 
@@ -401,6 +465,15 @@ internal sealed class PowerShellSemanticAnalyzer
         else if (statement is PowerShellBoundForEachStatement forEachLoop)
         {
             yield return forEachLoop.Collection;
+        }
+        else if (statement is PowerShellBoundSwitchStatement switchStatement)
+        {
+            yield return switchStatement.Value;
+            foreach (var clause in switchStatement.Clauses) yield return clause.Value;
+        }
+        else if (statement is PowerShellBoundThrowStatement { Expression: not null } thrown)
+        {
+            yield return thrown.Expression;
         }
     }
 

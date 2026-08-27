@@ -41,6 +41,7 @@ internal sealed class PowerShellBoundCSharpBackend
             .AppendLine("        {");
 
         var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
+            .Concat(function.Locals.Select(static local => PowerShellClrSymbolMapper.MapIdentifier(local.Symbol.Name)))
             .ToHashSet(StringComparer.Ordinal);
         var temporaryIndex = 0;
         string GetTemporaryIdentifier(string prefix)
@@ -63,7 +64,7 @@ internal sealed class PowerShellBoundCSharpBackend
                 builder.Append("            ").AppendLine(line);
         }
 
-        foreach (var statement in function.Statements) EmitStatement(builder, statement, 3);
+        foreach (var statement in function.Statements) EmitStatement(builder, statement, 3, GetTemporaryIdentifier);
 
         builder.AppendLine("        }").Append("    }");
         return new PowerShellCSharpMethodEmission(
@@ -74,7 +75,7 @@ internal sealed class PowerShellBoundCSharpBackend
             help: function.Help?.ToPublicModel());
     }
 
-    private static void EmitStatement(StringBuilder builder, PowerShellLoweredStatement statement, int indent)
+    private static void EmitStatement(StringBuilder builder, PowerShellLoweredStatement statement, int indent, Func<string, string> getTemporaryIdentifier)
     {
         var prefix = new string(' ', indent * 4);
         switch (statement)
@@ -105,17 +106,17 @@ internal sealed class PowerShellBoundCSharpBackend
                 {
                     var clause = conditional.Clauses[index];
                     builder.Append(prefix).Append(index == 0 ? "if (" : "else if (").Append(EmitExpression(clause.Condition)).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier);
                 }
                 if (conditional.ElseStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("else");
-                    EmitBlock(builder, conditional.ElseStatements, indent);
+                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier);
                 }
                 return;
             case PowerShellLoweredWhileStatement loop:
                 builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier);
                 return;
             case PowerShellLoweredForStatement loop:
                 var initializer = loop.Initializer is null
@@ -124,7 +125,7 @@ internal sealed class PowerShellBoundCSharpBackend
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier);
                 return;
             case PowerShellLoweredForEachStatement loop:
                 var collection = EmitExpression(loop.Collection);
@@ -135,7 +136,39 @@ internal sealed class PowerShellBoundCSharpBackend
                     .Append(PowerShellCSharpMethodEmitter.GetTypeName(loop.ElementType)).Append(' ')
                     .Append(PowerShellCSharpMethodEmitter.SanitizeIdentifier(loop.Variable.Name)).Append(" in ")
                     .Append(enumerable).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier);
+                return;
+            case PowerShellLoweredSwitchStatement switchStatement:
+                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier);
+                return;
+            case PowerShellLoweredThrowStatement { Expression: null }:
+                builder.Append(prefix).AppendLine("throw;");
+                return;
+            case PowerShellLoweredThrowStatement thrown:
+                builder.Append(prefix).Append("throw ").Append(EmitExpression(thrown.Expression!)).AppendLine(";");
+                return;
+            case PowerShellLoweredTryStatement tryStatement:
+                builder.Append(prefix).AppendLine("try");
+                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier);
+                foreach (var clause in tryStatement.Catches)
+                {
+                    if (clause.ExceptionTypes.Length == 0)
+                    {
+                        builder.Append(prefix).AppendLine("catch (global::System.Exception)");
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier);
+                        continue;
+                    }
+                    foreach (var exceptionType in clause.ExceptionTypes)
+                    {
+                        builder.Append(prefix).Append("catch (").Append(PowerShellCSharpMethodEmitter.GetTypeName(exceptionType)).AppendLine(")");
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier);
+                    }
+                }
+                if (tryStatement.FinallyStatements is not null)
+                {
+                    builder.Append(prefix).AppendLine("finally");
+                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier);
+                }
                 return;
             case PowerShellLoweredBreakStatement:
                 builder.Append(prefix).AppendLine("break;");
@@ -148,12 +181,47 @@ internal sealed class PowerShellBoundCSharpBackend
         }
     }
 
-    private static void EmitBlock(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements, int indent)
+    private static void EmitBlock(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements, int indent, Func<string, string> getTemporaryIdentifier)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
-        foreach (var statement in statements) EmitStatement(builder, statement, indent + 1);
+        foreach (var statement in statements) EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier);
         builder.Append(prefix).AppendLine("}");
+    }
+
+    private static void EmitSwitch(
+        StringBuilder builder,
+        PowerShellLoweredSwitchStatement statement,
+        int indent,
+        Func<string, string> getTemporaryIdentifier)
+    {
+        var prefix = new string(' ', indent * 4);
+        var valueIdentifier = getTemporaryIdentifier("switch_value");
+        var matchedIdentifier = getTemporaryIdentifier("switch_matched");
+        builder.Append(prefix).Append(PowerShellCSharpMethodEmitter.GetTypeName(statement.Value.ClrType)).Append(' ')
+            .Append(valueIdentifier).Append(" = ").Append(EmitExpression(statement.Value)).AppendLine(";");
+        builder.Append(prefix).Append("bool ").Append(matchedIdentifier).AppendLine(" = false;");
+        builder.Append(prefix).AppendLine("do");
+        builder.Append(prefix).AppendLine("{");
+        foreach (var clause in statement.Clauses)
+        {
+            var clauseSource = EmitExpression(clause.Value);
+            var comparison = statement.Value.ClrType == typeof(string)
+                ? $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})"
+                : $"{valueIdentifier} == {clauseSource}";
+            builder.Append(prefix).Append("    if (").Append(comparison).AppendLine(")");
+            builder.Append(prefix).AppendLine("    {");
+            builder.Append(prefix).Append("        ").Append(matchedIdentifier).AppendLine(" = true;");
+            foreach (var nested in clause.Statements) EmitStatement(builder, nested, indent + 2, getTemporaryIdentifier);
+            builder.Append(prefix).AppendLine("    }");
+        }
+        if (statement.DefaultStatements is not null)
+        {
+            builder.Append(prefix).Append("    if (!").Append(matchedIdentifier).AppendLine(")");
+            EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier);
+        }
+        builder.Append(prefix).AppendLine("}");
+        builder.Append(prefix).AppendLine("while (false);");
     }
 
     private static string EmitExpression(PowerShellLoweredExpression expression)

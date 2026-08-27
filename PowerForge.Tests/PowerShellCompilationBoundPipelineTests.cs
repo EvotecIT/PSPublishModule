@@ -236,6 +236,47 @@ public sealed class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ScalarSwitchMatchingAndBreakUseLoweredControlFlow()
+    {
+        var sourceText = "function Get-Choice { param([string] $Value) [string] $result = ''; switch ($Value) { 'one' { $result = '1'; break } default { $result = '0' } }; return $result }";
+        var document = PowerShellSourceParser.Parse(sourceText, TestPath("switch.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var bound = Assert.IsType<PowerShellBoundSwitchStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundSwitchStatement));
+        Assert.False(bound.CaseSensitive);
+        Assert.IsType<PowerShellLoweredSwitchStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredSwitchStatement));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("StringComparison.InvariantCultureIgnoreCase", source, StringComparison.Ordinal);
+        Assert.Contains("while (false);", source, StringComparison.Ordinal);
+        Assert.Contains("break;", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryCatchThrowAndRethrowAreLoweredFromExceptionContracts()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Recovered { param([System.InvalidOperationException] $Failure) try { throw $Failure } catch [System.InvalidOperationException] { return 7 } } function Invoke-Rethrow { param([System.Exception] $Failure) try { throw $Failure } catch { throw } }",
+            TestPath("try-catch.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var recovered = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Recovered");
+        Assert.Equal(typeof(int), recovered.ReturnType.ClrType);
+        var boundTry = Assert.IsType<PowerShellBoundTryStatement>(Assert.Single(recovered.Body.Statements));
+        Assert.Equal(typeof(InvalidOperationException), Assert.Single(Assert.Single(boundTry.Catches).ExceptionTypes));
+        Assert.IsType<PowerShellBoundThrowStatement>(Assert.Single(boundTry.Body.Statements));
+        var recoveredSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Recovered").Source;
+        Assert.Contains("throw Failure;", recoveredSource, StringComparison.Ordinal);
+        Assert.Contains("catch (global::System.InvalidOperationException)", recoveredSource, StringComparison.Ordinal);
+        var rethrowSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_Rethrow").Source;
+        Assert.Contains("catch (global::System.Exception)", rethrowSource, StringComparison.Ordinal);
+        Assert.Contains("throw;", rethrowSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublicTranspilerUsesBoundConditionalPlan()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "BoundPipeline", Guid.NewGuid().ToString("N"));

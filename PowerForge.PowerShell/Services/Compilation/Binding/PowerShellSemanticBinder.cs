@@ -103,7 +103,7 @@ internal sealed class PowerShellSemanticBinder
         {
             var statement = authoredStatements[index];
             var diagnosticCount = diagnostics.Count;
-            var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1);
+            var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1, targetFramework);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)
@@ -238,7 +238,8 @@ internal sealed class PowerShellSemanticBinder
         IReadOnlyDictionary<string, SymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        bool isTerminal)
+        bool isTerminal,
+        string? targetFramework)
     {
         if (statement is AssignmentStatementAst assignment)
         {
@@ -274,13 +275,13 @@ internal sealed class PowerShellSemanticBinder
                     diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
                     return null;
                 }
-                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics);
+                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework);
                 if (body is null) return null;
                 clauses.Add(new PowerShellBoundConditionalClause(condition, body));
             }
             var elseBlock = ifStatement.ElseClause is null
                 ? null
-                : BindBlock(document, ifStatement.ElseClause, symbols, functions, diagnostics);
+                : BindBlock(document, ifStatement.ElseClause, symbols, functions, diagnostics, targetFramework);
             if (ifStatement.ElseClause is not null && elseBlock is null) return null;
             return new PowerShellBoundIfStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), clauses.ToArray(), elseBlock);
         }
@@ -293,7 +294,7 @@ internal sealed class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
                 return null;
             }
-            var body = BindBlock(document, whileStatement.Body, symbols, functions, diagnostics);
+            var body = BindBlock(document, whileStatement.Body, symbols, functions, diagnostics, targetFramework);
             return body is null ? null : new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), condition, body);
         }
         if (statement is ForStatementAst forStatement)
@@ -314,7 +315,7 @@ internal sealed class PowerShellSemanticBinder
                 ? null
                 : BindExpression(document, forStatement.Iterator, symbols, functions, diagnostics) as PowerShellBoundMutationExpression;
             if (forStatement.Iterator is not null && iterator is null) return null;
-            var body = BindBlock(document, forStatement.Body, symbols, functions, diagnostics);
+            var body = BindBlock(document, forStatement.Body, symbols, functions, diagnostics, targetFramework);
             return body is null ? null : new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
         }
         if (statement is ForEachStatementAst forEachStatement)
@@ -338,8 +339,117 @@ internal sealed class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2303", "foreach requires a statically typed one-dimensional array or explicitly typed scalar string.", collection.Span));
                 return null;
             }
-            var body = BindBlock(document, forEachStatement.Body, symbols, functions, diagnostics);
+            var body = BindBlock(document, forEachStatement.Body, symbols, functions, diagnostics, targetFramework);
             return body is null ? null : new PowerShellBoundForEachStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), target.Symbol, elementType, collection, scalarString, body);
+        }
+        if (statement is SwitchStatementAst switchStatement)
+        {
+            if ((switchStatement.Flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304", $"Switch flags '{switchStatement.Flags}' require PowerShell runtime matching semantics.", PowerShellSourceParser.GetSpan(document, switchStatement.Extent)));
+                return null;
+            }
+            var value = BindExpression(document, switchStatement.Condition, symbols, functions, diagnostics);
+            if (value is null) return null;
+            var valueType = value.Type.ClrType;
+            if (valueType != typeof(bool) && valueType != typeof(char) && valueType != typeof(string) && !PowerShellClrTypeSemantics.IsNumeric(valueType))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305", $"Scalar switch requires a Boolean, character, string, or numeric condition; resolved type was '{valueType.FullName}'.", value.Span));
+                return null;
+            }
+            var clauses = new List<PowerShellBoundSwitchClause>();
+            foreach (var clause in switchStatement.Clauses)
+            {
+                var clauseValue = BindExpression(document, clause.Item1, symbols, functions, diagnostics, valueType);
+                if (clauseValue is null) return null;
+                if (clauseValue.Type.ClrType != valueType)
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2306", $"Scalar switch clause type '{clauseValue.Type.ClrType.FullName}' must exactly match condition type '{valueType.FullName}' to avoid PowerShell coercion semantics.", clauseValue.Span));
+                    return null;
+                }
+                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework);
+                if (body is null) return null;
+                clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body));
+            }
+            var defaultBlock = switchStatement.Default is null
+                ? null
+                : BindBlock(document, switchStatement.Default, symbols, functions, diagnostics, targetFramework);
+            if (switchStatement.Default is not null && defaultBlock is null) return null;
+            return new PowerShellBoundSwitchStatement(
+                PowerShellSourceParser.GetSpan(document, statement.Extent),
+                value,
+                clauses.ToArray(),
+                defaultBlock,
+                (switchStatement.Flags & SwitchFlags.CaseSensitive) != 0);
+        }
+        if (statement is ThrowStatementAst throwStatement)
+        {
+            if (throwStatement.IsRethrow)
+            {
+                if (!HasAncestor<CatchClauseAst>(throwStatement))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2307", "A bare typed rethrow is valid only inside a catch clause.", PowerShellSourceParser.GetSpan(document, throwStatement.Extent)));
+                    return null;
+                }
+                return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), null);
+            }
+            if (throwStatement.Pipeline is null) return null;
+            var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics);
+            if (expression is null) return null;
+            if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2308", $"Typed throw requires a CLR exception expression; resolved type was '{expression.Type.ClrType.FullName}'.", expression.Span));
+                return null;
+            }
+            return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression);
+        }
+        if (statement is TryStatementAst tryStatement)
+        {
+            if (tryStatement.Finally?.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst, searchNestedScriptBlocks: true).Any() == true)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2309", "Typed finally blocks cannot alter enclosing return, break, or continue control flow.", PowerShellSourceParser.GetSpan(document, tryStatement.Finally.Extent)));
+                return null;
+            }
+            var body = BindBlock(document, tryStatement.Body, symbols, functions, diagnostics, targetFramework);
+            if (body is null) return null;
+            var catches = new List<PowerShellBoundCatchClause>();
+            foreach (var clause in tryStatement.CatchClauses)
+            {
+                var types = new List<Type>();
+                foreach (var constraint in clause.CatchTypes)
+                {
+                    var type = constraint.TypeName.GetReflectionType();
+                    if (type is null || !typeof(Exception).IsAssignableFrom(type) || !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
+                    {
+                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2310", $"Typed catch '{constraint.TypeName.FullName}' is not a statically resolvable target-compatible CLR exception type.", PowerShellSourceParser.GetSpan(document, constraint.Extent)));
+                        return null;
+                    }
+                    types.Add(type);
+                }
+                var catchBody = BindBlock(document, clause.Body, symbols, functions, diagnostics, targetFramework);
+                if (catchBody is null) return null;
+                catches.Add(new PowerShellBoundCatchClause(types.ToArray(), catchBody));
+            }
+            var catchAll = catches.FindIndex(static clause => clause.ExceptionTypes.Length == 0);
+            if (catchAll >= 0 && catchAll != catches.Count - 1)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2311", "A catch-all clause must follow all typed catches on the conservative typed path.", PowerShellSourceParser.GetSpan(document, tryStatement.CatchClauses[catchAll].Extent)));
+                return null;
+            }
+            var flattened = catches.SelectMany(static clause => clause.ExceptionTypes.Select(type => new { Clause = clause, Type = type })).ToArray();
+            for (var index = 0; index < flattened.Length; index++)
+            {
+                if (flattened.Take(index).Any(previous => previous.Type.IsAssignableFrom(flattened[index].Type)))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2312", $"Typed catch '{flattened[index].Type.FullName}' is unreachable after a broader earlier catch.", PowerShellSourceParser.GetSpan(document, tryStatement.CatchClauses[index].Extent)));
+                    return null;
+                }
+            }
+            var finallyBlock = tryStatement.Finally is null
+                ? null
+                : BindBlock(document, tryStatement.Finally, symbols, functions, diagnostics, targetFramework);
+            if (tryStatement.Finally is not null && finallyBlock is null) return null;
+            return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock);
         }
         if (statement is BreakStatementAst { Label: null } breakStatement && HasBreakableAncestor(breakStatement))
             return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
@@ -360,13 +470,14 @@ internal sealed class PowerShellSemanticBinder
         StatementBlockAst syntax,
         IReadOnlyDictionary<string, SymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellSymbolId> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        string? targetFramework)
     {
         var statements = new List<PowerShellBoundStatement>();
         foreach (var statement in syntax.Statements)
         {
             var diagnosticCount = diagnostics.Count;
-            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal: false);
+            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal: false, targetFramework);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)

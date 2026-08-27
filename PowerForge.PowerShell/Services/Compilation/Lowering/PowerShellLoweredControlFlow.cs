@@ -88,6 +88,77 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
     internal PowerShellLoweredStatement[] Statements { get; }
 }
 
+internal sealed class PowerShellLoweredSwitchClause
+{
+    internal PowerShellLoweredSwitchClause(PowerShellLoweredExpression value, PowerShellLoweredStatement[] statements)
+    {
+        Value = value;
+        Statements = statements;
+    }
+
+    internal PowerShellLoweredExpression Value { get; }
+    internal PowerShellLoweredStatement[] Statements { get; }
+}
+
+internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredSwitchStatement(
+        SourceSpan span,
+        PowerShellLoweredExpression value,
+        PowerShellLoweredSwitchClause[] clauses,
+        PowerShellLoweredStatement[]? defaultStatements,
+        bool caseSensitive)
+        : base(span)
+    {
+        Value = value;
+        Clauses = clauses;
+        DefaultStatements = defaultStatements;
+        CaseSensitive = caseSensitive;
+    }
+
+    internal PowerShellLoweredExpression Value { get; }
+    internal PowerShellLoweredSwitchClause[] Clauses { get; }
+    internal PowerShellLoweredStatement[]? DefaultStatements { get; }
+    internal bool CaseSensitive { get; }
+}
+
+internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredThrowStatement(SourceSpan span, PowerShellLoweredExpression? expression) : base(span) => Expression = expression;
+    internal PowerShellLoweredExpression? Expression { get; }
+}
+
+internal sealed class PowerShellLoweredCatchClause
+{
+    internal PowerShellLoweredCatchClause(Type[] exceptionTypes, PowerShellLoweredStatement[] statements)
+    {
+        ExceptionTypes = exceptionTypes;
+        Statements = statements;
+    }
+
+    internal Type[] ExceptionTypes { get; }
+    internal PowerShellLoweredStatement[] Statements { get; }
+}
+
+internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredTryStatement(
+        SourceSpan span,
+        PowerShellLoweredStatement[] statements,
+        PowerShellLoweredCatchClause[] catches,
+        PowerShellLoweredStatement[]? finallyStatements)
+        : base(span)
+    {
+        Statements = statements;
+        Catches = catches;
+        FinallyStatements = finallyStatements;
+    }
+
+    internal PowerShellLoweredStatement[] Statements { get; }
+    internal PowerShellLoweredCatchClause[] Catches { get; }
+    internal PowerShellLoweredStatement[]? FinallyStatements { get; }
+}
+
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
     internal PowerShellLoweredBreakStatement(SourceSpan span) : base(span) { }
