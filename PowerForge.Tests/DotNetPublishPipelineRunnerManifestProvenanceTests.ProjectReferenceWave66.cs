@@ -48,6 +48,171 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ControlledBuildInputs_RejectTargetTimeReferenceHintPathReparsePoint()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string externalPath = Path.Combine(externalRoot, "Payload.dll");
+            string linkPath = Path.Combine(root, "payload-link.dll");
+            File.WriteAllText(externalPath, "external");
+            try
+            {
+                File.CreateSymbolicLink(linkPath, externalPath);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath, "<Project><Target Name=\"Build\"><ItemGroup><Reference Include=\"Payload\"><HintPath>payload-link.dll</HintPath></Reference></ItemGroup></Target></Project>");
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+            DeleteTestRepository(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void ControlledBuildInputs_AcceptTargetTimeReferenceWithControlledHintPath()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            string referencePath = Path.Combine(root, "Payload.dll");
+            File.WriteAllText(referencePath, "controlled");
+            File.WriteAllText(projectPath, "<Project><Target Name=\"Build\"><ItemGroup><Reference Include=\"Payload\" HintPath=\"Payload.dll\" /></ItemGroup></Target></Project>");
+
+            Assert.True(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath, referencePath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledBuildInputs_RejectTargetTimeAmbientReferenceWithoutHintPath()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath, "<Project><Target Name=\"Build\"><ItemGroup><Reference Include=\"Ambient.Assembly\" /></ItemGroup></Target></Project>");
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("COMFileReference")]
+    [InlineData("COMReference")]
+    [InlineData("NativeReference")]
+    public void ControlledBuildInputs_RejectTargetTimeAmbientReferenceItem(string itemName)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            string referencePath = Path.Combine(root, "reference.bin");
+            File.WriteAllText(referencePath, "controlled");
+            File.WriteAllText(projectPath, $"<Project><Target Name=\"Build\"><ItemGroup><{itemName} Include=\"reference.bin\" /></ItemGroup></Target></Project>");
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath, referencePath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledBuildInputs_RejectTargetTimeEmbeddedResourceDependentUponReparsePoint()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string resourcesRoot = Directory.CreateDirectory(Path.Combine(root, "Resources")).FullName;
+            string resourcePath = Path.Combine(resourcesRoot, "Data.resx");
+            string externalPath = Path.Combine(externalRoot, "Payload.cs");
+            string linkPath = Path.Combine(resourcesRoot, "payload-link.cs");
+            File.WriteAllText(resourcePath, "<root />");
+            File.WriteAllText(externalPath, "external");
+            try
+            {
+                File.CreateSymbolicLink(linkPath, externalPath);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return;
+            }
+
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath, "<Project><Target Name=\"Build\"><ItemGroup><EmbeddedResource Include=\"Resources/Data.resx\"><DependentUpon>payload-link.cs</DependentUpon></EmbeddedResource></ItemGroup></Target></Project>");
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath, resourcePath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+            DeleteTestRepository(externalRoot);
+        }
+    }
+
+    [Fact]
+    public void ControlledBuildInputs_AcceptTargetTimeEmbeddedResourceWithControlledDependentUpon()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string resourcesRoot = Directory.CreateDirectory(Path.Combine(root, "Resources")).FullName;
+            string projectPath = Path.Combine(root, "App.proj");
+            string resourcePath = Path.Combine(resourcesRoot, "Data.resx");
+            string dependentPath = Path.Combine(resourcesRoot, "Data.cs");
+            File.WriteAllText(resourcePath, "<root />");
+            File.WriteAllText(dependentPath, "internal static class Data { }");
+            File.WriteAllText(projectPath, "<Project><Target Name=\"Build\"><ItemGroup><EmbeddedResource Include=\"Resources/Data.resx\" DependentUpon=\"Data.cs\" /></ItemGroup></Target></Project>");
+
+            Assert.True(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath, resourcePath, dependentPath],
+                [projectPath]));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void ControlledBuildInputs_RejectGenerateResourceWithoutSourceRelativeFileReferences()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

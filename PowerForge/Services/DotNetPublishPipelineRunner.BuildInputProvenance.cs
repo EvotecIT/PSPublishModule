@@ -1078,9 +1078,9 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool IsAmbientReferenceResolutionItem(string itemName)
-        => itemName.Equals("COMFileReference", StringComparison.Ordinal) ||
-           itemName.Equals("COMReference", StringComparison.Ordinal) ||
-           itemName.Equals("NativeReference", StringComparison.Ordinal);
+        => itemName.Equals("COMFileReference", StringComparison.OrdinalIgnoreCase) ||
+           itemName.Equals("COMReference", StringComparison.OrdinalIgnoreCase) ||
+           itemName.Equals("NativeReference", StringComparison.OrdinalIgnoreCase);
 
     internal static void ValidateGeneratedConfigurationInputs(DotNetPublishPlan? plan)
     {
