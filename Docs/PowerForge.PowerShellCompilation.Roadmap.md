@@ -67,7 +67,7 @@ The companion guide owns the exact current benchmark numbers and runtime proof. 
 
 The lowered C# method backend does not reference SMA AST types, and the former direct AST-to-C# emitter was deleted. Eligibility, call graphs, executable binding, source mapping, command providers, dependency locks, and hosted lifecycle metadata now consume canonical semantic or lowered contracts.
 
-Architecture closure is **Complete**. Milestone 11 value/object-flow work is unblocked, while native/process adapter execution and supported-RID promotion remain explicitly gated by Milestone 14 rather than being inferred from dependency discovery.
+The dependency-ordered architecture-closure checkpoint is **Complete**, so Milestone 11 value/object-flow work is unblocked. The broader architecture completion gate remains **Partial** until Milestone 14 target contracts, provenance, native/process target-host execution, supported-RID promotion, and the remaining diagnostic-chain requirements pass; those delivery claims are not inferred from dependency discovery.
 
 ## Artifact ladder
 
@@ -766,10 +766,11 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 6. Define runtime-free artifact contract and managed ABI | Complete | Strict publication is fail-closed and ABI v4 carries value state, output/null/cardinality, streams, and binding semantics |
 | 7. Preserve help and module contracts | Complete | Compiled functions retain full help/export behavior |
 | Architecture-closure checkpoint | Complete | Publication certification, consumed locks, command-family lowering, lifecycle ownership, and responsibility-based growth headroom are closed |
+| Overall architecture completion gate | Partial / Milestone 14 | The compiler core is unblocked; target-contract, provenance, target-host, and remaining diagnostic-chain product gates stay open |
 | 8. Build command and pipeline semantics | Complete | Deterministic injected providers, typed family stages, complete CLR stream sinks, and runtime-free adapter execution share one semantic route |
 | 9. Resolve modules, dependencies, and interop | Complete | Builds consume exact graph locks; transitive module, managed, native/process, and COM dispositions are deterministic and clean-target tested |
 | 10. Complete advanced-function lifecycle | Complete | Canonical lifecycle IR preserves raw records, guarantees cleanup, and enforces PowerShell 5.1/7/7.3+ behavior explicitly |
-| 11. Complete value and object flows | Planned / Next | Publication, lock, command, lifecycle, and clean-target interop gates no longer block semantic breadth |
+| 11. Complete value and object flows | Planned / Next | The narrow compiler-core closure gates no longer block semantic breadth |
 | 12. Expand bounded runtime state | Planned | More real helpers compile without accepting arbitrary dynamic scope |
 | 13. Run generic coverage waves | Planned | Coverage rises through semantic families, not product special cases |
 | 14. Productize managed, Hybrid, and native delivery | Planned | Reproducible DLL/EXE outputs have runtime, RID, ABI, and provenance proof |
@@ -922,7 +923,7 @@ This is the first new module-surface feature after migration because it proves t
 
 Implemented evidence re-proven on the 2026-08-27 architecture-closure candidate:
 
-- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-build --no-restore --filter "FullyQualifiedName~PowerShellCompilation"` passed 749/749 tests, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4, consumed dependency locks, transitive module discovery, interop boundaries, injected runtime-free providers, hosted lifecycle fidelity, trimming, NativeAOT build contracts, and delivered-artifact inspection;
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~PowerShellCompilation"` passed 756/756 tests, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4, analyzer-JSON-to-reviewed-lock round trips, exact managed-assembly closure identities, transitive module discovery, interop boundaries, injected runtime-free providers, hosted lifecycle fidelity, trimming, NativeAOT build contracts, and delivered-artifact inspection;
 - `PowerForge.PowerShell.csproj` built with zero warnings and errors for `net472`, `net8.0`, and `net10.0` after the final compatibility changes;
 - the portable generic Hybrid corpus remains at 5/6 emitted functions (83.33%) with zero eligible functions dropped after graph or binary-cmdlet shaping; its intentional runtime-scope function remains fallback;
 - the refreshed exact-pinned six-product lane reports 123/1,235 emitted functions (9.96%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
@@ -932,7 +933,7 @@ Implemented evidence re-proven on the 2026-08-27 architecture-closure candidate:
 - typed targets reject native-process effects before emission, while strict dependency verification rejects managed `System.Diagnostics.Process.Start` references before runtime-free certification;
 - the former 139/1,235 result is retained in the companion guide as a historical snapshot of the deleted direct AST emitter, not represented as current all-IR coverage;
 - the lowered C# method backend has no reference to `System.Management.Automation.Language`; the former direct AST-to-C# emitter files, transpiler graph reconstruction, and AST-aware Strict executable shaping are absent;
-- deterministic graph schema 3 snapshots drive analysis/build planning and manifest schema 4; build consumes a reviewed lock, rejects source, content-hash, and analysis-to-build drift, resolves local/acquired transitive module specifications without importing source, and records managed, native, process, and literal `New-Object -ComObject` boundaries;
+- deterministic graph schema 3 snapshots drive analysis/build planning and manifest schema 5; build requires a reviewed lock by default, marks an explicit development opt-out as unreviewed, rejects source, content-hash, and analysis-to-build drift, resolves local/acquired transitive module specifications without importing source, and records managed, native, process, and literal `New-Object -ComObject` boundaries;
 - PowerShell 7 Hybrid advanced-function fixtures preserve original pipeline-record identity and properties while executing `begin`, per-record `process`, `end`, and `clean` through a hosted `SteppablePipeline`; cleanup runs across begin/process/end failure paths, PowerShell 5.1 behavior and pre-7.3 `clean` rejection are explicit, and Strict rejects hosted-only lifecycle;
 - deterministic external command-provider registration, typed projection/filter/map/sort stages, complete PowerShell stream sinks, and injected runtime-free adapters flow through the canonical semantic/lowered contracts; the strict library proof executes an injected provider without an SMA dependency;
 - the clean-target interop matrix records TFM/RID/bitness, ownership, error, cancellation, cleanup, threading, and COM apartment contracts without activating COM or executing authored source; actual native/process adapter execution and supported-RID promotion remain Milestone 14 target-host gates;
@@ -1253,9 +1254,9 @@ Every new command family should normally require:
 - [x] Keep substantial generated PowerShell and C# templates in native template/resource files.
 - [x] Add XML documentation to public and non-obvious reusable contracts.
 - [x] Keep tests grouped by behavioral contract rather than implementation class count.
-- [ ] Before Milestones 11–13, decompose the active analyzer, binder, lowered backend, lowerer, and large bound-pipeline test owners that are already in the 761–792-line range; passing the 800-line gate is a floor, not growth headroom.
+- [x] Before Milestones 11–13, decompose the active analyzer, binder, lowered backend, lowerer, and large bound-pipeline test owners by semantic responsibility; output analysis, declarations, invocation rendering, host requirements, and hosted-pipeline tests now have named owners and the primary files retain growth headroom.
 
-## Architecture completion gate
+## Architecture completion gate — Partial / Milestone 14
 
 The redesign is complete only when all of the following are true:
 
@@ -1264,25 +1265,25 @@ The redesign is complete only when all of the following are true:
 - [x] no census code independently decides compiler eligibility;
 - [x] no command behavior depends on registration order;
 - [x] analysis does not execute/import source modules or activate native/COM dependencies to discover semantics;
-- [ ] all artifact behavior, including hosted lifecycle discovery and binding, runs through the canonical front-end/IR boundary;
+- [x] all current artifact behavior, including hosted lifecycle discovery and binding, runs through the canonical front-end/IR boundary;
 - [x] migrated direct AST-to-C# paths are deleted;
-- [x] the focused 740-test compiler suite passes on the integrated branch candidate;
+- [x] the focused compiler suite passes on the integrated branch candidate;
 - [x] established applicable PowerShell 5.1 and PowerShell 7 differential lanes in that suite pass;
-- [ ] hosted lifecycle has an explicit PowerShell 5.1/7 version-capability matrix and differential proof;
+- [x] hosted lifecycle has an explicit PowerShell 5.1/7 version-capability matrix and differential proof;
 - [x] net472, net8.0, and net10.0 builds remain warning-free on the integrated branch candidate;
 - [ ] each artifact records one explicit semantic/execution/deployment target contract from Milestone 14 rather than inferring it from mode/kind/TFM fields;
-- [ ] Strict publication fails when delivered dependency closure cannot mechanically exclude PowerShell runtime and source fallback;
+- [x] Strict publication fails when delivered dependency closure cannot mechanically exclude PowerShell runtime, source fallback, or missing non-framework managed references;
 - [x] every emitted runtime-free helper has one versioned owner and is trim/NativeAOT clean, or the artifact explicitly records that no support substrate is present;
-- [ ] generated CLR libraries carry a normalized public ABI map with bound null/value/cardinality semantics and pass clean-consumer tests;
-- [ ] semantic, dependency, and deployment graphs share stable identities and one reviewed lock that the build consumes and verifies;
-- [ ] every required module, assembly, native asset, resource, process, and equivalent COM activation capability has one explicit artifact disposition;
+- [x] generated CLR libraries carry a normalized public ABI map with bound null/value/cardinality and success-stream semantics and pass clean-consumer tests;
+- [x] semantic, dependency, and deployment graphs share stable identities and one reviewed lock that the build requires, consumes, and verifies; explicit development opt-out is recorded as unreviewed;
+- [x] every currently discovered required module, assembly, native asset, resource, process, and equivalent COM activation capability has one explicit artifact disposition;
 - [ ] Hybrid/fallback diagnostics retain the causal function-command-module-dependency chain and boundary contract;
 - [ ] representative external binary-module, managed-wrapper, native/process, and Windows COM artifacts pass clean-target validation;
 - [ ] named NativeAOT RIDs have target-host execution proof;
 - [ ] generated source, ABI, dependencies, and build inputs have provenance bound to the consumed lock and explicit target contract;
-- [ ] generated artifacts preserve invocation, export, help, source-map, fallback, original pipeline-input, and lifecycle-cleanup contracts;
+- [x] generated artifacts preserve invocation, export, help, source-map, fallback, original pipeline-input, and synchronized lifecycle-cleanup contracts in the supported profiles;
 - [x] touched non-generated compiler production/test files stay below 800 lines;
-- [ ] active compiler owners have responsibility-based headroom for planned value/object/command expansion, not only sub-800 line counts;
-- [ ] adding an operator, syntax form, or command family has one obvious canonical semantic/lowering/backend owner and an injectable provider route where appropriate.
+- [x] active compiler owners have responsibility-based headroom for planned value/object/command expansion, not only sub-800 line counts;
+- [x] adding an operator, syntax form, or command family has one obvious canonical semantic/lowering/backend owner and an injectable provider route where appropriate.
 
 Only after this gate should PowerForge treat broad percentage growth as the primary objective.

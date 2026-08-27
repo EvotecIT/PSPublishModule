@@ -103,7 +103,8 @@ public sealed class PowerShellCompilationDependencyGraphTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(4, result.Manifest!.SchemaVersion);
+        Assert.Equal(5, result.Manifest!.SchemaVersion);
+        Assert.True(result.Manifest.DependencyLockReviewed);
         Assert.NotNull(result.Manifest.DependencyGraph);
         Assert.Equal(expected.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
     }
@@ -165,6 +166,52 @@ public sealed class PowerShellCompilationDependencyGraphTests
         Assert.False(result.Succeeded);
         Assert.Contains("invalid content hash", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
+    public void Build_RequiresReviewedDependencyLockUnlessDevelopmentOptOutIsExplicit()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("Demo.ps1", "function Get-Demo { return 1 }");
+        var output = Path.Combine(fixture.Root, "out");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            script,
+            output,
+            "Dependency.Graph.Required",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("separately reviewed dependency lock", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+    }
+
+    [Fact]
+    public void Resolve_RequiredModuleRangeChoosesHighestSatisfyingVersionAndSkipsInvalidUnversionedCandidate()
+    {
+        using var fixture = new GraphFixture();
+        fixture.Write("Demo.psm1", "function Get-Demo { return 1 }");
+        fixture.Write("Demo.psd1", "@{ RootModule='Demo.psm1'; ModuleVersion='1.0.0'; RequiredModules=@(@{ ModuleName='Foo'; ModuleVersion='1.0.0'; MaximumVersion='2.5.0' }) }");
+        fixture.Write("Foo/Foo.psd1", "@{ ModuleVersion='invalid' }");
+        fixture.Write("Foo/1.5.0/Foo.psd1", "@{ ModuleVersion='1.5.0' }");
+        var selected = fixture.Write("Foo/2.0.0/Foo.psd1", "@{ ModuleVersion='2.0.0' }");
+        fixture.Write("Foo/3.0.0/Foo.psd1", "@{ ModuleVersion='3.0.0' }");
+
+        var input = new PowerShellCompilationInputResolver().Resolve(
+            Path.Combine(fixture.Root, "Demo.psd1"),
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+        var graph = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(input, PowerShellCompilationMode.Hybrid);
+
+        var module = Assert.Single(graph.Nodes, node =>
+            node.Identity.Source.Replace('\\', '/').EndsWith("Foo/2.0.0/Foo.psd1", StringComparison.OrdinalIgnoreCase));
+        Assert.True(module.Exists);
+        Assert.Equal("Foo", module.Identity.Name);
+        Assert.Equal("1.0.0", module.Identity.MinimumVersion);
+        Assert.Equal("2.5.0", module.Identity.MaximumVersion);
+        Assert.Equal("2.0.0", ModuleManifestValueReader.ReadTopLevelString(selected, "ModuleVersion"));
+        Assert.EndsWith("Foo/2.0.0/Foo.psd1", module.Identity.Source.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -36,6 +36,98 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("native-process launch reference", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("Missing.Dependency")]
+    [InlineData("System.CommandLine")]
+    public async Task StrictClosureVerifierRejectsMissingTransitiveManagedAssembly(string assemblyName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "ManagedClosure", Guid.NewGuid().ToString("N"));
+        var dependency = Path.Combine(root, "Dependency");
+        var consumer = Path.Combine(root, "Consumer");
+        var output = Path.Combine(root, "out");
+        Directory.CreateDirectory(dependency);
+        Directory.CreateDirectory(consumer);
+        try
+        {
+            File.WriteAllText(Path.Combine(dependency, assemblyName + ".csproj"),
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>{assemblyName}</AssemblyName></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(dependency, "Value.cs"),
+                $"namespace {assemblyName}; public static class Value {{ public static int Get() => 1; }}");
+            File.WriteAllText(Path.Combine(consumer, "Consumer.csproj"),
+                $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"../Dependency/{assemblyName}.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(consumer, "Consumer.cs"),
+                $"public static class Consumer {{ public static int Get() => {assemblyName}.Value.Get(); }}");
+            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                    "dotnet",
+                    root,
+                    new[] { "build", Path.Combine(consumer, "Consumer.csproj"), "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" },
+                    TimeSpan.FromSeconds(60)));
+            Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
+
+            var consumerAssembly = Path.Combine(output, "Consumer.dll");
+            var exception = Assert.Throws<InvalidOperationException>(() => PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            {
+                new PowerShellCompilationArtifactFile { Path = consumerAssembly, Role = "Primary" }
+            }));
+
+            Assert.Contains($"missing managed assembly '{assemblyName}", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StrictClosureVerifierRejectsDeliveredAssemblyWithWrongIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "ManagedIdentityClosure", Guid.NewGuid().ToString("N"));
+        var dependencyV1 = Path.Combine(root, "DependencyV1");
+        var dependencyV2 = Path.Combine(root, "DependencyV2");
+        var consumer = Path.Combine(root, "Consumer");
+        var consumerOutput = Path.Combine(root, "consumer-out");
+        var wrongOutput = Path.Combine(root, "wrong-out");
+        Directory.CreateDirectory(dependencyV1);
+        Directory.CreateDirectory(dependencyV2);
+        Directory.CreateDirectory(consumer);
+        try
+        {
+            const string project = "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><AssemblyName>Versioned.Dependency</AssemblyName><AssemblyVersion>{0}</AssemblyVersion></PropertyGroup></Project>";
+            File.WriteAllText(Path.Combine(dependencyV1, "Versioned.Dependency.csproj"), string.Format(System.Globalization.CultureInfo.InvariantCulture, project, "1.0.0.0"));
+            File.WriteAllText(Path.Combine(dependencyV1, "Value.cs"), "namespace Versioned.Dependency; public static class Value { public static int Get() => 1; }");
+            File.WriteAllText(Path.Combine(dependencyV2, "Versioned.Dependency.csproj"), string.Format(System.Globalization.CultureInfo.InvariantCulture, project, "2.0.0.0"));
+            File.WriteAllText(Path.Combine(dependencyV2, "Value.cs"), "namespace Versioned.Dependency; public static class Value { public static int Get() => 2; }");
+            File.WriteAllText(Path.Combine(consumer, "Consumer.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"../DependencyV1/Versioned.Dependency.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(consumer, "Consumer.cs"),
+                "public static class Consumer { public static int Get() => Versioned.Dependency.Value.Get(); }");
+
+            var consumerBuild = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet", root,
+                new[] { "build", Path.Combine(consumer, "Consumer.csproj"), "-c", "Release", "-o", consumerOutput, "--nologo", "--verbosity", "quiet" },
+                TimeSpan.FromSeconds(60)));
+            Assert.True(consumerBuild.Succeeded, consumerBuild.StdErr + Environment.NewLine + consumerBuild.StdOut);
+            var wrongBuild = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet", root,
+                new[] { "build", Path.Combine(dependencyV2, "Versioned.Dependency.csproj"), "-c", "Release", "-o", wrongOutput, "--nologo", "--verbosity", "quiet" },
+                TimeSpan.FromSeconds(60)));
+            Assert.True(wrongBuild.Succeeded, wrongBuild.StdErr + Environment.NewLine + wrongBuild.StdOut);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => PowerShellStrictDependencyClosureVerifier.Verify(new[]
+            {
+                new PowerShellCompilationArtifactFile { Path = Path.Combine(consumerOutput, "Consumer.dll"), Role = "Primary" },
+                new PowerShellCompilationArtifactFile { Path = Path.Combine(wrongOutput, "Versioned.Dependency.dll"), Role = "RuntimeDependency" }
+            }));
+
+            Assert.Contains("Versioned.Dependency, Version=1.0.0.0", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exact assembly identity", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void StrictClosureVerifierFailsClosedForUnknownExecutableFormat()
     {

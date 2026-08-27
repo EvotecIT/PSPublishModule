@@ -393,6 +393,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
                     DependencyGraph = dependencyGraph,
+                    DependencyLockReviewed = spec.ExpectedDependencyLock is not null,
                     CommandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
                         .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
                         .Select(static group => group.First())
@@ -470,6 +471,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentOutOfRangeException(nameof(spec), "Resource mode is not defined.");
         if (!Enum.IsDefined(typeof(CertificateStoreLocation), spec.CertificateStoreLocation))
             throw new ArgumentOutOfRangeException(nameof(spec), "Certificate store location is not defined.");
+        if (spec.ExpectedDependencyLock is not null && spec.AllowUnreviewedDependencyResolution)
+            throw new ArgumentException("ExpectedDependencyLock and AllowUnreviewedDependencyResolution are mutually exclusive.", nameof(spec));
+        if (spec.Optimization == PowerShellCompilationExecutableOptimization.NativeAot &&
+            spec.CommandProviders.Any(static provider => provider.Adapter.RuntimeFree && !provider.Adapter.AotCompatible))
+            throw new ArgumentException("NativeAOT compilation requires every runtime-free command provider adapter to declare AotCompatible.", nameof(spec));
         if (spec.Mode == PowerShellCompilationMode.Analyze)
             throw new ArgumentException("Analyze mode reports eligibility and does not produce artifacts. Use the analyzer API or CLI analyze command.", nameof(spec));
         if (!File.Exists(spec.SourcePath))

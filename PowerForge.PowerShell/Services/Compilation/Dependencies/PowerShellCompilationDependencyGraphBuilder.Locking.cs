@@ -85,21 +85,45 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
     {
         var name = module.ModuleName.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
         var fileName = Path.GetFileNameWithoutExtension(name);
-        var version = module.RequiredVersion ?? module.ModuleVersion;
         var candidates = new List<string>();
         if (name.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
             candidates.Add(Path.Combine(directory, name));
         candidates.Add(Path.Combine(directory, fileName + ".psd1"));
         candidates.Add(Path.Combine(directory, fileName, fileName + ".psd1"));
         candidates.Add(Path.Combine(_moduleRoot, fileName, fileName + ".psd1"));
-        if (!string.IsNullOrWhiteSpace(version))
+        foreach (var versionRoot in new[] { Path.Combine(directory, fileName), Path.Combine(_moduleRoot, fileName) }
+                     .Select(Path.GetFullPath)
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
-            candidates.Add(Path.Combine(directory, fileName, version!, fileName + ".psd1"));
-            candidates.Add(Path.Combine(_moduleRoot, fileName, version!, fileName + ".psd1"));
+            if (!Directory.Exists(versionRoot)) continue;
+            foreach (var versionDirectory in Directory.EnumerateDirectories(versionRoot, "*", SearchOption.TopDirectoryOnly))
+                candidates.Add(Path.Combine(versionDirectory, fileName + ".psd1"));
         }
+
         return candidates.Select(Path.GetFullPath)
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
-            .FirstOrDefault(File.Exists);
+            .Where(File.Exists)
+            .Select(path => new { Path = path, Version = GetMatchingModuleVersion(path, module) })
+            .Where(static candidate => candidate.Version is not null)
+            .OrderByDescending(static candidate => candidate.Version)
+            .ThenBy(static candidate => candidate.Path, PowerShellCompilationPathSafety.PathComparer)
+            .Select(static candidate => candidate.Path)
+            .FirstOrDefault();
+    }
+
+    private static Version? GetMatchingModuleVersion(string manifestPath, RequiredModuleReference module)
+    {
+        var actualText = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ModuleVersion");
+        if (!Version.TryParse(actualText, out var actual)) return null;
+        if (Version.TryParse(module.RequiredVersion, out var required) && actual != required) return null;
+        if (Version.TryParse(module.ModuleVersion, out var minimum) && actual < minimum) return null;
+        if (Version.TryParse(module.MaximumVersion, out var maximum) && actual > maximum) return null;
+        if (Guid.TryParse(module.Guid, out var requiredGuid))
+        {
+            var actualGuid = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "GUID");
+            if (!Guid.TryParse(actualGuid, out var parsedGuid) || parsedGuid != requiredGuid) return null;
+        }
+        return actual;
     }
 
     private static void ApplyModuleIdentity(

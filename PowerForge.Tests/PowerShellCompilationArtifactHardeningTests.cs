@@ -32,7 +32,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PowerInfoBloxHelper",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = targetFramework
         };
@@ -77,7 +77,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedSemantics",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package);
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -111,7 +111,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedExitPath",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!);
@@ -130,7 +130,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PackagedUsingModule",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("using module/assembly directives", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -149,7 +149,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.StructuredOutput",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var packaged = Run(result.ArtifactPath!);
@@ -177,7 +177,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "input",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -201,7 +201,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CommonParameterCollision",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -223,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.StrictManifestHook",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime script hook", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -242,7 +242,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.StrictDynamicManifestHook",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("literal string", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -262,7 +262,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.HybridManifestHook",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
@@ -281,7 +281,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.MemberCollision",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -300,7 +300,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ClassMemberCollision",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -319,7 +319,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.DuplicateCmdletClass",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -339,7 +339,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NonCmdletFallback",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -376,7 +376,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.DuplicateFunctionFallback",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -424,7 +424,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.LibraryOptions",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             SelfContained = true
         };
@@ -445,7 +445,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.Sibling",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(sibling.Succeeded, sibling.Error + Environment.NewLine + sibling.BuildOutput);
         var artifactHash = Hash(sibling.ArtifactPath!);
         var manifestHash = Hash(sibling.ManifestPath!);
@@ -455,7 +455,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.Sibling.dll",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)));
 
         Assert.Contains("generated artifact suffix", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(artifactHash, Hash(sibling.ArtifactPath!));
@@ -472,7 +472,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConditionalFunction",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
@@ -500,7 +500,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConditionalExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
@@ -527,7 +527,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConditionalOnlyExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
@@ -554,7 +554,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ConditionalFalseExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
@@ -581,7 +581,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.AttachedExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -605,7 +605,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.SourceRequires",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("#requires", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -622,7 +622,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "Foo",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
@@ -639,7 +639,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TargetFrameworkType",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         };
@@ -661,7 +661,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.UnreferencedFrameworkType",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         };
@@ -685,7 +685,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.PrivateHelper",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
@@ -714,7 +714,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TopLevelOmission",
             kind,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("top-level script unit", result.Error, StringComparison.OrdinalIgnoreCase);

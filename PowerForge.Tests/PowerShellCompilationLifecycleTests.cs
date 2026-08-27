@@ -45,9 +45,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.Lifecycle",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net10.0"
+            TargetFramework = "net10.0",
+            EmitSource = true
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -65,6 +66,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(lifecycle.CommonParameters);
         Assert.True(lifecycle.SupportsShouldProcess);
         Assert.Equal("Low", lifecycle.ConfirmImpact, ignoreCase: true);
+        var generatedLifecycleSource = string.Join(
+            Environment.NewLine,
+            Directory.EnumerateFiles(result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories)
+                .Select(File.ReadAllText));
+        Assert.Contains("Interlocked.Exchange(ref __powerForgeCleaned, 1)", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("lock (__powerForgeLifecycleGate)", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("var pipeline = __powerForgePipeline;", generatedLifecycleSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (__powerForgePipeline is null) return;", generatedLifecycleSource, StringComparison.Ordinal);
 
         var escapedCleanup = cleanup.Replace("'", "''", StringComparison.Ordinal);
         var proof = RunModuleProof(
@@ -137,7 +146,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.Lifecycle.FailurePaths",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net10.0"
         });
@@ -188,7 +197,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.Lifecycle.WindowsPowerShell",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         });
@@ -214,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.StrictLifecycle",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net10.0"
         });

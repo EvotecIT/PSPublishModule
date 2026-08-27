@@ -62,8 +62,10 @@ Code signing establishes publisher identity and artifact integrity; it does not 
 For the common case, point PowerForge at the module directory. It selects the matching top-level manifest and root module, infers a hybrid binary-module build, and writes to the module's `artifacts` directory:
 
 ```powershell
-powerforge powershell build .\MyModule --emit-source
+powerforge powershell build .\MyModule --allow-unreviewed-dependencies --emit-source
 ```
+
+Artifact builds require a separately reviewed dependency graph by default. Capture the `dependencyGraph` from `powerforge powershell analyze <path> --output json`, review and store that graph, then pass the raw graph JSON with `--dependency-lock <graph.json>` or the equivalent `-DependencyLock` cmdlet object. For a local development build only, `--allow-unreviewed-dependencies` / `-AllowUnreviewedDependencies` is the explicit opt-out; manifest schema 5 records `dependencyLockReviewed: false` so that result cannot be mistaken for a reviewed build.
 
 The accepted input shapes are:
 
@@ -86,11 +88,13 @@ powerforge powershell build .\Public\Get-One.ps1 `
     --path .\Public\Get-Two.ps1 `
     --kind dll `
     --out .\artifacts `
+    --allow-unreviewed-dependencies `
     --emit-source
 
 Build-PowerShellArtifact `
     -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 `
     -Kind BinaryModule `
+    -AllowUnreviewedDependencies `
     -EmitSource
 ```
 
@@ -104,13 +108,15 @@ powerforge powershell build .\Tool.ps1 `
     --entry-point .\Tool.ps1 `
     --kind exe `
     --mode Package `
+    --allow-unreviewed-dependencies `
     --out .\artifacts
 
 Build-PowerShellArtifact `
     -Path .\Tool.ps1, .\Private\Helpers.ps1 `
     -EntryPoint .\Tool.ps1 `
     -Kind Executable `
-    -Mode Package
+    -Mode Package `
+    -AllowUnreviewedDependencies
 ```
 
 The dependency tree is extracted with its relative layout before the embedded script runs, so `$PSScriptRoot`, `$PSCommandPath`, and nested literal dot-sources retain file-backed behavior. Dynamic, escaping, missing, or linked dependencies fail closed. Multi-file Strict EXEs remain unsupported until local PowerShell function declarations and calls have a typed entrypoint contract.
@@ -151,7 +157,8 @@ powerforge powershell analyze .\MyModule `
 Build-PowerShellArtifact -Path .\MyModule `
     -ResourceMode Declared `
     -IncludeResource 'Templates/**', 'Vendor' `
-    -ExcludeResource 'Vendor/**/*.pdb'
+    -ExcludeResource 'Vendor/**/*.pdb' `
+    -AllowUnreviewedDependencies
 ```
 
 PowerForge does not turn a module into an EXE or infer an application entrypoint from exported functions. A standalone `.ps1` that imports another module does not cause that module and its complete resource tree to be bundled; module dependency acquisition remains an explicit deployment concern.
@@ -167,6 +174,7 @@ Package a script as an executable:
 ```powershell
 powerforge powershell build .\Invoke-Report.ps1 `
     --out .\artifacts `
+    --allow-unreviewed-dependencies `
     --name Invoke-Report
 
 .\artifacts\Invoke-Report.exe --Path C:\Reports --Format Html
@@ -178,6 +186,7 @@ Compile an eligible top-level script into a PowerShell-free executable:
 powerforge powershell build .\Measure-Threshold.ps1 `
     --kind exe `
     --mode Strict `
+    --allow-unreviewed-dependencies `
     --out .\artifacts `
     --name Measure-Threshold
 ```
@@ -195,6 +204,7 @@ powerforge powershell build .\MathTools.psm1 `
     --kind dll `
     --mode Strict `
     --framework net8.0 `
+    --allow-unreviewed-dependencies `
     --out .\artifacts
 
 Import-Module .\artifacts\MathTools.dll
@@ -206,6 +216,7 @@ Build a hybrid module when only part of the source is eligible. The kind and mod
 
 ```powershell
 powerforge powershell build .\Operations `
+    --allow-unreviewed-dependencies `
     --out .\artifacts
 
 Import-Module .\artifacts\Operations\Operations.psm1
@@ -217,6 +228,7 @@ Build a runtime-independent CLR library containing every eligible function:
 powerforge powershell build .\Calculations.psm1 `
     --kind library `
     --mode Hybrid `
+    --allow-unreviewed-dependencies `
     --out .\artifacts
 ```
 
@@ -229,6 +241,7 @@ The cmdlet is a thin PowerShell surface over the same artifact builder:
 ```powershell
 Build-PowerShellArtifact `
     -Path .\Operations `
+    -AllowUnreviewedDependencies `
     -EmitSource
 ```
 

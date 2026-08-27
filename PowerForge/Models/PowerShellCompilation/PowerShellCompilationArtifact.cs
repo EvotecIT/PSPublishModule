@@ -45,13 +45,25 @@ public sealed class PowerShellCompilationBuildSpec
     {
     }
 
+    /// <summary>Creates an artifact-build specification and explicitly selects unreviewed dependency resolution.</summary>
+    public PowerShellCompilationBuildSpec(
+        string sourcePath,
+        string outputDirectory,
+        string artifactName,
+        PowerShellCompilationArtifactKind kind,
+        bool allowUnreviewedDependencyResolution)
+        : this(sourcePath, outputDirectory, artifactName, kind, GetDefaultMode(kind), allowUnreviewedDependencyResolution)
+    {
+    }
+
     /// <summary>Creates an artifact-build specification.</summary>
     public PowerShellCompilationBuildSpec(
         string sourcePath,
         string outputDirectory,
         string artifactName,
         PowerShellCompilationArtifactKind kind,
-        PowerShellCompilationMode mode)
+        PowerShellCompilationMode mode,
+        bool allowUnreviewedDependencyResolution = false)
     {
         if (string.IsNullOrWhiteSpace(sourcePath)) throw new ArgumentException("A source path is required.", nameof(sourcePath));
         if (string.IsNullOrWhiteSpace(outputDirectory)) throw new ArgumentException("An output directory is required.", nameof(outputDirectory));
@@ -63,6 +75,7 @@ public sealed class PowerShellCompilationBuildSpec
         ArtifactName = artifactName;
         Kind = kind;
         Mode = mode;
+        AllowUnreviewedDependencyResolution = allowUnreviewedDependencyResolution;
     }
 
     /// <summary>Returns the build mode used when a caller omits an explicit mode.</summary>
@@ -200,6 +213,12 @@ public sealed class PowerShellCompilationBuildSpec
     /// </summary>
     public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
 
+    /// <summary>
+    /// Explicitly permits a build to resolve the current dependency graph without a separately reviewed lock.
+    /// The resulting manifest records that the dependency lock was not reviewed.
+    /// </summary>
+    public bool AllowUnreviewedDependencyResolution { get; set; }
+
     /// <summary>Additional compile-time-only command semantic providers used by this build.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
 }
@@ -210,7 +229,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 4;
+    public int SchemaVersion { get; set; } = 5;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -310,6 +329,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Locked dependency graph used by analysis, build planning, and deployment validation.</summary>
     public PowerShellCompilationDependencyGraph? DependencyGraph { get; set; }
+
+    /// <summary>Whether the build consumed a separately supplied and validated dependency lock.</summary>
+    public bool DependencyLockReviewed { get; set; }
 
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();

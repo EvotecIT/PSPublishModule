@@ -119,7 +119,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             output,
             "Demo.Compiled",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid)
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = Path.Combine(fixture.RootPath, "Demo.psd1"),
             CompilationSourcePaths = new[] { Path.Combine(fixture.RootPath, "Demo.psm1") },
@@ -159,7 +159,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
                 Path.Combine(fixture.RootPath, "out"),
                 "Escaping.Runtime.Source",
                 PowerShellCompilationArtifactKind.Executable,
-                PowerShellCompilationMode.Package)
+                PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = new[] { script },
                 RuntimeSourcePaths = new[] { script, outside }

@@ -77,7 +77,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedCliProof --output json");
+                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedCliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -132,7 +132,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --out \"{output}\" --name TypedMultiCliProof --output json");
+                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedMultiCliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("multi-file typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -204,7 +204,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
+                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --allow-unreviewed-dependencies --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("build", build));
             using (var document = JsonDocument.Parse(build.StdOut))
             {
@@ -224,6 +224,44 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                                   dependency.GetProperty("selection").GetString() == "ExplicitInclude");
                 Assert.Equal(1, manifest.GetProperty("resourceSummary").GetProperty("includedFiles").GetInt32());
             }
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeDependencyGraph_RoundTripsAsReviewedBuildLock()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Dependency Lock Tests", Guid.NewGuid().ToString("N"));
+        var sourceRoot = Path.Combine(root, "source");
+        var output = Path.Combine(root, "output");
+        var source = Path.Combine(sourceRoot, "Locked.psm1");
+        var lockPath = Path.Combine(root, "dependency-lock.json");
+        Directory.CreateDirectory(sourceRoot);
+        File.WriteAllText(source, "function Get-LockedValue { return 42 }");
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --output json");
+            Assert.True(analyze.ExitCode == 0, FormatFailure("dependency-lock analyze", analyze));
+            using (var document = JsonDocument.Parse(analyze.StdOut))
+            {
+                var graph = document.RootElement.GetProperty("result").GetProperty("dependencyGraph");
+                Assert.Contains("\"roles\":\"", graph.GetRawText(), StringComparison.Ordinal);
+                File.WriteAllText(lockPath, graph.GetRawText());
+            }
+
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --dependency-lock \"{lockPath}\" --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("reviewed dependency-lock build", build));
+            using var buildDocument = JsonDocument.Parse(build.StdOut);
+            var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
+            Assert.True(manifest.GetProperty("dependencyLockReviewed").GetBoolean());
         }
         finally
         {
@@ -284,7 +322,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --out \"{output}\" --name PositionalProof --output json");
+                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name PositionalProof --output json");
             Assert.True(build.ExitCode == 0, FormatFailure("option-first build", build));
         }
         finally

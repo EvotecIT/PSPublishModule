@@ -116,6 +116,14 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [ValidateRange(1, int.MaxValue)]
     public int TimeoutSeconds { get; set; } = 300;
 
+    /// <summary>Dependency graph produced by analysis and reviewed before this build.</summary>
+    [Parameter]
+    public PowerShellCompilationDependencyGraph? DependencyLock { get; set; }
+
+    /// <summary>Explicitly allow a development build to resolve dependencies without a separately reviewed lock.</summary>
+    [Parameter]
+    public SwitchParameter AllowUnreviewedDependencies { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
     {
@@ -169,7 +177,9 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             SigningTimeoutSeconds = SigningTimeoutSeconds,
             KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
             EmitSource = EmitSource.IsPresent,
-            TimeoutSeconds = TimeoutSeconds
+            TimeoutSeconds = TimeoutSeconds,
+            ExpectedDependencyLock = DependencyLock,
+            AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent
         };
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
         if (!result.Succeeded)

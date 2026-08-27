@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-DependencyLock <PowerShellCompilationDependencyGraph>] [-AllowUnreviewedDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -39,6 +39,22 @@ Build-PowerShellArtifact -Path .\Public\Get-One.ps1, .\Public\Get-Two.ps1 -Kind 
 
 ## PARAMETERS
 
+### -AllowUnreviewedDependencies
+Explicitly allow a development build to resolve dependencies without a separately reviewed lock.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -CertificateStoreLocation
 Certificate store used for Authenticode signing.
 
@@ -60,6 +76,22 @@ Optional code-signing certificate thumbprint.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DependencyLock
+Dependency graph produced by analysis and reviewed before this build.
+
+```yaml
+Type: PowerShellCompilationDependencyGraph
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

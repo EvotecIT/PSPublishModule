@@ -180,7 +180,7 @@ internal sealed class PowerShellCommandSemanticRegistry
             Errors = errors,
             Adapter = new PowerShellCompilationCommandAdapterContract
             {
-                Operation = "Write" + stream,
+                Operation = stream.Equals("Success", StringComparison.Ordinal) ? "WriteOutput" : "Write" + stream,
                 SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
                 RuntimeFree = true,
                 AotCompatible = true
@@ -234,10 +234,27 @@ internal sealed class PowerShellCommandSemanticRegistry
                 throw new InvalidOperationException("Command semantic providers require schema 1 plus non-empty provider, version, and command identities.");
             if (!contract.CompileTimeOnly || contract.MayImportSourceModules || contract.MayExecuteSource)
                 throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' violates the compile-time-only execution boundary.");
-            if (contract.Family == PowerShellCompilationCommandFamily.Stream && contract.Adapter.RuntimeFree &&
-                (string.IsNullOrWhiteSpace(contract.Adapter.Operation) ||
-                 contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Error")))
-                throw new InvalidOperationException($"Runtime-free stream provider '{contract.ProviderId}' requires a supported stream and adapter operation.");
+            if (contract.Adapter.RuntimeFree)
+            {
+                if (contract.Family != PowerShellCompilationCommandFamily.Stream ||
+                    contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Error"))
+                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must use one supported stream adapter contract.");
+                var expectedProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion;
+                if (!contract.Adapter.SemanticProfile.Equals(expectedProfile, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' targets semantic profile '{contract.Adapter.SemanticProfile}' instead of '{expectedProfile}'.");
+                var expectedOperation = contract.Stream.Equals("Success", StringComparison.Ordinal)
+                    ? "WriteOutput"
+                    : "Write" + contract.Stream;
+                if (!contract.Adapter.Operation.Equals(expectedOperation, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' operation '{contract.Adapter.Operation}' does not match stream '{contract.Stream}' operation '{expectedOperation}'.");
+                if (contract.Adapter.Dependencies.Length > 0)
+                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' declares adapter dependencies that cannot yet be locked and certified. Dependency-bearing providers require the Milestone 16 provider package contract.");
+            }
+            else if (contract.Adapter.Dependencies.Any(static dependency =>
+                         !dependency.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' declares an adapter dependency outside the current PowerShell host contract.");
+            }
             var duplicateName = new[] { contract.CommandName }.Concat(contract.Aliases)
                 .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault(static group => group.Count() > 1);

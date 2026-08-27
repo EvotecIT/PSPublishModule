@@ -18,14 +18,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "ContractProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             EmitSource = true
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var manifest = Assert.IsType<PowerShellCompilationArtifactManifest>(result.Manifest);
-        Assert.Equal(4, manifest.SchemaVersion);
+        Assert.Equal(5, manifest.SchemaVersion);
+        Assert.False(manifest.DependencyLockReviewed);
         Assert.NotNull(manifest.SemanticProfile);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictName, manifest.SemanticProfile.Name);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion, manifest.SemanticProfile.Version);
@@ -109,7 +110,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "ContractProofConsumer",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
 
         var consumer = Path.Combine(fixture.RootPath, "consumer");
@@ -193,6 +194,28 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(nullable.Nullable);
         Assert.True(nullable.NoOutputDistinctFromNull);
         Assert.False(nullable.CanProduceNoOutput);
+    }
+
+    [Fact]
+    public void AbiAggregatesSuccessStreamOutputAndTreatsUnknownReferenceValuesAsNullable()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-MixedOutput { Write-Output 1; return 2 }\n" +
+            "function Get-Passthrough { param([AllowNull()][object] $Value) return $Value }");
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        var abi = PowerShellCompilationAbiBuilder.Create(typed.NamespaceName, typed.TypeName, typed.Methods);
+
+        var mixed = Assert.Single(abi.Methods, static method => method.PowerShellName == "Get-MixedOutput");
+        Assert.Equal("Collection", mixed.OutputCardinality);
+        Assert.Equal("EnumerateCollection", mixed.OutputScalarization);
+        Assert.Equal("SuccessAndNonSuccessStreams", mixed.StreamContract);
+        Assert.Contains(mixed.Parameters, static parameter => parameter.CompilerPurpose == "SuccessStream");
+
+        var passthrough = Assert.Single(abi.Methods, static method => method.PowerShellName == "Get-Passthrough");
+        Assert.Contains("Unknown", passthrough.OutputValueStates);
+        Assert.True(passthrough.CanProduceNull);
+        Assert.True(passthrough.Nullable);
     }
 
     [Fact]

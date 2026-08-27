@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 root,
                 "Foo",
                 PowerShellCompilationArtifactKind.Library,
-                PowerShellCompilationMode.Strict));
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -54,7 +54,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 root,
                 "foo",
                 PowerShellCompilationArtifactKind.Library,
-                PowerShellCompilationMode.Strict));
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -94,7 +94,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ShapeReplacement",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
         var library = new PowerShellCompilationArtifactBuilder().Build(librarySpec);
         Assert.True(library.Succeeded, library.Error + Environment.NewLine + library.BuildOutput);
         var previousLibraryPath = library.ArtifactPath!;
@@ -105,7 +105,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ShapeReplacement",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
         var module = new PowerShellCompilationArtifactBuilder().Build(moduleSpec);
 
         Assert.True(module.Succeeded, module.Error + Environment.NewLine + module.BuildOutput);
@@ -128,7 +128,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             artifactName,
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(File.Exists(lockPath));
@@ -145,7 +145,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.AtomicRollback",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
         var first = new PowerShellCompilationArtifactBuilder().Build(spec);
         Assert.True(first.Succeeded, first.Error + Environment.NewLine + first.BuildOutput);
         var originalArtifactHash = Hash(first.ArtifactPath!);

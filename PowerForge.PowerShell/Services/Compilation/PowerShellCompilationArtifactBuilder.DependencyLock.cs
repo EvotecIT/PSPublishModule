@@ -11,7 +11,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationDependencyLockHasher.EnsureValid(actual, "actual");
         VerifyDependencyInputsHaveNotDrifted(spec, actual);
         var expected = spec.ExpectedDependencyLock;
-        if (expected is null) return;
+        if (expected is null)
+        {
+            if (spec.AllowUnreviewedDependencyResolution) return;
+            throw new InvalidOperationException(
+                "PowerShell compilation requires a separately reviewed dependency lock. Supply ExpectedDependencyLock from analysis, or explicitly set AllowUnreviewedDependencyResolution for a non-reviewed development build.");
+        }
 
         PowerShellCompilationDependencyLockHasher.EnsureValid(expected, nameof(spec.ExpectedDependencyLock));
         if (expected.SchemaVersion != actual.SchemaVersion ||

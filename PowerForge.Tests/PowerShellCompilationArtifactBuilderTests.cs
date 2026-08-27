@@ -30,7 +30,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.TypedProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -84,7 +84,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.PackageProof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package);
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -178,7 +178,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.BinaryProof",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
         Assert.True(
             plan.CanProceed,
@@ -244,7 +244,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.HybridProof",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -304,7 +304,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.HybridLibraryProof",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -327,7 +327,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.AnalyzeOnly",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Analyze);
+            PowerShellCompilationMode.Analyze, allowUnreviewedDependencyResolution: true);
 
         var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
 
@@ -349,7 +349,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.SelectiveExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -405,7 +405,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.ManifestExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -470,7 +470,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.HybridManifest",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -512,7 +512,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.DynamicManifest",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -536,7 +536,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.DynamicExportCommand",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -558,7 +558,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.CaughtExit",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package);
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
@@ -580,7 +580,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.MultiFileProof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             SingleFile = false
         };
@@ -645,7 +645,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.CrossRidProof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             RuntimeIdentifier = targetRid
         };
@@ -677,7 +677,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.OutputPath,
             "PowerForge.DesktopProof",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         };

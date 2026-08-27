@@ -102,7 +102,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.DeclaredOutput",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
@@ -122,7 +122,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.TemporaryIdentifiers",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -152,7 +152,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.SwitchHostTypes",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         var binaryUnit = Assert.Single(Assert.Single(binary.Files).Units);
         Assert.True(binaryUnit.IsCompilable, string.Join(Environment.NewLine, binaryUnit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
@@ -240,7 +240,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             fixture.OutputPath,
             name,
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             SingleFile = false,
             EmitSource = true

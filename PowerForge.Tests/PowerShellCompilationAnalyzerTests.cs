@@ -20,7 +20,7 @@ public sealed class PowerShellCompilationAnalyzerTests
             "input.ps1",
             Path.GetTempPath(),
             "DefaultMode",
-            kind);
+            kind, allowUnreviewedDependencyResolution: true);
 
         Assert.Equal(expectedMode, spec.Mode);
         Assert.Equal(expectedMode, PowerShellCompilationBuildSpec.GetDefaultMode(kind));
@@ -40,12 +40,12 @@ public sealed class PowerShellCompilationAnalyzerTests
             Path.GetTempPath(),
             "InvalidMode",
             PowerShellCompilationArtifactKind.Executable,
-            (PowerShellCompilationMode)999));
+            (PowerShellCompilationMode)999, allowUnreviewedDependencyResolution: true));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationBuildSpec(
             "input.ps1",
             Path.GetTempPath(),
             "InvalidKind",
-            (PowerShellCompilationArtifactKind)999));
+            (PowerShellCompilationArtifactKind)999, allowUnreviewedDependencyResolution: true));
     }
 
     [Theory]

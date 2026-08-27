@@ -28,7 +28,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.SingleDivisionDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -109,7 +109,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.CommonModuleHelpers",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -148,7 +148,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.NullableMemberDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -199,7 +199,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.NullablePropertyDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -241,7 +241,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.VoidMemberDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
     }
@@ -322,7 +322,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.MemberDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -408,7 +408,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.InlineStringDifferential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
         using var assemblyStream = File.OpenRead(build.ArtifactPath!);
@@ -526,7 +526,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             fixture.OutputPath,
             "PowerForge.Differential",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict);
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true);
         var build = new PowerShellCompilationArtifactBuilder().Build(spec);
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 

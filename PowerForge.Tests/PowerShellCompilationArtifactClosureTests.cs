@@ -75,7 +75,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NonterminatingError",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var run = Run(result.ArtifactPath!);
@@ -102,7 +102,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ParameterIdentity",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("preserve its PowerShell name", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -119,7 +119,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CollectionEnumeration",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -144,7 +144,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ArrayOutputMetadata",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -175,7 +175,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.DotSourceDependencies",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Private", "Outer.ps1"), StringComparison.OrdinalIgnoreCase));
@@ -210,7 +210,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ManifestHookDependencies",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Hooks", "Private.ps1"), StringComparison.OrdinalIgnoreCase));
@@ -252,7 +252,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NestedManifestClosure",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Contains(result.Manifest!.Files, file => file.Role == "ModuleDependency" && file.Path.EndsWith(Path.Combine("Nested", "Nested.psd1"), StringComparison.OrdinalIgnoreCase));
@@ -285,7 +285,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NestedLiteralExport",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -316,7 +316,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             nestedFixture.OutputPath,
             "NestedBinary",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
 
         using var fixture = ArtifactFixture.Create("function Get-TypedValue { return 1 }", ".psm1");
@@ -334,7 +334,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.StrictNestedBinary",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.False(result.Manifest!.UsesPowerShellRuntimeFallback);
@@ -354,7 +354,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             nestedFixture.OutputPath,
             "PowerForge.NestedCmdlets",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
         var nestedAssembly = nestedResult.ArtifactPath!;
 
@@ -370,7 +370,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ExternalNestedModule",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -397,7 +397,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.ExternalNestedFunctions",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
@@ -416,7 +416,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             nestedFixture.OutputPath,
             "NestedCmdlets",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
         Assert.True(nestedResult.Succeeded, nestedResult.Error + Environment.NewLine + nestedResult.BuildOutput);
 
         using var fixture = ArtifactFixture.Create("function Get-TypedValue { return 1 }", ".psm1");
@@ -434,7 +434,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.RootPath,
             "Foo",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -459,7 +459,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.RootPath,
             "Foo",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("contains the input source", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -477,7 +477,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.NestedExit",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("nested exit statements", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -517,7 +517,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 fixture.OutputPath,
                 "PowerForge.LinkedDependency",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Hybrid));
+                PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("symbolic link or junction", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -562,7 +562,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 outputPath,
                 "PowerForge.LinkedSourceRoot",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Hybrid));
+                PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
             Assert.False(result.Succeeded);
             Assert.Contains("symbolic link or junction", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -586,7 +586,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.DynamicDotSource",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("Dot-source expression", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -604,7 +604,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.RelativeDotSource",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.False(result.Succeeded);
         Assert.Contains("portable hybrid staging", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -625,7 +625,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.OmittedAliasPolicy",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.DoesNotContain("AliasesToExport", File.ReadAllText(result.ArtifactPath!), StringComparison.OrdinalIgnoreCase);
@@ -651,7 +651,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TargetMemberSurface",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         });
@@ -671,7 +671,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.Net472ReferenceAssemblies",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472",
             KeepBuildWorkspace = true
@@ -704,7 +704,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TargetMethodMatrix",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = targetFramework
         });
@@ -731,7 +731,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.TargetStaticMemberSurface",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict)
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
             TargetFramework = "net472"
         });

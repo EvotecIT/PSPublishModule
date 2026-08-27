@@ -52,7 +52,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 output,
                 "GenericCompilerCorpus",
                 resolved.Kind,
-                resolved.Mode)
+                resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
@@ -104,7 +104,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 output,
                 "GenericCompilerProgram",
                 resolved.Kind,
-                resolved.Mode)
+                resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,

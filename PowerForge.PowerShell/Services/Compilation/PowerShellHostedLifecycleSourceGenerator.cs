@@ -9,7 +9,8 @@ internal static class PowerShellHostedLifecycleSourceGenerator
     {
         var lifecycle = method.Lifecycle!;
         builder.AppendLine("    private SteppablePipeline? __powerForgePipeline;");
-        builder.AppendLine("    private bool __powerForgeCleaned;");
+        builder.AppendLine("    private readonly object __powerForgeLifecycleGate = new object();");
+        builder.AppendLine("    private int __powerForgeCleaned;");
         if (lifecycle.ValueFromPipeline || lifecycle.ValueFromPipelineByPropertyName)
             builder.AppendLine("    private bool __powerForgePipelineInputExplicitlyBound;");
         builder.AppendLine();
@@ -47,11 +48,20 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         builder.Append("            var script = ScriptBlock.Create(")
             .Append(PowerShellCSharpLiteral.QuoteString(hostedSource))
             .AppendLine(");");
-        builder.AppendLine("            __powerForgePipeline = script.GetSteppablePipeline(CommandOrigin.Internal, new object[] { bound });");
+        builder.AppendLine("            var pipeline = script.GetSteppablePipeline(CommandOrigin.Internal, new object[] { bound });");
         var expectsPipelineInput = lifecycle.ValueFromPipeline || lifecycle.ValueFromPipelineByPropertyName;
-        builder.Append("            __powerForgePipeline.Begin(")
+        builder.AppendLine("            lock (__powerForgeLifecycleGate)");
+        builder.AppendLine("            {");
+        builder.AppendLine("                if (global::System.Threading.Volatile.Read(ref __powerForgeCleaned) != 0)");
+        builder.AppendLine("                {");
+        builder.AppendLine("                    (pipeline as global::System.IDisposable)?.Dispose();");
+        builder.AppendLine("                    throw new global::System.OperationCanceledException(\"The hosted PowerShell lifecycle was stopped before begin completed.\");");
+        builder.AppendLine("                }");
+        builder.AppendLine("                __powerForgePipeline = pipeline;");
+        builder.Append("                pipeline.Begin(")
             .Append(expectsPipelineInput ? "!__powerForgePipelineInputExplicitlyBound" : "false")
             .AppendLine(");");
+        builder.AppendLine("            }");
         builder.AppendLine("        }");
         builder.AppendLine("        catch");
         builder.AppendLine("        {");
@@ -63,8 +73,14 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         AppendProcessRecord(builder, method, lifecycle);
         builder.AppendLine("    protected override void EndProcessing()");
         builder.AppendLine("    {");
-        builder.AppendLine("        if (__powerForgePipeline is null) return;");
-        builder.AppendLine("        try { WriteLifecycleOutput(__powerForgePipeline.End()); }");
+        builder.AppendLine("        try");
+        builder.AppendLine("        {");
+        builder.AppendLine("            lock (__powerForgeLifecycleGate)");
+        builder.AppendLine("            {");
+        builder.AppendLine("                if (global::System.Threading.Volatile.Read(ref __powerForgeCleaned) != 0 || __powerForgePipeline is null) return;");
+        builder.AppendLine("                WriteLifecycleOutput(__powerForgePipeline.End());");
+        builder.AppendLine("            }");
+        builder.AppendLine("        }");
         builder.AppendLine("        finally { CleanLifecycle(); }");
         builder.AppendLine("    }");
         builder.AppendLine();
@@ -78,10 +94,13 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         builder.AppendLine();
         builder.AppendLine("    private void CleanLifecycle()");
         builder.AppendLine("    {");
-        builder.AppendLine("        if (__powerForgeCleaned) return;");
-        builder.AppendLine("        __powerForgeCleaned = true;");
-        builder.AppendLine("        var pipeline = __powerForgePipeline;");
-        builder.AppendLine("        __powerForgePipeline = null;");
+        builder.AppendLine("        if (global::System.Threading.Interlocked.Exchange(ref __powerForgeCleaned, 1) != 0) return;");
+        builder.AppendLine("        SteppablePipeline? pipeline;");
+        builder.AppendLine("        lock (__powerForgeLifecycleGate)");
+        builder.AppendLine("        {");
+        builder.AppendLine("            pipeline = __powerForgePipeline;");
+        builder.AppendLine("            __powerForgePipeline = null;");
+        builder.AppendLine("        }");
         builder.AppendLine("        if (pipeline is null) return;");
         builder.AppendLine("        try");
         builder.AppendLine("        {");
@@ -102,20 +121,24 @@ internal static class PowerShellHostedLifecycleSourceGenerator
     {
         builder.AppendLine("    protected override void ProcessRecord()");
         builder.AppendLine("    {");
-        builder.AppendLine("        if (__powerForgePipeline is null) return;");
         builder.AppendLine("        try");
         builder.AppendLine("        {");
+        builder.AppendLine("            lock (__powerForgeLifecycleGate)");
+        builder.AppendLine("            {");
+        builder.AppendLine("                if (global::System.Threading.Volatile.Read(ref __powerForgeCleaned) != 0 || __powerForgePipeline is null) return;");
+        builder.AppendLine("                var pipeline = __powerForgePipeline;");
         if (lifecycle.ValueFromPipeline || lifecycle.ValueFromPipelineByPropertyName)
         {
-            builder.AppendLine("            if (__powerForgePipelineInputExplicitlyBound)");
-            builder.AppendLine("                WriteLifecycleOutput(__powerForgePipeline.Process());");
-            builder.AppendLine("            else");
-            builder.AppendLine("                WriteLifecycleOutput(__powerForgePipeline.Process(__PowerForgeInputObject));");
+            builder.AppendLine("                if (__powerForgePipelineInputExplicitlyBound)");
+            builder.AppendLine("                    WriteLifecycleOutput(pipeline.Process());");
+            builder.AppendLine("                else");
+            builder.AppendLine("                    WriteLifecycleOutput(pipeline.Process(__PowerForgeInputObject));");
         }
         else if (lifecycle.HasProcess)
         {
-            builder.AppendLine("            WriteLifecycleOutput(__powerForgePipeline.Process());");
+            builder.AppendLine("                WriteLifecycleOutput(pipeline.Process());");
         }
+        builder.AppendLine("            }");
         builder.AppendLine("        }");
         builder.AppendLine("        catch");
         builder.AppendLine("        {");

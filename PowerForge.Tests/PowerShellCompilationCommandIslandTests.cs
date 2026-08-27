@@ -49,7 +49,7 @@ public sealed class PowerShellCompilationCommandIslandTests
                 output,
                 "PowerForge.StreamIslands",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Strict)
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
             {
                 TargetFramework = "net10.0"
             });
@@ -123,7 +123,7 @@ public sealed class PowerShellCompilationCommandIslandTests
                 output,
                 "PowerForge.CoarseCommandIsland",
                 PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Strict)
+                PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
             {
                 TargetFramework = "net10.0",
                 EmitSource = true

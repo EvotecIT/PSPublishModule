@@ -1917,6 +1917,18 @@
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Build-PowerShellArtifact</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowUnreviewedDependencies</maml:name>
+          <maml:description>
+            <maml:para>Explicitly allow a development build to resolve dependencies without a separately reviewed lock.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>CertificateStoreLocation</maml:name>
           <maml:description>
             <maml:para>Certificate store used for Authenticode signing.</maml:para>
@@ -1940,6 +1952,18 @@
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DependencyLock</maml:name>
+          <maml:description>
+            <maml:para>Dependency graph produced by analysis and reviewed before this build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationDependencyGraph</command:parameterValue>
+          <dev:type>
+            <maml:name>PowerShellCompilationDependencyGraph</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -2209,6 +2233,18 @@
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AllowUnreviewedDependencies</maml:name>
+        <maml:description>
+          <maml:para>Explicitly allow a development build to resolve dependencies without a separately reviewed lock.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>CertificateStoreLocation</maml:name>
         <maml:description>
           <maml:para>Certificate store used for Authenticode signing.</maml:para>
@@ -2232,6 +2268,18 @@
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DependencyLock</maml:name>
+        <maml:description>
+          <maml:para>Dependency graph produced by analysis and reviewed before this build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationDependencyGraph</command:parameterValue>
+        <dev:type>
+          <maml:name>PowerShellCompilationDependencyGraph</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

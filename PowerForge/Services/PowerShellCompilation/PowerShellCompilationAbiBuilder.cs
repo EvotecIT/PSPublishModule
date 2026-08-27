@@ -151,8 +151,12 @@ internal static class PowerShellCompilationAbiBuilder
         var outputValueStates = method.OutputValueStates.Length == 0
             ? GetLegacyValueStates(outputCardinality, method.ReturnType)
             : method.OutputValueStates.Distinct(StringComparer.Ordinal).OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+        var resolvedReturnType = Type.GetType(method.ReturnType, throwOnError: false);
+        var unknownCanBeNull = outputValueStates.Contains("Unknown", StringComparer.Ordinal) &&
+                               (resolvedReturnType is null || !resolvedReturnType.IsValueType || Nullable.GetUnderlyingType(resolvedReturnType) is not null);
         var canProduceNull = outputValueStates.Contains("Null", StringComparer.Ordinal) ||
-                             outputValueStates.Contains("AutomationNull", StringComparer.Ordinal);
+                             outputValueStates.Contains("AutomationNull", StringComparer.Ordinal) ||
+                             unknownCanBeNull;
         return new PowerShellCompilationAbiMethod
         {
             PowerShellName = method.SourceName,

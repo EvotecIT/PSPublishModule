@@ -282,7 +282,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package));
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.False(File.Exists(Path.Combine(output, "Templates", "report.txt")));
@@ -317,7 +317,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Dynamic.Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             IncludeResource = new[] { "dynamic.txt" }
         });
@@ -360,7 +360,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             Path.Combine(fixture.RootPath, "out"),
             "Nested.Resource.Proof",
             PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package)
+            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true)
         {
             CompilationSourcePaths = resolved.CompilationSourceFiles,
             RuntimeSourcePaths = resolved.SourceFiles
@@ -420,7 +420,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             "Complete.Resources",
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,
@@ -451,7 +451,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
             output,
             artifactName,
             resolved.Kind,
-            resolved.Mode)
+            resolved.Mode, allowUnreviewedDependencyResolution: true)
         {
             ModuleManifestPath = resolved.ModuleManifestPath,
             CompilationSourcePaths = resolved.CompilationSourceFiles,

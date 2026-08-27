@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
 
@@ -43,8 +43,8 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
-                new[] { "--self-contained", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--dependency-lock", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--self-contained", "--allow-unreviewed-dependencies", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
@@ -95,6 +95,16 @@ internal static partial class Program
             if (!Enum.TryParse<CertificateStoreLocation>(certificateStoreValue, ignoreCase: true, out var certificateStore) ||
                 !Enum.IsDefined(typeof(CertificateStoreLocation), certificateStore))
                 return WritePowerShellError(outputJson, 2, $"Unknown certificate store '{certificateStoreValue}'. Use CurrentUser or LocalMachine.", logger, "powershell.build");
+            PowerShellCompilationDependencyGraph? expectedDependencyLock = null;
+            var dependencyLockPath = TryGetOptionValue(args, "--dependency-lock");
+            if (!string.IsNullOrWhiteSpace(dependencyLockPath))
+            {
+                var fullDependencyLockPath = Path.GetFullPath(dependencyLockPath.Trim().Trim('"'));
+                expectedDependencyLock = JsonSerializer.Deserialize<PowerShellCompilationDependencyGraph>(
+                    File.ReadAllText(fullDependencyLockPath),
+                    CliJson.Options)
+                    ?? throw new InvalidDataException($"Dependency lock '{fullDependencyLockPath}' did not contain a graph.");
+            }
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
@@ -113,7 +123,9 @@ internal static partial class Program
                 CertificateStoreLocation = certificateStore,
                 TimeStampServer = TryGetOptionValue(args, "--timestamp-server") ?? "http://timestamp.digicert.com",
                 KeepBuildWorkspace = args.Any(static argument => argument.Equals("--keep-workspace", StringComparison.OrdinalIgnoreCase)),
-                EmitSource = args.Any(static argument => argument.Equals("--emit-source", StringComparison.OrdinalIgnoreCase))
+                EmitSource = args.Any(static argument => argument.Equals("--emit-source", StringComparison.OrdinalIgnoreCase)),
+                ExpectedDependencyLock = expectedDependencyLock,
+                AllowUnreviewedDependencyResolution = args.Any(static argument => argument.Equals("--allow-unreviewed-dependencies", StringComparison.OrdinalIgnoreCase))
             };
             var signingTimeoutValue = TryGetOptionValue(args, "--signing-timeout");
             if (!string.IsNullOrWhiteSpace(signingTimeoutValue))

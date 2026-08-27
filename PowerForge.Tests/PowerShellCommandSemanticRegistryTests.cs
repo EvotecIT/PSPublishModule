@@ -52,6 +52,28 @@ public sealed class PowerShellCommandSemanticRegistryTests
     }
 
     [Fact]
+    public void RuntimeFreeProviderRejectsMismatchedOperationProfileAndUnlockedDependencies()
+    {
+        var provider = RuntimeFreeStreamContract();
+        provider.Adapter.Operation = "WriteError";
+        var operationError = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCommandSemanticRegistry(new[] { provider }));
+        Assert.Contains("does not match stream", operationError.Message, StringComparison.Ordinal);
+
+        provider = RuntimeFreeStreamContract();
+        provider.Adapter.SemanticProfile = "PowerForge.RuntimeFree.Strict/999";
+        var profileError = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCommandSemanticRegistry(new[] { provider }));
+        Assert.Contains("targets semantic profile", profileError.Message, StringComparison.Ordinal);
+
+        provider = RuntimeFreeStreamContract();
+        provider.Adapter.Dependencies = new[] { "Unreviewed.Adapter.Dependency" };
+        var dependencyError = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCommandSemanticRegistry(new[] { provider }));
+        Assert.Contains("cannot yet be locked and certified", dependencyError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UnqualifiedConflictsAreAmbiguousButQualifiedCommandsRemainDeterministic()
     {
         var first = Contract("provider.one", "Get-Thing", "One.Module");
@@ -172,6 +194,27 @@ public sealed class PowerShellCommandSemanticRegistryTests
             {
                 SemanticProfile = "PowerShell.Hosted/1.0",
                 Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+
+    private static PowerShellCompilationCommandProviderContract RuntimeFreeStreamContract()
+        => new()
+        {
+            ProviderId = "tests.runtime-free.stream",
+            ProviderVersion = "1.0",
+            FeatureId = "tests.command.write-notice",
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = "Write-Notice",
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "Information",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "WriteInformation",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
             }
         };
 }
