@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class PowerShellCompilationBoundPipelineTests
+public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Fact]
     public void EmptyFunctionFlowsThroughTheCompleteSemanticPipeline()
@@ -11,6 +11,7 @@ public sealed class PowerShellCompilationBoundPipelineTests
 
         var function = Assert.Single(result.Analyzed.Functions);
         Assert.Equal(typeof(void), function.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.None, function.OutputCardinality);
         Assert.Equal(PowerShellExecutionDispositionKind.Typed, function.Disposition.Kind);
         var method = Assert.Single(result.Emitted.Methods);
         Assert.Contains("public static void Invoke_Empty()", method.Source, StringComparison.Ordinal);
@@ -31,7 +32,11 @@ public sealed class PowerShellCompilationBoundPipelineTests
         var function = Assert.Single(result.Analyzed.Functions);
         Assert.Equal(expectedType, function.ReturnType.ClrType);
         Assert.Equal(PowerShellTypeFactProvenance.Inferred, function.ReturnType.Provenance);
-        Assert.Contains(expectedSource, Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+        Assert.Equal(PowerShellOutputCardinality.Scalar, function.OutputCardinality);
+        var lowered = Assert.Single(result.Lowered.Functions);
+        var method = Assert.Single(result.Emitted.Methods);
+        Assert.Equal(lowered.Span, method.SourceSpan);
+        Assert.Contains(expectedSource, method.Source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,6 +151,7 @@ public sealed class PowerShellCompilationBoundPipelineTests
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var function = Assert.Single(result.Analyzed.Functions);
         Assert.Equal(typeof(double), function.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Scalar, function.OutputCardinality);
         var conditional = Assert.IsType<PowerShellBoundIfStatement>(Assert.Single(function.Body.Statements));
         Assert.IsType<PowerShellBoundBinaryExpression>(Assert.Single(conditional.Clauses).Condition);
         Assert.IsType<PowerShellBoundWhileStatement>(Assert.Single(conditional.ElseBlock!.Statements, static statement => statement is PowerShellBoundWhileStatement));
@@ -210,7 +216,9 @@ public sealed class PowerShellCompilationBoundPipelineTests
         var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var boundAssignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundAssignmentStatement));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.Equal(PowerShellOutputCardinality.Collection, function.OutputCardinality);
+        var boundAssignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(function.Body.Statements, static statement => statement is PowerShellBoundAssignmentStatement));
         Assert.IsType<PowerShellBoundArrayExpression>(boundAssignment.Value);
         Assert.Contains(expectedSource, Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
@@ -644,11 +652,104 @@ public sealed class PowerShellCompilationBoundPipelineTests
 
         var root = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Root");
         Assert.Equal(typeof(int), root.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Scalar, root.OutputCardinality);
         Assert.True(root.Effects.HasFlag(PowerShellSemanticEffect.Mutation));
         var edge = Assert.Single(result.Analyzed.CallGraph);
         Assert.Equal("Get-Root", edge.Caller.Name);
         Assert.Equal("Get-Leaf", edge.Callee.Name);
         Assert.Contains("return Get_Leaf();", Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Root").Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostedLocalCallsBindDeclaredParameterConversionsInTheSemanticIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-UriValue { [string] $uri = 'https://example.test/path'; return Invoke-UriValue -Uri $uri } function Invoke-UriValue { param([uri] $Uri) return $Uri.AbsoluteUri }",
+            TestPath("local-call-conversion.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var root = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-UriValue");
+        var returned = Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(root.Body.Statements, static statement => statement is PowerShellBoundReturnStatement));
+        var invocation = Assert.IsType<PowerShellBoundInvocationExpression>(returned.Expression);
+        var conversion = Assert.IsType<PowerShellBoundConversionExpression>(Assert.Single(invocation.Arguments));
+        Assert.True(conversion.UsePowerShellLanguageRuntime);
+        Assert.Equal(typeof(Uri), conversion.Type.ClrType);
+        Assert.Contains(
+            "LanguagePrimitives.ConvertTo",
+            Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_UriValue").Source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeLocalCallsRejectImplicitPowerShellParameterConversions()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-UriValue { [string] $uri = 'https://example.test/path'; return Invoke-UriValue -Uri $uri } function Invoke-UriValue { param([uri] $Uri) return $Uri.AbsoluteUri }",
+            TestPath("runtime-free-local-call-conversion.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2808");
+        Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Get_UriValue");
+        Assert.Contains(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_UriValue");
+    }
+
+    [Fact]
+    public void HostedBinderRebindsCallsToSemanticallyRejectedLocalFunctionsAsCommandRegions()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Invoke-Fallback { return $env:POWERFORGE_VALUE } function Get-Value { $output = Invoke-Fallback; $output }",
+            TestPath("retained-local-command-region.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.DoesNotContain(result.Bound.Functions, static function => function.Symbol.Name == "Invoke-Fallback");
+        var caller = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Value");
+        Assert.True(caller.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion));
+        Assert.IsType<PowerShellBoundCommandRegionStatement>(Assert.Single(caller.Body.Statements));
+        var emitted = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_Value");
+        Assert.True(emitted.RequiresPowerShellCommandRegions);
+        Assert.Contains("Invoke-Fallback", emitted.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostedConditionsAndLogicalOperatorsCarryPowerShellTruthinessThroughIr()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Test-Value { param([string] $Value, [object] $Other) if ($Value -and -not $Other) { return $true }; return $false }",
+            TestPath("hosted-truthiness.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        Assert.True(function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellLanguageConversions));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Equal(2, source.Split("LanguagePrimitives.IsTrue", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public void RuntimeFreeConditionsRejectPowerShellTruthiness()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Test-Value { param([string] $Value) if ($Value) { return $true }; return $false }",
+            TestPath("runtime-free-truthiness.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2301");
+        Assert.Empty(result.Emitted.Methods);
     }
 
     [Fact]

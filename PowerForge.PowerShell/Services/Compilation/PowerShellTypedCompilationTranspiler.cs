@@ -508,7 +508,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.GeneratedName,
             emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
             source.Unit.Parameters,
-            source.Function.Body.Extent.StartLineNumber,
+            emitted.SourceSpan.StartLine,
             source.Parsed.Path,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,
@@ -724,6 +724,7 @@ internal sealed class PowerShellCSharpMethodEmission
         string generatedName,
         Type returnType,
         string source,
+        SourceSpan sourceSpan,
         bool requiresPowerShellStreams = false,
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
@@ -734,6 +735,7 @@ internal sealed class PowerShellCSharpMethodEmission
         GeneratedName = generatedName;
         ReturnType = returnType;
         Source = source;
+        SourceSpan = sourceSpan;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
@@ -745,6 +747,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string GeneratedName { get; }
     internal Type ReturnType { get; }
     internal string Source { get; }
+    internal SourceSpan SourceSpan { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }

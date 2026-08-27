@@ -146,7 +146,7 @@ internal static class PowerShellTypedExecutableCompiler
             method.GeneratedName,
             method.ReturnType.FullName ?? method.ReturnType.Name,
             unit.Parameters,
-            unit.StartLine,
+            method.SourceSpan.StartLine,
             sourcePath,
             requiresPowerShellStreams: false,
             requiresPowerShellCommandRegions: false,

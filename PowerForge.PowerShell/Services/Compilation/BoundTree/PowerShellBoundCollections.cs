@@ -29,7 +29,9 @@ internal sealed class PowerShellBoundArrayExpression : PowerShellBoundExpression
 internal enum PowerShellBoundDictionaryKind
 {
     StringDictionary,
-    OrderedStringDictionary
+    OrderedStringDictionary,
+    ObjectDictionary,
+    OrderedObjectDictionary
 }
 
 internal sealed class PowerShellBoundDictionaryEntry
@@ -52,7 +54,11 @@ internal sealed class PowerShellBoundDictionaryExpression : PowerShellBoundExpre
             new PowerShellTypeFact(dictionaryType, PowerShellTypeFactProvenance.Inferred, "A homogeneous literal selects one case-insensitive CLR dictionary representation."),
             PowerShellValueState.Known,
             entries.Aggregate(PowerShellSemanticEffect.None, static (effects, entry) => effects | entry.Key.Effects | entry.Value.Effects),
-            entries.Aggregate(PowerShellRequiredCapability.None, static (capabilities, entry) => capabilities | entry.Key.Capabilities | entry.Value.Capabilities))
+            entries.Aggregate(
+                kind is PowerShellBoundDictionaryKind.ObjectDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary
+                    ? PowerShellRequiredCapability.PowerShellHostTypes
+                    : PowerShellRequiredCapability.None,
+                static (capabilities, entry) => capabilities | entry.Key.Capabilities | entry.Value.Capabilities))
     {
         Kind = kind;
         Entries = entries;

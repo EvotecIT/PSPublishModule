@@ -1,12 +1,12 @@
 # PowerShell Compilation Architecture Roadmap
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
-The current compiler works and proves the product direction. The next step is not another large syntax wave. The next step is to establish a typed semantic architecture that makes later coverage work smaller, deterministic, and easier to verify.
+The compiler now uses a typed semantic architecture for every supported compilation path. Milestones 1–7 established the parser/binder boundary, immutable bound IR, deterministic analysis, lowering, lowered-only C# backend, runtime-free ABI, and help/module-contract flow. The next implementation milestone is command and pipeline semantics; coverage work should extend those shared owners rather than recreate AST-to-C# decisions.
 
-The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md) documents current behavior, artifact modes, supported syntax, measured performance, and distribution limits. This file tracks future architecture and implementation work.
+The companion [PowerShell Compilation guide](PowerForge.PowerShellCompilation.md) documents current behavior, artifact modes, supported syntax, measured performance, census evidence, and distribution limits. This file records completed architecture gates as well as the remaining implementation plan.
 
 This roadmap does not schedule a package, gallery, NuGet, or GitHub release. Those remain separate decisions after source work is complete.
 
@@ -59,9 +59,9 @@ The compiler already provides:
 
 The companion guide owns the exact current benchmark numbers and runtime proof. This roadmap must not copy those figures as timeless claims; every performance or platform promotion uses a fresh clean-worktree run pinned to a source revision, toolchain, target framework, runtime identifier, and benchmark run ID.
 
-The current scaling problem is architectural rather than conceptual. Eligibility analysis, graph construction, type inference, effect discovery, fallback classification, and C# generation still inspect PowerShell ASTs in several stages. A new feature can therefore require coordinated changes in the analyzer, transpiler, emitter, command policy, diagnostics, and census.
+PowerShell AST objects now stop at parsing and semantic binding. Eligibility, graph construction, type inference, cardinality, effects, capabilities, fallback, and target selection are represented in bound or lowered nodes; the C# backend renders lowered nodes without referencing SMA AST types. The legacy direct emitter was deleted rather than retained behind a compatibility switch.
 
-The current emitter is physically split into partial files, but it remains one semantic owner. Adding more partial files would control line counts without removing the duplicate decisions.
+The remaining scaling work is semantic breadth, beginning with canonical command and pipeline owners. New coverage must extend the registry, binders, analysis, and lowering contracts already in place.
 
 ## Artifact ladder
 
@@ -72,7 +72,7 @@ The modes are different products with different guarantees. They must not be col
 | Package EXE | Available | Yes, complete script | Managed host; optionally self-contained | Broad compatibility and delivery |
 | Hybrid binary module | Available | Yes, only fallback and bounded hosted regions | Typed cmdlets plus retained script | Incremental acceleration inside PowerShell |
 | Strict binary module | Available | Yes, as the cmdlet host; no script fallback | Managed DLL | Importable compiled PowerShell command surface |
-| Strict CLR library | Available; public ABI needs hardening | No | Managed DLL | Direct use from C# and other CLR hosts |
+| Strict CLR library | Available with normalized public ABI manifest and clean-consumer proof | No | Managed DLL | Direct use from C# and other CLR hosts |
 | Strict managed EXE | Available | No | JIT-compiled managed executable | Small runtime-free CLI/application |
 | Strict NativeAOT EXE | Available for the proven subset; promotion matrix incomplete | No | RID-specific native executable | No installed PowerShell or .NET requirement, low startup/footprint potential |
 | Hybrid EXE | Planned | Yes, explicit fallback only | Packaged host plus typed assembly | Broad script compatibility with coarse compiled acceleration |
@@ -751,15 +751,15 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 
 | Milestone | Status | Result |
 | --- | --- | --- |
-| 0. Freeze and inventory current contracts | **Current** | A trustworthy behavioral and ownership baseline |
-| 1. Establish compiler boundaries | Planned | Parser, binder, IR, passes, lowering, and backend dependencies are explicit |
-| 2. Implement foundational bound IR | Planned | Simple functions compile through IR |
-| 3. Add deterministic analysis passes | Planned | Types, graph, effects, capabilities, and fallback are order-independent |
-| 4. Separate lowering from emission | Planned | Backends consume lowered nodes and no longer infer semantics |
-| 5. Migrate all current behavior | Planned | Existing compiler behavior runs through IR and legacy paths are deleted |
-| 6. Define runtime-free substrate and managed ABI | Planned | Strict artifacts share one AOT-safe semantic runtime and documented CLR contract |
-| 7. Preserve help and module contracts | Planned | Compiled functions retain full help/export behavior |
-| 8. Build command and pipeline semantics | Planned | Command families have canonical, deterministic owners |
+| 0. Freeze and inventory current contracts | Complete | A trustworthy behavioral and ownership baseline |
+| 1. Establish compiler boundaries | Complete | Parser, binder, IR, passes, lowering, and backend dependencies are explicit |
+| 2. Implement foundational bound IR | Complete | Simple functions compile through IR |
+| 3. Add deterministic analysis passes | Complete | Types, graph, effects, capabilities, and fallback are order-independent |
+| 4. Separate lowering from emission | Complete | Backends consume lowered nodes and no longer infer semantics |
+| 5. Migrate all current behavior | Complete | Existing compiler behavior runs through IR and legacy paths are deleted |
+| 6. Define runtime-free substrate and managed ABI | Complete | Strict artifacts share one AOT-safe semantic runtime and documented CLR contract |
+| 7. Preserve help and module contracts | Complete | Compiled functions retain full help/export behavior |
+| 8. Build command and pipeline semantics | **Current** | Command families have canonical, deterministic owners |
 | 9. Resolve modules, dependencies, and interop | Planned | Transitive modules, assemblies, native assets, and COM boundaries have deterministic plans |
 | 10. Complete advanced-function lifecycle | Planned | `begin`/`process`/`end`/`clean` and pipeline binding are modeled correctly |
 | 11. Complete value and object flows | Planned | Common PowerShell object shaping becomes typed |
@@ -770,75 +770,75 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 
 ## Milestone 0 — Freeze and inventory current contracts
 
-- [ ] Freeze broad language and command feature additions until the IR migration gate is met.
-- [ ] Record the current compiler-filtered test count and exact command.
-- [ ] Record generic-corpus artifact and census evidence.
-- [ ] Record a clean benchmark baseline for interpreted, Package, Hybrid, Strict managed, Strict NativeAOT, and equivalent hand-C# lanes where each exists.
-- [ ] Record current startup, throughput, allocations/working set, artifact-set size, and build time without filling missing lanes with inferred numbers.
-- [ ] Record which NativeAOT RIDs were executed on their target hosts and mark build-only RIDs experimental.
-- [ ] Record the current Strict dependency closure and any runtime helper code duplicated across generated backends.
-- [ ] Record current `RequiredModules`, assembly, native-library, resource, and external-requirement behavior separately for Package, Hybrid, Strict, BinaryModule, and CLR-library artifacts.
-- [ ] Inventory compiler production/test file sizes, partial-type totals, and semantic owners approaching 700, 800, or 1,000 lines.
-- [ ] Refresh the wider pinned census or label older figures as historical engine snapshots.
-- [ ] Inventory every owner that performs type inference, conversion, effects, command recognition, graph propagation, capability selection, or fallback classification.
-- [ ] Identify duplicated decisions across analyzer, transpiler, emitters, policies, artifact shaping, and census reporting.
-- [ ] Record current public CLI, cmdlet, plan, manifest, source-map, export, and artifact contracts.
-- [ ] Define the current PowerShell 5.1/7 and target-framework acceptance matrix.
+- [x] Freeze broad language and command feature additions until the IR migration gate is met.
+- [x] Record the current compiler-filtered test count and exact command.
+- [x] Record generic-corpus artifact and census evidence.
+- [x] Record a clean benchmark baseline for interpreted, Package, Hybrid, Strict managed, Strict NativeAOT, and equivalent hand-C# lanes where each exists.
+- [x] Record current startup, throughput, allocations/working set, artifact-set size, and build time without filling missing lanes with inferred numbers.
+- [x] Record which NativeAOT RIDs were executed on their target hosts and mark build-only RIDs experimental.
+- [x] Record the current Strict dependency closure and any runtime helper code duplicated across generated backends.
+- [x] Record current `RequiredModules`, assembly, native-library, resource, and external-requirement behavior separately for Package, Hybrid, Strict, BinaryModule, and CLR-library artifacts.
+- [x] Inventory compiler production/test file sizes, partial-type totals, and semantic owners approaching 700, 800, or 1,000 lines.
+- [x] Refresh the wider pinned census or label older figures as historical engine snapshots.
+- [x] Inventory every owner that performs type inference, conversion, effects, command recognition, graph propagation, capability selection, or fallback classification.
+- [x] Identify duplicated decisions across analyzer, transpiler, emitters, policies, artifact shaping, and census reporting.
+- [x] Record current public CLI, cmdlet, plan, manifest, source-map, export, and artifact contracts.
+- [x] Define the current PowerShell 5.1/7 and target-framework acceptance matrix.
 
 Exit gate: the refactor has a behavioral baseline and an explicit ownership map. No current behavior depends on undocumented assumptions.
 
 ## Milestone 1 — Establish compiler boundaries
 
-- [ ] Define the dependency direction between parsing, binding, IR, analysis, lowering, backends, reporting, and artifact orchestration.
-- [ ] Define how module/assembly resolution, explicit restore, dependency locking, and interop capabilities feed the compiler without importing/executing source modules.
-- [ ] Define a neutral `SourceSpan` that does not expose SMA AST objects.
-- [ ] Define immutable symbol identities for files, functions, parameters, locals, pipeline variables, and generated commands.
-- [ ] Add one minimal parser-to-binder-to-backend path.
-- [ ] Prevent new backends from accepting AST nodes.
-- [ ] Prevent binders from producing C# strings.
-- [ ] Keep the IR internal until a real external consumer requires a stable public API.
+- [x] Define the dependency direction between parsing, binding, IR, analysis, lowering, backends, reporting, and artifact orchestration.
+- [x] Define how module/assembly resolution, explicit restore, dependency locking, and interop capabilities feed the compiler without importing/executing source modules.
+- [x] Define a neutral `SourceSpan` that does not expose SMA AST objects.
+- [x] Define immutable symbol identities for files, functions, parameters, locals, pipeline variables, and generated commands.
+- [x] Add one minimal parser-to-binder-to-backend path.
+- [x] Prevent new backends from accepting AST nodes.
+- [x] Prevent binders from producing C# strings.
+- [x] Keep the IR internal until a real external consumer requires a stable public API.
 
 Exit gate: an empty or literal-returning program flows through the complete new pipeline.
 
 ## Milestone 2 — Implement foundational bound IR
 
-- [ ] Program, source document, function, parameter, block, statement, and expression nodes.
-- [ ] Symbols and lexical scopes.
-- [ ] Literal, variable, assignment, conversion, invocation, and return nodes.
-- [ ] PowerShell type and CLR representation models.
-- [ ] Type-fact provenance explaining explicit, inferred, command-contract, widened, and unknown results.
-- [ ] Value state and output cardinality.
-- [ ] Effects and required capabilities.
-- [ ] Execution disposition and stable fallback reasons.
-- [ ] Source spans on every node that can produce a diagnostic or generated line.
+- [x] Program, source document, function, parameter, block, statement, and expression nodes.
+- [x] Symbols and lexical scopes.
+- [x] Literal, variable, assignment, conversion, invocation, and return nodes.
+- [x] PowerShell type and CLR representation models.
+- [x] Type-fact provenance explaining explicit, inferred, command-contract, widened, and unknown results.
+- [x] Value state and output cardinality.
+- [x] Effects and required capabilities.
+- [x] Execution disposition and stable fallback reasons.
+- [x] Source spans on every node that can produce a diagnostic or generated line.
 
 Exit gate: the simplest existing Strict functions compile entirely through bound IR with equivalent source-map evidence.
 
 ## Milestone 3 — Add deterministic analysis passes
 
-- [ ] Definite assignment and read-before-write analysis.
-- [ ] Local and parameter type propagation.
-- [ ] Return and success-output type inference.
-- [ ] Pipeline cardinality and scalarization analysis.
-- [ ] Function call graph construction.
-- [ ] Recursive fixed-point analysis.
-- [ ] Effect propagation through local calls.
-- [ ] Capability propagation through local calls.
-- [ ] Fallback propagation with causal diagnostics.
-- [ ] Stable results independent of file, declaration, registration, and traversal order.
+- [x] Definite assignment and read-before-write analysis.
+- [x] Local and parameter type propagation.
+- [x] Return and success-output type inference.
+- [x] Pipeline cardinality and scalarization analysis.
+- [x] Function call graph construction.
+- [x] Recursive fixed-point analysis.
+- [x] Effect propagation through local calls.
+- [x] Capability propagation through local calls.
+- [x] Fallback propagation with causal diagnostics.
+- [x] Stable results independent of file, declaration, registration, and traversal order.
 
 Exit gate: reversing input-file and function-declaration order produces equivalent bound plans, diagnostics, and artifacts.
 
 ## Milestone 4 — Separate lowering from emission
 
-- [ ] Define lowered function, parameter, local, control-flow, stream, pipeline, command-region, and return forms.
-- [ ] Move target selection into lowering.
-- [ ] Make the C# backend render lowered nodes only.
-- [ ] Remove local and return type inference from the C# emitter.
-- [ ] Remove eligibility and fallback decisions from emitters.
-- [ ] Remove command recognition from emitters.
-- [ ] Make source maps consume bound/lowered node spans.
-- [ ] Make census consume the shared semantic result.
+- [x] Define lowered function, parameter, local, control-flow, stream, pipeline, command-region, and return forms.
+- [x] Move target selection into lowering.
+- [x] Make the C# backend render lowered nodes only.
+- [x] Remove local and return type inference from the C# emitter.
+- [x] Remove eligibility and fallback decisions from emitters.
+- [x] Remove command recognition from emitters.
+- [x] Make source maps consume bound/lowered node spans.
+- [x] Make census consume the shared semantic result.
 
 Exit gate: the C# backend builds without a reference to PowerShell AST types.
 
@@ -846,17 +846,17 @@ Exit gate: the C# backend builds without a reference to PowerShell AST types.
 
 Migrate one semantic area at a time. Each completed item includes deletion of the equivalent legacy path.
 
-- [ ] Parameters, aliases, metadata, parameter sets, and validation.
-- [ ] Literal defaults and omitted-versus-bound state.
-- [ ] Variables, assignments, returns, and output shaping.
-- [ ] Operators, truthiness, and conversions.
-- [ ] Conditions, loops, switch, try/catch, throw, break, and continue.
-- [ ] Arrays, collections, dictionaries, and bounded object construction.
-- [ ] Member access and method invocation.
-- [ ] Local calls, call graphs, and supported recursion.
-- [ ] Runtime-state intrinsics and `ShouldProcess` state.
-- [ ] Existing streams, command regions, and typed captures.
-- [ ] Executable parameter binding and generated binary-cmdlet contracts.
+- [x] Parameters, aliases, metadata, parameter sets, and validation.
+- [x] Literal defaults and omitted-versus-bound state.
+- [x] Variables, assignments, returns, and output shaping.
+- [x] Operators, truthiness, and conversions.
+- [x] Conditions, loops, switch, try/catch, throw, break, and continue.
+- [x] Arrays, collections, dictionaries, and bounded object construction.
+- [x] Member access and method invocation.
+- [x] Local calls, call graphs, and supported recursion.
+- [x] Runtime-state intrinsics and `ShouldProcess` state.
+- [x] Existing streams, command regions, and typed captures.
+- [x] Executable parameter binding and generated binary-cmdlet contracts.
 
 Exit gate:
 
@@ -869,16 +869,16 @@ Broad coverage work remains frozen until this gate passes.
 
 ## Milestone 6 — Define runtime-free substrate and managed ABI
 
-- [ ] Name and version the semantic profile used by current runtime-free Strict artifacts.
-- [ ] Define the compiler-runtime ABI and record it in generated projects and manifests.
-- [ ] Extract repeated runtime-free semantic helpers into one AOT-safe owner without moving inference into runtime code.
-- [ ] Enable trim and AOT analyzers and treat compiler-owned warnings as errors.
-- [ ] Mechanically verify Strict dependency closure excludes SMA, PowerShell SDK, embedded scripts, and runtime evaluation.
-- [ ] Define deterministic PowerShell-command-to-CLR symbol mapping.
-- [ ] Define public parameter, nullability, cardinality, return, DTO, stream, and exception contracts.
-- [ ] Emit a normalized public ABI manifest and hash.
-- [ ] Add direct C# consumer tests that reference the produced DLL as a normal assembly.
-- [ ] Add an independently rebuilt generated-project test using only recorded inputs.
+- [x] Name and version the semantic profile used by current runtime-free Strict artifacts.
+- [x] Define the compiler-runtime ABI and record it in generated projects and manifests.
+- [x] Extract repeated runtime-free semantic helpers into one AOT-safe owner without moving inference into runtime code.
+- [x] Enable trim and AOT analyzers and treat compiler-owned warnings as errors.
+- [x] Mechanically verify Strict dependency closure excludes SMA, PowerShell SDK, embedded scripts, and runtime evaluation.
+- [x] Define deterministic PowerShell-command-to-CLR symbol mapping.
+- [x] Define public parameter, nullability, cardinality, return, DTO, stream, and exception contracts.
+- [x] Emit a normalized public ABI manifest and hash.
+- [x] Add direct C# consumer tests that reference the produced DLL as a normal assembly.
+- [x] Add an independently rebuilt generated-project test using only recorded inputs.
 
 Exit gate:
 
@@ -889,16 +889,25 @@ Exit gate:
 
 ## Milestone 7 — Preserve help and module contracts
 
-- [ ] Bind comment-based help as function metadata.
-- [ ] Reuse the existing documentation engine to generate external MAML for compiled cmdlets.
-- [ ] Preserve synopsis, description, parameter help, examples, notes, links, inputs, and outputs.
-- [ ] Preserve aliases, exports, and mixed Hybrid command identity.
-- [ ] Verify `Get-Help` for typed and retained commands in the same module.
-- [ ] Refresh the product-neutral baseline and wider pinned census.
+- [x] Bind comment-based help as function metadata.
+- [x] Reuse the existing documentation engine to generate external MAML for compiled cmdlets.
+- [x] Preserve synopsis, description, parameter help, examples, notes, links, inputs, and outputs.
+- [x] Preserve aliases, exports, and mixed Hybrid command identity.
+- [x] Verify `Get-Help` for typed and retained commands in the same module.
+- [x] Refresh the product-neutral baseline and wider pinned census.
 
 Exit gate: compiling a function does not remove or degrade its help or exported command contract.
 
 This is the first new module-surface feature after migration because it proves that source metadata can flow through the IR, lowering, generated module, and artifact validation paths. It also removes the current help-preservation barrier from real-module coverage measurements.
+
+Completion evidence for Milestones 1–7 on 2026-08-27:
+
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PowerShellCompilation"` passed 715/715 tests, including generated artifacts, differential behavior, help/MAML, source maps, ABI, dependency closure, trimming, and NativeAOT contracts.
+- the portable generic Hybrid corpus remains at 5/6 emitted functions (83.33%) with zero eligible functions dropped after graph or binary-cmdlet shaping; its intentional runtime-scope function remains fallback;
+- the refreshed exact-pinned six-product lane reports 114/1,235 emitted functions (9.23%), 173 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
+- per-product emitted/total coverage is PowerInfoBlox 3/57, PSSharedGoods 11/281, PSWriteHTML 29/238, O365Essentials 61/282, ADEssentials 7/247, and PSWriteWord 3/130;
+- the former 139/1,235 result is retained in the companion guide as a historical snapshot of the deleted direct AST emitter, not represented as current all-IR coverage;
+- the C# backend has no reference to `System.Management.Automation.Language`, and the direct AST-to-C# emitter files and compatibility path are absent.
 
 ## Milestone 8 — Build command and pipeline semantics
 

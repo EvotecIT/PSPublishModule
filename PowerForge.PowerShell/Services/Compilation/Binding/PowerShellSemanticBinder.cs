@@ -6,70 +6,8 @@ namespace PowerForge;
 /// Converts parser-owned PowerShell syntax into the compiler's neutral bound representation.
 /// Parser objects are consumed here and never become part of a bound node.
 /// </summary>
-internal sealed class PowerShellSemanticBinder
+internal sealed partial class PowerShellSemanticBinder
 {
-    internal PowerShellBoundProgram Bind(
-        IEnumerable<ParsedSourceDocument> documents,
-        string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-    {
-        if (documents is null) throw new ArgumentNullException(nameof(documents));
-        var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
-        var diagnostics = new List<PowerShellSemanticDiagnostic>();
-        var declarations = DeclareFunctions(orderedDocuments, diagnostics);
-        var functionsByName = declarations
-            .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(static group => group.Count() == 1)
-            .Where(static group => HasTypedEndBlockShape(group.Single().Syntax.Body))
-            .ToDictionary(
-                static group => group.Key,
-                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
-                StringComparer.OrdinalIgnoreCase);
-        for (var iteration = 0; iteration < functionsByName.Count; iteration++)
-        {
-            var changed = false;
-            foreach (var declaration in declarations)
-            {
-                if (!functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) || signature.DeclaredReturnType is not null)
-                    continue;
-                var inferred = PowerShellLocalCallSemanticBinder.InferReturnType(declaration.Syntax, signature.Parameters, functionsByName);
-                if (inferred is not null) changed |= signature.RefineReturnType(inferred);
-            }
-            if (!changed) break;
-        }
-        var functions = new List<PowerShellBoundFunction>();
-
-        foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
-        {
-            if (declaration.Document.Errors.Length > 0 || !functionsByName.ContainsKey(declaration.Syntax.Name)) continue;
-            var bound = BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName, diagnostics, targetFramework, capabilities);
-            if (bound is not null) functions.Add(bound);
-        }
-
-        var boundDocuments = orderedDocuments.Select(document => new PowerShellBoundSourceDocument(
-            document.DocumentId,
-            document.Path,
-            PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent),
-            declarations.Where(declaration => declaration.Document.DocumentId == document.DocumentId)
-                .Select(static declaration => declaration.Symbol)
-                .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
-                .ToArray())).ToArray();
-
-        return new PowerShellBoundProgram(
-            boundDocuments,
-            functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
-            OrderDiagnostics(diagnostics));
-    }
-
-    private static bool HasTypedEndBlockShape(ScriptBlockAst body)
-        => body.DynamicParamBlock is null &&
-           body.BeginBlock is null &&
-           body.ProcessBlock is null &&
-           GetCleanBlock(body) is null;
-
-    private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
-        => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;
-
     private static FunctionDeclaration[] DeclareFunctions(
         IEnumerable<ParsedSourceDocument> documents,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
@@ -152,7 +90,7 @@ internal sealed class PowerShellSemanticBinder
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
-        var locals = DeclareLocals(document, function, symbols, runtimeTailOffset);
+        var locals = DeclareLocals(document, function, symbols, capabilities, runtimeTailOffset);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
@@ -207,6 +145,7 @@ internal sealed class PowerShellSemanticBinder
             declaredOutputType,
             body,
             PowerShellTypeFact.Unknown,
+            PowerShellOutputCardinality.Unknown,
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
             PowerShellExecutionDisposition.Typed);
@@ -255,6 +194,7 @@ internal sealed class PowerShellSemanticBinder
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        PowerShellCompilationCapability capabilities,
         int? excludedTailOffset = null)
     {
         var locals = new List<PowerShellBoundLocal>();
@@ -275,7 +215,7 @@ internal sealed class PowerShellSemanticBinder
                 continue;
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
-            var type = ResolveAssignmentType(assignment);
+            var type = ResolveAssignmentType(assignment, capabilities);
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
             var local = new PowerShellBoundLocal(symbol, type);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
@@ -309,18 +249,35 @@ internal sealed class PowerShellSemanticBinder
         return locals.ToArray();
     }
 
-    private static PowerShellTypeFact ResolveAssignmentType(AssignmentStatementAst assignment)
+    private static PowerShellTypeFact ResolveAssignmentType(
+        AssignmentStatementAst assignment,
+        PowerShellCompilationCapability capabilities)
     {
         var expression = UnwrapExpression(assignment.Right);
+        var hostedObjects = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
         if (assignment.Left is ConvertExpressionAst typedDictionary &&
             expression is HashtableAst &&
             (typedDictionary.StaticType == typeof(System.Collections.Hashtable) ||
              typedDictionary.StaticType == typeof(System.Collections.IDictionary)))
-            return new PowerShellTypeFact(typeof(Dictionary<string, string>), PowerShellTypeFactProvenance.Explicit, "A typed hashtable literal selects the compiler's homogeneous String dictionary representation.");
+            return new PowerShellTypeFact(
+                hostedObjects ? typeof(System.Collections.Hashtable) : typeof(Dictionary<string, string>),
+                PowerShellTypeFactProvenance.Explicit,
+                hostedObjects
+                    ? "A hosted typed hashtable literal preserves heterogeneous object values."
+                    : "A typed hashtable literal selects the compiler's homogeneous String dictionary representation.");
         if (assignment.Left is ConvertExpressionAst typedLeft)
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
         if (expression is HashtableAst)
-            return new PowerShellTypeFact(typeof(Dictionary<string, string>), PowerShellTypeFactProvenance.Inferred, "A homogeneous hashtable literal selects the compiler's string dictionary representation.");
+        {
+            var hashtable = (HashtableAst)expression;
+            var objectValues = PowerShellDictionarySemanticBinder.UsesHostedObjectRepresentation(hashtable, contextualType: null, capabilities);
+            return new PowerShellTypeFact(
+                objectValues ? typeof(System.Collections.Hashtable) : typeof(Dictionary<string, string>),
+                PowerShellTypeFactProvenance.Inferred,
+                objectValues
+                    ? "A hosted hashtable literal preserves heterogeneous object values."
+                    : "A homogeneous hashtable literal selects the compiler's string dictionary representation.");
+        }
         if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
             return new PowerShellTypeFact(typeof(System.Collections.Specialized.OrderedDictionary), PowerShellTypeFactProvenance.Explicit, "An [ordered] literal selects OrderedDictionary representation.");
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
@@ -431,14 +388,8 @@ internal sealed class PowerShellSemanticBinder
             {
                 var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
                 if (condition is null) return null;
-                if (condition.Type.ClrType != typeof(bool))
-                {
-                    var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation
-                        ? $"Local variable '${mutation.Target.Name}' may remain unassigned because its assignment occurs only while evaluating a dynamic-truthiness condition."
-                        : "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.";
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", message, condition.Span));
-                    return null;
-                }
+                condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+                if (condition is null) return null;
                 var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework, capabilities);
                 if (body is null) return null;
                 clauses.Add(new PowerShellBoundConditionalClause(condition, body));
@@ -453,11 +404,8 @@ internal sealed class PowerShellSemanticBinder
         {
             var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
             if (condition is null) return null;
-            if (condition.Type.ClrType != typeof(bool))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
-                return null;
-            }
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            if (condition is null) return null;
             var body = BindBlock(document, whileStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
             return body is null ? null : new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), condition, body);
         }
@@ -470,11 +418,8 @@ internal sealed class PowerShellSemanticBinder
             var condition = forStatement.Condition is null
                 ? null
                 : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-            if (condition is not null && condition.Type.ClrType != typeof(bool))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.", condition.Span));
-                return null;
-            }
+            if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            if (forStatement.Condition is not null && condition is null) return null;
             var iterator = forStatement.Iterator is null
                 ? null
                 : BindExpression(document, forStatement.Iterator, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities) as PowerShellBoundMutationExpression;
@@ -778,7 +723,9 @@ internal sealed class PowerShellSemanticBinder
                     document,
                     hashtable,
                     ordered: false,
+                    contextualType,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, true, LiteralType(typeof(bool), "$true is a Boolean literal."), PowerShellValueState.Known);
@@ -793,7 +740,9 @@ internal sealed class PowerShellSemanticBinder
                     document,
                     (HashtableAst)conversion.Child,
                     ordered: true,
+                    contextualType,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    capabilities,
                     diagnostics);
             case ConvertExpressionAst conversion when PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                 return PowerShellObjectSemanticBinder.Bind(
@@ -824,7 +773,8 @@ internal sealed class PowerShellSemanticBinder
                     unary,
                     span,
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities),
-                    diagnostics);
+                    diagnostics,
+                    capabilities);
             case AssignmentStatementAst assignment:
                 return PowerShellMutationSemanticBinder.BindAssignment(
                     document,
@@ -873,6 +823,7 @@ internal sealed class PowerShellSemanticBinder
                     target,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    capabilities,
                     diagnostics);
             default:
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", $"Expression '{syntax.GetType().Name}' is not yet represented by the bound pipeline.", span));
@@ -902,6 +853,27 @@ internal sealed class PowerShellSemanticBinder
 
     private static PowerShellTypeFact LiteralType(Type type, string explanation)
         => new(type, PowerShellTypeFactProvenance.Literal, explanation);
+
+    private static PowerShellBoundExpression? BindConditionTruthiness(
+        PowerShellBoundExpression condition,
+        PowerShellCompilationCapability capabilities,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        if (condition.Type.ClrType == typeof(bool)) return condition;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+        {
+            var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation
+                ? $"Local variable '${mutation.Target.Name}' may remain unassigned because its assignment occurs only while evaluating a dynamic-truthiness condition."
+                : "PowerShell truthiness conversion is dynamic; typed conditions must already be Boolean.";
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", message, condition.Span));
+            return null;
+        }
+        return new PowerShellBoundConversionExpression(
+            condition.Span,
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "PowerShell-hosted condition truthiness selects one Boolean result."),
+            condition,
+            usePowerShellTruthiness: true);
+    }
 
     private static Ast UnwrapExpression(Ast syntax)
     {

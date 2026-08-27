@@ -582,7 +582,8 @@ internal sealed class PowerShellTypedLowerer
                 conversion.Span,
                 conversion.Type.ClrType,
                 LowerExpression(conversion.Operand, functions, names, targetCapabilities),
-                conversion.UsePowerShellLanguageRuntime),
+                conversion.UsePowerShellLanguageRuntime,
+                conversion.UsePowerShellTruthiness),
             PowerShellBoundBinaryExpression binary => new PowerShellLoweredBinaryExpression(
                 binary.Span,
                 binary.Type.ClrType,

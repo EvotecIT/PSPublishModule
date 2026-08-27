@@ -31,13 +31,20 @@ internal sealed class PowerShellLoweredVariableExpression : PowerShellLoweredExp
 
 internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredConversionExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression operand, bool usePowerShellLanguageRuntime) : base(span, clrType)
+    internal PowerShellLoweredConversionExpression(
+        SourceSpan span,
+        Type clrType,
+        PowerShellLoweredExpression operand,
+        bool usePowerShellLanguageRuntime,
+        bool usePowerShellTruthiness) : base(span, clrType)
     {
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
+        UsePowerShellTruthiness = usePowerShellTruthiness;
     }
     internal PowerShellLoweredExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
+    internal bool UsePowerShellTruthiness { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression

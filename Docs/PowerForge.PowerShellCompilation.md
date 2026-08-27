@@ -1,5 +1,7 @@
 # PowerShell Compilation
 
+Last updated: 2026-08-27
+
 PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory into three different artifact shapes:
 
 - a packaged executable that preserves dynamic PowerShell semantics, or a genuinely typed executable for an eligible top-level script;
@@ -265,7 +267,7 @@ The current subset supports:
 - scalar string `-split` and string-array `-join`;
 - integral bitwise and shift operators with PowerShell-compatible small-integer promotion, plus target-compatible explicit conversions that use a compile-time literal when possible and PowerShell's public conversion primitive only in a PowerShell-backed host;
 - expandable strings containing statically typed string variables, with null strings rendered as empty text;
-- case-insensitive homogeneous string dictionaries created from ordinary or `[ordered]` string hashtable literals, including lookup and simple index assignment, plus conservative `IDictionary` parameter lookup and mutation;
+- case-insensitive homogeneous string dictionaries created from ordinary or `[ordered]` string hashtable literals, including lookup and simple index assignment; generated binary modules additionally preserve bounded heterogeneous `Hashtable`/`OrderedDictionary` values plus adapted `IDictionary` member lookup and assignment;
 - conservative `CmdletBinding` positional/default-set/ShouldProcess metadata and parameter binding metadata, with host-only behavior enabled only for generated binary cmdlets;
 - floating-point and decimal arithmetic with compatible operands;
 - explicitly typed integral accumulators and loop counters with checked assignment semantics;
@@ -277,24 +279,24 @@ The current subset supports:
 - direct local function graphs across Strict executables and generated binary modules, including positional, named, alias, unique-abbreviation, switch, mandatory, omitted-default, and supported validation-metadata binding; a direct self-recursive function additionally requires one target-compatible `[OutputType]` contract that matches its inferred body type, while mutual or otherwise uncontracted cycles stay on fallback. Calls into a local function that invokes `ShouldProcess` also stay on the PowerShell command path so the inner command identity and `ConfirmImpact` are not replaced by the outer generated cmdlet;
 - PowerShell stream calls and bounded top-level command/pipeline regions that can capture parameters and typed locals, return success output into an explicit typed assignment, or own a safe terminal dynamic tail when generating a binary module.
 
-Member compilation is intentionally exact. The emitter resolves a single CLR member or overload at build time, applies only supported assignable/numeric/one-character conversions, and falls back when resolution is missing or ambiguous. Both the type and selected constructor, method, property, or field must exist in the requested target framework's reference assemblies; analyzer-host-only APIs and general constructed generic types are rejected before `dotnet` compilation. The compiler-owned homogeneous string dictionary is the current narrow generic exception. Null typed arrays preserve PowerShell's zero-length `.Length` behavior, and a nullable inferred string's property access uses PowerShell's empty-string property semantics while method invocation retains CLR null failure behavior.
+Member compilation is intentionally exact. The semantic binder resolves a single CLR member or overload, applies only supported assignable/numeric/one-character conversions, and falls back when resolution is missing or ambiguous. Both the type and selected constructor, method, property, or field must exist in the requested target framework's reference assemblies; analyzer-host-only APIs and general constructed generic types are rejected before lowering. The compiler-owned homogeneous string dictionary is the current narrow generic exception. Generated binary modules also model bounded adapted dictionary reads and writes through their hosted PowerShell capability. Null typed arrays preserve PowerShell's zero-length `.Length` behavior, and a nullable inferred string's property access uses PowerShell's empty-string property semantics while method invocation retains CLR null failure behavior.
 
 The analyzer rejects dynamic behavior rather than guessing. Current blockers include:
 
 - commands and pipelines outside the bounded binary-module region contract, including nested closures over unresolved runtime variables;
-- dynamic member names, PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
+- dynamic member names, unbounded PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
 - script blocks, closures, runtime scopes such as `$env:`, and untyped parameters;
 - automatic or preference variables outside the explicit read-only intrinsic set, arbitrary `$PSVersionTable` keys, and `$PSCmdlet` interactions other than the bounded `ShouldProcess` overloads;
 - dynamic or host-incompatible parameter attributes, PowerShell default expressions, and `dynamicparam`, `begin`, `process`, or `clean` blocks;
 - dynamic `$PSBoundParameters` access, noncanonical or computed keys, dynamic/string throw operands, and `[pscustomobject]` construction outside generated binary modules;
 - nonterminal or nested implicit pipeline output;
-- PowerShell truthiness conversions, element-wise array comparison, and coercion between incompatible CLR types;
+- PowerShell truthiness outside a hosted target, element-wise array comparison, and coercion between incompatible CLR types without an explicit target capability;
 - string relational operators whose culture-aware ordering has not yet been translated;
 - conversion expressions whose target is unavailable or whose dynamic semantics require a host capability not present in the artifact, heterogeneous branch return types, and integral division whose PowerShell result type depends on the quotient;
 - untyped integral arithmetic that can change CLR type after overflow;
 - array concatenation and compound-assignment operand pairs that have no exact static CLR operator;
 - source `#requires` directives and runtime-bearing `using module` / `using assembly` statements, which keep the complete source file on the PowerShell runtime path rather than being silently omitted;
-- control flow for which the conservative emitter cannot prove declaration or return behavior.
+- control flow for which binding and analysis cannot prove declaration, output, or return behavior.
 
 This boundary is expected to expand through semantic proof, not syntax count. New constructs need differential tests against PowerShell before they become eligible.
 
@@ -302,7 +304,7 @@ This boundary is expected to expand through semantic proof, not syntax count. Ne
 
 Strict executable compilation is deliberately all-or-nothing. The root script is `Main`, its top-level `param()` block is the application argument contract, and every reachable statement and local function in its contained literal dot-source closure must have an equivalent typed lowering. One unsupported command, dynamic lookup, closure, coercion, or control-flow shape rejects the build rather than quietly placing PowerShell back into a supposedly runtime-free executable.
 
-That means an arbitrary existing automation script is unlikely to qualify for Strict today. The real-product matrix later in this document currently compiles between 1.48% and 26.57% of whole functions in Hybrid modules. A small purpose-built CLI can qualify completely because its entrypoint and helper graph can be designed around the supported subset; a command-heavy administration product usually cannot. Coverage should therefore be read as three separate outcomes:
+That means an arbitrary existing automation script is unlikely to qualify for Strict today. The refreshed exact-pinned real-product matrix later in this document currently emits between 2.31% and 21.63% of whole functions in Hybrid modules. A small purpose-built CLI can qualify completely because its entrypoint and helper graph can be designed around the supported subset; a command-heavy administration product usually cannot. Coverage should therefore be read as three separate outcomes:
 
 - **Strict program coverage:** the complete reachable application graph is eligible, so a PowerShell-free EXE can be produced;
 - **Hybrid function coverage:** complete eligible functions become generated cmdlets while other functions remain scripts;
@@ -316,21 +318,17 @@ A Hybrid executable is not implemented today. It is the natural future bridge fo
 
 The implementation sequence, ownership rules, migration gates, and active checklists are maintained in the [PowerShell Compilation Architecture Roadmap](PowerForge.PowerShellCompilation.Roadmap.md).
 
-The current implementation is already staged rather than being a text replacement engine:
+The current implementation is a semantic pipeline rather than a text replacement engine:
 
 1. input discovery resolves the root script or module and its contained authored dependency closure without executing it;
-2. the PowerShell parser produces ASTs and source extents;
-3. the analyzer creates file and unit plans, parameter metadata, target-framework checks, capabilities, and fail-closed diagnostics;
-4. the transpiler builds eligible local function graphs and rejects cycles, ambiguous identities, or incompatible dependencies;
-5. semantic policy components handle members, operators, assignments, binding, objects, command islands, and generated-type availability;
-6. target emitters generate a typed executable, CLR library, binary cmdlets, or Hybrid module composition;
-7. the artifact builder compiles, optionally signs, records hashes and source maps, and atomically publishes the complete artifact set.
+2. the PowerShell parser produces syntax plus neutral source documents and spans;
+3. the semantic binder creates immutable symbols, scopes, functions, statements, expressions, type facts, value state, effects, capabilities, and fail-closed diagnostics;
+4. deterministic analysis passes compute definite assignment, output type/cardinality, call graphs, recursion, effects, capabilities, and fallback through fixed points;
+5. lowering selects typed CLR operations, generated-cmdlet operations, bounded hosted regions, and target-specific runtime primitives;
+6. the C# backend renders lowered nodes only; it has no PowerShell AST reference and performs no semantic inference;
+7. graph and binary-cmdlet shaping consume the same semantic result before the artifact builder compiles, optionally signs, records hashes/source maps/ABI evidence, and atomically publishes the artifact set.
 
-The emitter is split by semantic responsibility—control flow, local calls, arrays, collections, validation, objects, operators, and advanced binding—and reusable capability flags prevent a Strict target from accidentally using PowerShell-backed behavior. This structure has supported the current feature waves without putting compiler logic into the CLI or cmdlet surfaces.
-
-There is still an important scaling limit: several paths currently analyze the PowerShell AST and then lower it directly to C#. A substantial new feature can require coordinated changes to eligibility analysis, type inference, graph propagation, emission, diagnostics, and target capabilities. That is manageable for the present conservative subset, but it should not become the long-term extension model for broad coverage.
-
-The next architectural milestone is a typed bound intermediate representation between the PowerShell AST and generated C#. Each bound node should carry:
+Every bound node carries:
 
 - its resolved CLR type and PowerShell-specific conversion rule;
 - its source extent for diagnostics and generated-source mapping;
@@ -338,7 +336,9 @@ The next architectural milestone is a typed bound intermediate representation be
 - required target capabilities, for example pure CLR, cmdlet host, bound-parameter state, PowerShell objects, or a command region;
 - an explicit fallback reason when the semantic contract cannot be proven.
 
-With that boundary, a feature is bound once and target emitters consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The transition can be incremental: new high-value features can use the bound representation first, and existing emitters can be migrated by semantic area instead of stopping current compilation work for a rewrite.
+With that boundary, a feature is bound once and backends consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The former direct AST-to-C# emitter and its partial implementations were deleted after the existing behavior migrated; there is no compatibility switch that can silently bypass the IR.
+
+The active architecture milestone is canonical command and pipeline semantics. New command families should add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
 
 Every newly eligible language feature should satisfy the same acceptance packet:
 
@@ -472,7 +472,9 @@ powerforge powershell census `
     --output json
 ```
 
-The current six-root example census reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 285 functions pass structural analysis, 139 survive graph and artifact shaping as typed CLR methods, and 146 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 11.26%. The per-root emitted/total function split is PowerInfoBlox 2/57, PSSharedGoods 20/281, PSWriteHTML 18/238, O365Essentials 82/282, ADEssentials 10/247, and PSWriteWord 7/130. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
+The 2026-08-27 all-IR refresh reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: 287 functions pass structural analysis, 114 survive semantic binding, fixed-point analysis, lowering, graph shaping, and binary-cmdlet shaping as typed CLR methods, and 173 analyzer-eligible functions are routed back to fallback. Post-emission function coverage is therefore 9.23%. The per-root emitted/total function split is PowerInfoBlox 3/57, PSSharedGoods 11/281, PSWriteHTML 29/238, O365Essentials 61/282, ADEssentials 7/247, and PSWriteWord 3/130.
+
+The former 139/1,235 (11.26%) figure—PowerInfoBlox 2, PSSharedGoods 20, PSWriteHTML 18, O365Essentials 82, ADEssentials 10, and PSWriteWord 7—was the last snapshot produced by the deleted direct AST emitter. It remains useful historical migration evidence but is not current coverage. The lower all-IR total is reported openly and forms the new architecture baseline; future gains resume with the semantic families in Milestone 8 and later. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
 
 Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and normalized authored text; CRLF, LF, and CR line endings hash identically, while malformed or legacy-encoded byte identity is preserved so a source change cannot silently pass merely because its aggregate counts stayed equal.
 

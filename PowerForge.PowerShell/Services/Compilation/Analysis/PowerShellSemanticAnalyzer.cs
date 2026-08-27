@@ -34,6 +34,7 @@ internal sealed class PowerShellSemanticAnalyzer
         yield return new LocalTypePass();
         yield return new CallGraphPass();
         yield return new ReturnTypePass();
+        yield return new CardinalityPass();
         yield return new EffectPass();
         yield return new CapabilityPass();
         yield return new FallbackPass();
@@ -293,6 +294,48 @@ internal sealed class PowerShellSemanticAnalyzer
         }
     }
 
+    private sealed class CardinalityPass : IPowerShellSemanticPass
+    {
+        public string Id => "35-output-cardinality-fixed-point";
+
+        public PowerShellBoundProgram Run(PowerShellBoundProgram program)
+        {
+            var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+            RunFixedPoint(
+                functions,
+                (function, lookup) => function.WithAnalysis(outputCardinality: Analyze(function, lookup)),
+                static (left, right) => left.OutputCardinality == right.OutputCardinality);
+            return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+        }
+
+        private static PowerShellOutputCardinality Analyze(
+            PowerShellBoundFunction function,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            var outputs = EnumerateStatements(function.Body)
+                .Select(GetSuccessOutputExpression)
+                .Where(static expression => expression is not null)
+                .Select(expression => Resolve(expression!, functions))
+                .ToArray();
+            if (outputs.Length == 0) return PowerShellOutputCardinality.None;
+            if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Unknown))
+                return PowerShellOutputCardinality.Unknown;
+            if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Collection))
+                return PowerShellOutputCardinality.Collection;
+            return PowerShellOutputCardinality.Scalar;
+        }
+
+        private static PowerShellOutputCardinality Resolve(
+            PowerShellBoundExpression expression,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            if (expression is PowerShellBoundInvocationExpression invocation &&
+                functions.TryGetValue(invocation.Target.StableKey, out var target))
+                return target.OutputCardinality;
+            return expression.Type.ClrType.IsArray ? PowerShellOutputCardinality.Collection : expression.Cardinality;
+        }
+    }
+
     private sealed class EffectPass : IPowerShellSemanticPass
     {
         public string Id => "40-effects-fixed-point";
@@ -339,8 +382,10 @@ internal sealed class PowerShellSemanticAnalyzer
                         blockingDiagnostic.Code,
                         blockingDiagnostic.Message));
                 }
-                if (function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
-                    function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary))
+                if ((function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
+                     function.ReturnType.ClrType == typeof(System.Collections.Hashtable) ||
+                     function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary)) &&
+                    ReturnsCompilerDictionary(function))
                 {
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
@@ -538,6 +583,20 @@ internal sealed class PowerShellSemanticAnalyzer
             .SelectMany(EnumerateExpressions)
             .OfType<PowerShellBoundRuntimeStateExpression>()
             .Any(static expression => expression.Kind is PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
+
+    private static bool ReturnsCompilerDictionary(PowerShellBoundFunction function)
+    {
+        var dictionaryLocals = EnumerateStatements(function.Body)
+            .OfType<PowerShellBoundAssignmentStatement>()
+            .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
+            .Select(static assignment => assignment.Target.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
+        return EnumerateStatements(function.Body)
+            .Select(GetSuccessOutputExpression)
+            .Where(static expression => expression is not null)
+            .Any(expression => expression is PowerShellBoundDictionaryExpression ||
+                               expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey));
+    }
 
     private static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {

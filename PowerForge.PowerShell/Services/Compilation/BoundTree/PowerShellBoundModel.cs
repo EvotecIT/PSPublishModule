@@ -214,20 +214,29 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
 
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundConversionExpression(SourceSpan span, PowerShellTypeFact targetType, PowerShellBoundExpression operand, bool usePowerShellLanguageRuntime = false)
+    internal PowerShellBoundConversionExpression(
+        SourceSpan span,
+        PowerShellTypeFact targetType,
+        PowerShellBoundExpression operand,
+        bool usePowerShellLanguageRuntime = false,
+        bool usePowerShellTruthiness = false)
         : base(
             span,
             targetType,
             operand.ValueState,
             operand.Effects,
-            operand.Capabilities | (usePowerShellLanguageRuntime ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
+            operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
     {
+        if (usePowerShellLanguageRuntime && usePowerShellTruthiness)
+            throw new ArgumentException("A bound conversion cannot select two PowerShell language conversion operations.");
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
+        UsePowerShellTruthiness = usePowerShellTruthiness;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
+    internal bool UsePowerShellTruthiness { get; }
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression
@@ -427,6 +436,7 @@ internal sealed class PowerShellBoundFunction
         Type? declaredOutputType,
         PowerShellBoundBlock body,
         PowerShellTypeFact returnType,
+        PowerShellOutputCardinality outputCardinality,
         PowerShellSemanticEffect effects,
         PowerShellRequiredCapability capabilities,
         PowerShellExecutionDisposition disposition)
@@ -439,6 +449,7 @@ internal sealed class PowerShellBoundFunction
         DeclaredOutputType = declaredOutputType;
         Body = body;
         ReturnType = returnType;
+        OutputCardinality = outputCardinality;
         Effects = effects;
         Capabilities = capabilities;
         Disposition = disposition;
@@ -452,16 +463,18 @@ internal sealed class PowerShellBoundFunction
     internal Type? DeclaredOutputType { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
+    internal PowerShellOutputCardinality OutputCardinality { get; }
     internal PowerShellSemanticEffect Effects { get; }
     internal PowerShellRequiredCapability Capabilities { get; }
     internal PowerShellExecutionDisposition Disposition { get; }
 
     internal PowerShellBoundFunction WithAnalysis(
         PowerShellTypeFact? returnType = null,
+        PowerShellOutputCardinality? outputCardinality = null,
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters, Locals, Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters, Locals, Scope, Help, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument

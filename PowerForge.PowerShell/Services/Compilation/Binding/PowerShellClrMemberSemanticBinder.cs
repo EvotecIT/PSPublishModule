@@ -44,6 +44,20 @@ internal static class PowerShellClrMemberSemanticBinder
                 _ => false
             })
             .ToArray();
+        if (members.Length == 0 &&
+            typeof(System.Collections.IDictionary).IsAssignableFrom(target.Type) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+        {
+            var adaptedValue = bindExpression(syntax.Right, typeof(object));
+            if (adaptedValue is null) return null;
+            return new PowerShellBoundClrMemberAssignmentStatement(
+                span,
+                target.Receiver!,
+                target.Type,
+                name,
+                PowerShellClrReceiverBehavior.PowerShellAdapter,
+                adaptedValue);
+        }
         if (members.Length != 1)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2616", members.Length == 0
@@ -91,6 +105,20 @@ internal static class PowerShellClrMemberSemanticBinder
                 _ => false
             })
             .ToArray();
+        if (members.Length == 0 &&
+            !target.IsStatic &&
+            typeof(System.Collections.IDictionary).IsAssignableFrom(target.Type) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+        {
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                name,
+                false,
+                target.Receiver,
+                PowerShellClrReceiverBehavior.PowerShellAdapter,
+                new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred, "PowerShell's adapted dictionary member is evaluated by the hosted runtime."));
+        }
         if (members.Length == 0 &&
             !target.IsStatic &&
             name.Equals("Count", StringComparison.OrdinalIgnoreCase) &&

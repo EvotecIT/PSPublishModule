@@ -242,6 +242,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictBinaryModulePreservesHeterogeneousHashtableValues()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-FrontierMapValue { [CmdletBinding()] param([string] $Key) " +
+            "$map = @{ Text = 'ready'; Count = 2; Enabled = $true }; return $map[$Key] }; " +
+            "function Get-FrontierMapMember { [CmdletBinding()] param() $map = @{ Text = 'ready'; Count = 2 }; return $map.Text }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HeterogeneousHashtable",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("2", RunModuleProof(result.ArtifactPath!, "Get-FrontierMapValue -Key Count"));
+        Assert.Equal("ready", RunModuleProof(result.ArtifactPath!, "Get-FrontierMapMember"));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("System.Collections.Hashtable", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StrictBinaryModulePreservesSwitchParameterInsideCommandRegion()
     {
         using var fixture = ArtifactFixture.Create(

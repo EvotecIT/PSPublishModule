@@ -89,6 +89,7 @@ internal sealed class PowerShellBoundCSharpBackend
             function.GeneratedName,
             function.ReturnType,
             builder.ToString(),
+            function.Span,
             requiresPowerShellStreams: function.RequiresPowerShellStreams,
             requiresPowerShellCommandRegions: function.RequiresPowerShellCommandRegions,
             requiresPowerShellBoundParameters: requiresBoundParameters,
@@ -345,6 +346,8 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitConversion(PowerShellLoweredConversionExpression conversion)
     {
         var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
+        if (conversion.UsePowerShellTruthiness)
+            return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
         return conversion.UsePowerShellLanguageRuntime
             ? $"({type})global::System.Management.Automation.LanguagePrimitives.ConvertTo((object?)({EmitExpression(conversion.Operand)}), typeof({type}), global::System.Globalization.CultureInfo.InvariantCulture)!"
             : $"({type})({EmitExpression(conversion.Operand)})";
@@ -430,9 +433,14 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {
         var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
-        return dictionary.Kind == PowerShellBoundDictionaryKind.OrderedStringDictionary
-            ? $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
-            : $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}";
+        return dictionary.Kind switch
+        {
+            PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary =>
+                $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
+            PowerShellBoundDictionaryKind.ObjectDictionary =>
+                $"new global::System.Collections.Hashtable(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
+            _ => $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
+        };
     }
 
     private static string EmitPowerShellObject(PowerShellLoweredPowerShellObjectExpression powerShellObject)
@@ -510,6 +518,12 @@ internal sealed class PowerShellBoundCSharpBackend
     private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
         var receiver = EmitExpression(assignment.Receiver);
+        if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapter &&
+            typeof(global::System.Collections.IDictionary).IsAssignableFrom(assignment.DeclaringType))
+        {
+            var name = PowerShellCSharpLiteral.QuoteString(assignment.MemberName);
+            return $"((global::System.Collections.IDictionary)({receiver}))[{name}] = {EmitExpression(assignment.Value)}";
+        }
         if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellRuntimeException)
         {
             var message = PowerShellCSharpLiteral.QuoteString($"The property '{assignment.MemberName}' cannot be found on this object. Verify that the property exists and can be set.");
@@ -531,8 +545,12 @@ internal sealed class PowerShellBoundCSharpBackend
             PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
                 $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
             PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
-            PowerShellClrReceiverBehavior.PowerShellAdapter =>
+            PowerShellClrReceiverBehavior.PowerShellAdapter when typeof(global::System.Collections.IDictionary).IsAssignableFrom(member.DeclaringType) =>
+                $"new global::System.Func<object?>(() => {{ var __pf_dictionary = (global::System.Collections.IDictionary?)({receiver}); return __pf_dictionary is null || !__pf_dictionary.Contains({PowerShellCSharpLiteral.QuoteString(member.MemberName)}) ? null : __pf_dictionary[{PowerShellCSharpLiteral.QuoteString(member.MemberName)}]; }})()",
+            PowerShellClrReceiverBehavior.PowerShellAdapter when member.MemberName.Equals("Count", StringComparison.OrdinalIgnoreCase) && member.ClrType == typeof(int) =>
                 $"new global::System.Func<int>(() => {{ var __pf_adapted_value = (object?)({receiver}); if (__pf_adapted_value is null) return 0; var __pf_count = global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[\"Count\"]?.Value; return __pf_count is null ? 1 : (int)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__pf_count, typeof(int), global::System.Globalization.CultureInfo.InvariantCulture)!; }})()",
+            PowerShellClrReceiverBehavior.PowerShellAdapter =>
+                $"new global::System.Func<object?>(() => {{ var __pf_adapted_value = (object?)({receiver}); return __pf_adapted_value is null ? null : global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[{PowerShellCSharpLiteral.QuoteString(member.MemberName)}]?.Value; }})()",
             _ => $"({receiver}).{member.MemberName}"
         };
     }

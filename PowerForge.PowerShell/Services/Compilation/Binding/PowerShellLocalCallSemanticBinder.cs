@@ -160,6 +160,7 @@ internal static class PowerShellLocalCallSemanticBinder
         PowerShellLocalCallSignature signature,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
@@ -212,8 +213,20 @@ internal static class PowerShellLocalCallSemanticBinder
             var parameter = signature.Parameters[parameterIndex];
             var argument = bindExpression(argumentSyntax, parameter.Type);
             if (argument is null) return null;
-            if (!PowerShellClrTypeSemantics.CanAssign(parameter.Type, argument.Type.ClrType) && !(argument.ValueState == PowerShellValueState.Null && !parameter.Type.IsValueType))
-                return Reject(diagnostics, "PSB2808", $"Argument for '-{parameter.Contract.Name}' has CLR type '{argument.Type.ClrType.FullName}', not assignable to '{parameter.Type.FullName}'.", argument.Span);
+            if (!PowerShellClrTypeSemantics.CanAssign(parameter.Type, argument.Type.ClrType) &&
+                !(argument.ValueState == PowerShellValueState.Null && !parameter.Type.IsValueType))
+            {
+                if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+                    return Reject(diagnostics, "PSB2808", $"Argument for '-{parameter.Contract.Name}' has CLR type '{argument.Type.ClrType.FullName}', not assignable to '{parameter.Type.FullName}'.", argument.Span);
+                argument = new PowerShellBoundConversionExpression(
+                    argument.Span,
+                    new PowerShellTypeFact(
+                        parameter.Type,
+                        PowerShellTypeFactProvenance.CommandContract,
+                        $"PowerShell parameter binding converts the argument for '-{parameter.Contract.Name}' to its declared type."),
+                    argument,
+                    usePowerShellLanguageRuntime: true);
+            }
             bound[parameterIndex] = argument;
             authoredOrder.Add(parameterIndex);
         }

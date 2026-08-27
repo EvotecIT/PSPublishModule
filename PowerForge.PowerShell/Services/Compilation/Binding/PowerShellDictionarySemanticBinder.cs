@@ -11,9 +11,12 @@ internal static class PowerShellDictionarySemanticBinder
         ParsedSourceDocument document,
         HashtableAst syntax,
         bool ordered,
+        Type? contextualType,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
+        var hostedObjects = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
         var entries = new List<PowerShellBoundDictionaryEntry>();
         foreach (var pair in syntax.KeyValuePairs)
         {
@@ -24,9 +27,9 @@ internal static class PowerShellDictionarySemanticBinder
                 return null;
             }
             var key = bindExpression(pair.Item1, typeof(string));
-            var value = bindExpression(valueSyntax, typeof(string));
+            var value = bindExpression(valueSyntax, hostedObjects ? null : typeof(string));
             if (key is null || value is null) return null;
-            if (key.Type.ClrType != typeof(string) || value.Type.ClrType != typeof(string))
+            if (key.Type.ClrType != typeof(string) || !hostedObjects && value.Type.ClrType != typeof(string))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2702", "Typed dictionary literals require homogeneous String keys and String values.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
                 return null;
@@ -34,11 +37,21 @@ internal static class PowerShellDictionarySemanticBinder
             entries.Add(new PowerShellBoundDictionaryEntry(key, value));
         }
 
-        var type = ordered ? typeof(OrderedDictionary) : typeof(Dictionary<string, string>);
+        var hostedObjectValues = UsesHostedObjectRepresentation(syntax, contextualType, capabilities);
+        var type = ordered
+            ? typeof(OrderedDictionary)
+            : hostedObjectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+        var kind = (ordered, hostedObjectValues) switch
+        {
+            (true, true) => PowerShellBoundDictionaryKind.OrderedObjectDictionary,
+            (true, false) => PowerShellBoundDictionaryKind.OrderedStringDictionary,
+            (false, true) => PowerShellBoundDictionaryKind.ObjectDictionary,
+            _ => PowerShellBoundDictionaryKind.StringDictionary
+        };
         return new PowerShellBoundDictionaryExpression(
             PowerShellSourceParser.GetSpan(document, syntax.Extent),
             type,
-            ordered ? PowerShellBoundDictionaryKind.OrderedStringDictionary : PowerShellBoundDictionaryKind.StringDictionary,
+            kind,
             entries.ToArray());
     }
 
@@ -60,7 +73,7 @@ internal static class PowerShellDictionarySemanticBinder
             return null;
         }
         var target = bindExpression(syntax.Target, null);
-        if (target is null || !TryClassify(target.Type.ClrType, out var kind, out var indexType, out var resultType))
+        if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out var resultType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2704", "Typed indexing supports strings, one-dimensional arrays, homogeneous string dictionaries, and IDictionary values.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
             return null;
@@ -112,7 +125,7 @@ internal static class PowerShellDictionarySemanticBinder
             return null;
         }
         var target = bindExpression(indexSyntax.Target, null);
-        if (target is null || !TryClassify(target.Type.ClrType, out var kind, out var indexType, out _) || kind == PowerShellBoundIndexKind.String)
+        if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out _) || kind == PowerShellBoundIndexKind.String)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
             return null;
@@ -154,7 +167,22 @@ internal static class PowerShellDictionarySemanticBinder
     internal static bool IsOrderedHashtableConversion(ConvertExpressionAst syntax)
         => syntax.StaticType == typeof(OrderedDictionary) && syntax.Child is HashtableAst;
 
-    private static bool TryClassify(Type type, out PowerShellBoundIndexKind kind, out Type indexType, out Type resultType)
+    internal static bool UsesHostedObjectRepresentation(
+        HashtableAst syntax,
+        Type? contextualType,
+        PowerShellCompilationCapability capabilities)
+    {
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects)) return false;
+        if (contextualType == typeof(Hashtable) || contextualType == typeof(IDictionary) || contextualType == typeof(OrderedDictionary)) return true;
+        return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst);
+    }
+
+    private static bool TryClassify(
+        Type type,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellBoundIndexKind kind,
+        out Type indexType,
+        out Type resultType)
     {
         if (type == typeof(string))
         {
@@ -170,6 +198,10 @@ internal static class PowerShellDictionarySemanticBinder
         }
         if (type == typeof(OrderedDictionary))
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+            {
+                kind = PowerShellBoundIndexKind.ObjectDictionary; indexType = typeof(object); resultType = typeof(object); return true;
+            }
             kind = PowerShellBoundIndexKind.OrderedStringDictionary; indexType = typeof(string); resultType = typeof(string); return true;
         }
         if (typeof(IDictionary).IsAssignableFrom(type))

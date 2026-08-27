@@ -38,8 +38,9 @@ internal static class PowerShellOperatorSemanticBinder
 
         if (operation is "And" or "Or")
         {
-            if (leftType != typeof(bool) || rightType != typeof(bool))
-                return Reject(diagnostics, span, "PSB2201", $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");
+            left = BindTruthiness(left, capabilities, diagnostics, span, "PSB2201", $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");
+            right = BindTruthiness(right, capabilities, diagnostics, span, "PSB2201", $"Operator '-{operation.ToLowerInvariant()}' requires Boolean operands on the typed compilation path.");
+            if (left is null || right is null) return null;
             return Binary(span, operation == "And" ? PowerShellBoundBinaryOperator.LogicalAnd : PowerShellBoundBinaryOperator.LogicalOr, left, right, typeof(bool));
         }
 
@@ -298,7 +299,8 @@ internal static class PowerShellOperatorSemanticBinder
         UnaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var operation = syntax.TokenKind.ToString();
         if (operation is "PlusPlus" or "MinusMinus" or "PostfixPlusPlus" or "PostfixMinusMinus") return null;
@@ -307,7 +309,8 @@ internal static class PowerShellOperatorSemanticBinder
         var type = operand.Type.ClrType;
         if (operation is "Not" or "Exclaim")
         {
-            if (type != typeof(bool)) return Reject(diagnostics, span, "PSB2213", "Typed logical negation requires a Boolean operand.");
+            operand = BindTruthiness(operand, capabilities, diagnostics, span, "PSB2213", "Typed logical negation requires a Boolean operand.");
+            if (operand is null) return null;
             return Unary(span, PowerShellBoundUnaryOperator.LogicalNot, operand, typeof(bool));
         }
         if (operation == "Bnot")
@@ -331,6 +334,24 @@ internal static class PowerShellOperatorSemanticBinder
 
     private static PowerShellTypeFact Fact(Type type, string explanation)
         => new(type, PowerShellTypeFactProvenance.Inferred, explanation);
+
+    private static PowerShellBoundExpression? BindTruthiness(
+        PowerShellBoundExpression expression,
+        PowerShellCompilationCapability capabilities,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        SourceSpan span,
+        string code,
+        string message)
+    {
+        if (expression.Type.ClrType == typeof(bool)) return expression;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+            return Reject(diagnostics, span, code, message);
+        return new PowerShellBoundConversionExpression(
+            expression.Span,
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "PowerShell-hosted truthiness selects one Boolean result."),
+            expression,
+            usePowerShellTruthiness: true);
+    }
 
     private static Type? TryUnify(Type left, Type right, ICollection<PowerShellSemanticDiagnostic> diagnostics, SourceSpan span)
     {
