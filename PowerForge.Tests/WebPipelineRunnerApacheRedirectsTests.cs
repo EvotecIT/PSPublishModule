@@ -61,6 +61,11 @@ public class WebPipelineRunnerApacheRedirectsTests
             Assert.True(File.Exists(outputPath));
             var config = File.ReadAllText(outputPath);
             Assert.Contains("RewriteEngine On", config, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{REQUEST_URI} !^/(?:\\.well-known/acme-challenge(?:/|$)|_powerforge/deployment\\.json$) [NC]", config, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^ - [END]", config, StringComparison.Ordinal);
+            Assert.Equal(
+                Regex.Matches(config, "^RewriteCond %\\{REQUEST_URI\\} !", RegexOptions.Multiline).Count,
+                Regex.Matches(config, "^RewriteRule .+\\[R=", RegexOptions.Multiline).Count);
             Assert.Contains("RewriteCond %{QUERY_STRING} (^|&)p=15(&|$)", config, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{QUERY_STRING} (^|&)page_id=40(&|$)", config, StringComparison.Ordinal);
             Assert.Contains("/new-url [R=301,L]", config, StringComparison.Ordinal);
