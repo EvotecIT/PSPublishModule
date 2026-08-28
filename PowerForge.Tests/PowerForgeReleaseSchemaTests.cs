@@ -67,11 +67,20 @@ public sealed class PowerForgeReleaseSchemaTests
     [Theory]
     [InlineData("""{ "schemaVersion": 1, "appId": "123", "accessibility": [ { "deviceFamily": "IPHONE", "supportsVoiceover": true } ] }""", true)]
     [InlineData("""{ "schemaVersion": 1, "appId": "123", "accessibility": [ { "deviceFamily": "CARPLAY" } ] }""", false)]
+    [InlineData("""{ "schemaVersion": 1, "appId": "123", "availability": { "availableInNewTerritories": false, "territories": [ { "territoryId": "POL", "available": true, "preOrderEnabled": false, "releaseDate": "2026-07-03" } ] } }""", true)]
+    [InlineData("""{ "schemaVersion": 1, "appId": "123", "availability": { "availableInNewTerritories": false, "territories": [ { "territoryId": "POL", "available": true, "preOrderEnabled": true, "releaseDate": "2026-09-15" } ] } }""", true)]
+    [InlineData("""{ "schemaVersion": 1, "appId": "123", "availability": { "availableInNewTerritories": false, "territories": [ { "territoryId": "POL", "available": true, "preOrderEnabled": true, "releaseDate": "2026-02-31" } ] } }""", false)]
+    [InlineData("""{ "schemaVersion": 1, "appId": "123", "availability": { "availableInNewTerritories": false, "territories": [ { "territoryId": "POL", "available": true, "preOrderEnabled": true } ] } }""", false)]
+    [InlineData("""{ "schemaVersion": 1, "appId": "123", "availability": { "availableInNewTerritories": false, "territories": [ { "territoryId": "POL", "available": true, "preOrderEnabled": true, "releaseDate": null } ] } }""", false)]
     [InlineData("""{ "schemaVersion": 1, "appId": "123", "inventedLegalAnswer": true }""", false)]
     public void Apple_governance_schema_rejects_unknown_or_unsupported_contracts(string json, bool expectedValid)
     {
         var schema = JsonSchema.FromText(File.ReadAllText(GetSchemaPath("appstore-connect-governance.schema.json")));
-        var result = schema.Evaluate(JsonNode.Parse(json)!, new EvaluationOptions { OutputFormat = OutputFormat.List });
+        var result = schema.Evaluate(JsonNode.Parse(json)!, new EvaluationOptions
+        {
+            OutputFormat = OutputFormat.List,
+            RequireFormatValidation = true
+        });
         Assert.Equal(expectedValid, result.IsValid);
     }
 

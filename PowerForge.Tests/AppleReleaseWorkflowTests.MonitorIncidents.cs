@@ -173,7 +173,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 if ($attempt -eq 1) { exit 1 }
 
                 $sourceRoot = Split-Path -Parent $PSScriptRoot
-                $toolPath = Join-Path $sourceRoot "Artifacts/PowerForge/$($Runtimes[0])/net10.0/SingleContained/PowerForge"
+                $toolPath = Join-Path $sourceRoot "Artifacts/PowerForge/$($Runtimes[0])/net10.0/$($Flavors[0])/PowerForge"
                 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $toolPath) | Out-Null
                 Set-Content -LiteralPath $toolPath -Value 'recovered-tool' -NoNewline
                 exit 0
@@ -181,7 +181,7 @@ public sealed partial class AppleReleaseWorkflowTests
             var outputPath = Path.Combine(sandbox, "github-output.txt");
             var script = ReadCompositeActionStepScript(
                 Path.Combine(root, ".github", "actions", "build-powerforge", "action.yml"),
-                "Build immutable standalone PowerForge");
+                "Build immutable self-contained PowerForge");
             var environment = new Dictionary<string, string?>
             {
                 ["SOURCE_ROOT"] = sandbox,
