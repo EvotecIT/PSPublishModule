@@ -50,6 +50,23 @@ public sealed class PowerForgeCliAppleReleaseTests
     }
 
     [Fact]
+    public void AppleRelease_CliMapsExplicitIsolatedTargetResolution()
+    {
+        var request = BuildReleaseRequest(
+            ["--apple-action", "Screenshots", "--apple-resolve-target-identities", "--summary"],
+            "/tmp/powerforge.release.json",
+            planOnly: false,
+            validateOnly: true,
+            packagesOnly: false,
+            moduleOnly: false,
+            toolsOnly: false);
+
+        Assert.True(request.AppleResolveTargetIdentities);
+        Assert.True(request.ValidateOnly);
+        Assert.True(request.AppleSummaryOnly);
+    }
+
+    [Fact]
     public async Task AppleRelease_JsonRedactionPreservesPropertyNames()
     {
         var repoRoot = FindRepositoryRoot();

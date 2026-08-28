@@ -81,6 +81,7 @@ internal static partial class Program
             "--apple-wait",
             "--no-apple-wait",
             "--summary",
+            "--apple-resolve-target-identities",
             "--apple-sync-screenshots"
         };
         var options = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
