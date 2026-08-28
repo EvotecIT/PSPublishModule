@@ -111,7 +111,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
         }
 
         VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies);
-        VerifyReviewedDependencyGraph(request, managedAssemblies, targetRuntimeAssemblies);
+        VerifyReviewedDependencyGraph(request, managedAssemblies);
         VerifyNativeReferenceClosure(managedAssemblies);
         result.Verified = result.Limitations.Count == 0;
         return result;
@@ -398,7 +398,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
             definition.Version,
             reader.GetBlobBytes(definition.PublicKey),
             publicKey: true,
-            definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture));
+            definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture),
+            definition.Flags);
         var references = new List<AssemblyIdentity>();
         foreach (var referenceHandle in reader.AssemblyReferences)
         {
@@ -409,7 +410,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 reference.Version,
                 reader.GetBlobBytes(reference.PublicKeyOrToken),
                 (reference.Flags & AssemblyFlags.PublicKey) != 0,
-                reference.Culture.IsNil ? string.Empty : reader.GetString(reference.Culture)));
+                reference.Culture.IsNil ? string.Empty : reader.GetString(reference.Culture),
+                reference.Flags));
             if (name.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Microsoft.PowerShell.SDK", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' references forbidden PowerShell assembly '{name}'.");
@@ -454,8 +456,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
 
     private static void VerifyReviewedDependencyGraph(
         PowerShellStrictDependencyClosureRequest request,
-        IEnumerable<ManagedAssemblyInspection> assemblies,
-        ISet<string> targetRuntimeAssemblies)
+        IReadOnlyCollection<ManagedAssemblyInspection> assemblies)
     {
         var locked = request.DependencyGraph.Nodes
             .Where(static node => node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment))
@@ -470,13 +471,14 @@ internal static class PowerShellStrictDependencyClosureVerifier
                     node.Identity.Name,
                     Version.Parse(node.Identity.Version),
                     node.Identity.PublicKeyToken,
-                    node.Identity.Culture),
+                    node.Identity.Culture,
+                    node.Identity.Retargetable,
+                    node.Identity.ContentType),
                 StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         foreach (var assembly in assemblies)
         {
-            if (targetRuntimeAssemblies.Contains(assembly.Identity.StableKey) ||
-                IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
+            if (IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
                 continue;
             if (!locked.TryGetValue(assembly.Identity.StableKey, out var candidates))
                 throw new InvalidOperationException(
@@ -491,6 +493,20 @@ internal static class PowerShellStrictDependencyClosureVerifier
             if (!contentHashes.Contains(assembly.ContentSha256, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' does not match the SHA-256 content identity in the reviewed dependency graph.");
+        }
+
+        foreach (var pair in locked.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var node in pair.Value.OrderBy(static node => node.Id, StringComparer.Ordinal))
+        {
+            if (string.IsNullOrWhiteSpace(node.Identity.Sha256))
+                throw new InvalidOperationException(
+                    $"Strict runtime-free reviewed dependency '{node.Identity.Name}' has no SHA-256 content identity.");
+            if (assemblies.Any(assembly =>
+                    assembly.Identity.StableKey.Equals(pair.Key, StringComparison.OrdinalIgnoreCase) &&
+                    assembly.ContentSha256.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            throw new InvalidOperationException(
+                $"Strict runtime-free reviewed dependency '{node.Identity.Name}' was required for delivery but is absent from the delivered artifact closure.");
         }
     }
 
@@ -524,12 +540,19 @@ internal static class PowerShellStrictDependencyClosureVerifier
         Version version,
         byte[] publicKeyOrToken,
         bool publicKey,
-        string culture)
+        string culture,
+        AssemblyFlags flags)
     {
         var token = publicKey && publicKeyOrToken.Length > 0
             ? PowerShellTargetRuntimeAssemblyCatalog.ComputePublicKeyToken(publicKeyOrToken)
             : string.Concat(publicKeyOrToken.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
-        return new AssemblyIdentity(name, version, token, culture);
+        return new AssemblyIdentity(
+            name,
+            version,
+            token,
+            culture,
+            PowerShellTargetRuntimeAssemblyCatalog.IsRetargetable(flags),
+            PowerShellTargetRuntimeAssemblyCatalog.GetContentType(flags));
     }
 
     private static bool IsProcessType(MetadataReader reader, EntityHandle handle)
@@ -601,20 +624,36 @@ internal static class PowerShellStrictDependencyClosureVerifier
 
     private sealed class AssemblyIdentity
     {
-        internal AssemblyIdentity(string name, Version version, string publicKeyToken, string culture)
+        internal AssemblyIdentity(
+            string name,
+            Version version,
+            string publicKeyToken,
+            string culture,
+            bool retargetable,
+            string contentType)
         {
             Name = name;
             Version = version;
             PublicKeyToken = publicKeyToken;
             Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture);
+            Retargetable = retargetable;
+            ContentType = PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType);
         }
 
         internal string Name { get; }
         internal Version Version { get; }
         internal string PublicKeyToken { get; }
         internal string Culture { get; }
-        internal string StableKey => PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(Name, Version, PublicKeyToken, Culture);
-        internal string DisplayName => $"{Name}, Version={Version}, Culture={Culture}, PublicKeyToken={(PublicKeyToken.Length == 0 ? "null" : PublicKeyToken)}";
+        internal bool Retargetable { get; }
+        internal string ContentType { get; }
+        internal string StableKey => PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(
+            Name,
+            Version,
+            PublicKeyToken,
+            Culture,
+            Retargetable,
+            ContentType);
+        internal string DisplayName => $"{Name}, Version={Version}, Culture={Culture}, PublicKeyToken={(PublicKeyToken.Length == 0 ? "null" : PublicKeyToken)}, Retargetable={Retargetable}, ContentType={ContentType}";
     }
 
     private sealed class DotNetBundleManifest

@@ -17,6 +17,21 @@ public sealed class PowerShellCompilationInputResolverTests
         {
             typeof(string), typeof(string), typeof(string), typeof(string), typeof(PowerShellCompiledMethod[]), typeof(PowerShellCompilationDiagnostic[])
         }));
+        Assert.NotNull(typeof(PowerShellTypedCompilationResult).GetConstructor(new[]
+        {
+            typeof(string), typeof(string), typeof(string), typeof(string),
+            typeof(PowerShellCompiledMethod[]), typeof(PowerShellCompilationDiagnostic[]),
+            typeof(string[]), typeof(PowerShellCompilationLifecycleSource[])
+        }));
+        _ = new PowerShellTypedCompilationResult(
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            Array.Empty<string>(),
+            null);
     }
 
     [Fact]

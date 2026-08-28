@@ -116,6 +116,38 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
+    public async Task Explain_HybridModuleReportsDuplicateFunctionsAfterFinalCollisionRouting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Final Explain Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.psm1");
+        File.WriteAllText(source, "function Get-Duplicate { return 1 }\nfunction Get-Duplicate { return 2 }");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind dll --mode Hybrid --framework net10.0 --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(0, explanation.GetProperty("typedUnits").GetInt32());
+            Assert.Equal(2, explanation.GetProperty("runtimeFallbackUnits").GetInt32());
+            var units = Assert.Single(explanation.GetProperty("files").EnumerateArray())
+                .GetProperty("units").EnumerateArray().ToArray();
+            Assert.All(units, static unit => Assert.Equal("RuntimeFallback", unit.GetProperty("decision").GetString()));
+            Assert.All(units, static unit => Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray()));
+            Assert.Contains(units.SelectMany(static unit => unit.GetProperty("causes").EnumerateArray()), static cause =>
+                cause.GetProperty("message").GetString()!.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task BuildStrictTypedExecutable_ExposesRuntimeIndependentCliContract()
     {
         var repositoryRoot = FindRepositoryRoot();

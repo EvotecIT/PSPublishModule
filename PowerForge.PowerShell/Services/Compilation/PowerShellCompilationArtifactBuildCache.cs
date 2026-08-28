@@ -52,6 +52,22 @@ internal static class PowerShellCompilationArtifactBuildCache
         string publishDirectory)
     {
         if (!spec.UseBuildCache || string.IsNullOrWhiteSpace(evidence.Key)) return false;
+        try
+        {
+            return TryRestoreCore(spec, evidence, publishDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            evidence.Reason = "EntryUnavailable";
+            return false;
+        }
+    }
+
+    private static bool TryRestoreCore(
+        PowerShellCompilationBuildSpec spec,
+        PowerShellCompilationBuildCacheEvidence evidence,
+        string publishDirectory)
+    {
         var root = GetCacheRoot(spec);
         if (HasReparsePointInPath(root))
         {
@@ -170,7 +186,12 @@ internal static class PowerShellCompilationArtifactBuildCache
         }
         finally
         {
-            if (Directory.Exists(restoreDirectory)) Directory.Delete(restoreDirectory, recursive: true);
+            if (Directory.Exists(restoreDirectory))
+            {
+                try { Directory.Delete(restoreDirectory, recursive: true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
         evidence.Hit = true;
         evidence.Reason = "VerifiedContentAddressedHit";

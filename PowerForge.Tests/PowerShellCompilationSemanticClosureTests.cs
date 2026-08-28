@@ -194,6 +194,76 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void StrictClosureVerifierDoesNotTrustDeliveredTargetRuntimeIdentityWithoutReviewedContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "TargetRuntimeContent", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = PowerShellGeneratedTypePolicy.GetTargetRuntimeAssemblyPaths("net10.0")
+                .Single(path => Path.GetFileName(path).Equals("System.Runtime.dll", StringComparison.OrdinalIgnoreCase));
+            var delivered = Path.Combine(root, "System.Runtime.dll");
+            File.Copy(source, delivered);
+            using (var stream = new FileStream(delivered, FileMode.Append, FileAccess.Write, FileShare.None))
+                stream.WriteByte(0);
+
+            var exception = Assert.Throws<InvalidOperationException>(() => Verify(new[]
+            {
+                new PowerShellCompilationArtifactFile { Path = delivered, Role = "RuntimeDependency" }
+            }));
+
+            Assert.Contains("reviewed dependency graph", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void StrictClosureVerifierRejectsReviewedDeliveredNodeMissingFromArtifact()
+    {
+        var graph = new PowerShellCompilationDependencyGraph
+        {
+            Nodes = new[]
+            {
+                new PowerShellCompilationDependencyNode
+                {
+                    Id = "required-managed",
+                    Roles = PowerShellCompilationDependencyGraphRole.Dependency | PowerShellCompilationDependencyGraphRole.Deployment,
+                    Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                    Disposition = PowerShellCompilationDependencyGraphDisposition.PrivateRestored,
+                    Exists = true,
+                    Identity = new PowerShellCompilationDependencyIdentity
+                    {
+                        Name = "Required.Managed",
+                        Version = "1.0.0.0",
+                        Culture = "neutral",
+                        ContentType = "Default",
+                        Sha256 = new string('a', 64)
+                    }
+                }
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => Verify(Array.Empty<PowerShellCompilationArtifactFile>(), graph: graph));
+
+        Assert.Contains("absent from the delivered artifact closure", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ManagedStableIdentityIncludesRetargetableAndContentTypeFlags()
+    {
+        var conventional = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey("Identity", new Version(1, 0), "", "neutral");
+        var retargetable = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey("Identity", new Version(1, 0), "", "neutral", retargetable: true);
+        var windowsRuntime = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey("Identity", new Version(1, 0), "", "neutral", contentType: "WindowsRuntime");
+
+        Assert.NotEqual(conventional, retargetable);
+        Assert.NotEqual(conventional, windowsRuntime);
+        Assert.NotEqual(retargetable, windowsRuntime);
+    }
+
+    [Fact]
     public async Task StrictClosureVerifierRejectsDeliveredDependencyAbsentFromReviewedGraph()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "ReviewedClosure", Guid.NewGuid().ToString("N"));

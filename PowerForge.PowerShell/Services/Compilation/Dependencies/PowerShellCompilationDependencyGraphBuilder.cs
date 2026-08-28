@@ -113,6 +113,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             DiscoverManifestEdges(Path.GetFullPath(manifestPath!), rootId, targetFramework, runtimeIdentifier, new HashSet<string>(PowerShellCompilationPathSafety.PathComparer));
 
         DiscoverManagedDependencyClosure(targetFramework, runtimeIdentifier);
+        AddCompilerPackageNodes(rootId, targetFramework);
 
         var nodes = _nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
         var edges = _edges
@@ -141,6 +142,39 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 Conflicts = conflicts
             })
         };
+    }
+
+    private void AddCompilerPackageNodes(string rootId, string? targetFramework)
+    {
+        foreach (var package in PowerShellCompilationGeneratedPackageCatalog.Select(_artifactKind, _mode, targetFramework))
+        {
+            var id = StableId("compiler-package", package.Id.ToUpperInvariant(), package.Version, package.ContentHash);
+            _nodes.Add(id, new PowerShellCompilationDependencyNode
+            {
+                Id = id,
+                Kind = PowerShellCompilationDependencyNodeKind.NuGetPackage,
+                Roles = PowerShellCompilationDependencyGraphRole.Dependency | PowerShellCompilationDependencyGraphRole.Build,
+                Identity = new PowerShellCompilationDependencyIdentity
+                {
+                    Name = package.Id,
+                    Version = package.Version,
+                    ContentHashAlgorithm = "SHA-512",
+                    ContentHash = package.ContentHash,
+                    Source = "https://api.nuget.org/v3/index.json",
+                    TargetFramework = targetFramework ?? string.Empty,
+                    Provenance = "EmbeddedCompilerPackageCatalog"
+                },
+                Disposition = PowerShellCompilationDependencyGraphDisposition.Referenced,
+                Exists = false,
+                Note = "Immutable compiler-owned generated-project package reference.",
+                Policy = new PowerShellCompilationDependencyPolicy
+                {
+                    Redistribution = "PackageLicense",
+                    Servicing = "PowerForgeCompilerCatalog"
+                }
+            });
+            AddEdge(rootId, id, PowerShellCompilationDependencyEdgeKind.CompilerPackage, package.Id + "/" + package.Version);
+        }
     }
 
     private string AddDependencyNode(
@@ -441,6 +475,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             identity.PublicKeyToken = string.Concat((assembly.GetPublicKeyToken() ?? Array.Empty<byte>())
                 .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
             identity.Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(assembly.CultureName);
+            identity.Retargetable = assembly.Flags.HasFlag(AssemblyNameFlags.Retargetable);
+            identity.ContentType = PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(assembly.ContentType.ToString());
             identity.Architecture = ReadPortableExecutableArchitecture(path);
             identity.Provenance = "ManagedMetadataReadOnly";
         }

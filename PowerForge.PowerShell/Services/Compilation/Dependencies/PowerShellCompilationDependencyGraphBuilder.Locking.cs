@@ -292,8 +292,15 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             foreach (var versionGroup in group.GroupBy(static node => node.Identity.Version, StringComparer.OrdinalIgnoreCase))
             {
                 var managed = versionGroup.Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule).ToArray();
-                AddConflict(managed, "public-key tokens", static node => node.Identity.PublicKeyToken);
+                AddConflict(
+                    managed,
+                    "public-key tokens",
+                    static node => string.IsNullOrWhiteSpace(node.Identity.PublicKeyToken)
+                        ? "<unsigned>"
+                        : node.Identity.PublicKeyToken);
                 AddConflict(managed, "cultures", static node => PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(node.Identity.Culture));
+                AddConflict(managed, "retargetable flags", static node => node.Identity.Retargetable.ToString());
+                AddConflict(managed, "content types", static node => PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(node.Identity.ContentType));
                 AddConflict(managed, "SHA-256 content hashes", static node => node.Identity.Sha256);
 
                 var modules = versionGroup.Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ExternalModule or PowerShellCompilationDependencyNodeKind.ModuleManifest).ToArray();

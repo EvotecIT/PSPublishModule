@@ -25,9 +25,9 @@ public sealed class PowerShellCompilationExplanationTests
             Array.Empty<PowerShellCompilationUnitPlan>(),
             new[] { diagnostic });
         var missing = new PowerShellCompilationDependency(
-            "Missing.dll",
+            privatePath,
             sourcePath: null,
-            "lib/Missing.dll",
+            privateUnixPath,
             PowerShellCompilationDependencyKind.ManagedAssembly,
             PowerShellCompilationDependencyDiscovery.RequiredAssemblies,
             PowerShellCompilationDependencyDisposition.Missing,
@@ -47,6 +47,8 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.False(explanation.CanProceed);
         Assert.DoesNotContain(privatePath, fileCause.Message, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(privatePath, dependencyCause.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(privatePath, dependencyCause.Name, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(privateUnixPath, dependencyCause.RelativePath, StringComparison.Ordinal);
         Assert.DoesNotContain(privateUnixPath, fileCause.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(privateUncPath, fileCause.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<redacted-path>", fileCause.Message, StringComparison.Ordinal);

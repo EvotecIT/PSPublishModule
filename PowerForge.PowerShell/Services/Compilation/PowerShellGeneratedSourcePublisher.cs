@@ -39,23 +39,9 @@ internal static class PowerShellGeneratedSourcePublisher
             foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
-        WriteBuildIsolationFiles(sourceDirectory);
+        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
-    }
-
-    private static void WriteBuildIsolationFiles(string sourceDirectory)
-    {
-        var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        File.WriteAllText(Path.Combine(sourceDirectory, "Directory.Build.props"), "<Project />" + Environment.NewLine, utf8);
-        File.WriteAllText(Path.Combine(sourceDirectory, "Directory.Build.targets"), "<Project />" + Environment.NewLine, utf8);
-        File.WriteAllText(
-            Path.Combine(sourceDirectory, "Directory.Packages.props"),
-            "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>" + Environment.NewLine,
-            utf8);
-        var globalJson = Path.Combine(sourceDirectory, "global.json");
-        if (!File.Exists(globalJson))
-            throw new InvalidOperationException("Generated source publication did not receive the exact SDK selection used by the artifact build.");
     }
 
     private static void WriteSourceMap(

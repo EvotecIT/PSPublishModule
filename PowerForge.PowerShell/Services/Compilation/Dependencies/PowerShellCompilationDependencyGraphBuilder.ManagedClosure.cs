@@ -36,14 +36,37 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                     ? PowerShellTargetRuntimeAssemblyCatalog.ComputePublicKeyToken(tokenBytes)
                     : string.Concat(tokenBytes.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
                 var culture = reference.Culture.IsNil ? string.Empty : reader.GetString(reference.Culture);
-                var stableKey = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(name, reference.Version, token, culture);
+                var retargetable = PowerShellTargetRuntimeAssemblyCatalog.IsRetargetable(reference.Flags);
+                var contentType = PowerShellTargetRuntimeAssemblyCatalog.GetContentType(reference.Flags);
+                var stableKey = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(
+                    name,
+                    reference.Version,
+                    token,
+                    culture,
+                    retargetable,
+                    contentType);
                 if (targetRuntime.Contains(stableKey)) continue;
 
-                var adjacent = FindAdjacentManagedAssembly(directory, name, reference.Version, token, culture);
+                var adjacent = FindAdjacentManagedAssembly(
+                    directory,
+                    name,
+                    reference.Version,
+                    token,
+                    culture,
+                    retargetable,
+                    contentType);
                 string nodeId;
                 if (adjacent is null)
                 {
-                    nodeId = AddExternalManagedNode(name, reference.Version, token, culture, targetFramework!, runtimeIdentifier);
+                    nodeId = AddExternalManagedNode(
+                        name,
+                        reference.Version,
+                        token,
+                        culture,
+                        retargetable,
+                        contentType,
+                        targetFramework!,
+                        runtimeIdentifier);
                 }
                 else
                 {
@@ -104,6 +127,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         Version version,
         string publicKeyToken,
         string culture,
+        bool retargetable,
+        string contentType,
         string targetFramework,
         string? runtimeIdentifier)
     {
@@ -112,7 +137,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             name.ToUpperInvariant(),
             version.ToString(),
             publicKeyToken.ToUpperInvariant(),
-            PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture).ToUpperInvariant());
+            PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture).ToUpperInvariant(),
+            retargetable.ToString(),
+            PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType).ToUpperInvariant());
         if (_nodes.ContainsKey(id)) return id;
         _nodes.Add(id, new PowerShellCompilationDependencyNode
         {
@@ -128,6 +155,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 Version = version.ToString(),
                 PublicKeyToken = publicKeyToken,
                 Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture),
+                Retargetable = retargetable,
+                ContentType = PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType),
                 Source = "External",
                 TargetFramework = targetFramework,
                 RuntimeIdentifier = runtimeIdentifier ?? string.Empty,
@@ -142,7 +171,14 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         return id;
     }
 
-    private static string? FindAdjacentManagedAssembly(string directory, string name, Version version, string publicKeyToken, string culture)
+    private static string? FindAdjacentManagedAssembly(
+        string directory,
+        string name,
+        Version version,
+        string publicKeyToken,
+        string culture,
+        bool retargetable,
+        string contentType)
     {
         foreach (var extension in new[] { ".dll", ".exe" })
         {
@@ -156,7 +192,11 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 var assemblyCulture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(assembly.CultureName);
                 if (assembly.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true &&
                     assembly.Version == version && token.Equals(publicKeyToken, StringComparison.OrdinalIgnoreCase) &&
-                    assemblyCulture.Equals(PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture), StringComparison.OrdinalIgnoreCase))
+                    assemblyCulture.Equals(PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture), StringComparison.OrdinalIgnoreCase) &&
+                    assembly.Flags.HasFlag(AssemblyNameFlags.Retargetable) == retargetable &&
+                    assembly.ContentType.ToString().Equals(
+                        PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType),
+                        StringComparison.OrdinalIgnoreCase))
                     return Path.GetFullPath(candidate);
             }
             catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or FileNotFoundException)

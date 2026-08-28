@@ -338,6 +338,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     dependencyPlan,
                     stagedArtifact.Files));
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(WriteBuildEvidence(
+                    workspace,
                     artifactStagingDirectory,
                     artifactName,
                     spec,
@@ -586,10 +587,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     private static string GetPowerShellSdkVersion(string targetFramework)
-        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.4" : "7.4.18";
+        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.5" : "7.4.18";
 
     private static string GetSecurityXmlVersion(string targetFramework)
-        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "10.0.11" : "8.0.4";
+        => "10.0.11";
 
     private static string GetPowerShellReference(string targetFramework)
         => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)

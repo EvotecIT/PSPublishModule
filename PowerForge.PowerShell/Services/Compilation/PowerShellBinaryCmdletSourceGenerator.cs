@@ -126,6 +126,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             filtered.SourcePaths,
+            lifecycleSources: null,
             optimization: filtered.Optimization);
     }
 

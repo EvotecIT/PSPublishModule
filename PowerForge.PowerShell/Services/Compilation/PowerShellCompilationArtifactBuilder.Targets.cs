@@ -142,6 +142,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
     private static PowerShellCompilationArtifactFile[] WriteBuildEvidence(
+        string workspace,
         string stagingDirectory,
         string artifactName,
         PowerShellCompilationBuildSpec spec,
@@ -150,6 +151,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationDependencyGraph graph,
         string generatedSourceSha256)
     {
+        var resolvedPackages = PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph);
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var sources = new[] { spec.SourcePath }.Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Select(Path.GetFullPath)
@@ -172,7 +174,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             generatedSourceSha256,
             reviewedDependencyLock = spec.ExpectedDependencyLock is not null,
             toolchain,
-            sources
+            sources,
+            resolvedPackages = resolvedPackages.Select(static package => new
+            {
+                id = package.Id,
+                version = package.Version,
+                contentHashAlgorithm = package.ContentHashAlgorithm,
+                contentHash = package.ContentHash,
+                directCompilerReference = package.DirectCompilerReference
+            }).ToArray()
         }, EvidenceJsonOptions), new UTF8Encoding(false));
         File.WriteAllText(sbomPath, JsonSerializer.Serialize(new
         {
@@ -182,9 +192,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             version = 1,
             metadata = new { component = new { type = "application", name = artifactName } },
             components = graph.Nodes
-                .Where(static node => node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment))
+                .Where(static node => node.Kind != PowerShellCompilationDependencyNodeKind.NuGetPackage &&
+                                      (node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment) ||
+                                       node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Build)))
                 .OrderBy(static node => node.Id, StringComparer.Ordinal)
-                .Select(static node => new
+                .Select(static node => (object)new
                 {
                     type = node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule ? "library" : "file",
                     name = node.Identity.Name,
@@ -197,7 +209,30 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         new { name = "powerforge:disposition", value = node.Disposition.ToString() },
                         new { name = "powerforge:source", value = node.Identity.Source }
                     }
-                }).ToArray()
+                })
+                .Concat(resolvedPackages.Select(static package => (object)new
+                {
+                    type = "library",
+                    name = package.Id,
+                    version = package.Version,
+                    purl = "pkg:nuget/" + Uri.EscapeDataString(package.Id) + "@" + Uri.EscapeDataString(package.Version),
+                    hashes = new object[]
+                    {
+                        new
+                        {
+                            alg = package.ContentHashAlgorithm,
+                            content = string.Concat(Convert.FromBase64String(package.ContentHash)
+                                .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)))
+                        }
+                    },
+                    properties = new[]
+                    {
+                        new { name = "powerforge:disposition", value = "Referenced" },
+                        new { name = "powerforge:source", value = "NuGetRestore" },
+                        new { name = "powerforge:directCompilerReference", value = package.DirectCompilerReference.ToString() }
+                    }
+                }))
+                .ToArray()
         }, EvidenceJsonOptions), new UTF8Encoding(false));
         return new[]
         {

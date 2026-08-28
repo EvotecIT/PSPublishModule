@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
@@ -25,18 +26,35 @@ internal static class PowerShellTargetRuntimeAssemblyCatalog
                 reader.GetString(definition.Name),
                 definition.Version,
                 token,
-                definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture)));
+                definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture),
+                IsRetargetable(definition.Flags),
+                GetContentType(definition.Flags)));
         }
         if (identities.Count == 0)
             throw new InvalidOperationException($"Target framework '{targetFramework}' did not expose any certifiable reference-assembly identities.");
         return identities;
     }
 
-    internal static string CreateStableKey(string name, Version version, string publicKeyToken, string culture = "")
-        => $"{name}|{version}|{publicKeyToken}|{NormalizeCulture(culture)}";
+    internal static string CreateStableKey(
+        string name,
+        Version version,
+        string publicKeyToken,
+        string culture = "",
+        bool retargetable = false,
+        string? contentType = null)
+        => $"{name}|{version}|{publicKeyToken}|{NormalizeCulture(culture)}|{retargetable}|{NormalizeContentType(contentType)}";
 
     internal static string NormalizeCulture(string? culture)
         => string.IsNullOrWhiteSpace(culture) ? "neutral" : culture!.Trim();
+
+    internal static string NormalizeContentType(string? contentType)
+        => string.IsNullOrWhiteSpace(contentType) ? "Default" : contentType!.Trim();
+
+    internal static bool IsRetargetable(AssemblyFlags flags)
+        => (flags & AssemblyFlags.Retargetable) != 0;
+
+    internal static string GetContentType(AssemblyFlags flags)
+        => (flags & AssemblyFlags.ContentTypeMask) == AssemblyFlags.WindowsRuntime ? "WindowsRuntime" : "Default";
 
     internal static string ComputePublicKeyToken(byte[] publicKey)
     {

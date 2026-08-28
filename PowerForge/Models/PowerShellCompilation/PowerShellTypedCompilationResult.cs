@@ -333,9 +333,36 @@ public sealed class PowerShellTypedCompilationResult
         string sourceCode,
         PowerShellCompiledMethod[] methods,
         PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources: null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with every authored source file and hosted lifecycle source.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
         string[]? sourcePaths,
-        PowerShellCompilationLifecycleSource[]? lifecycleSources = null,
-        PowerShellCompilationOptimizationEvidence? optimization = null)
+        PowerShellCompilationLifecycleSource[]? lifecycleSources)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources, null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with authored sources, hosted lifecycle sources, and optimization evidence.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths,
+        PowerShellCompilationLifecycleSource[]? lifecycleSources,
+        PowerShellCompilationOptimizationEvidence? optimization)
     {
         SourcePath = sourcePath ?? string.Empty;
         NamespaceName = namespaceName ?? string.Empty;

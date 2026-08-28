@@ -22,7 +22,7 @@ internal static partial class Program
 
         try
         {
-            var explanation = PowerShellCompilationExplanationService.Create(CreatePowerShellAnalysisPlan(args, request!));
+            var explanation = CreatePowerShellExplanation(args, request!);
             var exitCode = explanation.CanProceed ? 0 : 1;
             if (outputJson)
             {
@@ -124,6 +124,26 @@ internal static partial class Program
             GetOptionValues(args, "--include-resource"),
             GetOptionValues(args, "--exclude-resource"),
             TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+    }
+
+    private static PowerShellCompilationExplanation CreatePowerShellExplanation(string[] args, PowerShellAnalysisRequest request)
+    {
+        var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            request.Path,
+            request.Kind,
+            request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            resolved,
+            request.Mode,
+            targetFramework,
+            request.ResourceMode,
+            GetOptionValues(args, "--include-resource"),
+            GetOptionValues(args, "--exclude-resource"),
+            TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+        return request.Mode == PowerShellCompilationMode.Analyze
+            ? PowerShellCompilationExplanationService.Create(plan)
+            : PowerShellCompilationExplainShaper.CreateFinalExplanation(resolved, plan, targetFramework);
     }
 
     private sealed record PowerShellAnalysisRequest(

@@ -51,10 +51,6 @@ internal static class PowerShellHybridFunctionCollisionResolver
         if (excludedMethods.Count == 0)
             return typed;
 
-        var excludedNames = typed.Methods
-            .Where(method => fallbackNames.Contains(method.SourceName))
-            .Select(static method => method.SourceName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
@@ -62,12 +58,9 @@ internal static class PowerShellHybridFunctionCollisionResolver
             targetFramework,
             excludedMethods,
             PowerShellCompilationCapabilities.BinaryModule);
-        var diagnostics = excludedNames.Select(name =>
+        var diagnostics = definitions.Where(definition => fallbackNames.Contains(definition.Function.Name)).Select(definition =>
         {
-            var definition = definitions
-                .Where(item => item.Function.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(static item => item.Function.Extent.StartOffset)
-                .First();
+            var name = definition.Function.Name;
             var message = duplicateNames.Contains(name)
                 ? $"Function '{name}' has multiple retained definitions, so hybrid compilation keeps PowerShell's runtime replacement semantics."
                 : $"Function '{name}' is referenced by retained module-scope code before or across a separately loaded declaration boundary, so hybrid compilation preserves PowerShell's command-availability timing.";
@@ -89,6 +82,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             filtered.SourcePaths,
+            lifecycleSources: null,
             optimization: filtered.Optimization);
     }
 

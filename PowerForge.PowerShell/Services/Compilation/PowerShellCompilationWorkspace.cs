@@ -29,6 +29,7 @@ internal sealed class PowerShellCompilationWorkspace : IDisposable
 
         var path = System.IO.Path.Combine(workspaceRoot, WorkspacePrefix + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
+        PowerShellCompilationBuildIsolation.Write(path, requireSdkSelection: false);
         File.WriteAllText(System.IO.Path.Combine(path, OwnershipFileName), "PowerForge PowerShell compilation workspace.");
         if (keep)
             File.WriteAllText(System.IO.Path.Combine(path, KeepFileName), "This generated workspace was retained by KeepBuildWorkspace.");

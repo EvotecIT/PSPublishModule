@@ -11,7 +11,9 @@ public enum PowerShellCompilationDependencyGraphRole
     /// <summary>The node participates in dependency resolution.</summary>
     Dependency = 2,
     /// <summary>The node participates in artifact deployment.</summary>
-    Deployment = 4
+    Deployment = 4,
+    /// <summary>The node participates in the generated-project build toolchain.</summary>
+    Build = 8
 }
 
 /// <summary>Exact technical class of a dependency-graph node.</summary>
@@ -46,7 +48,9 @@ public enum PowerShellCompilationDependencyNodeKind
     /// <summary>Other artifact content.</summary>
     Content,
     /// <summary>External PowerShell module identity.</summary>
-    ExternalModule
+    ExternalModule,
+    /// <summary>NuGet package consumed by the compiler-owned generated project.</summary>
+    NuGetPackage
 }
 
 /// <summary>Static reason for one graph edge.</summary>
@@ -85,7 +89,9 @@ public enum PowerShellCompilationDependencyEdgeKind
     /// <summary>Runtime asset or ordinary payload.</summary>
     RuntimeAsset,
     /// <summary>Windows COM activation API.</summary>
-    ComActivation
+    ComActivation,
+    /// <summary>Compiler-owned generated-project package reference.</summary>
+    CompilerPackage
 }
 
 /// <summary>Artifact treatment assigned to every dependency graph node.</summary>
@@ -124,6 +130,10 @@ public sealed class PowerShellCompilationDependencyIdentity
     public string Guid { get; set; } = string.Empty;
     /// <summary>SHA-256 for a local dependency.</summary>
     public string Sha256 { get; set; } = string.Empty;
+    /// <summary>Algorithm for an immutable non-file content identity such as a NuGet package content hash.</summary>
+    public string ContentHashAlgorithm { get; set; } = string.Empty;
+    /// <summary>Immutable non-file content identity such as a NuGet package content hash.</summary>
+    public string ContentHash { get; set; } = string.Empty;
     /// <summary>Resolved source path or repository/source identity.</summary>
     public string Source { get; set; } = string.Empty;
     /// <summary>PowerShell edition requirement.</summary>
@@ -138,6 +148,10 @@ public sealed class PowerShellCompilationDependencyIdentity
     public string PublicKeyToken { get; set; } = string.Empty;
     /// <summary>Exact managed assembly culture, or empty/neutral for culture-neutral assemblies.</summary>
     public string Culture { get; set; } = string.Empty;
+    /// <summary>Whether the exact managed assembly identity carries the Retargetable flag.</summary>
+    public bool Retargetable { get; set; }
+    /// <summary>Managed assembly content type, normally Default or WindowsRuntime.</summary>
+    public string ContentType { get; set; } = string.Empty;
     /// <summary>Provenance statement.</summary>
     public string Provenance { get; set; } = string.Empty;
     /// <summary>Interop adapter that owns activation or invocation.</summary>
@@ -222,7 +236,7 @@ public sealed class PowerShellCompilationDependencyEdge
 public sealed class PowerShellCompilationDependencyGraph
 {
     /// <summary>Graph schema version.</summary>
-    public int SchemaVersion { get; set; } = 5;
+    public int SchemaVersion { get; set; } = 6;
     /// <summary>Root input node identity.</summary>
     public string RootNodeId { get; set; } = string.Empty;
     /// <summary>Stable graph nodes.</summary>

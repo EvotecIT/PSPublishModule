@@ -7,6 +7,47 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void ResolvedPackageCatalogRejectsContentThatDiffersFromReviewedCompilerPackage()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "powerforge-package-provenance-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(workspace, "obj"));
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(workspace, "obj", "project.assets.json"),
+                "{\"libraries\":{\"Compiler.Package/1.2.3\":{\"type\":\"package\",\"sha512\":\"" +
+                Convert.ToBase64String(Enumerable.Repeat((byte)1, 64).ToArray()) + "\"}}}");
+            var graph = new PowerShellCompilationDependencyGraph
+            {
+                Nodes = new[]
+                {
+                    new PowerShellCompilationDependencyNode
+                    {
+                        Kind = PowerShellCompilationDependencyNodeKind.NuGetPackage,
+                        Roles = PowerShellCompilationDependencyGraphRole.Build,
+                        Identity = new PowerShellCompilationDependencyIdentity
+                        {
+                            Name = "Compiler.Package",
+                            Version = "1.2.3",
+                            ContentHashAlgorithm = "SHA-512",
+                            ContentHash = Convert.ToBase64String(Enumerable.Repeat((byte)2, 64).ToArray())
+                        }
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph));
+
+            Assert.Contains("content hash", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(workspace, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void TargetContractSeparatesExternalRuntimeRequirementFromFallbackCapability()
     {
         var hybridLibrary = PowerShellCompilationTargetContractService.Create(
@@ -497,6 +538,76 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             if (Directory.Exists(cache) && (File.GetAttributes(cache) & FileAttributes.ReparsePoint) != 0)
                 Directory.Delete(cache);
             try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildCacheTreatsLockedManifestAsSafeMiss()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Cache", Guid.NewGuid().ToString("N"));
+        var cache = Path.Combine(root, "cache");
+        var publish = Path.Combine(root, "publish");
+        var output = Path.Combine(root, "output");
+        var source = Path.Combine(root, "Source.ps1");
+        var key = new string('a', 64);
+        var entry = Path.Combine(cache, key.Substring(0, 2), key);
+        Directory.CreateDirectory(entry);
+        Directory.CreateDirectory(publish);
+        File.WriteAllText(source, "function Get-Proof { return 1 }");
+        File.WriteAllText(Path.Combine(entry, ".complete"), key);
+        var manifestPath = Path.Combine(entry, "cache-manifest.json");
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            key,
+            files = new[] { new { path = "Proof.dll", sha256 = new string('b', 64), sizeBytes = 1 } }
+        }));
+        var spec = new PowerShellCompilationBuildSpec(
+            source,
+            output,
+            "LockedCache",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            BuildCacheDirectory = cache,
+            UseBuildCache = true
+        };
+        var evidence = new PowerShellCompilationBuildCacheEvidence { Key = key };
+        try
+        {
+            using var locked = new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var restored = PowerShellCompilationArtifactBuildCache.TryRestore(spec, evidence, publish);
+
+            Assert.False(restored);
+            Assert.False(evidence.Hit);
+            Assert.Equal("EntryUnavailable", evidence.Reason);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GeneratedWorkspaceStartsInsideCompilerOwnedBuildIsolationBoundary()
+    {
+        var workspace = PowerShellCompilationWorkspace.Create(keep: true);
+        var path = workspace.Path;
+        try
+        {
+            Assert.True(File.Exists(Path.Combine(path, "Directory.Build.props")));
+            Assert.True(File.Exists(Path.Combine(path, "Directory.Build.targets")));
+            Assert.True(File.Exists(Path.Combine(path, "Directory.Packages.props")));
+            var nugetConfig = File.ReadAllText(Path.Combine(path, "NuGet.Config"));
+            Assert.Contains("<clear", nugetConfig, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("https://api.nuget.org/v3/index.json", nugetConfig, StringComparison.Ordinal);
+        }
+        finally
+        {
+            workspace.Dispose();
+            try { Directory.Delete(path, recursive: true); } catch { }
         }
     }
 
