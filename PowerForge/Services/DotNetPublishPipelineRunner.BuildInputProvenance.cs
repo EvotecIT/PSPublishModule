@@ -490,7 +490,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string evaluationKey = group.Key;
                 string[] trustedInputs = group
-                    .Where(entry => entry.Input.IsSdkDefined &&
+                    .Where(entry => (entry.Input.IsSdkDefined || entry.Input.IsProjectDefined) &&
                         entry.Input.IsControlledEquivalent &&
                         IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
                     .Select(entry => entry.Input.FullPath)
@@ -504,7 +504,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 provenNoBuildPublishInputsByEvaluation[evaluationKey] =
                     new HashSet<string>(trustedInputs, comparison);
                 provenNoBuildPublishInputs.AddRange(group
-                    .Where(entry => entry.Input.IsSdkDefined &&
+                    .Where(entry => (entry.Input.IsSdkDefined || entry.Input.IsProjectDefined) &&
                         entry.Input.IsControlledEquivalent &&
                         !string.IsNullOrWhiteSpace(entry.Input.ControlledSha256) &&
                         IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
@@ -520,7 +520,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
         {
-            bool trustedGeneratedOutput = publishInput.IsSdkDefined &&
+            bool trustedGeneratedOutput =
+                (publishInput.IsSdkDefined ||
+                 (publishInput.IsProjectDefined && publishInput.IsControlledEquivalent)) &&
                 IsTrustedSdkGeneratedOutput(publishInput.FullPath) &&
                 (buildPlan?.NoBuildInPublish != true ||
                  (provenNoBuildPublishInputsByEvaluation.TryGetValue(

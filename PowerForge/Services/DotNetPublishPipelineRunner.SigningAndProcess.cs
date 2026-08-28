@@ -553,7 +553,14 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         fileName = ResolveDotNetChildExecutable(fileName);
         IReadOnlyDictionary<string, string?> safeEnvironment =
-            CreateSafeDotNetChildEnvironment(environmentVariables);
+            CreateSafeDotNetChildEnvironment(
+                environmentVariables,
+                Environment.GetEnvironmentVariables().Keys
+                    .Cast<object?>()
+                    .Select(key => key?.ToString())
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!),
+                removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value);
         var result = _processRunner.RunAsync(
                 new ProcessRunRequest(
                     fileName,
@@ -763,6 +770,15 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables,
         IEnumerable<string> inheritedVariableNames)
+        => CreateSafeDotNetChildEnvironment(
+            environmentVariables,
+            inheritedVariableNames,
+            removeUnapprovedAmbient: true);
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames,
+        bool removeUnapprovedAmbient)
     {
         ValidateExplicitDotNetEnvironmentVariables(environmentVariables);
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -775,7 +791,9 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (!string.IsNullOrWhiteSpace(name) &&
                 !values.ContainsKey(name) &&
-                !IsApprovedDotNetChildAmbientEnvironmentVariable(name))
+                (IsUncontrolledRuntimeInjectionEnvironmentVariable(name) ||
+                 (removeUnapprovedAmbient &&
+                  !IsApprovedDotNetChildAmbientEnvironmentVariable(name))))
                 values[name] = null;
         }
         values["DOTNET_ROOT"] = Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"));

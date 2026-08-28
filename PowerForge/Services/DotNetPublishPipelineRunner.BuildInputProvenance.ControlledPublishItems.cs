@@ -207,6 +207,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
 
                 bool isSdkDefined = false;
+                bool isProjectDefined = false;
                 if (item.Metadata.TryGetValue(
                         "DefiningProjectFullPath",
                         out string? definingProject) &&
@@ -215,8 +216,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     isSdkDefined = IsTrustedExternalBuildInfrastructurePath(
                         definingProject!,
                         trustedBuildInfrastructureRoots);
+                    isProjectDefined = !isSdkDefined &&
+                        IsSameOrBelowBuildInputPath(definingProject!, controlledSourceRoot);
                 }
-                bool isControlledEquivalent = isSdkDefined &&
+                bool isControlledEquivalent = (isSdkDefined || isProjectDefined) &&
                     File.Exists(originalInputPath) &&
                     File.Exists(item.FullPath) &&
                     AreControlledGeneratedOutputsEquivalent(originalInputPath, item.FullPath);
@@ -230,6 +233,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     relativePath,
                     item.Metadata,
                     isSdkDefined,
+                    isProjectDefined,
                     isControlledEquivalent,
                     controlledSha256));
             }

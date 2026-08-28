@@ -261,6 +261,12 @@ public sealed partial class DotNetPublishPipelineRunner
             string snapshotPath,
             ICollection<FileStream> leases)
         {
+            DateTime sourceLastWriteTimeUtc = File.GetLastWriteTimeUtc(sourcePath);
+#if NET8_0_OR_GREATER
+            UnixFileMode? sourceUnixFileMode = null;
+            if (!OperatingSystem.IsWindows())
+                sourceUnixFileMode = File.GetUnixFileMode(sourcePath);
+#endif
             using FileStream source = new(
                 sourcePath,
                 FileMode.Open,
@@ -281,6 +287,11 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             snapshot.Flush(flushToDisk: true);
             snapshot.Dispose();
+            File.SetLastWriteTimeUtc(snapshotPath, sourceLastWriteTimeUtc);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows() && sourceUnixFileMode.HasValue)
+                File.SetUnixFileMode(snapshotPath, sourceUnixFileMode.Value);
+#endif
             leases.Add(new FileStream(
                 snapshotPath,
                 FileMode.Open,

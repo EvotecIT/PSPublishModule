@@ -26,6 +26,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string relativePath,
             IReadOnlyDictionary<string, string> metadata,
             bool isSdkDefined,
+            bool isProjectDefined,
             bool isControlledEquivalent = false,
             string? controlledSha256 = null)
         {
@@ -33,6 +34,7 @@ public sealed partial class DotNetPublishPipelineRunner
             RelativePath = relativePath;
             Metadata = metadata;
             IsSdkDefined = isSdkDefined;
+            IsProjectDefined = isProjectDefined;
             IsControlledEquivalent = isControlledEquivalent;
             ControlledSha256 = controlledSha256;
         }
@@ -44,6 +46,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> Metadata { get; }
 
         internal bool IsSdkDefined { get; }
+
+        internal bool IsProjectDefined { get; }
 
         internal bool IsControlledEquivalent { get; }
 

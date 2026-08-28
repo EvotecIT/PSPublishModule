@@ -38,6 +38,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
         string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
         bool previousNativeAotPublish = ActiveNativeAotPublish.Value;
+        bool previousStrictDotNetEnvironment = ActiveStrictDotNetEnvironment.Value;
         bool previousToolSnapshotScope = ActiveToolSnapshotScope.Value;
         ActiveDotNetExecutablePath.Value = null;
         ActiveDotNetExecutableSha256.Value = null;
@@ -70,6 +71,9 @@ public sealed partial class DotNetPublishPipelineRunner
             ValidateNativeAotEnvironmentVariables(plan);
             ValidateTrackedGeneratedProvenancePaths(plan);
             ActiveNativeAotPublish.Value = PlanUsesNativeAot(plan);
+            ActiveStrictDotNetEnvironment.Value = plan.NoBuildInPublish ||
+                (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                .Any(static target => target?.Publish?.Sign?.Enabled == true);
             if ((plan.Steps ?? Array.Empty<DotNetPublishStep>())
                 .Any(step => step.Kind == DotNetPublishStepKind.Manifest))
             {
@@ -305,6 +309,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ActiveGitExecutablePath.Value = previousGitExecutablePath;
                 ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
                 ActiveNativeAotPublish.Value = previousNativeAotPublish;
+                ActiveStrictDotNetEnvironment.Value = previousStrictDotNetEnvironment;
                 ActiveToolSnapshotScope.Value = previousToolSnapshotScope;
             }
         }

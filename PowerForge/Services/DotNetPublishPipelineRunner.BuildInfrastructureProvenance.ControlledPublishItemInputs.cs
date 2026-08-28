@@ -173,17 +173,27 @@ public sealed partial class DotNetPublishPipelineRunner
         if (metadataName is null)
             return true;
 
-        string[] metadataValues = item.Attributes()
+        (string Value, string DeclaringPath)[] metadataValues = item.Attributes()
             .Where(attribute => attribute.Name.LocalName.Equals(
                 metadataName,
                 StringComparison.OrdinalIgnoreCase))
-            .Select(attribute => attribute.Value)
+            .Select(attribute => (attribute.Value, declaringPath))
             .Concat(item.Elements()
                 .Where(element => element.Name.LocalName.Equals(
                     metadataName,
                     StringComparison.OrdinalIgnoreCase))
-                .Select(element => element.Value))
+                .Select(element => (element.Value, declaringPath)))
             .ToArray();
+        if (metadataValues.Length == 0 &&
+            !TryReadControlledItemDefinitionMetadata(
+                itemName,
+                metadataName,
+                relatedDocuments,
+                evaluatedGlobalProperties,
+                out metadataValues))
+        {
+            return false;
+        }
         if (metadataValues.Length == 0)
             return true;
         if (itemName.Equals("Reference", StringComparison.OrdinalIgnoreCase))
@@ -202,11 +212,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (inputBaseDirectories.Length == 0)
             return false;
 
-        foreach (string metadataValue in metadataValues)
+        foreach ((string metadataValue, string metadataDeclaringPath) in metadataValues)
         {
             if (!TryExpandControlledTaskInputValues(
                     metadataValue,
-                    declaringPath,
+                    metadataDeclaringPath,
                     taskInputBaseDirectory,
                     relatedDocuments,
                     evaluatedGlobalProperties,
@@ -258,6 +268,86 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        return true;
+    }
+
+    private static bool TryReadControlledItemDefinitionMetadata(
+        string itemName,
+        string metadataName,
+        IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        out (string Value, string DeclaringPath)[] metadataValues)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (evaluatedGlobalProperties is not null)
+        {
+            foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+                properties[property.Key] = property.Value;
+        }
+
+        (string Value, string DeclaringPath)? effectiveMetadata = null;
+        foreach ((XDocument document, string itemDefinitionDeclaringPath) in relatedDocuments)
+        {
+            foreach (XElement group in document.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase) &&
+                         !element.Ancestors().Any(ancestor =>
+                             ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
+            {
+                if (!TryIsControlledPropertyBranchActive(group, properties, out bool branchActive))
+                {
+                    metadataValues = Array.Empty<(string Value, string DeclaringPath)>();
+                    return false;
+                }
+                if (!branchActive)
+                    continue;
+                if (!TryIsControlledPropertyAssignmentActive(group, properties, out bool groupActive))
+                {
+                    metadataValues = Array.Empty<(string Value, string DeclaringPath)>();
+                    return false;
+                }
+                if (!groupActive)
+                    continue;
+
+                foreach (XElement definition in group.Elements().Where(element =>
+                             element.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (!TryIsControlledPropertyAssignmentActive(
+                            definition,
+                            properties,
+                            out bool definitionActive))
+                    {
+                        metadataValues = Array.Empty<(string Value, string DeclaringPath)>();
+                        return false;
+                    }
+                    if (!definitionActive)
+                        continue;
+
+                    foreach (XAttribute attribute in definition.Attributes().Where(attribute =>
+                                 attribute.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        effectiveMetadata = (attribute.Value, itemDefinitionDeclaringPath);
+                    }
+                    foreach (XElement metadata in definition.Elements().Where(element =>
+                                 element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (!TryIsControlledPropertyAssignmentActive(
+                                metadata,
+                                properties,
+                                out bool metadataActive))
+                        {
+                            metadataValues = Array.Empty<(string Value, string DeclaringPath)>();
+                            return false;
+                        }
+                        if (metadataActive)
+                            effectiveMetadata = (metadata.Value, itemDefinitionDeclaringPath);
+                    }
+                }
+            }
+        }
+
+        metadataValues = effectiveMetadata.HasValue
+            ? new[] { effectiveMetadata.Value }
+            : Array.Empty<(string Value, string DeclaringPath)>();
         return true;
     }
 
