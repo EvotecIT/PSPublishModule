@@ -69,6 +69,12 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool ValidateOnly { get; set; }
 
+    /// <summary>
+    /// Allows an explicitly isolated validation run to materialize Apple projects and resolve
+    /// the exact target identity used by screenshot evidence admission.
+    /// </summary>
+    internal bool AppleResolveTargetIdentities { get; set; }
+
     public bool PackagesOnly { get; set; }
 
     public bool ModuleOnly { get; set; }

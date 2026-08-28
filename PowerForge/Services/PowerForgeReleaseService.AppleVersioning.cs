@@ -24,11 +24,6 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(expectedPlanSha256) &&
             plan.Action != PowerForgeAppleReleaseAction.Version)
         {
-            if (!string.IsNullOrWhiteSpace(plan.SourceCommit) && HasAppleExecutionMutation(plan))
-            {
-                _ = CreateAppleMutationInputEvidence(plan, ResolveSelectedAppleScreenshotSpecs(plan));
-                CaptureApprovedMutationInputContents(plan);
-            }
             return null;
         }
 

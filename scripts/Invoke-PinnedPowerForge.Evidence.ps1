@@ -152,7 +152,7 @@ function Get-AppleTargetResolutionArgumentList {
     $result = [Collections.Generic.List[string]]::new()
     for ($index = 0; $index -lt $Arguments.Count; $index++) {
         $argument = [string]$Arguments[$index]
-        if ($argument -in @('--plan', '--dry-run', '--validate', '--summary', '--confirm-apple-action')) { continue }
+        if ($argument -in @('--plan', '--dry-run', '--validate', '--summary', '--apple-resolve-target-identities', '--confirm-apple-action')) { continue }
         $optionWithValue = $null
         foreach ($candidate in @('--apple-expected-plan-sha256', '--output')) {
             if ($argument -eq $candidate -or $argument.StartsWith("$candidate=", [StringComparison]::OrdinalIgnoreCase)) {
@@ -168,6 +168,7 @@ function Get-AppleTargetResolutionArgumentList {
     }
     $result.Add('--validate')
     $result.Add('--summary')
+    $result.Add('--apple-resolve-target-identities')
     $result.Add('--output')
     $result.Add('json')
     return @($result)
@@ -644,7 +645,7 @@ function Assert-ScreenshotPublicationBinding {
     }
     Assert-UnlinkedDirectory -Path $retainedRoot -Name '--allowed-root'
     $retainedPrefix = $retainedRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $pathComparison = if ($pathComparer.Equals('a', 'A')) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
     $counts = [Collections.Generic.Dictionary[string, int]]::new($pathComparer)
     foreach ($approved in $approvedItems) {
         if (-not $approved.Path.StartsWith($retainedPrefix, $pathComparison)) {

@@ -15,6 +15,9 @@ internal sealed partial class PowerForgeReleaseService
             return Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
 
         configured ??= LoadAppleScreenshotSpecs(plan);
+        if (configured.Length == 0)
+            return Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+
         var selected = new List<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
         foreach (var app in plan.Apps.Where(app =>
                      app.DistributionRoute == AppleDistributionRoute.AppStore &&

@@ -109,11 +109,12 @@ public sealed partial class AppleReleaseWorkflowTests
                 $arguments = @(
                     'apple-release', 'Screenshots', '--config', 'powerforge.release.json',
                     '--target', 'App', '--plan', '--confirm-apple-action',
+                    '--apple-resolve-target-identities',
                     '--apple-expected-plan-sha256', ('a' * 64), '--output=text')
                 $resolvedArguments = @(Get-AppleTargetResolutionArgumentList -Arguments $arguments)
                 $expected = @(
                     'apple-release', 'Screenshots', '--config', 'powerforge.release.json',
-                    '--target', 'App', '--validate', '--summary', '--output', 'json')
+                    '--target', 'App', '--validate', '--summary', '--apple-resolve-target-identities', '--output', 'json')
                 if (($resolvedArguments -join '|') -ne ($expected -join '|')) {
                     throw "Unexpected target-resolution arguments: $($resolvedArguments -join '|')"
                 }
@@ -400,6 +401,11 @@ public sealed partial class AppleReleaseWorkflowTests
                 . $Support
                 $appTargets = @([pscustomobject]@{ name='App'; platform='iOS'; distributionRoute='AppStore'; appId='123'; marketingVersion='1.2.3' })
                 Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $appTargets
+                if ((Get-ConsumerPathComparer).Compare('a', 'A') -eq 0) {
+                    $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json','--target','App','--allowed-root','Capture')
+                    Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $appTargets
+                    $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json','--target','App','--allowed-root','capture')
+                }
                 $sharedPixelTargets = @(
                     $appTargets[0],
                     [pscustomobject]@{ name='Other'; platform='iOS'; distributionRoute='AppStore'; appId='888'; marketingVersion='1.2.3' })
