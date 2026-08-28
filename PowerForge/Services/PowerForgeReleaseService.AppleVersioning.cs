@@ -26,7 +26,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (!string.IsNullOrWhiteSpace(plan.SourceCommit) && HasAppleExecutionMutation(plan))
             {
-                _ = CreateAppleMutationInputEvidence(plan);
+                _ = CreateAppleMutationInputEvidence(plan, ResolveSelectedAppleScreenshotSpecs(plan));
                 CaptureApprovedMutationInputContents(plan);
             }
             return null;
@@ -88,12 +88,13 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var path in paths.Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(pathComparer))
         {
             var fullPath = Path.GetFullPath(path);
+            var relative = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, fullPath).Replace('\\', '/');
+            if (!plan.ApprovedMutationInputFilesSha256.TryGetValue(relative, out var expected))
+                continue;
             var bytes = File.ReadAllBytes(fullPath);
             using var sha256 = SHA256.Create();
             var actual = BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
-            var relative = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, fullPath).Replace('\\', '/');
-            if (!plan.ApprovedMutationInputFilesSha256.TryGetValue(relative, out var expected) ||
-                !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     $"Approved Apple mutation input changed before execution: {relative}");
@@ -137,7 +138,7 @@ internal sealed partial class PowerForgeReleaseService
                 : PowerForgeAppleShipPhase.Release;
         }
 
-        var screenshotSpecs = ((plan.SyncScreenshots && plan.ReplaceScreenshots) ||
+        var screenshotSpecs = (plan.SyncScreenshots ||
                                plan.CheckReleaseReadiness ||
                                (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
             ? LoadAppleScreenshotSpecs(plan)
@@ -145,7 +146,8 @@ internal sealed partial class PowerForgeReleaseService
         var targets = plan.Apps
             .Select(app => CreateApplePlanTarget(plan, app, versioning, screenshotSpecs))
             .ToArray();
-        var mutationInputs = CreateAppleMutationInputEvidence(plan);
+        var selectedScreenshotSpecs = ResolveSelectedAppleScreenshotSpecs(plan, screenshotSpecs);
+        var mutationInputs = CreateAppleMutationInputEvidence(plan, selectedScreenshotSpecs);
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Action = plan.Action,
@@ -353,16 +355,15 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private (Dictionary<string, string> Files, string Sha256) CreateAppleMutationInputEvidence(
-        PowerForgeAppleReleasePlan plan)
+        PowerForgeAppleReleasePlan plan,
+        IReadOnlyCollection<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)> screenshotSpecs)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
         var configuredInputs = new List<string>();
         if (plan.SyncScreenshots || plan.CheckReleaseReadiness ||
             (plan.SubmitForReview && !plan.SkipReviewReadinessCheck))
         {
-            if (!string.IsNullOrWhiteSpace(plan.ScreenshotConfigPath))
-                configuredInputs.Add(plan.ScreenshotConfigPath!);
-            configuredInputs.AddRange(plan.ScreenshotConfigPaths);
+            configuredInputs.AddRange(screenshotSpecs.Select(static configured => configured.ConfigPath));
         }
         if (plan.SyncMetadata)
         {
@@ -395,7 +396,7 @@ internal sealed partial class PowerForgeReleaseService
 
         if (plan.SyncScreenshots)
         {
-            foreach (var configured in LoadAppleScreenshotSpecs(plan))
+            foreach (var configured in screenshotSpecs)
             {
                 var baseDirectory = Path.GetDirectoryName(configured.ConfigPath) ?? plan.ProjectRoot;
                 if (configured.Spec.Quality?.RequireApprovalManifest == true &&

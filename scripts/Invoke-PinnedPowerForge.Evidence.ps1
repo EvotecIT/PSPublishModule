@@ -147,6 +147,56 @@ function Get-ForwardedArgumentList {
     return @($result)
 }
 
+function Get-AppleTargetResolutionArgumentList {
+    param([Parameter(Mandatory)][string[]] $Arguments)
+    $result = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $Arguments.Count; $index++) {
+        $argument = [string]$Arguments[$index]
+        if ($argument -in @('--plan', '--dry-run', '--validate', '--summary', '--confirm-apple-action')) { continue }
+        $optionWithValue = $null
+        foreach ($candidate in @('--apple-expected-plan-sha256', '--output')) {
+            if ($argument -eq $candidate -or $argument.StartsWith("$candidate=", [StringComparison]::OrdinalIgnoreCase)) {
+                $optionWithValue = $candidate
+                break
+            }
+        }
+        if ($optionWithValue) {
+            if ($argument -eq $optionWithValue -and $index + 1 -lt $Arguments.Count) { $index++ }
+            continue
+        }
+        $result.Add($argument)
+    }
+    $result.Add('--validate')
+    $result.Add('--summary')
+    $result.Add('--output')
+    $result.Add('json')
+    return @($result)
+}
+
+function Read-ResolvedAppleTargets {
+    param([Parameter(Mandatory)][string] $Path)
+    try { $envelope = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+    catch { throw 'The exact PowerForge target-resolution output is not valid JSON.' }
+    if ($envelope.success -ne $true -or [string]$envelope.command -ne 'apple-release' -or
+        $envelope.result.validateOnly -ne $true -or $envelope.result.planOnly -ne $false) {
+        throw 'The exact PowerForge target-resolution output does not describe a successful validation-only Apple release plan.'
+    }
+    $targets = @($envelope.result.targets)
+    if ($targets.Count -eq 0) { throw 'The exact PowerForge target-resolution output contains no selected Apple targets.' }
+    foreach ($target in $targets) {
+        if ([string]::IsNullOrWhiteSpace([string]$target.name) -or
+            [string]::IsNullOrWhiteSpace([string]$target.platform) -or
+            [string]::IsNullOrWhiteSpace([string]$target.distributionRoute)) {
+            throw 'The exact PowerForge target-resolution output contains an incomplete Apple target identity.'
+        }
+        if ([string]$target.distributionRoute -eq 'AppStore' -and
+            [string]::IsNullOrWhiteSpace([string]$target.marketingVersion)) {
+            throw "The exact PowerForge target-resolution output contains no marketing version for App Store target '$([string]$target.name)'."
+        }
+    }
+    return $targets
+}
+
 function Assert-ConsumerRepositoryContent {
     $paths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($arguments in @(
@@ -369,7 +419,10 @@ function Test-ScreenshotInventorySubsetCounts {
 }
 
 function Assert-ScreenshotPublicationBinding {
-    param([Parameter(Mandatory)][string] $SourceCommit)
+    param(
+        [Parameter(Mandatory)][string] $SourceCommit,
+        [object[]] $ResolvedTargets
+    )
     if ($ArgumentList[0] -ne 'apple-release' -or $ArgumentList.Count -lt 2) { return }
     $operation = $ArgumentList[1]
     if ($operation -notin @('Screenshots', 'Advance')) { return }
@@ -388,32 +441,10 @@ function Assert-ScreenshotPublicationBinding {
     $requiresBinding = $operation -eq 'Screenshots' -or
         ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true -and $configValues.Count -gt 0)
     if (-not $requiresBinding) { return }
-    $selectedTargets = @((Get-OptionValue -Option '--target') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $enabledApps = @($apple.Apps | Where-Object { $_.Enabled -ne $false })
-    $missingTargets = @($selectedTargets | Where-Object {
-        $selectedTarget = $_
-        @($enabledApps | Where-Object {
-            $selectedTarget -eq ([string]$_.Name).Trim() -or
-            $selectedTarget -eq ([string]$_.Scheme).Trim() -or
-            $selectedTarget -eq ([string]$_.BundleId).Trim()
-        }).Count -eq 0
-    })
-    if ($missingTargets.Count -gt 0) {
-        throw "Unknown Apple app target(s): $($missingTargets -join ', ')"
+    if ($null -eq $ResolvedTargets) {
+        throw "apple-release $operation requires the exact engine-resolved Apple target summary before screenshot evidence can be admitted."
     }
-    $targetedApps = @($enabledApps | Where-Object {
-        $selectedTargets.Count -eq 0 -or $selectedTargets -contains ([string]$_.Name).Trim() -or
-        $selectedTargets -contains ([string]$_.Scheme).Trim() -or
-        $selectedTargets -contains ([string]$_.BundleId).Trim()
-    })
-    $appStoreApps = @($enabledApps | Where-Object {
-        $route = [string]$_.DistributionRoute
-        [string]::IsNullOrWhiteSpace($route) -or $route -eq 'AppStore'
-    })
-    $selectedApps = @($targetedApps | Where-Object {
-        $route = [string]$_.DistributionRoute
-        [string]::IsNullOrWhiteSpace($route) -or $route -eq 'AppStore'
-    })
+    $selectedApps = @($ResolvedTargets | Where-Object { [string]$_.distributionRoute -eq 'AppStore' })
     if ($selectedApps.Count -eq 0) { return }
     if ($configValues.Count -eq 0) { throw "apple-release $operation requires at least one screenshot configuration." }
     if ($null -eq $script:validatedCaptureProvenance) {
@@ -435,45 +466,45 @@ function Assert-ScreenshotPublicationBinding {
     $approvedItems = [Collections.Generic.List[object]]::new()
     $approvedPaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     $manifestPaths = [Collections.Generic.List[string]]::new()
-    $activeConfigs = [Collections.Generic.List[object]]::new()
+    $configuredScreenshots = [Collections.Generic.List[object]]::new()
     foreach ($screenshotConfigPath in $configValues) {
         $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
         $specVersion = if ([string]::IsNullOrWhiteSpace([string]$screenshotConfig.VersionString)) {
             $null
         } else { ([string]$screenshotConfig.VersionString).Trim() }
-        $versionMatches = ($screenshotConfig.UseReleaseVersion -eq $true -and $null -eq $specVersion) -or
-            ($null -ne $specVersion -and $specVersion.Equals([string]$provenance.marketingVersion, [StringComparison]::OrdinalIgnoreCase))
-        if (-not $versionMatches) { continue }
-        $activeConfigs.Add([pscustomobject]@{ Path = $screenshotConfigPath; Spec = $screenshotConfig })
+        $configuredScreenshots.Add([pscustomobject]@{
+            Path = $screenshotConfigPath
+            Spec = $screenshotConfig
+            VersionString = $specVersion
+        })
     }
-    if ($activeConfigs.Count -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
 
     $selectedConfigs = [Collections.Generic.Dictionary[string, object]]::new($pathComparer)
     foreach ($selectedApp in $selectedApps) {
-        $platformApps = @($appStoreApps | Where-Object { [string]$_.Platform -eq [string]$selectedApp.Platform })
-        $enabledPlatformApps = @($enabledApps | Where-Object { [string]$_.Platform -eq [string]$selectedApp.Platform })
-        $configuredAppIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-        foreach ($platformApp in $enabledPlatformApps) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$platformApp.AppStoreConnectAppId)) {
-                $null = $configuredAppIds.Add(([string]$platformApp.AppStoreConnectAppId).Trim())
-            }
+        $selectedAppId = ([string]$selectedApp.appId).Trim()
+        if ([string]::IsNullOrWhiteSpace($selectedAppId)) {
+            throw "The resolved Apple target '$([string]$selectedApp.name)' does not contain AppStoreConnectAppId."
         }
-        $blankIdApps = @($platformApps | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.AppStoreConnectAppId) })
-        $matchingConfigs = @($activeConfigs | Where-Object {
+        $selectedVersion = ([string]$selectedApp.marketingVersion).Trim()
+        if ([string]::IsNullOrWhiteSpace($selectedVersion)) {
+            throw "The resolved Apple target '$([string]$selectedApp.name)' does not contain a marketing version."
+        }
+        if (-not $selectedVersion.Equals(([string]$provenance.marketingVersion).Trim(), [StringComparison]::OrdinalIgnoreCase)) {
+            throw "The authoritative capture provenance version '$([string]$provenance.marketingVersion)' does not match selected Apple app '$([string]$selectedApp.name)' version '$selectedVersion'."
+        }
+        $matchingConfigs = @($configuredScreenshots | Where-Object {
             $candidate = $_.Spec
-            if ([string]$candidate.Platform -ne [string]$selectedApp.Platform) { return $false }
+            if ([string]$candidate.Platform -ne [string]$selectedApp.platform) { return $false }
             $candidateAppId = ([string]$candidate.AppId).Trim()
-            $selectedAppId = ([string]$selectedApp.AppStoreConnectAppId).Trim()
-            if (-not [string]::IsNullOrWhiteSpace($selectedAppId)) {
-                return [string]::IsNullOrWhiteSpace($candidateAppId) -or
-                    $candidateAppId.Equals($selectedAppId, [StringComparison]::OrdinalIgnoreCase)
-            }
-            if ([string]::IsNullOrWhiteSpace($candidateAppId)) { return $true }
-            return $blankIdApps.Count -eq 1 -and -not $configuredAppIds.Contains($candidateAppId)
+            $appIdMatches = [string]::IsNullOrWhiteSpace($candidateAppId) -or
+                $candidateAppId.Equals($selectedAppId, [StringComparison]::OrdinalIgnoreCase)
+            $versionMatches = ($candidate.UseReleaseVersion -eq $true -and $null -eq $_.VersionString) -or
+                ($null -ne $_.VersionString -and $_.VersionString.Equals($selectedVersion, [StringComparison]::OrdinalIgnoreCase))
+            return $appIdMatches -and $versionMatches
         })
         if ($matchingConfigs.Count -ne 1) {
             $reason = if ($matchingConfigs.Count -eq 0) { 'No' } else { 'Multiple' }
-            throw "$reason screenshot configurations match selected Apple app '$([string]$selectedApp.Name)' version '$([string]$provenance.marketingVersion)' platform '$([string]$selectedApp.Platform)'. Configure AppStoreConnectAppId explicitly when discovery would otherwise be ambiguous."
+            throw "$reason screenshot configurations match selected Apple app '$([string]$selectedApp.name)' version '$selectedVersion' platform '$([string]$selectedApp.platform)'."
         }
         $selectedConfigs[$matchingConfigs[0].Path] = $matchingConfigs[0]
     }

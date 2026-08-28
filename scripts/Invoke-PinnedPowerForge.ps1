@@ -502,6 +502,7 @@ function Invoke-RedactedProcess {
         [Parameter(Mandatory)][string] $WorkingDirectory,
         [Parameter(Mandatory)][string[]] $Arguments,
         [Parameter(Mandatory)][string] $NuGetPackagesPath,
+        [string] $CaptureStandardOutputPath,
         [switch] $IncludeAppleCredentials
     )
     $start = [Diagnostics.ProcessStartInfo]::new()
@@ -542,7 +543,9 @@ function Invoke-RedactedProcess {
         $process.WaitForExit()
         $safeStdOut = Get-RedactedToolText -Text ($stdout.GetAwaiter().GetResult())
         $safeStdErr = Get-RedactedToolText -Text ($stderr.GetAwaiter().GetResult())
-        if ($safeStdOut.Length -gt 0) { [Console]::Out.Write($safeStdOut) }
+        if (-not [string]::IsNullOrWhiteSpace($CaptureStandardOutputPath)) {
+            [IO.File]::WriteAllText($CaptureStandardOutputPath, $safeStdOut)
+        } elseif ($safeStdOut.Length -gt 0) { [Console]::Out.Write($safeStdOut) }
         if ($safeStdErr.Length -gt 0) { [Console]::Error.Write($safeStdErr) }
         return $process.ExitCode
     } finally {
@@ -578,11 +581,6 @@ try {
         $gh = Resolve-FixedTool -Name gh
         Assert-AuthoritativeCaptureProvenance -GhPath $gh -SourceCommit $consumerHead
     }
-    Register-StandaloneScreenshotEvidence
-    Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead
-    Register-AppleAutomationEvidence -SourceCommit $consumerHead
-    Assert-ConsumerRepositoryContent
-    Assert-TrackedSourceLinks
     $tar = Resolve-FixedTool -Name tar
     $buildToolRoot = New-TrackedToolSnapshot -TarPath $tar
     $cliProject = Join-Path $buildToolRoot 'PowerForge.Cli/PowerForge.Cli.csproj'
@@ -606,6 +604,33 @@ try {
     if ($buildExitCode -ne 0) { exit $buildExitCode }
     $cliAssembly = Join-Path $cliOutput 'PowerForge.Cli.dll'
     if (-not (Test-Path -LiteralPath $cliAssembly -PathType Leaf)) { throw "PowerForge CLI build output is missing: $cliAssembly" }
+
+    $resolvedAppleTargets = $null
+    if ($ArgumentList[0] -eq 'apple-release' -and $ArgumentList.Count -gt 1 -and
+        $ArgumentList[1] -in @('Screenshots', 'Advance')) {
+        $resolutionOutput = Join-Path $temporaryRoot 'apple-target-resolution.json'
+        $resolutionArguments = Get-AppleTargetResolutionArgumentList -Arguments $forwardedArgumentList
+        $resolutionExitCode = Invoke-RedactedProcess `
+            -FilePath $dotnet `
+            -WorkingDirectory $consumer `
+            -Arguments (@($cliAssembly) + $resolutionArguments) `
+            -NuGetPackagesPath $nugetPackages `
+            -CaptureStandardOutputPath $resolutionOutput `
+            -IncludeAppleCredentials
+        if ($resolutionExitCode -ne 0) {
+            if (Test-Path -LiteralPath $resolutionOutput -PathType Leaf) {
+                [Console]::Error.Write((Get-Content -LiteralPath $resolutionOutput -Raw))
+            }
+            exit $resolutionExitCode
+        }
+        $resolvedAppleTargets = @(Read-ResolvedAppleTargets -Path $resolutionOutput)
+    }
+
+    Register-StandaloneScreenshotEvidence
+    Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead -ResolvedTargets $resolvedAppleTargets
+    Register-AppleAutomationEvidence -SourceCommit $consumerHead
+    Assert-ConsumerRepositoryContent
+    Assert-TrackedSourceLinks
 
     Write-Host "PowerForge source: $toolHead"
     Write-Host "Consumer source: $consumerHead"

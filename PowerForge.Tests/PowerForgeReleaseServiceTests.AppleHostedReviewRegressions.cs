@@ -3,6 +3,97 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_TargetedAppleScreenshotPlan_BindsOnlyTheDiscoveredSelectedAppInputs()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var selectedShots = Directory.CreateDirectory(Path.Combine(root, "selected-shots"));
+            File.WriteAllText(Path.Combine(selectedShots.FullName, "home.png"), "selected pixels");
+            WriteScreenshotConfig(
+                root,
+                "selected-screenshots.json",
+                "111",
+                "1.2.0",
+                "iOS",
+                "selected-shots",
+                qualityEnabled: false);
+            WriteScreenshotConfig(
+                root,
+                "unrelated-screenshots.json",
+                "222",
+                "1.2.0",
+                "iOS",
+                "missing-unrelated-shots",
+                qualityEnabled: false);
+
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var selected = Assert.Single(spec.AppleApps!.Apps);
+            selected.AppStoreConnectAppId = null;
+            spec.AppleApps.ScreenshotConfigPath = null;
+            spec.AppleApps.ScreenshotConfigPaths =
+            [
+                "selected-screenshots.json",
+                "unrelated-screenshots.json"
+            ];
+            spec.AppleApps.SyncScreenshots = true;
+            spec.AppleApps.Apps =
+            [
+                selected,
+                new AppleAppConfiguration
+                {
+                    Name = "Other iOS",
+                    BundleId = "com.evotecit.other",
+                    Platform = ApplePlatform.iOS,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "Other",
+                    AppStoreConnectAppId = null
+                }
+            ];
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("A non-replacing screenshot plan must not query release state."),
+                    findAppleApps: (_, bundleId) =>
+                    [
+                        new AppStoreConnectAppInfo
+                        {
+                            Id = bundleId == "com.evotecit.casaray" ? "111" : "222",
+                            BundleId = bundleId,
+                            Name = bundleId == "com.evotecit.casaray" ? "CasaRay" : "Other"
+                        }
+                    ],
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                        PlanOnly = true,
+                        Targets = ["CasaRay iOS"]
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("111", target.AppId);
+            Assert.True(target.AppIdDiscovered);
+            Assert.Contains("selected-screenshots.json", result.AppleReceipt.MutationInputFiles.Keys);
+            Assert.Contains("selected-shots/home.png", result.AppleReceipt.MutationInputFiles.Keys);
+            Assert.DoesNotContain("unrelated-screenshots.json", result.AppleReceipt.MutationInputFiles.Keys);
+            Assert.DoesNotContain(
+                result.AppleReceipt.MutationInputFiles.Keys,
+                path => path.Contains("missing-unrelated-shots", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_ApplePlan_BindsEffectiveAutomationPolicy()
     {
         var root = CreateSandbox();
@@ -170,6 +261,45 @@ public sealed partial class PowerForgeReleaseServiceTests
         finally
         {
             TryDelete(plan.ProjectRoot);
+        }
+    }
+
+    [Fact]
+    public void ApprovedAppleMutationConfig_IgnoresUnselectedScreenshotConfigs()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var selectedPath = Path.Combine(root, "selected-screenshots.json");
+            File.WriteAllText(selectedPath, "{ \"appId\": \"111\" }");
+            var approvedHash = Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(selectedPath)))
+                .ToLowerInvariant();
+            var plan = new PowerForgeAppleReleasePlan
+            {
+                ProjectRoot = root,
+                SyncScreenshots = true,
+                ScreenshotConfigPaths =
+                [
+                    selectedPath,
+                    Path.Combine(root, "missing-unselected-screenshots.json")
+                ],
+                ApprovedMutationInputFilesSha256 = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["selected-screenshots.json"] = approvedHash
+                }
+            };
+
+            PowerForgeReleaseService.CaptureApprovedMutationInputContents(plan);
+
+            Assert.Single(plan.ApprovedMutationInputContents);
+            Assert.Equal(
+                "{ \"appId\": \"111\" }",
+                PowerForgeReleaseService.ReadApprovedMutationInputText(plan, selectedPath));
+        }
+        finally
+        {
+            TryDelete(root);
         }
     }
 
