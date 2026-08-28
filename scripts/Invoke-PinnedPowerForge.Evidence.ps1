@@ -83,14 +83,33 @@ function Get-ForwardedArgumentList {
     }
 
     $withoutLocalEvidence = [Collections.Generic.List[string]]::new()
+    $seenLocalOptions = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
         $argument = $ArgumentList[$index]
-        if ($argument -eq '--capture-provenance') {
-            if ($index + 1 -ge $ArgumentList.Count) { throw 'Missing value for --capture-provenance.' }
-            $index++
+        $localOption = $null
+        foreach ($candidate in @('--capture-provenance', '--allowed-root')) {
+            if ($argument -eq $candidate -or $argument.StartsWith("$candidate=", [StringComparison]::OrdinalIgnoreCase)) {
+                $localOption = $candidate
+                break
+            }
+        }
+        if ($localOption) {
+            if (-not $seenLocalOptions.Add($localOption)) { throw "$localOption must be specified at most once." }
+            if ($argument -eq $localOption) {
+                if ($index + 1 -ge $ArgumentList.Count) { throw "Missing value for $localOption." }
+                if ([string]::IsNullOrWhiteSpace([string]$ArgumentList[$index + 1]) -or
+                    ([string]$ArgumentList[$index + 1]).StartsWith('-', [StringComparison]::Ordinal)) {
+                    throw "Missing value for $localOption. Prefix a dash-leading path with './'."
+                }
+                $index++
+            } else {
+                $localValue = $argument.Substring($localOption.Length + 1)
+                if ([string]::IsNullOrWhiteSpace($localValue) -or $localValue.StartsWith('-', [StringComparison]::Ordinal)) {
+                    throw "Missing value for $localOption. Prefix a dash-leading path with './'."
+                }
+            }
             continue
         }
-        if ($argument.StartsWith('--capture-provenance=', [StringComparison]::OrdinalIgnoreCase)) { continue }
         $withoutLocalEvidence.Add($argument)
     }
 
@@ -338,7 +357,10 @@ function Assert-CaptureScreenshotEntry {
 }
 
 function Test-ScreenshotInventorySubsetCounts {
-    param([Parameter(Mandatory)][hashtable] $Expected, [Parameter(Mandatory)][hashtable] $Actual)
+    param(
+        [Parameter(Mandatory)][Collections.Generic.Dictionary[string, int]] $Expected,
+        [Parameter(Mandatory)][Collections.Generic.Dictionary[string, int]] $Actual
+    )
     if ($Actual.Count -eq 0 -or $Actual.Count -gt $Expected.Count) { return $false }
     foreach ($key in $Actual.Keys) {
         if ([int]$Actual[$key] -ne 1 -or [int]$Expected[$key] -ne 1) { return $false }
@@ -364,8 +386,35 @@ function Assert-ScreenshotPublicationBinding {
             Sort-Object -Unique
     )
     $requiresBinding = $operation -eq 'Screenshots' -or
-        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true)
+        ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true -and $configValues.Count -gt 0)
     if (-not $requiresBinding) { return }
+    $selectedTargets = @((Get-OptionValue -Option '--target') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $enabledApps = @($apple.Apps | Where-Object { $_.Enabled -ne $false })
+    $missingTargets = @($selectedTargets | Where-Object {
+        $selectedTarget = $_
+        @($enabledApps | Where-Object {
+            $selectedTarget -eq ([string]$_.Name).Trim() -or
+            $selectedTarget -eq ([string]$_.Scheme).Trim() -or
+            $selectedTarget -eq ([string]$_.BundleId).Trim()
+        }).Count -eq 0
+    })
+    if ($missingTargets.Count -gt 0) {
+        throw "Unknown Apple app target(s): $($missingTargets -join ', ')"
+    }
+    $targetedApps = @($enabledApps | Where-Object {
+        $selectedTargets.Count -eq 0 -or $selectedTargets -contains ([string]$_.Name).Trim() -or
+        $selectedTargets -contains ([string]$_.Scheme).Trim() -or
+        $selectedTargets -contains ([string]$_.BundleId).Trim()
+    })
+    $appStoreApps = @($enabledApps | Where-Object {
+        $route = [string]$_.DistributionRoute
+        [string]::IsNullOrWhiteSpace($route) -or $route -eq 'AppStore'
+    })
+    $selectedApps = @($targetedApps | Where-Object {
+        $route = [string]$_.DistributionRoute
+        [string]::IsNullOrWhiteSpace($route) -or $route -eq 'AppStore'
+    })
+    if ($selectedApps.Count -eq 0) { return }
     if ($configValues.Count -eq 0) { throw "apple-release $operation requires at least one screenshot configuration." }
     if ($null -eq $script:validatedCaptureProvenance) {
         throw "apple-release $operation requires --capture-provenance so screenshot publication remains bound to the retained capture artifact."
@@ -373,8 +422,8 @@ function Assert-ScreenshotPublicationBinding {
 
     $provenance = $script:validatedCaptureProvenance
     $provenanceEntries = @($provenance.screenshots)
-    $inventoryCounts = @{}
-    $pathComparer = if ($IsWindows -or $IsMacOS) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $pathComparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $inventoryCounts = [Collections.Generic.Dictionary[string, int]]::new($pathComparer)
     $provenancePaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     foreach ($entry in $provenanceEntries) {
         $relative = Assert-CaptureScreenshotEntry -Entry $entry
@@ -383,31 +432,55 @@ function Assert-ScreenshotPublicationBinding {
         if ($inventoryCounts.ContainsKey($key)) { throw "Capture provenance contains duplicate screenshot inventory entry '$relative'." }
         $inventoryCounts[$key] = 1
     }
-    $selectedTargets = @((Get-OptionValue -Option '--target') -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    $selectedApps = @($apple.Apps | Where-Object {
-        $_.Enabled -ne $false -and
-        ($selectedTargets.Count -eq 0 -or $selectedTargets -contains [string]$_.Name -or
-         $selectedTargets -contains [string]$_.Scheme -or $selectedTargets -contains [string]$_.BundleId)
-    })
-    if ($selectedTargets.Count -gt 0 -and $selectedApps.Count -eq 0) {
-        throw "--target does not match an enabled Apple app in '$releaseConfigPath'."
-    }
-
     $approvedItems = [Collections.Generic.List[object]]::new()
     $approvedPaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     $manifestPaths = [Collections.Generic.List[string]]::new()
-    $matchedConfigCount = 0
+    $activeConfigs = [Collections.Generic.List[object]]::new()
     foreach ($screenshotConfigPath in $configValues) {
         $screenshotConfig = Get-Content -LiteralPath $screenshotConfigPath -Raw | ConvertFrom-Json
-        if ($selectedTargets.Count -gt 0) {
-            $matchesSelectedApp = @($selectedApps | Where-Object {
-                ([string]::IsNullOrWhiteSpace([string]$screenshotConfig.AppId) -or
-                 [string]$screenshotConfig.AppId -eq [string]$_.AppStoreConnectAppId) -and
-                [string]$screenshotConfig.Platform -eq [string]$_.Platform
-            }).Count -gt 0
-            if (-not $matchesSelectedApp) { continue }
+        $specVersion = if ([string]::IsNullOrWhiteSpace([string]$screenshotConfig.VersionString)) {
+            $null
+        } else { ([string]$screenshotConfig.VersionString).Trim() }
+        $versionMatches = ($screenshotConfig.UseReleaseVersion -eq $true -and $null -eq $specVersion) -or
+            ($null -ne $specVersion -and $specVersion.Equals([string]$provenance.marketingVersion, [StringComparison]::OrdinalIgnoreCase))
+        if (-not $versionMatches) { continue }
+        $activeConfigs.Add([pscustomobject]@{ Path = $screenshotConfigPath; Spec = $screenshotConfig })
+    }
+    if ($activeConfigs.Count -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
+
+    $selectedConfigs = [Collections.Generic.Dictionary[string, object]]::new($pathComparer)
+    foreach ($selectedApp in $selectedApps) {
+        $platformApps = @($appStoreApps | Where-Object { [string]$_.Platform -eq [string]$selectedApp.Platform })
+        $enabledPlatformApps = @($enabledApps | Where-Object { [string]$_.Platform -eq [string]$selectedApp.Platform })
+        $configuredAppIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($platformApp in $enabledPlatformApps) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$platformApp.AppStoreConnectAppId)) {
+                $null = $configuredAppIds.Add(([string]$platformApp.AppStoreConnectAppId).Trim())
+            }
         }
-        $matchedConfigCount++
+        $blankIdApps = @($platformApps | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.AppStoreConnectAppId) })
+        $matchingConfigs = @($activeConfigs | Where-Object {
+            $candidate = $_.Spec
+            if ([string]$candidate.Platform -ne [string]$selectedApp.Platform) { return $false }
+            $candidateAppId = ([string]$candidate.AppId).Trim()
+            $selectedAppId = ([string]$selectedApp.AppStoreConnectAppId).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($selectedAppId)) {
+                return [string]::IsNullOrWhiteSpace($candidateAppId) -or
+                    $candidateAppId.Equals($selectedAppId, [StringComparison]::OrdinalIgnoreCase)
+            }
+            if ([string]::IsNullOrWhiteSpace($candidateAppId)) { return $true }
+            return $blankIdApps.Count -eq 1 -and -not $configuredAppIds.Contains($candidateAppId)
+        })
+        if ($matchingConfigs.Count -ne 1) {
+            $reason = if ($matchingConfigs.Count -eq 0) { 'No' } else { 'Multiple' }
+            throw "$reason screenshot configurations match selected Apple app '$([string]$selectedApp.Name)' version '$([string]$provenance.marketingVersion)' platform '$([string]$selectedApp.Platform)'. Configure AppStoreConnectAppId explicitly when discovery would otherwise be ambiguous."
+        }
+        $selectedConfigs[$matchingConfigs[0].Path] = $matchingConfigs[0]
+    }
+
+    foreach ($selectedConfig in $selectedConfigs.Values) {
+        $screenshotConfigPath = [string]$selectedConfig.Path
+        $screenshotConfig = $selectedConfig.Spec
         $manifestValue = [string]$screenshotConfig.Quality.ApprovalManifestPath
         if ([string]::IsNullOrWhiteSpace($manifestValue)) {
             throw "Screenshot configuration '$screenshotConfigPath' must name Quality.ApprovalManifestPath."
@@ -434,15 +507,19 @@ function Assert-ScreenshotPublicationBinding {
             $approvedItems.Add([pscustomobject]@{ Path = $approvedPath; Sha256 = $sha256; Width = [int]$entry.Width; Height = [int]$entry.Height })
         }
     }
-    if ($matchedConfigCount -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
 
-    if ([string]::IsNullOrWhiteSpace([string]$script:validatedCaptureProvenancePath)) {
-        throw 'Screenshot publication requires the validated local capture provenance path.'
+    $retainedRootValue = Get-OptionValue -Option '--allowed-root'
+    if ([string]::IsNullOrWhiteSpace([string]$retainedRootValue)) {
+        throw "apple-release $operation requires --allowed-root to bind screenshots to the retained capture inventory."
     }
-    $retainedRoot = [IO.Path]::GetFullPath((Split-Path -Parent $script:validatedCaptureProvenancePath))
+    $retainedRoot = Resolve-OptionPath -Value $retainedRootValue
+    if (-not (Test-Path -LiteralPath $retainedRoot -PathType Container)) {
+        throw "--allowed-root must identify the retained screenshot capture directory: $retainedRoot"
+    }
+    Assert-UnlinkedDirectory -Path $retainedRoot -Name '--allowed-root'
     $retainedPrefix = $retainedRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-    $pathComparison = if ($IsWindows -or $IsMacOS) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    $counts = @{}
+    $pathComparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $counts = [Collections.Generic.Dictionary[string, int]]::new($pathComparer)
     foreach ($approved in $approvedItems) {
         if (-not $approved.Path.StartsWith($retainedPrefix, $pathComparison)) {
             throw 'Screenshot approval manifests do not identify one exact retained capture root and approved inventory.'

@@ -31,7 +31,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 }
                 . $Support
 
-                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', 'capture.json')
+                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', 'capture.json', '--allowed-root', 'capture')
                 $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
                 if (($forwarded -join '|') -ne 'apple-release|Status|--config|powerforge.release.json|--apple-source-commit|{{commit}}') {
                     throw "Verified source commit was not injected: $($forwarded -join '|')"
@@ -43,14 +43,21 @@ public sealed partial class AppleReleaseWorkflowTests
                     throw "Explicit source commit was not normalized: $($forwarded -join '|')"
                 }
 
-                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', '--apple-source-commit={{commit}}')
+                $ArgumentList = @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root=capture')
                 $forwarded = @(Get-ForwardedArgumentList -SourceCommit '{{commit}}')
                 if (($forwarded -join '|') -ne 'apple-release|Status|--config|powerforge.release.json|--apple-source-commit|{{commit}}') {
-                    throw "A capture path was mistaken for a source option: $($forwarded -join '|')"
+                    throw "The local retained root was forwarded to the release engine: $($forwarded -join '|')"
                 }
 
                 foreach ($invalidArguments in @(
                     @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', ''),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root='),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root=-capture'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance=-capture.json'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root', '--plan'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--allowed-root', 'capture', '--allowed-root=other'),
+                    @('apple-release', 'Status', '--config', 'powerforge.release.json', '--capture-provenance', 'capture.json', '--capture-provenance=other.json'),
                     @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', '{{commit}}', '--apple-source-commit={{commit}}'),
                     @('apple-release', 'Status', '--config', 'powerforge.release.json', '--apple-source-commit', '89abcdef0123456789abcdef0123456789abcdef'))) {
                     $ArgumentList = $invalidArguments
@@ -193,9 +200,15 @@ public sealed partial class AppleReleaseWorkflowTests
             var nestedHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(nested))).ToLowerInvariant();
             const string commit = "0123456789abcdef0123456789abcdef01234567";
             File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
-                """{ "AppleApps": { "ProjectRoot": ".", "ScreenshotConfigPaths": [ "screenshots.json" ], "Apps": [ { "Name": "App", "Platform": "IOS", "AppStoreConnectAppId": "123" } ] } }""");
+                """{ "AppleApps": { "ProjectRoot": ".", "SyncScreenshots": true, "ScreenshotConfigPaths": [ "screenshots.json", "other-screenshots.json", "beta-screenshots.json", "historical-screenshots.json" ], "Apps": [ { "Name": " App ", "BundleId": "com.example.app", "Platform": "IOS" }, { "Name": "Other", "BundleId": "com.example.other", "Platform": "IOS", "AppStoreConnectAppId": "888" }, { "Name": "Beta", "BundleId": "com.example.beta", "Platform": "IOS", "DistributionRoute": "TestFlightOnly", "AppStoreConnectAppId": "999" }, { "Name": "Direct", "BundleId": "com.example.direct", "Platform": "macOS", "DistributionRoute": "DirectNotarized", "AppStoreConnectAppId": "777" } ] } }""");
             File.WriteAllText(Path.Combine(sandbox, "screenshots.json"),
-                """{ "AppId": "123", "Platform": "IOS", "Quality": { "ApprovalManifestPath": "screenshots.approval.json" } }""");
+                """{ "AppId": "123", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "screenshots.approval.json" } }""");
+            File.WriteAllText(Path.Combine(sandbox, "other-screenshots.json"),
+                """{ "AppId": "888", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "missing-other.approval.json" } }""");
+            File.WriteAllText(Path.Combine(sandbox, "beta-screenshots.json"),
+                """{ "AppId": "999", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "missing-beta.approval.json" } }""");
+            File.WriteAllText(Path.Combine(sandbox, "historical-screenshots.json"),
+                """{ "AppId": "123", "Platform": "IOS", "VersionString": "1.1.0", "Quality": { "ApprovalManifestPath": "missing-historical.approval.json" } }""");
             File.WriteAllText(Path.Combine(sandbox, "screenshots.approval.json"), JsonSerializer.Serialize(new
             {
                 CaptureRunId = "42",
@@ -210,7 +223,7 @@ public sealed partial class AppleReleaseWorkflowTests
             }));
             File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "capture/\n*.approval.json\n");
             Run("git", sandbox, "init", "--quiet").EnsureSuccess();
-            Run("git", sandbox, "add", "powerforge.release.json", "screenshots.json", ".gitignore").EnsureSuccess();
+            Run("git", sandbox, "add", "powerforge.release.json", "screenshots.json", "other-screenshots.json", "beta-screenshots.json", "historical-screenshots.json", ".gitignore").EnsureSuccess();
             CommitTrackedReleaseSandbox(sandbox, "Tracked screenshot configuration");
 
             var harness = Path.Combine(parent, "evidence-harness.ps1");
@@ -229,15 +242,57 @@ public sealed partial class AppleReleaseWorkflowTests
                         [pscustomobject]@{ path='website-candidate/home.png'; sha256='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; width=1200; height=800 })
                 }
                 $consumer = [IO.Path]::GetFullPath($Consumer)
-                $script:validatedCaptureProvenancePath = Join-Path $consumer 'capture/powerforge-apple-screenshot-provenance.json'
-                $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json')
+                $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json','--target','App','--allowed-root','capture')
                 function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
                 function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
                 function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
                 function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
                 function Assert-UnlinkedPath { param([string]$Path,[string]$Name,[switch]$AllowMissingLeaf) }
+                function Assert-UnlinkedDirectory { param([string]$Path,[string]$Name) }
                 . $Support
                 Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                $originalArguments = @($ArgumentList)
+                $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json','--target','App,Missing','--allowed-root','capture')
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'A mixed unknown target list was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*Unknown Apple app target(s): Missing*') { throw } }
+                $releasePath = Join-Path $consumer 'powerforge.release.json'
+                $originalRelease = Get-Content -LiteralPath $releasePath -Raw
+                $releaseWithoutScreenshots = $originalRelease | ConvertFrom-Json
+                $releaseWithoutScreenshots.AppleApps.ScreenshotConfigPaths = @('', '   ')
+                $releaseWithoutScreenshots | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releasePath
+                $originalProvenance = $script:validatedCaptureProvenance
+                $script:validatedCaptureProvenance = $null
+                $ArgumentList = @('apple-release','Advance','--config','powerforge.release.json','--target','App')
+                Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                Set-Content -LiteralPath $releasePath -Value $originalRelease -NoNewline
+                foreach ($routeTarget in @('Beta', 'Direct')) {
+                    $ArgumentList = @('apple-release','Advance','--config','powerforge.release.json','--target',$routeTarget)
+                    Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                }
+                $script:validatedCaptureProvenance = $originalProvenance
+                $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json','--target','App')
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Missing retained root was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*requires --allowed-root*') { throw } }
+                $ArgumentList = $originalArguments
+                $approvalPath = Join-Path $consumer 'screenshots.approval.json'
+                $originalApproval = Get-Content -LiteralPath $approvalPath -Raw
+                $caseVariantApproval = $originalApproval | ConvertFrom-Json
+                $caseVariantApproval.Screenshots[0].File = 'capture/phone/Home.png'
+                $caseVariantPath = Join-Path $consumer 'capture/phone/Home.png'
+                $caseVariantCreated = $false
+                if (-not (Test-Path -LiteralPath $caseVariantPath -PathType Leaf)) {
+                    Copy-Item -LiteralPath (Join-Path $consumer 'capture/phone/home.png') -Destination $caseVariantPath
+                    $caseVariantCreated = $true
+                }
+                $caseVariantApproval | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $approvalPath
+                if ($IsWindows) {
+                    Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                } else {
+                    try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Case-variant inventory path was accepted.' }
+                    catch { if ($_.Exception.Message -notlike '*approved inventory*') { throw } }
+                }
+                Set-Content -LiteralPath $approvalPath -Value $originalApproval -NoNewline
+                if ($caseVariantCreated) { Remove-Item -LiteralPath $caseVariantPath }
                 $originalProvenanceScreenshots = @($script:validatedCaptureProvenance.screenshots)
                 $script:validatedCaptureProvenance.screenshots += [pscustomobject]@{
                     path = 'home.png';
@@ -248,8 +303,6 @@ public sealed partial class AppleReleaseWorkflowTests
                 try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Conflicting provenance path was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*duplicate screenshot path*') { throw } }
                 $script:validatedCaptureProvenance.screenshots = $originalProvenanceScreenshots
-                $approvalPath = Join-Path $consumer 'screenshots.approval.json'
-                $originalApproval = Get-Content -LiteralPath $approvalPath -Raw
                 $duplicateApproval = $originalApproval | ConvertFrom-Json
                 $duplicateApproval.Screenshots += $duplicateApproval.Screenshots[0]
                 $duplicateApproval | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $approvalPath
