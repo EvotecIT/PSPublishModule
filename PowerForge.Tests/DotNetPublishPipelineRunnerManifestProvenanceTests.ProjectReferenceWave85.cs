@@ -86,8 +86,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             string[] guardedPaths = DotNetPublishPipelineRunner.PublishProvenanceLease.BuildGuardedPaths(
                 [projectPath],
-                [output],
-                includeNoBuildPublishInputs: true);
+                [output]);
 
             StringComparer comparer = OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase

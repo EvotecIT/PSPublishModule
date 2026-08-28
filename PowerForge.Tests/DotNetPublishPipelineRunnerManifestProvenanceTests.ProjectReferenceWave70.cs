@@ -149,17 +149,18 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ControlledBuildEnvironment_RejectsOutputObservableRequestedValue()
+    public void ControlledBuildEnvironment_DropsUnusedOutputObservableRequestedValue()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         string controlledRoot = Directory.CreateDirectory(Path.Combine(root, "controlled")).FullName;
         try
         {
-            Assert.False(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
+            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
                 new Dictionary<string, string?> { ["BUILD_STAMP"] = "ambient-value" },
                 root,
                 controlledRoot,
-                out _));
+                out IReadOnlyDictionary<string, string?> environment));
+            Assert.False(environment.ContainsKey("BUILD_STAMP"));
         }
         finally
         {

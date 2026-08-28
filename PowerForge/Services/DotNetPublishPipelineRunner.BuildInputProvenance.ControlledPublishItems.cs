@@ -174,6 +174,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     out string? packageRoot)
                 ? Path.GetFullPath(packageRoot!)
                 : string.Empty;
+            VerifiedPackageInputCatalog[] packageCatalogs = graphVerifiedPackages
+                .Concat(verifiedPackages is null
+                    ? Array.Empty<VerifiedPackageInputCatalog>()
+                    : new[] { verifiedPackages })
+                .Distinct()
+                .ToArray();
             foreach (JsonElement value in resolvedFiles.EnumerateArray())
             {
                 EvaluatedProjectItem? item = ReadEvaluatedProjectItem(
@@ -186,25 +192,36 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
-                if ((!string.IsNullOrEmpty(controlledPackageRoot) &&
-                     IsSameOrBelowBuildInputPath(item.FullPath, controlledPackageRoot)) ||
-                    IsSameOrBelowBuildInputPath(item.FullPath, offlinePackageSource) ||
-                    IsTrustedExternalBuildInfrastructurePath(
+                if (IsSameOrBelowBuildInputPath(item.FullPath, offlinePackageSource))
+                    return false;
+                if (IsTrustedExternalBuildInfrastructurePath(
                         item.FullPath,
                         trustedBuildInfrastructureRoots))
                 {
                     continue;
                 }
-                if (!IsSameOrBelowBuildInputPath(item.FullPath, controlledSourceRoot))
+                if (!TryMapControlledPublishInputPath(
+                        item.FullPath,
+                        controlledSourceRoot,
+                        controlledGitRoot!,
+                        controlledPackageRoot,
+                        packageCatalogs,
+                        out string originalInputPath,
+                        out bool isPackageBacked))
+                {
                     return false;
-
-                string relativeInputPath = FrameworkCompatibility.GetRelativePath(
-                    controlledSourceRoot,
-                    item.FullPath);
-                string originalInputPath = Path.GetFullPath(
-                    Path.Combine(controlledGitRoot!, relativeInputPath));
-                if (!IsSameOrBelowBuildInputPath(originalInputPath, controlledGitRoot!))
+                }
+                if (!TryMapControlledPublishMetadata(
+                        item.Metadata,
+                        controlledSourceRoot,
+                        controlledGitRoot!,
+                        controlledPackageRoot,
+                        controlledOutputRoot,
+                        packageCatalogs,
+                        out IReadOnlyDictionary<string, string> mappedMetadata))
+                {
                     return false;
+                }
 
                 bool isSdkDefined = false;
                 bool isProjectDefined = false;
@@ -223,19 +240,30 @@ public sealed partial class DotNetPublishPipelineRunner
                     File.Exists(originalInputPath) &&
                     File.Exists(item.FullPath) &&
                     AreControlledGeneratedOutputsEquivalent(originalInputPath, item.FullPath);
+                if (isPackageBacked)
+                {
+                    isControlledEquivalent = File.Exists(originalInputPath) &&
+                        File.Exists(item.FullPath) &&
+                        AreControlledGeneratedOutputsEquivalent(originalInputPath, item.FullPath);
+                }
                 string? controlledSha256 = isControlledEquivalent
                     ? ComputeSha256Hex(File.ReadAllBytes(item.FullPath))
                     : null;
-                if (isSdkDefined && !proveControlledGeneratedInputs)
+                int? controlledUnixFileMode = isControlledEquivalent
+                    ? ReadControlledUnixFileMode(item.FullPath)
+                    : null;
+                if (isSdkDefined && !proveControlledGeneratedInputs && !isPackageBacked)
                     continue;
                 results.Add(new EvaluatedPublishInput(
                     originalInputPath,
                     relativePath,
-                    item.Metadata,
+                    mappedMetadata,
                     isSdkDefined,
                     isProjectDefined,
                     isControlledEquivalent,
-                    controlledSha256));
+                    controlledSha256,
+                    controlledUnixFileMode,
+                    isPackageBacked));
             }
 
             publishInputs = results.ToArray();

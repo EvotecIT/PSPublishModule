@@ -15,7 +15,7 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStyle? styleOverride,
         SourceProvenance provenance)
     {
-        if (!plan.NoBuildInPublish || provenance.NoBuildPublishInputs.Length == 0)
+        if (provenance.NoBuildPublishInputs.Length == 0)
             return null;
 
         DotNetPublishTargetPlan target = plan.Targets.FirstOrDefault(candidate =>
@@ -31,7 +31,9 @@ public sealed partial class DotNetPublishPipelineRunner
             effectiveFramework,
             runtime,
             style);
-        NoBuildPublishInput[] inputs = provenance.NoBuildPublishInputs
+        NoBuildPublishInput[] inputs = SelectPublishInputSnapshotCandidates(
+                plan.NoBuildInPublish,
+                provenance.NoBuildPublishInputs)
             .Where(input => string.Equals(input.EvaluationKey, evaluationKey, StringComparison.Ordinal))
             .ToArray();
         if (inputs.Length == 0)
@@ -53,6 +55,13 @@ public sealed partial class DotNetPublishPipelineRunner
             : null;
         return NoBuildPublishInputSnapshot.Create(inputs, existingCustomAfterTargets);
     }
+
+    internal static NoBuildPublishInput[] SelectPublishInputSnapshotCandidates(
+        bool noBuildInPublish,
+        IEnumerable<NoBuildPublishInput> inputs)
+        => inputs
+            .Where(input => noBuildInPublish || input.IsPackageBacked)
+            .ToArray();
 
     private static string BuildPublishEvaluationRequestKey(
         DotNetPublishPlan plan,
@@ -160,6 +169,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         throw new InvalidOperationException(
                             $"Duplicate no-build publish inputs disagree about the proven hash: {input.FullPath}.");
                     }
+                    if (groupedInputs.Any(candidate => candidate.UnixFileMode != input.UnixFileMode))
+                    {
+                        throw new InvalidOperationException(
+                            $"Duplicate no-build publish inputs disagree about the proven Unix mode: {input.FullPath}.");
+                    }
                     string snapshotDirectory = Path.Combine(
                         inputRoot,
                         index++.ToString("D6", System.Globalization.CultureInfo.InvariantCulture));
@@ -167,7 +181,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     string snapshotPath = Path.Combine(
                         snapshotDirectory,
                         Path.GetFileName(input.FullPath));
-                    string actualSha256 = CopyAndHashSnapshot(input.FullPath, snapshotPath, leases);
+                    string actualSha256 = CopyAndHashSnapshot(
+                        input.FullPath,
+                        snapshotPath,
+                        input.UnixFileMode,
+                        leases);
                     if (!string.Equals(actualSha256, input.Sha256, StringComparison.OrdinalIgnoreCase))
                     {
                         throw new InvalidOperationException(
@@ -262,13 +280,22 @@ public sealed partial class DotNetPublishPipelineRunner
         private static string CopyAndHashSnapshot(
             string sourcePath,
             string snapshotPath,
+            int? expectedUnixFileMode,
             ICollection<FileStream> leases)
         {
             DateTime sourceLastWriteTimeUtc = File.GetLastWriteTimeUtc(sourcePath);
 #if NET8_0_OR_GREATER
             UnixFileMode? sourceUnixFileMode = null;
             if (!OperatingSystem.IsWindows())
+            {
                 sourceUnixFileMode = File.GetUnixFileMode(sourcePath);
+                if (expectedUnixFileMode.HasValue &&
+                    (int)sourceUnixFileMode.Value != expectedUnixFileMode.Value)
+                {
+                    throw new InvalidOperationException(
+                        $"A no-build publish input Unix mode changed after controlled proof: {sourcePath}.");
+                }
+            }
 #endif
             using FileStream source = new(
                 sourcePath,
@@ -290,6 +317,15 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             snapshot.Flush(flushToDisk: true);
             snapshot.Dispose();
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows() &&
+                expectedUnixFileMode.HasValue &&
+                (int)File.GetUnixFileMode(sourcePath) != expectedUnixFileMode.Value)
+            {
+                throw new InvalidOperationException(
+                    $"A no-build publish input Unix mode changed while it was snapshotted: {sourcePath}.");
+            }
+#endif
             File.SetLastWriteTimeUtc(snapshotPath, sourceLastWriteTimeUtc);
 #if NET8_0_OR_GREATER
             if (!OperatingSystem.IsWindows() && sourceUnixFileMode.HasValue)

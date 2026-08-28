@@ -49,12 +49,14 @@ public sealed partial class DotNetPublishPipelineRunner
         values["NUGET_PACKAGES"] = packageRoot;
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
-            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key) ||
-                !IsOverwrittenControlledBuildEnvironmentVariable(variable.Key))
+            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key))
             {
                 controlledEnvironment = values;
                 return false;
             }
+            // The controlled proof is offline and intentionally does not replay
+            // ordinary plan variables such as private-feed credentials. Values
+            // needed by the proof are assigned below from trusted inputs.
         }
         if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
         {
@@ -72,15 +74,6 @@ public sealed partial class DotNetPublishPipelineRunner
         controlledEnvironment = values;
         return true;
     }
-
-    private static bool IsOverwrittenControlledBuildEnvironmentVariable(string name)
-        => name.Equals("ALL_PROXY", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("DOTNET_ROOT", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("DOTNET_ROOT(x86)", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("HTTP_PROXY", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("HTTPS_PROXY", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("NO_PROXY", StringComparison.OrdinalIgnoreCase) ||
-           name.Equals("PATH", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsApprovedControlledBuildEnvironmentVariable(string name)
         => name.Equals("PATHEXT", StringComparison.OrdinalIgnoreCase) ||

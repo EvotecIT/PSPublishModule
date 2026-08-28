@@ -28,7 +28,9 @@ public sealed partial class DotNetPublishPipelineRunner
             bool isSdkDefined,
             bool isProjectDefined,
             bool isControlledEquivalent = false,
-            string? controlledSha256 = null)
+            string? controlledSha256 = null,
+            int? controlledUnixFileMode = null,
+            bool isPackageBacked = false)
         {
             FullPath = fullPath;
             RelativePath = relativePath;
@@ -37,6 +39,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IsProjectDefined = isProjectDefined;
             IsControlledEquivalent = isControlledEquivalent;
             ControlledSha256 = controlledSha256;
+            ControlledUnixFileMode = controlledUnixFileMode;
+            IsPackageBacked = isPackageBacked;
         }
 
         internal string FullPath { get; }
@@ -52,6 +56,10 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool IsControlledEquivalent { get; }
 
         internal string? ControlledSha256 { get; }
+
+        internal int? ControlledUnixFileMode { get; }
+
+        internal bool IsPackageBacked { get; }
     }
 
     internal sealed class NoBuildPublishInput
@@ -62,7 +70,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string relativePath,
             IReadOnlyDictionary<string, string> metadata,
             string sha256,
-            string? customAfterMicrosoftCommonTargets = null)
+            string? customAfterMicrosoftCommonTargets = null,
+            int? unixFileMode = null,
+            bool isPackageBacked = false)
         {
             EvaluationKey = evaluationKey;
             FullPath = fullPath;
@@ -70,6 +80,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Metadata = metadata;
             Sha256 = sha256;
             CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
+            UnixFileMode = unixFileMode;
+            IsPackageBacked = isPackageBacked;
         }
 
         internal string EvaluationKey { get; }
@@ -83,6 +95,10 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string Sha256 { get; }
 
         internal string? CustomAfterMicrosoftCommonTargets { get; }
+
+        internal int? UnixFileMode { get; }
+
+        internal bool IsPackageBacked { get; }
     }
 
     private sealed class ControlledPublishGraphNode

@@ -10,7 +10,18 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         byte[] candidateDigest = ComputeGeneratedOutputSha256(candidatePath);
         byte[] controlledDigest = ComputeGeneratedOutputSha256(controlledPath);
-        return candidateDigest.SequenceEqual(controlledDigest);
+        return candidateDigest.SequenceEqual(controlledDigest) &&
+               ReadControlledUnixFileMode(candidatePath) ==
+               ReadControlledUnixFileMode(controlledPath);
+    }
+
+    private static int? ReadControlledUnixFileMode(string path)
+    {
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            return (int)File.GetUnixFileMode(path);
+#endif
+        return null;
     }
 
     private static byte[] ComputeGeneratedOutputSha256(string path)

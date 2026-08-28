@@ -9,6 +9,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    internal static bool ShouldRefreshLockedRestoreOutputs(DotNetPublishPlan? plan)
+        => plan?.NoRestoreInPublish != true;
+
     private static bool TryRefreshLockedRestoreOutputs(ProjectEvaluationRequest request)
     {
         string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;

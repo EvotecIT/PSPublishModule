@@ -138,12 +138,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal static string[] BuildGuardedPaths(
             IEnumerable<string> publishInputFiles,
-            IEnumerable<NoBuildPublishInput> noBuildPublishInputs,
-            bool includeNoBuildPublishInputs)
+            IEnumerable<NoBuildPublishInput> provenPublishInputs)
         {
-            IEnumerable<string> paths = publishInputFiles;
-            if (includeNoBuildPublishInputs)
-                paths = paths.Concat(noBuildPublishInputs.Select(input => input.FullPath));
+            IEnumerable<string> paths = publishInputFiles.Concat(
+                provenPublishInputs.Select(input => input.FullPath));
 
             return paths
                 .Where(path => !string.IsNullOrWhiteSpace(path))

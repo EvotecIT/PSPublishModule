@@ -40,29 +40,31 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ControlledBuildEnvironment_RejectsEscapingRelativeReplayValue()
+    public void ControlledBuildEnvironment_DropsUnusedConfiguredReplayValues()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         string controlledRoot = Directory.CreateDirectory(Path.Combine(root, "controlled")).FullName;
         try
         {
-            Assert.False(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
+            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
                 new Dictionary<string, string?>
                 {
                     ["Payload"] = Path.Combine("..", "..", "outside", "payload.dll")
                 },
                 root,
                 controlledRoot,
-                out _));
+                out IReadOnlyDictionary<string, string?> escapingEnvironment));
+            Assert.False(escapingEnvironment.ContainsKey("Payload"));
 
-            Assert.False(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
+            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
                 new Dictionary<string, string?>
                 {
                     ["Payload"] = Path.Combine("artifacts", "payload.dll")
                 },
                 root,
                 controlledRoot,
-                out _));
+                out IReadOnlyDictionary<string, string?> containedEnvironment));
+            Assert.False(containedEnvironment.ContainsKey("Payload"));
         }
         finally
         {

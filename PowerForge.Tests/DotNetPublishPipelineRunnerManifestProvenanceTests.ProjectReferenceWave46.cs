@@ -118,14 +118,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 controlledRoot,
                 out _));
 
-            Assert.False(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
-                new Dictionary<string, string?>
-                {
-                    ["ProductSetting"] = "controlled"
-                },
-                root,
-                controlledRoot,
-                out _));
         }
         finally
         {

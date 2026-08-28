@@ -129,8 +129,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             using PublishProvenanceLease? provenanceLease = requiresPublishProvenance
                                 ? PublishProvenanceLease.Create(PublishProvenanceLease.BuildGuardedPaths(
                                     publishProvenance!.PublishInputFiles,
-                                    publishProvenance.NoBuildPublishInputs,
-                                    plan.NoBuildInPublish))
+                                    publishProvenance.NoBuildPublishInputs))
                                 : null;
                             if (provenanceLease is not null)
                             {
@@ -138,8 +137,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                     ReadPortableInventorySourceProvenance(plan);
                                 provenanceLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                                     confirmedProvenance.PublishInputFiles,
-                                    confirmedProvenance.NoBuildPublishInputs,
-                                    plan.NoBuildInPublish));
+                                    confirmedProvenance.NoBuildPublishInputs));
                                 provenanceLease.ValidateUnchanged();
                                 publishProvenance = confirmedProvenance;
                             }

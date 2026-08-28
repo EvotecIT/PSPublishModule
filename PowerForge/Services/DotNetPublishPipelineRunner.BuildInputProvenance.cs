@@ -339,7 +339,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (ProjectEvaluationRequest root in roots)
         {
-            if (!TryRefreshLockedRestoreOutputs(root))
+            if (ShouldRefreshLockedRestoreOutputs(buildPlan) &&
+                !TryRefreshLockedRestoreOutputs(root))
             {
                 projectDirectories = roots
                     .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
@@ -483,43 +484,42 @@ public sealed partial class DotNetPublishPipelineRunner
                     generatedRootsByEvaluation[ownerKey],
                     projectDirectoriesByEvaluation[ownerKey],
                     directories));
-        if (buildPlan?.NoBuildInPublish == true)
+        foreach (IGrouping<string, (string EvaluationKey, EvaluatedPublishInput Input)> group in
+                 evaluatedPublishInputs.GroupBy(entry => entry.EvaluationKey, StringComparer.Ordinal))
         {
-            foreach (IGrouping<string, (string EvaluationKey, EvaluatedPublishInput Input)> group in
-                     evaluatedPublishInputs.GroupBy(entry => entry.EvaluationKey, StringComparer.Ordinal))
+            string evaluationKey = group.Key;
+            (string EvaluationKey, EvaluatedPublishInput Input)[] snapshotInputs = group
+                .Where(entry => entry.Input.IsControlledEquivalent &&
+                    !string.IsNullOrWhiteSpace(entry.Input.ControlledSha256) &&
+                    (entry.Input.IsPackageBacked ||
+                     (buildPlan?.NoBuildInPublish == true &&
+                      (entry.Input.IsSdkDefined || entry.Input.IsProjectDefined) &&
+                      IsTrustedSdkGeneratedOutput(entry.Input.FullPath))))
+                .ToArray();
+            if (snapshotInputs.Length == 0)
             {
-                string evaluationKey = group.Key;
-                string[] trustedInputs = group
-                    .Where(entry => (entry.Input.IsSdkDefined || entry.Input.IsProjectDefined) &&
-                        entry.Input.IsControlledEquivalent &&
-                        IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
-                    .Select(entry => entry.Input.FullPath)
-                    .Distinct(comparison)
-                    .ToArray();
-                if (trustedInputs.Length == 0)
-                {
-                    continue;
-                }
-
-                provenNoBuildPublishInputsByEvaluation[evaluationKey] =
-                    new HashSet<string>(trustedInputs, comparison);
-                provenNoBuildPublishInputs.AddRange(group
-                    .Where(entry => (entry.Input.IsSdkDefined || entry.Input.IsProjectDefined) &&
-                        entry.Input.IsControlledEquivalent &&
-                        !string.IsNullOrWhiteSpace(entry.Input.ControlledSha256) &&
-                        IsTrustedSdkGeneratedOutput(entry.Input.FullPath))
-                    .Select(entry => new NoBuildPublishInput(
-                        evaluationKey,
-                        entry.Input.FullPath,
-                        entry.Input.RelativePath,
-                        entry.Input.Metadata,
-                        entry.Input.ControlledSha256!,
-                        evaluationsByEvaluation[evaluationKey].CustomAfterMicrosoftCommonTargets)));
+                continue;
             }
+
+            provenNoBuildPublishInputsByEvaluation[evaluationKey] = new HashSet<string>(
+                snapshotInputs.Select(entry => entry.Input.FullPath),
+                comparison);
+            provenNoBuildPublishInputs.AddRange(snapshotInputs.Select(entry =>
+                new NoBuildPublishInput(
+                    evaluationKey,
+                    entry.Input.FullPath,
+                    entry.Input.RelativePath,
+                    entry.Input.Metadata,
+                    entry.Input.ControlledSha256!,
+                    evaluationsByEvaluation[evaluationKey].CustomAfterMicrosoftCommonTargets,
+                    entry.Input.ControlledUnixFileMode,
+                    entry.Input.IsPackageBacked)));
         }
 
         foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
         {
+            if (publishInput.IsPackageBacked)
+                continue;
             bool trustedGeneratedOutput =
                 (publishInput.IsSdkDefined ||
                  (publishInput.IsProjectDefined && publishInput.IsControlledEquivalent)) &&
