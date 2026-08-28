@@ -42,11 +42,11 @@ function Get-RepeatedTriangularNumber {
 }
 
 function Get-IndexedSum {
-    param([int[]] $Values)
+    param([int[]] $Numbers)
 
     [long] $total = 0
-    for ([int] $index = 0; $index -lt $Values.Length; $index++) {
-        $total += $Values[$index]
+    foreach ($item in $Numbers) {
+        $total += $item
     }
 
     return $total

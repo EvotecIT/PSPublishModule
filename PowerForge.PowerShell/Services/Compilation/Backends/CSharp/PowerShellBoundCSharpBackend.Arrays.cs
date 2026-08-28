@@ -13,9 +13,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(concatenation.Left);
         var right = EmitExpression(concatenation.Right);
-        var rightValues = concatenation.EnumerateRight
-            ? "__powerForgeRight is null ? new object?[] { null } : global::System.Linq.Enumerable.Cast<object?>((global::System.Collections.IEnumerable)__powerForgeRight)"
-            : "new object?[] { __powerForgeRight }";
-        return $"((global::System.Func<object?[]>)(() => {{ object? __powerForgeLeft = (object?)({left}); object? __powerForgeRight = (object?)({right}); global::System.Collections.Generic.IEnumerable<object?> __powerForgeLeftValues = __powerForgeLeft is null ? global::System.Array.Empty<object?>() : global::System.Linq.Enumerable.Cast<object?>((global::System.Collections.IEnumerable)__powerForgeLeft); global::System.Collections.Generic.IEnumerable<object?> __powerForgeRightValues = {rightValues}; return global::System.Linq.Enumerable.ToArray(global::System.Linq.Enumerable.Concat(__powerForgeLeftValues, __powerForgeRightValues)); }}))()";
+        var appendRight = concatenation.EnumerateRight
+            ? "if (__powerForgeRight is null) { __powerForgeValues.Add(null); } else { foreach (object? __powerForgeItem in (global::System.Collections.IEnumerable)__powerForgeRight) __powerForgeValues.Add(__powerForgeItem); }"
+            : "__powerForgeValues.Add(__powerForgeRight);";
+        return $"((global::System.Func<object?[]>)(() => {{ object? __powerForgeLeft = (object?)({left}); object? __powerForgeRight = (object?)({right}); var __powerForgeValues = new global::System.Collections.Generic.List<object?>(); if (__powerForgeLeft is not null) {{ foreach (object? __powerForgeItem in (global::System.Collections.IEnumerable)__powerForgeLeft) __powerForgeValues.Add(__powerForgeItem); }} {appendRight} return __powerForgeValues.ToArray(); }}))()";
     }
 }

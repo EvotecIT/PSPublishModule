@@ -43,7 +43,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return prefix + "-" + architectureName;
     }
 
-    private static string? ResolveRuntimeIdentifier(PowerShellCompilationBuildSpec spec)
+    internal static string? ResolveRuntimeIdentifier(PowerShellCompilationBuildSpec spec)
     {
         if (spec.Kind != PowerShellCompilationArtifactKind.Executable)
             return null;
@@ -58,7 +58,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             RuntimeInformation.ProcessArchitecture);
     }
 
-    private static string? GetHostRuntimeIdentifier()
+    internal static string? GetHostRuntimeIdentifier()
     {
 #if NETFRAMEWORK
         return null;

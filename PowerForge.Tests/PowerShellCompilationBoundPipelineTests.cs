@@ -88,9 +88,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Theory]
-    [InlineData("[string[]] $Values", "Values ?? global::System.Array.Empty<string>()")]
-    [InlineData("[string] $Values", "new[] { Values }")]
-    public void ForeachCollectionShapeIsSelectedDuringBinding(string parameter, string expectedEnumerable)
+    [InlineData("[string[]] $Values", true)]
+    [InlineData("[string] $Values", false)]
+    public void ForeachCollectionShapeIsSelectedDuringBinding(string parameter, bool specializedArrayLoop)
     {
         var document = PowerShellSourceParser.Parse(
             $"function Get-Last {{ param({parameter}) [string] $last = ''; foreach ($value in $Values) {{ $last = $value }}; return $last }}",
@@ -104,9 +104,18 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.IsType<PowerShellLoweredForEachStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("string value = default!;", source, StringComparison.Ordinal);
-        Assert.Contains("foreach (string __foreachItem_", source, StringComparison.Ordinal);
         Assert.Contains("value = __foreachItem_", source, StringComparison.Ordinal);
-        Assert.Contains(expectedEnumerable, source, StringComparison.Ordinal);
+        if (specializedArrayLoop)
+        {
+            Assert.Contains("string[] __foreachArray_", source, StringComparison.Ordinal);
+            Assert.Contains("Values ?? global::System.Array.Empty<string>()", source, StringComparison.Ordinal);
+            Assert.Contains("for (int __foreachIndex_", source, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("foreach (string __foreachItem_", source, StringComparison.Ordinal);
+            Assert.Contains("new[] { Values }", source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

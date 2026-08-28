@@ -31,6 +31,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
         foreach (var file in files)
             File.Copy(file, Path.Combine(sourceDirectory, Path.GetFileName(file)), overwrite: false);
+        CopyMappedSources(sourceDirectory, spec);
         var embeddedDependencies = Path.Combine(workspace, "EmbeddedDependencies");
         if (Directory.Exists(embeddedDependencies))
         {
@@ -42,6 +43,27 @@ internal static class PowerShellGeneratedSourcePublisher
         PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
+    }
+
+    private static void CopyMappedSources(string sourceDirectory, PowerShellCompilationBuildSpec spec)
+    {
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        foreach (var sourcePath in new[] { spec.SourcePath }
+                     .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
+                     .Select(Path.GetFullPath)
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        {
+            var documentId = PowerShellSourceParser.CreateDocumentId(sourcePath, sourceRoot);
+            File.Copy(sourcePath, Path.Combine(sourceDirectory, documentId), overwrite: false);
+        }
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable &&
+            spec.Mode == PowerShellCompilationMode.Strict)
+        {
+            var entryDocumentId = PowerShellSourceParser.CreateDocumentId(
+                Path.GetFullPath(spec.SourcePath) + ".powerforge-entry.ps1",
+                sourceRoot);
+            File.Copy(spec.SourcePath, Path.Combine(sourceDirectory, entryDocumentId), overwrite: false);
+        }
     }
 
     private static void WriteSourceMap(

@@ -7,7 +7,8 @@ internal sealed class PowerShellStrictDependencyClosureRequest
         IEnumerable<PowerShellCompilationArtifactFile> files,
         string targetFramework,
         string? runtimeIdentifier,
-        PowerShellCompilationDependencyGraph dependencyGraph)
+        PowerShellCompilationDependencyGraph dependencyGraph,
+        PowerShellCompilationExecutableOptimization optimization = PowerShellCompilationExecutableOptimization.None)
     {
         Files = files?.ToArray() ?? throw new ArgumentNullException(nameof(files));
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework)
@@ -15,10 +16,12 @@ internal sealed class PowerShellStrictDependencyClosureRequest
             : targetFramework.Trim();
         RuntimeIdentifier = runtimeIdentifier?.Trim() ?? string.Empty;
         DependencyGraph = dependencyGraph ?? throw new ArgumentNullException(nameof(dependencyGraph));
+        Optimization = optimization;
     }
 
     internal PowerShellCompilationArtifactFile[] Files { get; }
     internal string TargetFramework { get; }
     internal string RuntimeIdentifier { get; }
     internal PowerShellCompilationDependencyGraph DependencyGraph { get; }
+    internal PowerShellCompilationExecutableOptimization Optimization { get; }
 }

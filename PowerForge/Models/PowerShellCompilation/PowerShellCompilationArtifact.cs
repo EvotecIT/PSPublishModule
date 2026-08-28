@@ -221,6 +221,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// </summary>
     public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
 
+    /// <summary>Optional equivalent-workload runtime boundary profile to bind into manifest evidence.</summary>
+    public PowerShellCompilationBoundaryRuntimeProfile? BoundaryRuntimeProfile { get; set; }
+
     /// <summary>
     /// Explicitly permits a build to resolve the current dependency graph without a separately reviewed lock.
     /// The resulting manifest records that the dependency lock was not reviewed.
@@ -373,7 +376,7 @@ public sealed class PowerShellCompilationArtifactManifest
 public sealed class PowerShellCompilationDependencyClosure
 {
     /// <summary>Closure evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Target framework whose reference pack supplied trusted runtime identities.</summary>
     public string TargetFramework { get; set; } = string.Empty;
@@ -396,11 +399,74 @@ public sealed class PowerShellCompilationDependencyClosure
     /// <summary>Number of delivered native libraries whose presence was inspected.</summary>
     public int NativeLibraries { get; set; }
 
+    /// <summary>Native imports resolved to exact reviewed runtime-pack assets.</summary>
+    public List<string> ReviewedNativeImports { get; set; } = new();
+
+    /// <summary>Native imports classified by the explicit target operating-system ABI.</summary>
+    public List<string> TargetAbiNativeImports { get; set; } = new();
+
+    /// <summary>Exact delivered native runtime-pack content identities.</summary>
+    public List<PowerShellCompilationDeliveredNativeDependency> DeliveredNativeDependencies { get; set; } = new();
+
     /// <summary>Number of entries read from a .NET single-file manifest.</summary>
     public int BundledEntries { get; set; }
 
+    /// <summary>NativeAOT primary executable format, architecture, hash, and imported libraries.</summary>
+    public PowerShellCompilationNativeExecutableEvidence? NativeExecutable { get; set; }
+
+    /// <summary>Number of reviewed runtime-pack assemblies rewritten by the selected SDK optimization pipeline.</summary>
+    public int TransformedManagedAssemblies { get; set; }
+
+    /// <summary>Exact input and delivered content identities for inspected managed dependencies.</summary>
+    public List<PowerShellCompilationDeliveredDependency> DeliveredDependencies { get; set; } = new();
+
     /// <summary>Formats or dependencies that prevented fail-closed certification.</summary>
     public List<string> Limitations { get; set; } = new();
+}
+
+/// <summary>Content-level derivation evidence for one delivered managed dependency.</summary>
+public sealed class PowerShellCompilationDeliveredDependency
+{
+    /// <summary>Stable managed assembly display identity.</summary>
+    public string Identity { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact delivered bytes.</summary>
+    public string DeliveredSha256 { get; set; } = string.Empty;
+
+    /// <summary>Reviewed input SHA-256 identities that could supply this assembly.</summary>
+    public string[] ReviewedInputSha256 { get; set; } = Array.Empty<string>();
+
+    /// <summary>Content relationship: Exact or SdkOptimization.</summary>
+    public string Derivation { get; set; } = "Exact";
+}
+
+/// <summary>Content-level evidence for one delivered native runtime-pack dependency.</summary>
+public sealed class PowerShellCompilationDeliveredNativeDependency
+{
+    /// <summary>Delivered bundle or file name.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact delivered bytes.</summary>
+    public string DeliveredSha256 { get; set; } = string.Empty;
+
+    /// <summary>Reviewed runtime-pack source identity.</summary>
+    public string ReviewedSource { get; set; } = string.Empty;
+}
+
+/// <summary>Mechanically inspected NativeAOT executable evidence.</summary>
+public sealed class PowerShellCompilationNativeExecutableEvidence
+{
+    /// <summary>Executable container format: PE, ELF, or MachO.</summary>
+    public string Format { get; set; } = string.Empty;
+
+    /// <summary>Architecture encoded in the executable header.</summary>
+    public string Architecture { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 of the exact delivered executable.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>Native libraries declared by the executable import/load table.</summary>
+    public string[] ImportedLibraries { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

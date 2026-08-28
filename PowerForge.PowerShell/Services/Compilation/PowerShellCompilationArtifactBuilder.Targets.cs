@@ -8,18 +8,23 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 {
     private static PowerShellCompilationBoundaryEvidence CreateBoundaryEvidence(
         IReadOnlyCollection<PowerShellCompiledMethod> methods,
-        int fallbackUnits)
+        int fallbackUnits,
+        PowerShellCompilationBoundaryRuntimeProfile? runtimeProfile)
     {
         var typedEntries = methods.Count(static method => method.Lifecycle is null);
         var hostedRegions = methods.Sum(static method => method.HostedRegionSiteCount);
+        var staticAdvisory = fallbackUnits > typedEntries
+            ? "Runtime fallback units exceed typed entry points; profile this Hybrid artifact before assuming compilation improves the workload."
+            : string.Empty;
         return new PowerShellCompilationBoundaryEvidence
         {
             TypedEntryPoints = typedEntries,
             HostedRegionSites = hostedRegions,
             RuntimeFallbackUnits = fallbackUnits,
-            Advisory = fallbackUnits > typedEntries
-                ? "Runtime fallback units exceed typed entry points; profile this Hybrid artifact before assuming compilation improves the workload."
-                : string.Empty
+            RuntimeProfile = runtimeProfile,
+            Advisory = !string.IsNullOrWhiteSpace(runtimeProfile?.Advisory)
+                ? runtimeProfile!.Advisory
+                : staticAdvisory
         };
     }
 

@@ -401,7 +401,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         stagedArtifact.Files,
                         spec.TargetFramework,
                         runtimeIdentifier,
-                        dependencyGraph));
+                        dependencyGraph,
+                        spec.Optimization));
                     EnsureStrictDependencyClosureCertified(dependencyClosure);
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);
@@ -413,7 +414,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) + runtimeManifestHooks.Length
                     : 0;
                 var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
-                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, fallbackUnits);
+                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, fallbackUnits, spec.BoundaryRuntimeProfile);
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
                     .ToArray();

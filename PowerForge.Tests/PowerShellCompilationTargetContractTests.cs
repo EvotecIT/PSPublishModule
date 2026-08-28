@@ -119,7 +119,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             allowUnreviewedDependencyResolution: true)
         {
             TargetContract = target,
-            EmitSource = true
+            EmitSource = true,
+            BoundaryRuntimeProfile = new PowerShellCompilationBoundaryRuntimeProfile
+            {
+                Workload = "target-contract-profile",
+                RuntimeIdentifier = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+                BaselineDurationNanoseconds = 100,
+                BoundaryDurationNanoseconds = 200,
+                BoundaryInvocations = 2,
+                EstimatedOverheadNanosecondsPerBoundary = 50,
+                EstimatedOverheadRatio = 0.5,
+                Advisory = "profile advisory"
+            }
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -128,10 +139,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(target.ContractSha256, result.Manifest.Toolchain!.TargetContractSha256);
         Assert.Equal(result.Manifest.DependencyGraph!.LockSha256, result.Manifest.Toolchain.DependencyLockSha256);
         Assert.NotNull(result.Manifest.IrOptimization);
-        Assert.Equal(new[] { "constant-folding", "dead-branch-elimination" }, result.Manifest.IrOptimization!.Passes);
+        Assert.Equal(
+            new[]
+            {
+                "constant-folding",
+                "dead-branch-elimination",
+                "allocation-reduction",
+                "pipeline-stage-fusion",
+                "command-region-coalescing",
+                "specialized-collection-loops",
+                "cached-conversion-plans",
+                "authored-source-sequence-mapping"
+            },
+            result.Manifest.IrOptimization!.Passes);
         Assert.NotNull(result.Manifest.Boundaries);
         Assert.Equal(1, result.Manifest.Boundaries!.TypedEntryPoints);
         Assert.Equal(0, result.Manifest.Boundaries.RuntimeFallbackUnits);
+        Assert.Equal("target-contract-profile", result.Manifest.Boundaries.RuntimeProfile!.Workload);
+        Assert.Equal("profile advisory", result.Manifest.Boundaries.Advisory);
         Assert.Contains(result.Manifest.Files, static file => file.Role == "TargetContract");
         Assert.Contains(result.Manifest.Files, static file => file.Role == "BuildProvenance");
         Assert.Contains(result.Manifest.Files, static file => file.Role == "Sbom");
@@ -250,6 +275,48 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.Contains("support level", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Supported", target.SupportLevel);
+    }
+
+    [Theory]
+    [InlineData("win-x64", PowerShellCompilationExecutableOptimization.None, false, "Supported")]
+    [InlineData("linux-x64", PowerShellCompilationExecutableOptimization.NativeAot, true, "Supported")]
+    [InlineData("osx-arm64", PowerShellCompilationExecutableOptimization.NativeAot, true, "Experimental")]
+    [InlineData("linux-arm64", PowerShellCompilationExecutableOptimization.NativeAot, true, "Experimental")]
+    [InlineData("win-x64", PowerShellCompilationExecutableOptimization.Trimmed, true, "Experimental")]
+    public void TargetContractPromotionIsLimitedToTargetHostCertifiedProfiles(
+        string runtimeIdentifier,
+        PowerShellCompilationExecutableOptimization optimization,
+        bool selfContained,
+        string expected)
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier,
+            selfContained,
+            singleFile: true,
+            optimization,
+            explicitContract: true);
+
+        Assert.Equal(expected, target.SupportLevel);
+        Assert.Equal(target.ContractSha256, PowerShellCompilationTargetContractService.ComputeSha256(target));
+    }
+
+    [Fact]
+    public void TargetContractDoesNotPromoteAnUntestedFrameworkOnACertifiedRid()
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net8.0",
+            "win-x64",
+            selfContained: true,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.NativeAot,
+            explicitContract: true);
+
+        Assert.Equal("Experimental", target.SupportLevel);
     }
 
     [Fact]

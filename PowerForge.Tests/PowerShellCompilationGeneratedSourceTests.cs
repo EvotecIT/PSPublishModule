@@ -38,6 +38,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "Directory.Build.targets")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "Directory.Packages.props")));
         Assert.True(File.Exists(Path.Combine(result.GeneratedSourcePath!, "global.json")));
+        var mappedDocumentId = PowerShellSourceParser.CreateDocumentId(fixture.ScriptPath, fixture.RootPath);
+        Assert.Equal(File.ReadAllBytes(fixture.ScriptPath), File.ReadAllBytes(Path.Combine(result.GeneratedSourcePath!, mappedDocumentId)));
         var sourceMapPath = Path.Combine(result.GeneratedSourcePath!, "source-map.json");
         Assert.True(File.Exists(sourceMapPath));
         using (var sourceMap = JsonDocument.Parse(File.ReadAllText(sourceMapPath)))
@@ -114,6 +116,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         startInfo.ArgumentList.Add("GeneratedIsolation.csproj");
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add("Release");
+        startInfo.ArgumentList.Add("/p:ContinuousIntegrationBuild=true");
         using var process = Process.Start(startInfo)!;
         var output = process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
@@ -192,6 +195,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 component.TryGetProperty("purl", out var purl) &&
                 purl.GetString() == "pkg:nuget/Microsoft.PowerShell.SDK@7.6.5");
         }
+    }
+
+    [Fact]
+    public void Build_StrictExecutableHostPinsUtf8AndKeepsAotParameterShapeReachable()
+    {
+        using var fixture = ArtifactFixture.Create("param([Parameter(Mandatory)] [string] $Text); return $Text");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "GeneratedStrictHost",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true,
+            TargetFramework = "net10.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var program = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "Program.cs"));
+        Assert.Contains("private static readonly bool AcceptsSurplusPositionalArguments", program, StringComparison.Ordinal);
+        Assert.Contains("Console.InputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
+        Assert.Contains("Console.OutputEncoding = new UTF8Encoding", program, StringComparison.Ordinal);
     }
 
     [Fact]

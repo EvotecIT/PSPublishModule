@@ -11,7 +11,7 @@ namespace PowerForge;
 /// Mechanically inspects the delivered Strict artifact set for PowerShell source,
 /// PowerShell runtime references, and known dynamic execution entry points.
 /// </summary>
-internal static class PowerShellStrictDependencyClosureVerifier
+internal static partial class PowerShellStrictDependencyClosureVerifier
 {
     private static readonly byte[] BundleSignature =
     {
@@ -50,6 +50,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
         var targetRuntimeAssemblies = PowerShellTargetRuntimeAssemblyCatalog.ReadStableKeys(request.TargetFramework)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var managedAssemblies = new List<ManagedAssemblyInspection>();
+        var nativeLibraries = new List<NativeLibraryInspection>();
         foreach (var file in request.Files.OrderBy(static file => file.Path, StringComparer.OrdinalIgnoreCase))
         {
             result.InspectedFiles++;
@@ -58,6 +59,14 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 throw new InvalidOperationException($"Strict runtime-free artifact contains PowerShell source '{file.Path}'.");
 
             var extension = Path.GetExtension(file.Path);
+            if (file.Role.Equals("Primary", StringComparison.Ordinal) &&
+                !extension.Equals(".dll", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!VerifyExecutable(request, file.Path, result, managedAssemblies, nativeLibraries))
+                    result.Limitations.Add($"Executable format is not currently certifiable: {Path.GetFileName(file.Path)}");
+                continue;
+            }
+
             if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase))
             {
                 VerifyGeneratedSource(file.Path);
@@ -80,16 +89,22 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 else
                 {
                     result.NativeLibraries++;
-                    result.Limitations.Add(
-                        $"Native library certification remains fail-closed until Milestone 14 proves the exact target-host architecture, ABI, publisher, transitive native closure, deployment, and execution contract: {Path.GetFileName(file.Path)}");
+                    nativeLibraries.Add(new NativeLibraryInspection(Path.GetFileName(file.Path), file.Path, ComputeSha256(file.Path)));
                 }
                 continue;
             }
 
             if (extension.Equals(".exe", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(extension))
             {
-                if (!VerifyExecutable(file.Path, result, managedAssemblies))
+                if (!VerifyExecutable(request, file.Path, result, managedAssemblies, nativeLibraries))
                     result.Limitations.Add($"Executable format is not currently certifiable: {Path.GetFileName(file.Path)}");
+                continue;
+            }
+
+            if (IsNativeLibrary(file.Path))
+            {
+                result.NativeLibraries++;
+                nativeLibraries.Add(new NativeLibraryInspection(Path.GetFileName(file.Path), file.Path, ComputeSha256(file.Path)));
                 continue;
             }
 
@@ -111,8 +126,9 @@ internal static class PowerShellStrictDependencyClosureVerifier
         }
 
         VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies);
-        VerifyReviewedDependencyGraph(request, managedAssemblies);
-        VerifyNativeReferenceClosure(managedAssemblies);
+        VerifyReviewedDependencyGraph(request, managedAssemblies, result);
+        VerifyReviewedNativeDependencyGraph(request, nativeLibraries, result);
+        VerifyNativeReferenceClosure(request, managedAssemblies, result);
         result.Verified = result.Limitations.Count == 0;
         return result;
     }
@@ -149,9 +165,11 @@ internal static class PowerShellStrictDependencyClosureVerifier
     }
 
     private static bool VerifyExecutable(
+        PowerShellStrictDependencyClosureRequest request,
         string path,
         PowerShellCompilationDependencyClosure result,
-        ICollection<ManagedAssemblyInspection> managedAssemblies)
+        ICollection<ManagedAssemblyInspection> managedAssemblies,
+        ICollection<NativeLibraryInspection> nativeLibraries)
     {
         using var stream = File.OpenRead(path);
         try
@@ -172,7 +190,16 @@ internal static class PowerShellStrictDependencyClosureVerifier
         stream.Position = 0;
         var headerOffset = FindBundleHeaderOffset(stream);
         if (headerOffset is null)
-            return false;
+        {
+            if (request.Optimization != PowerShellCompilationExecutableOptimization.NativeAot ||
+                !request.Files.Any(file => file.Role == "Primary" && PowerShellCompilationPathSafety.PathEquals(file.Path, path)))
+                return false;
+            var nativeExecutable = PowerShellNativeExecutableInspector.Inspect(path, request.RuntimeIdentifier);
+            VerifyNativeExecutableImports(request, nativeExecutable, result);
+            result.NativeExecutable = nativeExecutable;
+            result.ArtifactFormat = "NativeAOT/" + nativeExecutable.Format;
+            return true;
+        }
         if (headerOffset == 0)
         {
             result.ArtifactFormat = "DotNetAppHost";
@@ -182,7 +209,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
         result.ArtifactFormat = $"DotNetSingleFile/{manifest.MajorVersion}.{manifest.MinorVersion}";
         result.BundledEntries += manifest.Entries.Count;
         foreach (var entry in manifest.Entries)
-            VerifyBundleEntry(stream, entry, path, result, managedAssemblies);
+            VerifyBundleEntry(stream, entry, path, result, managedAssemblies, nativeLibraries);
         return true;
     }
 
@@ -308,7 +335,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
         DotNetBundleEntry entry,
         string bundlePath,
         PowerShellCompilationDependencyClosure result,
-        ICollection<ManagedAssemblyInspection> managedAssemblies)
+        ICollection<ManagedAssemblyInspection> managedAssemblies,
+        ICollection<NativeLibraryInspection> nativeLibraries)
     {
         if (IsPowerShellSource(entry.RelativePath))
             throw new InvalidOperationException($"Strict runtime-free bundle '{bundlePath}' contains PowerShell source '{entry.RelativePath}'.");
@@ -323,7 +351,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 VerifyDependencyManifest(bytes, bundlePath + "!" + entry.RelativePath);
                 break;
             case DotNetBundleFileType.NativeBinary:
-                result.Limitations.Add($"Bundled native dependency is not currently certifiable: {entry.RelativePath}");
+                result.NativeLibraries++;
+                nativeLibraries.Add(new NativeLibraryInspection(entry.RelativePath, bundlePath + "!" + entry.RelativePath, ComputeSha256(bytes)));
                 break;
             case DotNetBundleFileType.RuntimeConfigJson:
             case DotNetBundleFileType.Symbols:
@@ -448,7 +477,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
         foreach (var assembly in assemblies)
         foreach (var reference in assembly.References.GroupBy(static reference => reference.StableKey, StringComparer.OrdinalIgnoreCase).Select(static group => group.First()))
         {
-            if (delivered.Contains(reference.StableKey) || targetRuntimeAssemblies.Contains(reference.StableKey)) continue;
+            if (delivered.Contains(reference.StableKey) || targetRuntimeAssemblies.Contains(reference.StableKey) ||
+                IsResolvedRuntimeFacadeReference(reference, assemblies, targetRuntimeAssemblies)) continue;
             throw new InvalidOperationException(
                 $"Strict runtime-free managed dependency '{assembly.DisplayPath}' references missing managed assembly '{reference.DisplayName}'. The delivered closure must contain that exact assembly identity or classify its signed identity as part of the target runtime.");
         }
@@ -456,7 +486,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
 
     private static void VerifyReviewedDependencyGraph(
         PowerShellStrictDependencyClosureRequest request,
-        IReadOnlyCollection<ManagedAssemblyInspection> assemblies)
+        IReadOnlyCollection<ManagedAssemblyInspection> assemblies,
+        PowerShellCompilationDependencyClosure result)
     {
         var locked = request.DependencyGraph.Nodes
             .Where(static node => node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment))
@@ -490,9 +521,21 @@ internal static class PowerShellStrictDependencyClosureVerifier
             if (contentHashes.Length == 0)
                 throw new InvalidOperationException(
                     $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' has no SHA-256 content identity in the reviewed dependency graph.");
-            if (!contentHashes.Contains(assembly.ContentSha256, StringComparer.OrdinalIgnoreCase))
+            var exact = contentHashes.Contains(assembly.ContentSha256, StringComparer.OrdinalIgnoreCase);
+            var sdkTransformed = !exact &&
+                request.Optimization is PowerShellCompilationExecutableOptimization.Trimmed or PowerShellCompilationExecutableOptimization.NativeAot &&
+                candidates.Any(static node => node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal));
+            if (!exact && !sdkTransformed)
                 throw new InvalidOperationException(
                     $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' does not match the SHA-256 content identity in the reviewed dependency graph.");
+            if (sdkTransformed) result.TransformedManagedAssemblies++;
+            result.DeliveredDependencies.Add(new PowerShellCompilationDeliveredDependency
+            {
+                Identity = assembly.Identity.DisplayName,
+                DeliveredSha256 = assembly.ContentSha256,
+                ReviewedInputSha256 = contentHashes.OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase).ToArray(),
+                Derivation = sdkTransformed ? "SdkOptimization" : "Exact"
+            });
         }
 
         foreach (var pair in locked.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -505,9 +548,27 @@ internal static class PowerShellStrictDependencyClosureVerifier
                     assembly.Identity.StableKey.Equals(pair.Key, StringComparison.OrdinalIgnoreCase) &&
                     assembly.ContentSha256.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase)))
                 continue;
+            if (node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal))
+                continue;
             throw new InvalidOperationException(
                 $"Strict runtime-free reviewed dependency '{node.Identity.Name}' was required for delivery but is absent from the delivered artifact closure.");
         }
+    }
+
+    private static bool IsResolvedRuntimeFacadeReference(
+        AssemblyIdentity reference,
+        IEnumerable<ManagedAssemblyInspection> assemblies,
+        ISet<string> targetRuntimeAssemblies)
+    {
+        if (reference.Version != new Version(0, 0, 0, 0) || string.IsNullOrWhiteSpace(reference.PublicKeyToken))
+            return false;
+        return assemblies.Any(candidate =>
+            targetRuntimeAssemblies.Contains(candidate.Identity.StableKey) &&
+            candidate.Identity.Name.Equals(reference.Name, StringComparison.OrdinalIgnoreCase) &&
+            candidate.Identity.PublicKeyToken.Equals(reference.PublicKeyToken, StringComparison.OrdinalIgnoreCase) &&
+            candidate.Identity.Culture.Equals(reference.Culture, StringComparison.OrdinalIgnoreCase) &&
+            candidate.Identity.Retargetable == reference.Retargetable &&
+            candidate.Identity.ContentType.Equals(reference.ContentType, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsCompilerOwnedPrimaryAssembly(
@@ -520,19 +581,12 @@ internal static class PowerShellStrictDependencyClosureVerifier
             var separator = displayPath.IndexOf('!');
             if (separator <= 0 || !PowerShellCompilationPathSafety.PathEquals(file.Path, displayPath.Substring(0, separator))) continue;
             var entryName = Path.GetFileNameWithoutExtension(displayPath.Substring(separator + 1));
+            var primaryFileName = Path.GetFileName(file.Path);
             var primaryName = Path.GetFileNameWithoutExtension(file.Path);
-            if (entryName.Equals(primaryName, StringComparison.OrdinalIgnoreCase)) return true;
+            if (entryName.Equals(primaryFileName, StringComparison.OrdinalIgnoreCase) ||
+                entryName.Equals(primaryName, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
-    }
-
-    private static void VerifyNativeReferenceClosure(IEnumerable<ManagedAssemblyInspection> assemblies)
-    {
-        foreach (var assembly in assemblies)
-        foreach (var import in assembly.NativeImports.Distinct(StringComparer.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                $"Strict runtime-free managed dependency '{assembly.DisplayPath}' imports native library '{import}'. " +
-                "Native dependency certification remains fail-closed until Milestone 14 records and validates the exact target-host architecture, ABI, publisher, transitive native closure, and execution proof.");
     }
 
     private static AssemblyIdentity CreateAssemblyIdentity(

@@ -40,6 +40,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .AppendLine("        checked")
             .AppendLine("        {");
 
+        if (targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+        {
+            builder.AppendLine("            static T __powerForgeConvertInvariant<T>(object? value)")
+                .AppendLine("            {")
+                .AppendLine("                if (global::System.Management.Automation.LanguagePrimitives.TryConvertTo<T>(value, global::System.Globalization.CultureInfo.InvariantCulture, out T result)) return result;")
+                .AppendLine("                return (T)global::System.Management.Automation.LanguagePrimitives.ConvertTo(value, typeof(T), global::System.Globalization.CultureInfo.InvariantCulture)!;")
+                .AppendLine("            }");
+        }
+
         var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
             .Concat(function.Locals.Select(static local => PowerShellClrSymbolMapper.MapIdentifier(local.Symbol.Name)))
             .ToHashSet(StringComparer.Ordinal);
@@ -104,9 +113,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
         Func<string, string> getTemporaryIdentifier,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
+        var prefix = new string(' ', indent * 4);
+        builder.Append(prefix).Append("#line ")
+            .Append(statement.Span.StartLine.ToString(CultureInfo.InvariantCulture))
+            .Append(" \"").Append(statement.Span.DocumentId).AppendLine("\"");
         var start = PowerShellGeneratedSourcePosition.Get(builder);
         EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, sourceMap);
         var end = PowerShellGeneratedSourcePosition.Get(builder);
+        builder.Append(prefix).AppendLine("#line default");
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
             statement.Span.StartLine,
             statement.Span.StartColumn,
@@ -218,6 +232,28 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredForEachStatement loop:
                 var collection = EmitExpression(loop.Collection);
+                if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
+                {
+                    var arrayIdentifier = getTemporaryIdentifier("foreachArray");
+                    var indexIdentifier = getTemporaryIdentifier("foreachIndex");
+                    var specializedVariable = getTemporaryIdentifier("foreachItem");
+                    var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+                    builder.Append(prefix).Append(elementTypeName).Append("[] ").Append(arrayIdentifier)
+                        .Append(" = ").Append(collection).Append(" ?? global::System.Array.Empty<")
+                        .Append(elementTypeName).AppendLine(">();");
+                    builder.Append(prefix).Append("for (int ").Append(indexIdentifier).Append(" = 0; ")
+                        .Append(indexIdentifier).Append(" < ").Append(arrayIdentifier).Append(".Length; ")
+                        .Append(indexIdentifier).AppendLine("++)");
+                    builder.Append(prefix).AppendLine("{");
+                    builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(specializedVariable)
+                        .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
+                    builder.Append(prefix).Append("    ")
+                        .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
+                        .Append(specializedVariable).AppendLine(";");
+                    foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
+                    builder.Append(prefix).AppendLine("}");
+                    return;
+                }
                 var enumerable = loop.ScalarString
                     ? $"new[] {{ {collection} }}"
                     : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)}>())";
@@ -277,8 +313,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
     }
 
     private static string EmitCommandRegionArguments(IEnumerable<PowerShellLoweredCommandRegionArgument> arguments)
-        => "new object?[] { " + string.Join(", ", arguments.Select(argument =>
-            PowerShellCSharpSymbolRenderer.Identifier(argument.Symbol.Name))) + " }";
+    {
+        var values = arguments.Select(argument => PowerShellCSharpSymbolRenderer.Identifier(argument.Symbol.Name)).ToArray();
+        return values.Length == 0
+            ? "global::System.Array.Empty<object?>()"
+            : "new object?[] { " + string.Join(", ", values) + " }";
+    }
 
     private static void EmitCommandCapture(
         StringBuilder builder,
@@ -402,7 +442,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (conversion.UsePowerShellTruthiness)
             return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
         return conversion.UsePowerShellLanguageRuntime
-            ? $"({type})global::System.Management.Automation.LanguagePrimitives.ConvertTo((object?)({EmitExpression(conversion.Operand)}), typeof({type}), global::System.Globalization.CultureInfo.InvariantCulture)!"
+            ? $"__powerForgeConvertInvariant<{type}>((object?)({EmitExpression(conversion.Operand)}))"
             : $"({type})({EmitExpression(conversion.Operand)})";
     }
 
@@ -718,61 +758,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return $"({symbol}{EmitExpression(expression.Operand)})";
     }
 
-    internal static string EmitLiteral(PowerShellLoweredLiteralExpression literal)
-    {
-        if (literal.Value is null) return "null";
-        var nullableType = Nullable.GetUnderlyingType(literal.ClrType);
-        if (nullableType is not null)
-        {
-            var scalar = new PowerShellLoweredLiteralExpression(literal.Span, nullableType, literal.Value);
-            return $"new {PowerShellCSharpSymbolRenderer.TypeName(literal.ClrType)}({EmitLiteral(scalar)})";
-        }
-        if (literal.ClrType.IsEnum)
-        {
-            var underlying = Enum.GetUnderlyingType(literal.ClrType);
-            var value = Type.GetTypeCode(underlying) is TypeCode.Byte or TypeCode.UInt16 or TypeCode.UInt32 or TypeCode.UInt64
-                ? Convert.ToUInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "UL"
-                : Convert.ToInt64(literal.Value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture) + "L";
-            return $"({PowerShellCSharpSymbolRenderer.TypeName(literal.ClrType)}){value}";
-        }
-        if (literal.Value is string text) return PowerShellCSharpLiteral.QuoteString(text);
-        if (literal.Value is bool boolean) return boolean ? "true" : "false";
-        if (literal.Value is System.Management.Automation.SwitchParameter switchParameter)
-            return $"new global::System.Management.Automation.SwitchParameter({(switchParameter.IsPresent ? "true" : "false")})";
-        if (literal.Value is char character) return PowerShellCSharpLiteral.QuoteChar(character);
-        if (literal.Value is float single)
-            return float.IsNaN(single) || float.IsInfinity(single)
-                ? EmitCanonicalLiteral(literal)
-                : single.ToString("R", CultureInfo.InvariantCulture) + "f";
-        if (literal.Value is double doubleValue)
-            return double.IsNaN(doubleValue) || double.IsInfinity(doubleValue)
-                ? EmitCanonicalLiteral(literal)
-                : doubleValue.ToString("R", CultureInfo.InvariantCulture) + "d";
-        if (literal.Value is decimal decimalValue) return decimalValue.ToString(CultureInfo.InvariantCulture) + "m";
-        if (literal.Value is long longValue) return longValue.ToString(CultureInfo.InvariantCulture) + "L";
-        if (literal.Value is ulong unsignedLong) return unsignedLong.ToString(CultureInfo.InvariantCulture) + "UL";
-        if (literal.Value is uint unsignedInteger) return unsignedInteger.ToString(CultureInfo.InvariantCulture) + "U";
-        if (literal.Value is Guid guid) return $"new global::System.Guid({PowerShellCSharpLiteral.QuoteString(guid.ToString("D"))})";
-        if (literal.Value is DateTime dateTime)
-            return $"new global::System.DateTime({dateTime.Ticks.ToString(CultureInfo.InvariantCulture)}L, (global::System.DateTimeKind){((int)dateTime.Kind).ToString(CultureInfo.InvariantCulture)})";
-        if (literal.Value is DateTimeOffset dateTimeOffset)
-            return $"new global::System.DateTimeOffset({dateTimeOffset.Ticks.ToString(CultureInfo.InvariantCulture)}L, new global::System.TimeSpan({dateTimeOffset.Offset.Ticks.ToString(CultureInfo.InvariantCulture)}L))";
-        if (literal.Value is TimeSpan timeSpan) return $"new global::System.TimeSpan({timeSpan.Ticks.ToString(CultureInfo.InvariantCulture)}L)";
-        if (literal.Value is Uri uri) return $"new global::System.Uri({PowerShellCSharpLiteral.QuoteString(uri.OriginalString)}, global::System.UriKind.RelativeOrAbsolute)";
-        if (literal.Value is Version version) return $"new global::System.Version({PowerShellCSharpLiteral.QuoteString(version.ToString())})";
-        if (literal.Value is System.Numerics.BigInteger bigInteger)
-        {
-            return $"global::System.Numerics.BigInteger.Parse({PowerShellCSharpLiteral.QuoteString(bigInteger.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)";
-        }
-        return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
-    }
-
-    private static string EmitCanonicalLiteral(PowerShellLoweredLiteralExpression literal)
-    {
-        if (!PowerShellCompilationLiteralPolicy.TryEncodeValue(literal.Value, literal.ClrType, out var encoded) || encoded is null)
-            throw new InvalidOperationException($"Literal value for '{literal.ClrType.FullName}' has no canonical C# encoding.");
-        return PowerShellCSharpLiteral.Emit(encoded, literal.ClrType, PowerShellCSharpSymbolRenderer.TypeName);
-    }
 }
 
 internal sealed class PowerShellBoundCSharpResult

@@ -5,6 +5,31 @@ namespace PowerForge;
 /// <summary>Builds a deterministic, non-executing inventory of PowerShell compilation dependencies and resources.</summary>
 public sealed partial class PowerShellCompilationDependencyPlanner
 {
+    /// <summary>Builds the exact dependency lock that an artifact build specification will consume.</summary>
+    public PowerShellCompilationDependencyGraph AnalyzeGraph(PowerShellCompilationBuildSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var runtimeIdentifier = PowerShellCompilationArtifactBuilder.ResolveRuntimeIdentifier(spec);
+        if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
+        var sourcePath = Path.GetFullPath(spec.SourcePath);
+        var sourceRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        var sourceFiles = new[] { sourcePath }
+            .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
+        foreach (var path in sourceFiles)
+        {
+            if (!File.Exists(path))
+                throw new FileNotFoundException("PowerShell compilation source file was not found.", path);
+            if (!PowerShellCompilationPathSafety.PathEquals(path, sourcePath))
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
+        }
+        var dependencies = Analyze(spec, sourceFiles);
+        return AnalyzeGraph(spec, sourceFiles, dependencies);
+    }
+
     /// <summary>Plans dependencies for a source graph selected by the shared input resolver.</summary>
     public PowerShellCompilationDependency[] Analyze(
         PowerShellCompilationResolvedInput input,
@@ -99,7 +124,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             sourceFiles,
             dependencies,
             spec.TargetFramework,
-            spec.RuntimeIdentifier);
+            spec.RuntimeIdentifier,
+            includeRuntimePack: spec.Kind == PowerShellCompilationArtifactKind.Executable &&
+                                (spec.SelfContained || spec.Optimization != PowerShellCompilationExecutableOptimization.None));
     }
     private static PowerShellCompilationDependency[] AnalyzeCore(
         string sourcePath,

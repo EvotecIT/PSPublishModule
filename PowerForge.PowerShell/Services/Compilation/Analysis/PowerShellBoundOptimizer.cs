@@ -5,16 +5,36 @@ internal sealed class PowerShellBoundOptimizer
 {
     private int _constantExpressionsFolded;
     private int _deadBranchesRemoved;
+    private int _identityConversionsRemoved;
+    private int _pipelineStagesFused;
+    private int _commandRegionStatementsCoalesced;
+    private int _specializedCollectionLoops;
+    private int _runtimeConversionSitesSpecialized;
+    private int _sourceMappedStatements;
 
     internal PowerShellBoundOptimizationResult Optimize(PowerShellBoundProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         _constantExpressionsFolded = 0;
         _deadBranchesRemoved = 0;
+        _identityConversionsRemoved = 0;
+        _pipelineStagesFused = 0;
+        _commandRegionStatementsCoalesced = 0;
+        _specializedCollectionLoops = 0;
+        _runtimeConversionSitesSpecialized = 0;
+        _sourceMappedStatements = 0;
         var functions = program.Functions.Select(function => function.WithBody(OptimizeBlock(function.Body))).ToArray();
         return new PowerShellBoundOptimizationResult(
             program.WithFunctions(functions),
-            new PowerShellBoundOptimizationEvidence(_constantExpressionsFolded, _deadBranchesRemoved));
+            new PowerShellBoundOptimizationEvidence(
+                _constantExpressionsFolded,
+                _deadBranchesRemoved,
+                _identityConversionsRemoved,
+                _pipelineStagesFused,
+                _commandRegionStatementsCoalesced,
+                _specializedCollectionLoops,
+                _runtimeConversionSitesSpecialized,
+                _sourceMappedStatements));
     }
 
     private PowerShellBoundBlock OptimizeBlock(PowerShellBoundBlock block)
@@ -22,6 +42,16 @@ internal sealed class PowerShellBoundOptimizer
         var statements = new List<PowerShellBoundStatement>();
         foreach (var statement in block.Statements)
         {
+            _sourceMappedStatements++;
+            if (statement is PowerShellBoundCommandRegionStatement region)
+            {
+                _pipelineStagesFused += Math.Max(0, region.Stages.Length - 1);
+                _commandRegionStatementsCoalesced += Math.Max(0, region.StatementCount - 1);
+            }
+            if (statement is PowerShellBoundCommandCaptureStatement capture)
+                _pipelineStagesFused += Math.Max(0, capture.Stages.Length - 1);
+            if (statement is PowerShellBoundForEachStatement { Collection.Type.ClrType.IsArray: true })
+                _specializedCollectionLoops++;
             if (statement is PowerShellBoundIfStatement { Clauses.Length: 1 } conditional)
             {
                 var clause = conditional.Clauses[0];
@@ -116,7 +146,17 @@ internal sealed class PowerShellBoundOptimizer
             return new PowerShellBoundUnaryExpression(unary.Span, unary.Operation, operand, unary.Type);
         }
         if (expression is PowerShellBoundConversionExpression conversion)
-            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, OptimizeExpression(conversion.Operand), conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness);
+        {
+            var operand = OptimizeExpression(conversion.Operand);
+            if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness &&
+                operand.Type.ClrType == conversion.Type.ClrType)
+            {
+                _identityConversionsRemoved++;
+                return operand;
+            }
+            if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
+            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness);
+        }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
                 invocation.Arguments.Select(OptimizeExpression).ToArray(), invocation.Type,
@@ -278,20 +318,46 @@ internal sealed class PowerShellBoundOptimizationResult
 
 internal sealed class PowerShellBoundOptimizationEvidence
 {
-    internal PowerShellBoundOptimizationEvidence(int constantExpressionsFolded, int deadBranchesRemoved)
+    internal PowerShellBoundOptimizationEvidence(
+        int constantExpressionsFolded,
+        int deadBranchesRemoved,
+        int identityConversionsRemoved,
+        int pipelineStagesFused,
+        int commandRegionStatementsCoalesced,
+        int specializedCollectionLoops,
+        int runtimeConversionSitesSpecialized,
+        int sourceMappedStatements)
     {
         ConstantExpressionsFolded = constantExpressionsFolded;
         DeadBranchesRemoved = deadBranchesRemoved;
+        IdentityConversionsRemoved = identityConversionsRemoved;
+        PipelineStagesFused = pipelineStagesFused;
+        CommandRegionStatementsCoalesced = commandRegionStatementsCoalesced;
+        SpecializedCollectionLoops = specializedCollectionLoops;
+        RuntimeConversionSitesSpecialized = runtimeConversionSitesSpecialized;
+        SourceMappedStatements = sourceMappedStatements;
     }
 
     internal int ConstantExpressionsFolded { get; }
     internal int DeadBranchesRemoved { get; }
-    internal bool Changed => ConstantExpressionsFolded > 0 || DeadBranchesRemoved > 0;
+    internal int IdentityConversionsRemoved { get; }
+    internal int PipelineStagesFused { get; }
+    internal int CommandRegionStatementsCoalesced { get; }
+    internal int SpecializedCollectionLoops { get; }
+    internal int RuntimeConversionSitesSpecialized { get; }
+    internal int SourceMappedStatements { get; }
+    internal bool Changed => ConstantExpressionsFolded > 0 || DeadBranchesRemoved > 0 || IdentityConversionsRemoved > 0;
 
     internal PowerShellCompilationOptimizationEvidence ToPublicModel()
         => new()
         {
             ConstantExpressionsFolded = ConstantExpressionsFolded,
-            DeadBranchesRemoved = DeadBranchesRemoved
+            DeadBranchesRemoved = DeadBranchesRemoved,
+            IdentityConversionsRemoved = IdentityConversionsRemoved,
+            PipelineStagesFused = PipelineStagesFused,
+            CommandRegionStatementsCoalesced = CommandRegionStatementsCoalesced,
+            SpecializedCollectionLoops = SpecializedCollectionLoops,
+            RuntimeConversionSitesSpecialized = RuntimeConversionSitesSpecialized,
+            SourceMappedStatements = SourceMappedStatements
         };
 }

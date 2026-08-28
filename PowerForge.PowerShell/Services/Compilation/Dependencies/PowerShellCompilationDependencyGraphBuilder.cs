@@ -36,7 +36,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         IEnumerable<string> compilationSourceFiles,
         IReadOnlyCollection<PowerShellCompilationDependency> dependencies,
         string? targetFramework = null,
-        string? runtimeIdentifier = null)
+        string? runtimeIdentifier = null,
+        bool includeRuntimePack = false)
     {
         var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind);
         return builder.BuildCore(
@@ -45,7 +46,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             compilationSourceFiles,
             dependencies,
             targetFramework,
-            runtimeIdentifier);
+            runtimeIdentifier,
+            includeRuntimePack);
     }
 
     private PowerShellCompilationDependencyGraph BuildCore(
@@ -54,7 +56,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         IEnumerable<string> compilationSourceFiles,
         IReadOnlyCollection<PowerShellCompilationDependency> dependencies,
         string? targetFramework,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        bool includeRuntimePack)
     {
         var sourceNodeId = AddLocalNode(
             sourcePath,
@@ -114,6 +117,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
 
         DiscoverManagedDependencyClosure(targetFramework, runtimeIdentifier);
         AddCompilerPackageNodes(rootId, targetFramework);
+        if (includeRuntimePack) AddRuntimePackNodes(rootId, targetFramework, runtimeIdentifier);
 
         var nodes = _nodes.Values.OrderBy(static node => node.Id, StringComparer.Ordinal).ToArray();
         var edges = _edges

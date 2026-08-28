@@ -2,13 +2,14 @@
 #nullable enable
 using System.Collections;
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge.Compiled;
 
 internal static class Program
 {
-    private const bool AcceptsSurplusPositionalArguments = {{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}};
+    private static readonly bool AcceptsSurplusPositionalArguments = {{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}};
 
     private static readonly ParameterSpec[] Parameters =
     {
@@ -26,6 +27,8 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        Console.InputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         try
         {
             var values = ParseArguments(args, out var boundParameters);

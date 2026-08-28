@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Xunit;
 
@@ -154,6 +155,61 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void StrictClosureVerifierFailsClosedForRidSuffixedPrimaryExecutable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "RidSuffixedClosure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "unknown.linux-x64");
+            File.WriteAllBytes(path, new byte[] { 1, 2, 3, 4 });
+
+            var result = Verify(
+                new[] { new PowerShellCompilationArtifactFile { Path = path, Role = "Primary", SizeBytes = 4 } },
+                runtimeIdentifier: "linux-x64");
+
+            Assert.False(result.Verified);
+            Assert.Contains(result.Limitations, static value => value.Contains("not currently certifiable", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void NativeExecutableInspectorCertifiesTheCurrentHostContainerAndArchitecture()
+    {
+        var platform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win" :
+            RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "linux" :
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx" : string.Empty;
+        var architecture = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.X64 => "x64",
+            Architecture.Arm64 => "arm64",
+            _ => string.Empty
+        };
+        if (platform.Length == 0 || architecture.Length == 0) return;
+
+        var evidence = PowerShellNativeExecutableInspector.Inspect(Environment.ProcessPath!, platform + "-" + architecture);
+
+        Assert.Equal(architecture, evidence.Architecture);
+        Assert.Equal(64, evidence.Sha256.Length);
+        Assert.NotEmpty(evidence.ImportedLibraries);
+        Assert.Throws<InvalidDataException>(() =>
+            PowerShellNativeExecutableInspector.Inspect(Environment.ProcessPath!, platform + (architecture == "x64" ? "-arm64" : "-x64")));
+    }
+
+    [Fact]
+    public void TargetNativeAbiCatalogUsesExplicitPlatformLibraries()
+    {
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "ld-linux-x86-64.so.2"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "api-ms-win-crt-runtime-l1-1-0.dll"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "unreviewed.so"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "unreviewed.dll"));
+    }
+
+    [Fact]
     public async Task StrictClosureVerifierUsesTheArtifactTargetReferencePackInsteadOfTheBuildHost()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "TargetRuntimeClosure", Guid.NewGuid().ToString("N"));
@@ -249,6 +305,50 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         var exception = Assert.Throws<InvalidOperationException>(() => Verify(Array.Empty<PowerShellCompilationArtifactFile>(), graph: graph));
 
         Assert.Contains("absent from the delivered artifact closure", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void StrictClosureVerifierRecordsSdkTransformedRuntimePackContentOnlyForOptimizedBuilds()
+    {
+        var source = PowerShellGeneratedTypePolicy.GetTargetRuntimeAssemblyPaths("net10.0")
+            .Single(path => Path.GetFileName(path).Equals("System.Collections.Concurrent.dll", StringComparison.OrdinalIgnoreCase));
+        var assemblyName = AssemblyName.GetAssemblyName(source);
+        var graph = new PowerShellCompilationDependencyGraph
+        {
+            Nodes = new[]
+            {
+                new PowerShellCompilationDependencyNode
+                {
+                    Id = "reviewed-runtime-pack",
+                    Roles = PowerShellCompilationDependencyGraphRole.Dependency | PowerShellCompilationDependencyGraphRole.Deployment,
+                    Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                    Disposition = PowerShellCompilationDependencyGraphDisposition.PrivateRestored,
+                    Exists = true,
+                    Identity = new PowerShellCompilationDependencyIdentity
+                    {
+                        Name = assemblyName.Name!,
+                        Version = assemblyName.Version!.ToString(),
+                        Culture = string.IsNullOrWhiteSpace(assemblyName.CultureName) ? "neutral" : assemblyName.CultureName,
+                        PublicKeyToken = string.Concat((assemblyName.GetPublicKeyToken() ?? Array.Empty<byte>()).Select(static value => value.ToString("x2"))),
+                        Retargetable = (assemblyName.Flags & AssemblyNameFlags.Retargetable) != 0,
+                        ContentType = assemblyName.ContentType.ToString(),
+                        Sha256 = new string('a', 64),
+                        Provenance = "DotNetRuntimePack"
+                    }
+                }
+            }
+        };
+        var files = new[] { new PowerShellCompilationArtifactFile { Path = source, Role = "RuntimeDependency" } };
+
+        Assert.Throws<InvalidOperationException>(() => Verify(files, graph: graph));
+        var optimized = Verify(files, graph: graph, optimization: PowerShellCompilationExecutableOptimization.Trimmed);
+
+        Assert.True(optimized.Verified);
+        Assert.Equal(1, optimized.TransformedManagedAssemblies);
+        var delivered = Assert.Single(optimized.DeliveredDependencies);
+        Assert.Equal("SdkOptimization", delivered.Derivation);
+        Assert.Equal(new string('a', 64), Assert.Single(delivered.ReviewedInputSha256));
+        Assert.NotEqual(delivered.ReviewedInputSha256[0], delivered.DeliveredSha256);
     }
 
     [Fact]
@@ -385,7 +485,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         IEnumerable<PowerShellCompilationArtifactFile> files,
         string targetFramework = "net10.0",
         string? runtimeIdentifier = null,
-        PowerShellCompilationDependencyGraph? graph = null)
+        PowerShellCompilationDependencyGraph? graph = null,
+        PowerShellCompilationExecutableOptimization optimization = PowerShellCompilationExecutableOptimization.None)
     {
         graph ??= new PowerShellCompilationDependencyGraph();
         graph.LockSha256 = PowerShellCompilationDependencyLockHasher.ComputeSha256(graph);
@@ -393,7 +494,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             files,
             targetFramework,
             runtimeIdentifier,
-            graph));
+            graph,
+            optimization));
     }
 
     [Fact]

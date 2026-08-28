@@ -38,4 +38,61 @@ public sealed class PowerShellCompilationOptimizationTests
         Assert.Equal(88, Assert.IsType<PowerShellBoundLiteralExpression>(selectedReturn.Expression).Value);
         Assert.DoesNotContain("99", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void SemanticPipelineSpecializesArrayLoopsAndEmitsAuthoredSequencePoints()
+    {
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[]
+            {
+                PowerShellSourceParser.Parse(
+                    "function Get-Sum { param([int[]] $Numbers) [long] $total = 0; foreach ($number in $Numbers) { $total += $number }; return $total }",
+                    "array-loop.psm1")
+            });
+
+        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.Equal(1, result.Optimization.SpecializedCollectionLoops);
+        Assert.True(result.Optimization.SourceMappedStatements >= 3);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("for (int __foreachIndex_", source, StringComparison.Ordinal);
+        Assert.Contains("#line ", source, StringComparison.Ordinal);
+        Assert.Contains("#line default", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SemanticPipelineReportsFusedAndCoalescedHostedCommandWork()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Invoke-Hosted { Get-Item . | Select-Object Name; Get-Date }",
+            "hosted-regions.psm1");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            capabilities: PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.True(result.Optimization.PipelineStagesFused >= 1);
+        Assert.True(result.Optimization.CommandRegionStatementsCoalesced >= 1);
+        Assert.Equal(1, Assert.Single(result.Emitted.Methods).HostedRegionSiteCount);
+    }
+
+    [Fact]
+    public void BoundaryProfilerMeasuresEquivalentWorkAndCountsEveryCrossing()
+    {
+        var baselineCalls = 0;
+        var boundaryCalls = 0;
+        var profile = new PowerShellCompilationBoundaryProfiler().Profile(
+            "bounded-profile",
+            boundaryInvocationsPerIteration: 4,
+            baselineOperation: () => baselineCalls++,
+            boundaryOperation: () => boundaryCalls++,
+            warmupIterations: 1,
+            measuredIterations: 3);
+
+        Assert.Equal(4, baselineCalls);
+        Assert.Equal(4, boundaryCalls);
+        Assert.Equal(12, profile.BoundaryInvocations);
+        Assert.True(profile.BaselineDurationNanoseconds >= 0);
+        Assert.True(profile.BoundaryDurationNanoseconds >= 0);
+        Assert.False(string.IsNullOrWhiteSpace(profile.RuntimeIdentifier));
+    }
 }

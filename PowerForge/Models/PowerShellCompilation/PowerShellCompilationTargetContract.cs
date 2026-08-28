@@ -127,6 +127,12 @@ public sealed class PowerShellCompilationBuildCacheEvidence
 /// <summary>Canonical target-contract construction and validation.</summary>
 public static class PowerShellCompilationTargetContractService
 {
+    private static readonly HashSet<string> SupportedStrictExecutableRuntimeIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "linux-x64",
+        "win-x64"
+    };
+
     /// <summary>Creates the target implied by compatibility build fields.</summary>
     public static PowerShellCompilationTargetContract Create(
         PowerShellCompilationArtifactKind kind,
@@ -139,6 +145,7 @@ public static class PowerShellCompilationTargetContractService
         bool explicitContract)
     {
         var rid = runtimeIdentifier?.Trim() ?? string.Empty;
+        var framework = targetFramework?.Trim() ?? string.Empty;
         var deployment = optimization switch
         {
             PowerShellCompilationExecutableOptimization.Trimmed => PowerShellCompilationDeploymentModel.Trimmed,
@@ -159,7 +166,7 @@ public static class PowerShellCompilationTargetContractService
         {
             ArtifactKind = kind,
             Mode = mode,
-            TargetFramework = targetFramework?.Trim() ?? string.Empty,
+            TargetFramework = framework,
             RuntimeIdentifier = rid,
             OperatingSystem = GetRidPart(rid, 0),
             Architecture = GetRidPart(rid, -1),
@@ -168,7 +175,7 @@ public static class PowerShellCompilationTargetContractService
             SingleFile = kind == PowerShellCompilationArtifactKind.Executable && singleFile,
             AllowsPowerShellRuntimeEvaluation = allowsPowerShellRuntimeEvaluation,
             Explicit = explicitContract,
-            SupportLevel = GetSupportLevel(rid)
+            SupportLevel = GetSupportLevel(kind, mode, deployment, framework, rid)
         };
         contract.ContractSha256 = ComputeSha256(contract);
         return contract;
@@ -185,7 +192,12 @@ public static class PowerShellCompilationTargetContractService
         contract.Architecture = contract.Architecture?.Trim() ?? string.Empty;
         var expectedOperatingSystem = GetRidPart(contract.RuntimeIdentifier, 0);
         var expectedArchitecture = GetRidPart(contract.RuntimeIdentifier, -1);
-        var expectedSupportLevel = GetSupportLevel(contract.RuntimeIdentifier);
+        var expectedSupportLevel = GetSupportLevel(
+            contract.ArtifactKind,
+            contract.Mode,
+            contract.Deployment,
+            contract.TargetFramework,
+            contract.RuntimeIdentifier);
         if (!contract.OperatingSystem.Equals(expectedOperatingSystem, StringComparison.OrdinalIgnoreCase) ||
             !contract.Architecture.Equals(expectedArchitecture, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("PowerShell compilation target operating system or architecture conflicts with its runtime identifier.");
@@ -205,8 +217,22 @@ public static class PowerShellCompilationTargetContractService
         return contract;
     }
 
-    private static string GetSupportLevel(string? runtimeIdentifier)
-        => string.IsNullOrWhiteSpace(runtimeIdentifier) ? "PortableManaged" : "Experimental";
+    private static string GetSupportLevel(
+        PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode,
+        PowerShellCompilationDeploymentModel deployment,
+        string targetFramework,
+        string? runtimeIdentifier)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeIdentifier)) return "PortableManaged";
+        return kind == PowerShellCompilationArtifactKind.Executable &&
+               mode == PowerShellCompilationMode.Strict &&
+               targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) &&
+               deployment is PowerShellCompilationDeploymentModel.FrameworkDependent or PowerShellCompilationDeploymentModel.NativeAot &&
+               SupportedStrictExecutableRuntimeIdentifiers.Contains(runtimeIdentifier!)
+            ? "Supported"
+            : "Experimental";
+    }
 
     /// <summary>Computes the canonical target-contract hash.</summary>
     public static string ComputeSha256(PowerShellCompilationTargetContract contract)

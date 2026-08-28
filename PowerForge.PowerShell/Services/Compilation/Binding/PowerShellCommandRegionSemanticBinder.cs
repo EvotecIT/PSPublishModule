@@ -20,7 +20,7 @@ internal static class PowerShellCommandRegionSemanticBinder
             var last = PowerShellSourceParser.GetSpan(document, statements[statements.Count - 1].Extent);
             span = new SourceSpan(span.DocumentId, span.StartOffset, last.EndOffset, span.StartLine, span.StartColumn, last.EndLine, last.EndColumn);
         }
-        return new PowerShellBoundCommandRegionStatement(span, source, arguments, BindStages(document, statements, commandRegistry));
+        return new PowerShellBoundCommandRegionStatement(span, source, arguments, BindStages(document, statements, commandRegistry), statements.Count);
     }
 
     internal static PowerShellBoundCommandCaptureStatement BindCapture(

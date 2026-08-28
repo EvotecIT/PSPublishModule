@@ -66,17 +66,20 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         SourceSpan span,
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
-        PowerShellBoundCommandStage[]? stages = null)
+        PowerShellBoundCommandStage[]? stages = null,
+        int statementCount = 1)
         : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput, PowerShellRequiredCapability.CommandRegion)
     {
         HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
+        StatementCount = Math.Max(1, statementCount);
     }
 
     internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
+    internal int StatementCount { get; }
 }
 
 internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundStatement

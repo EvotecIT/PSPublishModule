@@ -110,6 +110,30 @@ public sealed class PowerShellCompilationDependencyGraphTests
     }
 
     [Fact]
+    public void BuildSpecPlannerProducesExactExecutableLockAfterDefaultRidResolution()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("Program.ps1", "param([int] $Value); return $Value");
+        var spec = new PowerShellCompilationBuildSpec(
+            script,
+            Path.Combine(fixture.Root, "out"),
+            "Dependency.Executable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetFramework = "net10.0"
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.DependencyLockReviewed);
+        Assert.Equal(spec.ExpectedDependencyLock.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
+        Assert.False(string.IsNullOrWhiteSpace(spec.RuntimeIdentifier));
+    }
+
+    [Fact]
     public void Build_RejectsReviewedDependencyLockAfterSourceDrift()
     {
         using var fixture = new GraphFixture();
