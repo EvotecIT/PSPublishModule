@@ -180,7 +180,7 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     [Fact]
-    public void ScreenshotEvidenceUsesOneExactInventoryRootAndRejectsEveryOtherIgnoredFile()
+    public void ScreenshotEvidenceAllowsAnApprovedSubsetWithinOneExactInventoryRootAndRejectsEveryOtherIgnoredFile()
     {
         var root = FindRepoRoot();
         var parent = Path.Combine(root, ".test-temp", $"powerforge-evidence-{Guid.NewGuid():N}");
@@ -229,7 +229,8 @@ public sealed partial class AppleReleaseWorkflowTests
                     workflowRef = 'EvotecIT/TestApp/.github/workflows/capture.yml@refs/heads/main';
                     marketingVersion = '1.2.3'; screenshots = @(
                         [pscustomobject]@{ path='phone/home.png'; sha256='NESTED_HASH'; width=100; height=200 },
-                        [pscustomobject]@{ path='home.png'; sha256='ROOT_HASH'; width=100; height=200 })
+                        [pscustomobject]@{ path='home.png'; sha256='ROOT_HASH'; width=100; height=200 },
+                        [pscustomobject]@{ path='website-candidate/home.png'; sha256='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; width=1200; height=800 })
                 }
                 $consumer = [IO.Path]::GetFullPath($Consumer)
                 $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json')
@@ -240,6 +241,38 @@ public sealed partial class AppleReleaseWorkflowTests
                 function Assert-UnlinkedPath { param([string]$Path,[string]$Name,[switch]$AllowMissingLeaf) }
                 . $Support
                 Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'
+                $originalProvenanceScreenshots = @($script:validatedCaptureProvenance.screenshots)
+                $script:validatedCaptureProvenance.screenshots += [pscustomobject]@{
+                    path = 'home.png';
+                    sha256 = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+                    width = 101;
+                    height = 200
+                }
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Conflicting provenance path was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*duplicate screenshot path*') { throw } }
+                $script:validatedCaptureProvenance.screenshots = $originalProvenanceScreenshots
+                $approvalPath = Join-Path $consumer 'screenshots.approval.json'
+                $originalApproval = Get-Content -LiteralPath $approvalPath -Raw
+                $duplicateApproval = $originalApproval | ConvertFrom-Json
+                $duplicateApproval.Screenshots += $duplicateApproval.Screenshots[0]
+                $duplicateApproval | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $approvalPath
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Duplicate approved screenshot was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*duplicate approved screenshot path*') { throw } }
+                Set-Content -LiteralPath $approvalPath -Value $originalApproval -NoNewline
+                $unretainedPath = Join-Path $consumer 'capture/unretained.png'
+                Set-Content -LiteralPath $unretainedPath -Value 'unretained screenshot bytes'
+                $approval = $originalApproval | ConvertFrom-Json
+                $approval.Screenshots += [pscustomobject]@{
+                    File = 'capture/unretained.png';
+                    Sha256 = (Get-FileHash -LiteralPath $unretainedPath -Algorithm SHA256).Hash;
+                    Width = 100;
+                    Height = 200
+                }
+                $approval | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $approvalPath
+                try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567'; throw 'Unretained screenshot was accepted.' }
+                catch { if ($_.Exception.Message -notlike '*approved inventory*') { throw } }
+                Set-Content -LiteralPath $approvalPath -Value $originalApproval -NoNewline
+                Remove-Item -LiteralPath $unretainedPath
                 Assert-ConsumerRepositoryContent
                 Set-Content -LiteralPath (Join-Path $consumer 'capture/injected.bin') -Value 'not reviewed'
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }

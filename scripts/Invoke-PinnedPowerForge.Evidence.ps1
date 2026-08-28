@@ -337,11 +337,11 @@ function Assert-CaptureScreenshotEntry {
     return $relative
 }
 
-function Test-ScreenshotInventoryCounts {
+function Test-ScreenshotInventorySubsetCounts {
     param([Parameter(Mandatory)][hashtable] $Expected, [Parameter(Mandatory)][hashtable] $Actual)
-    if ($Expected.Count -ne $Actual.Count) { return $false }
-    foreach ($key in $Expected.Keys) {
-        if ([int]$Actual[$key] -ne [int]$Expected[$key]) { return $false }
+    if ($Actual.Count -eq 0 -or $Actual.Count -gt $Expected.Count) { return $false }
+    foreach ($key in $Actual.Keys) {
+        if ([int]$Actual[$key] -ne 1 -or [int]$Expected[$key] -ne 1) { return $false }
     }
     return $true
 }
@@ -374,8 +374,11 @@ function Assert-ScreenshotPublicationBinding {
     $provenance = $script:validatedCaptureProvenance
     $provenanceEntries = @($provenance.screenshots)
     $inventoryCounts = @{}
+    $pathComparer = if ($IsWindows -or $IsMacOS) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $provenancePaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     foreach ($entry in $provenanceEntries) {
         $relative = Assert-CaptureScreenshotEntry -Entry $entry
+        if (-not $provenancePaths.Add($relative)) { throw "Capture provenance contains duplicate screenshot path '$relative'." }
         $key = Get-ScreenshotInventoryKey -Path $relative -Sha256 ([string]$entry.sha256) -Width ([int]$entry.width) -Height ([int]$entry.height)
         if ($inventoryCounts.ContainsKey($key)) { throw "Capture provenance contains duplicate screenshot inventory entry '$relative'." }
         $inventoryCounts[$key] = 1
@@ -391,6 +394,7 @@ function Assert-ScreenshotPublicationBinding {
     }
 
     $approvedItems = [Collections.Generic.List[object]]::new()
+    $approvedPaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     $manifestPaths = [Collections.Generic.List[string]]::new()
     $matchedConfigCount = 0
     foreach ($screenshotConfigPath in $configValues) {
@@ -422,6 +426,7 @@ function Assert-ScreenshotPublicationBinding {
             $approvedPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value ([string]$entry.File)
             if (-not (Test-Path -LiteralPath $approvedPath -PathType Leaf)) { throw "Approved screenshot was not found: $approvedPath" }
             Assert-UnlinkedPath -Path $approvedPath -Name 'Approved screenshot'
+            if (-not $approvedPaths.Add($approvedPath)) { throw "Screenshot approval manifests contain duplicate approved screenshot path '$approvedPath'." }
             $sha256 = ([string]$entry.Sha256).ToLowerInvariant()
             if (-not (Get-FileHash -LiteralPath $approvedPath -Algorithm SHA256).Hash.Equals($sha256, [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Approved screenshot bytes do not match manifest: $approvedPath"
@@ -453,9 +458,9 @@ function Assert-ScreenshotPublicationBinding {
             $key = Get-ScreenshotInventoryKey -Path $relative -Sha256 $approved.Sha256 -Width $approved.Width -Height $approved.Height
             $counts[$key] = 1 + [int]($counts[$key] ?? 0)
         }
-        if (Test-ScreenshotInventoryCounts -Expected $inventoryCounts -Actual $counts) { $validRoots.Add($root) }
+        if (Test-ScreenshotInventorySubsetCounts -Expected $inventoryCounts -Actual $counts) { $validRoots.Add($root) }
     }
-    if ($validRoots.Count -ne 1) { throw 'Screenshot approval manifests do not identify one exact retained capture root and inventory.' }
+    if ($validRoots.Count -ne 1) { throw 'Screenshot approval manifests do not identify one exact retained capture root and approved inventory.' }
     foreach ($path in $manifestPaths) { Add-AllowedConsumerEvidencePath -Path $path -Name 'Screenshot approval manifest' }
     foreach ($approved in $approvedItems) { Add-AllowedConsumerEvidencePath -Path $approved.Path -Name 'Approved screenshot' }
 }

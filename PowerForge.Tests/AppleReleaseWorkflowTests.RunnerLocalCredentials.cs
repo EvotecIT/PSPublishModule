@@ -60,7 +60,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("if ($ArgumentList[0] -ne 'apple-release' -or", evidence, StringComparison.Ordinal);
         Assert.Contains("$argument -eq '--capture-provenance'", evidence, StringComparison.Ordinal);
         Assert.Contains("$forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead", script, StringComparison.Ordinal);
-        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and approved inventory", evidence, StringComparison.Ordinal);
         Assert.Contains("Resolve-PathFromBase -BasePath", evidence, StringComparison.Ordinal);
         Assert.Contains("No screenshot configuration matches the selected release targets", evidence, StringComparison.Ordinal);
         Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);
