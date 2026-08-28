@@ -379,7 +379,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.OutputCardinality,
             emitted.OutputValueStates,
             emitted.CollectionElementType,
-            emitted.OutputScalarization);
+            emitted.OutputScalarization,
+            emitted.HostedRegionSiteCount);
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -526,7 +527,8 @@ internal sealed class PowerShellCSharpMethodEmission
         string? outputCardinality = null,
         string[]? outputValueStates = null,
         string? collectionElementType = null,
-        string? outputScalarization = null)
+        string? outputScalarization = null,
+        int hostedRegionSiteCount = 0)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -546,6 +548,7 @@ internal sealed class PowerShellCSharpMethodEmission
         OutputValueStates = outputValueStates ?? Array.Empty<string>();
         CollectionElementType = collectionElementType ?? string.Empty;
         OutputScalarization = outputScalarization ?? string.Empty;
+        HostedRegionSiteCount = hostedRegionSiteCount;
     }
 
     internal string GeneratedName { get; }
@@ -566,4 +569,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string[] OutputValueStates { get; }
     internal string CollectionElementType { get; }
     internal string OutputScalarization { get; }
+    internal int HostedRegionSiteCount { get; }
 }

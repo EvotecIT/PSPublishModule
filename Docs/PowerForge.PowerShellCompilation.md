@@ -169,6 +169,15 @@ Analyze a file or a complete source tree before building:
 powerforge powershell analyze .\MyModule --mode Hybrid
 ```
 
+Use `explain` when you need a stable reason rather than the full build plan. Human output lists file-level blockers, missing-dependency causes, and typed, runtime-fallback, or rejected unit decisions with their causal diagnostics. JSON output uses relocation-safe unit identities and redacts machine-specific absolute paths:
+
+```powershell
+powerforge powershell explain .\MyModule --mode Strict
+powerforge powershell explain .\MyModule --mode Hybrid --output json
+```
+
+This first explainability contract reports canonical analyzer decisions plus file, unit, and missing-dependency blocker chains. Inferred type/value-state traces, complete provider/dependency-node resolution, lowering choices, reproduction bundles, and generated/runtime failure mapping remain future evidence layers.
+
 Package a script as an executable:
 
 ```powershell
@@ -247,7 +256,7 @@ powerforge powershell build .\Calculations.psm1 `
 
 Add `--output json` to either `analyze` or `build` for a stable machine-readable envelope. Analyzer diagnostics include a stable `featureId`, while `dependencies` explains what the selected artifact shape will compile, preserve, copy, embed, leave external, or reject.
 
-Every build consumes one normalized target contract. Compatibility options such as `--framework`, `--rid`, `--self-contained`, `--optimization`, and `--no-single-file` construct it; `--target-contract .\target.json` instead supplies an explicit integrity-checked contract. Successful artifacts emit target-contract, toolchain, dependency-lock, SBOM/provenance, and file-hash evidence. The CLI and cmdlet use a verified content-addressed build cache by default; use `--cache-directory <path>` / `-BuildCacheDirectory` to select its owner or `--no-build-cache` / `-UseBuildCache:$false` for a deliberately uncached build. Cache entries are keyed by target, graph lock, compiler/toolchain identity, and generated inputs and are rehashed before reuse.
+Every build consumes one normalized target contract. Compatibility options such as `--framework`, `--rid`, `--self-contained`, `--optimization`, and `--no-single-file` construct it; `--target-contract .\target.json` instead supplies an explicit integrity-checked contract. Schema-v1 contracts remain accepted under their original hash rules and are migrated to schema v2, where request provenance is no longer part of target identity. Successful artifacts emit target-contract, toolchain, dependency-lock, SBOM/provenance, and file-hash evidence. The CLI and cmdlet use a verified content-addressed build cache by default; use `--cache-directory <path>` / `-BuildCacheDirectory` to select its owner or `--no-build-cache` / `-UseBuildCache:$false` for a deliberately uncached build. Cache keys include the normalized restore graph, actual resolved package bytes, selected SDK/reference-pack bytes, target, reviewed graph lock, compiler identity, build host, and generated inputs. Restore verifies a copied payload before atomic promotion; unsafe reparse-point roots/ancestors and malformed or changed entries are misses, never trusted hits.
 
 ## Use the PSPublishModule cmdlet
 

@@ -11,7 +11,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         int fallbackUnits)
     {
         var typedEntries = methods.Count(static method => method.Lifecycle is null);
-        var hostedRegions = methods.Count(static method => method.RequiresPowerShellCommandRegions);
+        var hostedRegions = methods.Sum(static method => method.HostedRegionSiteCount);
         return new PowerShellCompilationBoundaryEvidence
         {
             TypedEntryPoints = typedEntries,
@@ -107,6 +107,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return new PowerShellCompilationToolchainEvidence
         {
             DotNetSdkVersion = sdkVersion,
+            DotNetSdkSha256 = PowerShellCompilationToolchainFingerprint.ComputeSdkSha256(sdkVersion),
             CompilerVersion = typeof(PowerShellCompilationArtifactBuilder).Assembly.GetName().Version?.ToString() ?? string.Empty,
             CompilerSha256 = ComputeSha256(typeof(PowerShellCompilationArtifactBuilder).Assembly.Location),
             BuildOperatingSystem = RuntimeInformation.OSDescription,

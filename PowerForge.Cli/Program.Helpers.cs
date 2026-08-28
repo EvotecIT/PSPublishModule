@@ -55,6 +55,7 @@ internal static partial class Program
       powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]
                                    [--testimox-root <path>] [--variable <name=value>] [--plan] [--validate] [--output json]
       powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]
+      powerforge powershell explain <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--output json]
       powerforge powershell build <path> [--path <additional.ps1> ...] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--emit-source] [--no-single-file] [--output json]
       powerforge normalize <files...>   Normalize encodings and line endings [--output json]
       powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]

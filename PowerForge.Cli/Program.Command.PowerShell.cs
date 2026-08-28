@@ -10,6 +10,8 @@ internal static partial class Program
         "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
+    private const string PowerShellExplainUsage =
+        "Usage: powerforge powershell explain <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -27,6 +29,8 @@ internal static partial class Program
                 return CommandPowerShellBuild(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("census", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("matrix", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellCensus(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("explain", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellExplain(argv.Skip(1).ToArray(), outputJson, logger);
             return WritePowerShellError(outputJson, 2, $"Unknown PowerShell subcommand '{argv[0]}'.", logger);
         }
 
@@ -211,46 +215,12 @@ internal static partial class Program
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger);
 
-        var path = TryGetOptionValue(args, "--path");
-        if (!string.IsNullOrWhiteSpace(path) && positionalPath is not null)
-            return WritePowerShellError(outputJson, 2, "Specify the PowerShell analysis path either positionally or with --path, not both.", logger, "powershell.analyze");
-        if (string.IsNullOrWhiteSpace(path))
-            path = positionalPath;
-        if (string.IsNullOrWhiteSpace(path))
-            return WritePowerShellError(outputJson, 2, "A PowerShell file or directory path is required.", logger);
-
-        var kindValue = TryGetOptionValue(args, "--kind");
-        PowerShellCompilationArtifactKind? kindOverride = null;
-        if (!string.IsNullOrWhiteSpace(kindValue))
-        {
-            if (!TryParseArtifactKind(kindValue, out var parsedKind))
-                return WritePowerShellError(outputJson, 2, "Artifact kind must be 'exe', 'dll', or 'library'.", logger, "powershell.analyze");
-            kindOverride = parsedKind;
-        }
-
-        var modeValue = TryGetOptionValue(args, "--mode") ?? nameof(PowerShellCompilationMode.Analyze);
-        if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, ignoreCase: true, out var mode) ||
-            !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
-            return WritePowerShellError(outputJson, 2, $"Unknown compilation mode '{modeValue}'.", logger);
-        var resourceModeValue = TryGetOptionValue(args, "--resource-mode") ?? nameof(PowerShellCompilationResourceMode.Declared);
-        if (!Enum.TryParse<PowerShellCompilationResourceMode>(resourceModeValue, ignoreCase: true, out var resourceMode) ||
-            !Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
-            return WritePowerShellError(outputJson, 2, $"Unknown resource mode '{resourceModeValue}'. Use Declared, CompleteModule, or None.", logger);
+        if (!TryParsePowerShellAnalysisRequest(args, positionalPath, out var request, out var requestError))
+            return WritePowerShellError(outputJson, 2, requestError, logger, "powershell.analyze");
 
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(
-                path,
-                kindOverride,
-                mode == PowerShellCompilationMode.Analyze ? null : mode);
-            var plan = new PowerShellCompilationAnalyzer().Analyze(
-                resolved,
-                mode,
-                TryGetOptionValue(args, "--framework") ?? "net8.0",
-                resourceMode,
-                GetOptionValues(args, "--include-resource"),
-                GetOptionValues(args, "--exclude-resource"),
-                TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+            var plan = CreatePowerShellAnalysisPlan(args, request!);
             var exitCode = plan.CanProceed ? 0 : 1;
             if (outputJson)
             {
@@ -469,12 +439,13 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage })
             });
         }
         else
         {
             Console.WriteLine(PowerShellAnalyzeUsage);
+            Console.WriteLine(PowerShellExplainUsage);
             Console.WriteLine(PowerShellBuildUsage);
             Console.WriteLine(PowerShellCensusUsage);
         }

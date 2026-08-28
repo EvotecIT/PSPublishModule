@@ -28,7 +28,7 @@ public sealed class PowerShellCompilationBoundaryEvidence
     /// <summary>Generated typed callable entry points.</summary>
     public int TypedEntryPoints { get; set; }
 
-    /// <summary>Compiled methods containing an explicit hosted command region.</summary>
+    /// <summary>Statically emitted calls into hosted PowerShell command regions.</summary>
     public int HostedRegionSites { get; set; }
 
     /// <summary>Compilation units retained on a PowerShell runtime path.</summary>

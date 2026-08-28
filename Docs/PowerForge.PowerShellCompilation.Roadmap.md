@@ -63,7 +63,7 @@ The compiler already provides:
 - [x] PowerShell 5.1 and supported PowerShell 7 differential coverage, including hosted lifecycle raw-input, cleanup, and explicit `clean` version behavior
 - [x] net472, net8.0, and net10.0 compiler build lanes
 - [x] an explicit integrity-bound target contract in engine, CLI/cmdlet, generated source, manifests, provenance, and SBOM sidecars
-- [x] a verified content-addressed build cache that rejects incomplete, modified, and cross-target entries
+- [x] a verified content-addressed build cache that rejects incomplete, modified, malformed, cross-target, and reparse-root/ancestor entries
 - [x] a managed Hybrid executable path that registers compiled cmdlets while retaining unsupported source and dependency units for hosted execution
 - [x] immutable constant-folding and dead-branch-elimination passes over bound IR with optimization evidence in the artifact manifest
 
@@ -71,7 +71,7 @@ The companion guide owns the exact current benchmark numbers and runtime proof. 
 
 The lowered C# method backend does not reference SMA AST types, and the former direct AST-to-C# emitter was deleted. Eligibility, call graphs, executable binding, source mapping, command providers, dependency locks, and hosted lifecycle metadata now consume canonical semantic or lowered contracts.
 
-The dependency-ordered semantic pipeline migration checkpoint and bounded Milestones 6 and 9–13 are **Complete** after the latest review defects were reproduced and fixed at their canonical owners. Milestones 14 and 15 are **Partial**: managed target contracts, evidence, caching, Hybrid EXE, constant folding, and dead-branch elimination are implemented, while named-RID NativeAOT execution, cross-platform target-host certification, runtime boundary-cost profiling, and the remaining measured optimization families stay open. The broader architecture completion gate remains **Partial** until those Milestone 14 delivery gates and the Milestone 17 explainability contract pass; delivery claims are not inferred from dependency discovery or cross-publish success.
+The dependency-ordered semantic pipeline migration checkpoint and bounded Milestones 6 and 9–13 are **Complete** after the latest review defects were reproduced and fixed at their canonical owners. Milestones 14, 15, and 17 are **Partial**: managed target contracts, evidence, host-bound verified caching, Hybrid EXE, conservative optimizations, and a first relocation-safe explain contract are implemented, while named-RID NativeAOT execution, cross-platform target-host certification, runtime boundary-cost profiling, the remaining measured optimization families, and full reproducible diagnostic bundles stay open. The broader architecture completion gate remains **Partial** until those Milestone 14 delivery gates and the complete Milestone 17 evidence contract pass; delivery claims are not inferred from dependency discovery or cross-publish success.
 
 ## Artifact ladder
 
@@ -780,7 +780,7 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 14. Productize managed, Hybrid, and native delivery | Partial / managed foundation | Explicit target contracts, evidence, verified caching, and managed Hybrid EXE exist; named-RID NativeAOT and cross-platform target-host promotion remain open |
 | 15. Optimize proven IR | Partial / first passes | Immutable constant folding and dead-branch elimination emit evidence; allocation, fusion, coalescing, loop, conversion, mapping, and benchmark gates remain open |
 | 16. Productize the provider SDK and trust model | Planned | Versioned external providers are discoverable, validated, isolated, and conformance-tested without executing source during analysis |
-| 17. Add compiler explainability and reproducible diagnostics | Planned | Users can inspect decisions, reproduce failures, and debug generated artifacts from stable evidence bundles |
+| 17. Add compiler explainability and reproducible diagnostics | Partial / decision trace foundation | Human and versioned JSON explain output now reports relocation-safe per-unit typed/fallback/rejected decisions and causal blockers; full semantic traces, repro bundles, and failure mapping remain open |
 
 Closure sequence completed on this branch:
 
@@ -939,10 +939,14 @@ Implemented evidence from the 2026-08-28 closure candidate is refreshed after th
 - cache restore rejects reparse-point files and ancestors before reading payload bytes;
 - net472 target-runtime identity includes both the top-level reference assemblies and the complete facade set;
 - target promotion state is compiler-owned, so an explicit RID contract cannot self-assert `Supported`.
+- schema-v1 target identities remain verifiable and migrate to schema v2 without preserving caller provenance as semantic target identity;
+- cache keys cover canonical restore results, actual resolved package bytes, and the selected SDK/reference-pack bytes, while copied payloads are rehashed before atomic restore;
+- the first explain schema includes file-level blockers and missing dependencies and redacts authored absolute paths as well as omitting path-bearing source identities;
+- the published complete `PowerShellCompiledMethod` constructor signature remains available while exact hosted-region counts use a new overload.
 
 Integrated evidence from the final 2026-08-28 closure candidate:
 
-- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --framework net10.0 --no-restore --filter "FullyQualifiedName~PowerShellCompilation|FullyQualifiedName~PowerShellCommandSemanticRegistry"` passed 832/832 tests, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4, analyzer-JSON-to-reviewed-lock round trips, target-reference-pack and net472 facade identities, transitive managed/native discovery, exact reviewed-delivery reconciliation, opaque-native fail-closed certification, exact provider parameters, value/object flows, bounded runtime state, event-owned prompt lifecycle stop/clean, trimming, NativeAOT build contracts, exact SDK pinning, reparse-safe cache restore, rewritten Hybrid dependency integrity, compiler-owned target promotion, and delivered-artifact inspection;
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --framework net10.0 --no-restore --filter "FullyQualifiedName~PowerShellCompilation|FullyQualifiedName~PowerShellCommandSemanticRegistry|FullyQualifiedName~PowerForgeCliPowerShellCompilationTests"` passed 847/847 tests after the functional remediation, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4 and binary constructor compatibility, analyzer-JSON-to-reviewed-lock round trips, target-contract v1-to-v2 migration, target-reference-pack and net472 facade identities, transitive managed/native discovery, exact reviewed-delivery reconciliation, opaque-native fail-closed certification, exact provider parameters, value/object flows, bounded runtime state, event-owned prompt lifecycle stop/clean, trimming, NativeAOT build contracts, exact SDK/package-byte cache inputs, hostile and malformed cache misses, host-bound atomic cache restore, exact hosted-region site evidence, optimized authored-artifact execution, relocation-safe redacted explain output, rewritten Hybrid dependency integrity, compiler-owned target promotion, and delivered-artifact inspection; after a net472-only nullability annotation, the exact-source rerun passed 846/847 and its sole generated-project restore failure (`System.OutOfMemoryException` from NuGet) passed immediately in isolation, while the exact cache subset passed 6/6;
 - `PowerForge.PowerShell.csproj` built with zero warnings and errors for `net472`, `net8.0`, and `net10.0` after the final compatibility changes;
 - the portable generic Hybrid corpus emits 8/8 functions (100%) with zero fallback or eligible-function loss and now covers bounded environment, PSCustomObject, `Add-Member`, and `ArrayList` flows;
 - the refreshed exact-pinned six-product lane reports 122/1,235 emitted functions (9.88%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
@@ -1142,7 +1146,7 @@ Milestone 14 may develop in parallel with Milestone 17, but it cannot satisfy it
 - [x] Complete the managed Hybrid EXE foundation using the same bound plan, generated cmdlets, embedded retained-source/dependency plan, and fallback contract as Hybrid modules; NativeAOT-hosted Hybrid promotion remains open.
 - [ ] Measure runtime typed/fallback boundary crossings and their cost so the tool can warn when Hybrid compilation is unlikely to help; manifests now expose deterministic static typed, hosted, fallback, and crossing-site counts plus an advisory, but runtime profiling is not yet claimed.
 - [x] Pin or record SDK, compiler-runtime, package, managed/native dependency, target-contract, and reviewed-lock identity for reproducible release builds.
-- [x] Add a content-addressed incremental build cache keyed by normalized generated inputs, compiler version/source identity, target contract, dependency lock, TFM/RID, and relevant toolchain inputs; verify every restored payload and reject incomplete, modified, reparse-point, escaping, or cross-target entries.
+- [x] Add a content-addressed incremental build cache keyed by normalized generated inputs and restore graph, actual resolved package bytes, compiler version/source identity, selected SDK/reference-pack bytes, build host, target contract, dependency lock, and TFM/RID; verify a copied payload before atomic restore and reject incomplete, malformed, modified, reparse-root/ancestor, escaping, or cross-target entries.
 - [x] Emit source, PDB/symbol, public ABI, dependency graph/lock, target contract, CycloneDX SBOM, build provenance, and artifact-integrity evidence as applicable.
 - [ ] Run Strict managed and NativeAOT artifacts on every named supported RID rather than treating cross-publish success as execution proof.
 - [ ] Verify Windows and Unix exit codes, stdout/stderr encoding, signals/cancellation, file permissions, resources, and native dependencies.
@@ -1199,13 +1203,13 @@ Exit gate: a separately built provider package can be reviewed, locked, register
 
 ## Milestone 17 — Add compiler explainability and reproducible diagnostics
 
-- [ ] Emit a stable per-unit decision trace linking source spans to bound features, inferred types/value states, capabilities, provider resolution, dependency nodes, fallback/rejection causes, lowering choices, and artifact disposition.
-- [ ] Add `explain` output for humans plus versioned JSON for tools, with deterministic ordering and relocation-stable identities.
+- [ ] Emit a stable decision trace linking source spans to bound features, inferred types/value states, capabilities, provider resolution, dependency nodes, fallback/rejection causes, lowering choices, and artifact disposition; the first schema now covers relocation-safe unit identity, authored location, file/unit blocker causes, missing dependencies, and final typed/fallback/rejected disposition.
+- [x] Add `explain` output for humans plus versioned JSON for tools, with deterministic ordering, relocation-stable identities, and absolute-path redaction.
 - [ ] Produce a redacted reproduction bundle containing normalized source identities, compiler/semantic-profile versions, target contract, provider contracts, dependency lock, generated source hash, ABI hash, source maps, diagnostics, and toolchain identity without copying secrets or machine-owned state.
 - [ ] Map build, trim/AOT, dependency, and runtime failures back through statement-level source maps and boundary contracts instead of exposing generated-project internals as the primary diagnosis.
 - [ ] Add optional bound/lowered IR snapshots suitable for diffing while keeping parser AST objects and executable hosted source out of runtime-free semantic payloads.
 - [ ] Record cache hit/miss reasons, graph/ABI drift, fallback crossings, and provider selection so performance and reproducibility claims can be audited.
-- [ ] Add golden compatibility tests proving equivalent inputs produce equivalent explain output across path relocation, file/declaration order, and supported host versions.
+- [ ] Add golden compatibility tests proving equivalent inputs produce equivalent explain output across path relocation, file/declaration order, and supported host versions; path relocation is covered, while order and cross-host compatibility remain open.
 - [ ] Define retention and redaction policy for diagnostics, crash bundles, and generated source before any telemetry or automatic upload is considered.
 
 Exit gate: a user can explain why a unit compiled, fell back, or failed; reproduce the same decision from a bounded evidence bundle; and map artifact/runtime failures back to authored source without reverse-engineering generated C# or exposing secrets.

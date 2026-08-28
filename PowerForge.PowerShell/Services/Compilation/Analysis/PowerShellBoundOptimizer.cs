@@ -147,12 +147,12 @@ internal sealed class PowerShellBoundOptimizer
         if (operation == PowerShellBoundUnaryOperator.LogicalNot && operand is bool boolean) { value = !boolean; return true; }
         if (operand is int integer && type == typeof(int))
         {
-            value = operation switch { PowerShellBoundUnaryOperator.Negate => -integer, PowerShellBoundUnaryOperator.BitwiseNot => ~integer, _ => null };
+            value = operation switch { PowerShellBoundUnaryOperator.BitwiseNot => ~integer, _ => null };
             return value is not null;
         }
         if (operand is long longInteger && type == typeof(long))
         {
-            value = operation switch { PowerShellBoundUnaryOperator.Negate => -longInteger, PowerShellBoundUnaryOperator.BitwiseNot => ~longInteger, _ => null };
+            value = operation switch { PowerShellBoundUnaryOperator.BitwiseNot => ~longInteger, _ => null };
             return value is not null;
         }
         return false;
@@ -207,11 +207,6 @@ internal sealed class PowerShellBoundOptimizer
     {
         value = operation switch
         {
-            PowerShellBoundBinaryOperator.Add => left + right,
-            PowerShellBoundBinaryOperator.Subtract => left - right,
-            PowerShellBoundBinaryOperator.Multiply => left * right,
-            PowerShellBoundBinaryOperator.Divide when right != 0 => left / right,
-            PowerShellBoundBinaryOperator.Remainder when right != 0 => left % right,
             PowerShellBoundBinaryOperator.Equal => left == right,
             PowerShellBoundBinaryOperator.NotEqual => left != right,
             PowerShellBoundBinaryOperator.LessThan => left < right,
@@ -232,11 +227,6 @@ internal sealed class PowerShellBoundOptimizer
     {
         value = operation switch
         {
-            PowerShellBoundBinaryOperator.Add => left + right,
-            PowerShellBoundBinaryOperator.Subtract => left - right,
-            PowerShellBoundBinaryOperator.Multiply => left * right,
-            PowerShellBoundBinaryOperator.Divide when right != 0 => left / right,
-            PowerShellBoundBinaryOperator.Remainder when right != 0 => left % right,
             PowerShellBoundBinaryOperator.Equal => left == right,
             PowerShellBoundBinaryOperator.NotEqual => left != right,
             PowerShellBoundBinaryOperator.LessThan => left < right,

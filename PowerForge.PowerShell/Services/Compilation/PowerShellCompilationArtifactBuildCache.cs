@@ -22,6 +22,10 @@ internal static class PowerShellCompilationArtifactBuildCache
         Append(toolchain.CompilerVersion);
         Append(toolchain.CompilerSha256);
         Append(toolchain.DotNetSdkVersion);
+        Append(toolchain.DotNetSdkSha256);
+        Append(toolchain.BuildOperatingSystem);
+        Append(toolchain.BuildArchitecture);
+        Append(ComputeResolvedRestoreInputsSha256(workspace));
         foreach (var path in Directory.EnumerateFiles(workspace, "*", SearchOption.AllDirectories)
                      .Where(path => !Path.GetFileName(path).Equals(".powerforge-active.lock", StringComparison.OrdinalIgnoreCase))
                      .Where(path => !IsBelow(path, Path.Combine(workspace, "publish")))
@@ -49,6 +53,11 @@ internal static class PowerShellCompilationArtifactBuildCache
     {
         if (!spec.UseBuildCache || string.IsNullOrWhiteSpace(evidence.Key)) return false;
         var root = GetCacheRoot(spec);
+        if (HasReparsePointInPath(root))
+        {
+            evidence.Reason = "UnsafeCacheRoot";
+            return false;
+        }
         var entry = GetEntryPath(spec, evidence.Key);
         var manifestPath = Path.Combine(entry, "cache-manifest.json");
         var completePath = Path.Combine(entry, ".complete");
@@ -74,35 +83,94 @@ internal static class PowerShellCompilationArtifactBuildCache
             return false;
         }
         if (manifest is null || manifest.SchemaVersion != 1 ||
-            !manifest.Key.Equals(evidence.Key, StringComparison.Ordinal) || manifest.Files.Length == 0)
+            manifest.Key is null || !manifest.Key.Equals(evidence.Key, StringComparison.Ordinal) ||
+            manifest.Files is not { Length: > 0 } || manifest.Files.Any(static file => file is null))
         {
             evidence.Reason = "InvalidManifest";
             return false;
         }
-        foreach (var file in manifest.Files)
+        var files = manifest.Files.Select(static file => file!).ToArray();
+        try
         {
-            if (!IsSafeRelativePath(file.Path))
+            foreach (var file in files)
             {
-                evidence.Reason = "UnsafeEntryPath";
-                return false;
-            }
-            var source = Path.GetFullPath(Path.Combine(entry, "payload", file.Path.Replace('/', Path.DirectorySeparatorChar)));
-            if (!File.Exists(source) ||
-                DotNetPublishPipelineRunner.HasReparsePointBelowRoot(source, root) ||
-                new FileInfo(source).Length != file.SizeBytes ||
-                !ComputeSha256(source).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                evidence.Reason = "ContentDrift";
-                return false;
+                if (string.IsNullOrWhiteSpace(file.Path) ||
+                    file.Path.IndexOfAny(Path.GetInvalidPathChars()) >= 0 ||
+                    string.IsNullOrWhiteSpace(file.Sha256) ||
+                    file.SizeBytes < 0)
+                {
+                    evidence.Reason = "InvalidManifest";
+                    return false;
+                }
+                if (!IsSafeRelativePath(file.Path))
+                {
+                    evidence.Reason = "UnsafeEntryPath";
+                    return false;
+                }
+                var source = Path.GetFullPath(Path.Combine(entry, "payload", file.Path.Replace('/', Path.DirectorySeparatorChar)));
+                if (!File.Exists(source) ||
+                    DotNetPublishPipelineRunner.HasReparsePointBelowRoot(source, root) ||
+                    new FileInfo(source).Length != file.SizeBytes ||
+                    !ComputeSha256(source).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    evidence.Reason = "ContentDrift";
+                    return false;
+                }
             }
         }
-        Directory.CreateDirectory(publishDirectory);
-        foreach (var file in manifest.Files)
+        catch (ArgumentException)
         {
-            var source = Path.Combine(entry, "payload", file.Path.Replace('/', Path.DirectorySeparatorChar));
-            var target = Path.Combine(publishDirectory, file.Path.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? publishDirectory);
-            File.Copy(source, target, overwrite: false);
+            evidence.Reason = "InvalidManifest";
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            evidence.Reason = "InvalidManifest";
+            return false;
+        }
+        catch (PathTooLongException)
+        {
+            evidence.Reason = "InvalidManifest";
+            return false;
+        }
+        if (Directory.EnumerateFileSystemEntries(publishDirectory).Any())
+        {
+            evidence.Reason = "PublishDirectoryNotEmpty";
+            return false;
+        }
+        var restoreDirectory = publishDirectory + ".restore-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            Directory.CreateDirectory(restoreDirectory);
+            foreach (var file in files)
+            {
+                var source = Path.Combine(entry, "payload", file.Path.Replace('/', Path.DirectorySeparatorChar));
+                var target = Path.Combine(restoreDirectory, file.Path.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? restoreDirectory);
+                File.Copy(source, target, overwrite: false);
+                if (new FileInfo(target).Length != file.SizeBytes ||
+                    !ComputeSha256(target).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    evidence.Reason = "ContentDrift";
+                    return false;
+                }
+            }
+            Directory.Delete(publishDirectory);
+            Directory.Move(restoreDirectory, publishDirectory);
+        }
+        catch (IOException)
+        {
+            evidence.Reason = "ContentDrift";
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            evidence.Reason = "ContentDrift";
+            return false;
+        }
+        finally
+        {
+            if (Directory.Exists(restoreDirectory)) Directory.Delete(restoreDirectory, recursive: true);
         }
         evidence.Hit = true;
         evidence.Reason = "VerifiedContentAddressedHit";
@@ -118,7 +186,17 @@ internal static class PowerShellCompilationArtifactBuildCache
         var entry = GetEntryPath(spec, evidence.Key);
         var parent = Path.GetDirectoryName(entry) ?? throw new InvalidOperationException("Compilation cache entry has no parent.");
         var root = GetCacheRoot(spec);
+        if (HasReparsePointInPath(root))
+        {
+            evidence.Reason = "UnsafeCacheRoot";
+            return;
+        }
         Directory.CreateDirectory(root);
+        if (HasReparsePointInPath(root))
+        {
+            evidence.Reason = "UnsafeCacheRoot";
+            return;
+        }
         if (Directory.Exists(parent) && DotNetPublishPipelineRunner.HasReparsePointBelowRoot(parent, root))
         {
             evidence.Reason = "UnsafeCacheRoot";
@@ -148,7 +226,7 @@ internal static class PowerShellCompilationArtifactBuildCache
                     var target = Path.Combine(payload, relative.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(target) ?? payload);
                     File.Copy(path, target, overwrite: false);
-                    return new CacheFile { Path = relative, Sha256 = ComputeSha256(path), SizeBytes = new FileInfo(path).Length };
+                    return new CacheFile { Path = relative, Sha256 = ComputeSha256(target), SizeBytes = new FileInfo(target).Length };
                 }).ToArray();
             if (files.Length == 0) throw new InvalidOperationException("Generated build produced no files to cache.");
             File.WriteAllText(
@@ -183,6 +261,120 @@ internal static class PowerShellCompilationArtifactBuildCache
         => !string.IsNullOrWhiteSpace(path) && !Path.IsPathRooted(path) &&
            !path.Split('/', '\\').Any(static part => part is "" or "." or "..");
 
+    private static bool HasReparsePointInPath(string path)
+    {
+        var current = new DirectoryInfo(Path.GetFullPath(path));
+        while (current is not null)
+        {
+            if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0) return true;
+            current = current.Parent;
+        }
+        return false;
+    }
+
+    internal static string ComputeResolvedRestoreInputsSha256(string workspace)
+    {
+        var assetsPath = Path.Combine(workspace, "obj", "project.assets.json");
+        if (!File.Exists(assetsPath)) return "NoResolvedRestoreInputs";
+        var builder = new StringBuilder();
+        using var document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+        Append("project.assets.json");
+        Append(ComputeNormalizedAssetsSha256(document.RootElement, workspace));
+        if (!document.RootElement.TryGetProperty("packageFolders", out var packageFolders) ||
+            packageFolders.ValueKind != JsonValueKind.Object ||
+            !document.RootElement.TryGetProperty("libraries", out var libraries) ||
+            libraries.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Generated restore assets do not contain packageFolders and libraries objects.");
+        var roots = packageFolders.EnumerateObject().Select(static property => property.Name).ToArray();
+        foreach (var library in libraries.EnumerateObject().OrderBy(static property => property.Name, StringComparer.Ordinal))
+        {
+            if (!library.Value.TryGetProperty("type", out var type) || !"package".Equals(type.GetString(), StringComparison.OrdinalIgnoreCase) ||
+                !library.Value.TryGetProperty("path", out var pathValue))
+                continue;
+            var packagePath = pathValue.GetString();
+            if (string.IsNullOrWhiteSpace(packagePath))
+                throw new InvalidDataException($"Resolved package '{library.Name}' has no package path.");
+            var resolvedPackagePath = packagePath!;
+            var matches = roots.Select(root => Path.GetFullPath(Path.Combine(root, resolvedPackagePath.Replace('/', Path.DirectorySeparatorChar))))
+                .Where(Directory.Exists)
+                .ToArray();
+            if (matches.Length == 0)
+                throw new InvalidDataException($"Resolved package '{library.Name}' is absent from every restore package folder.");
+            Append(library.Name);
+            foreach (var packageRoot in matches)
+            foreach (var file in Directory.EnumerateFiles(packageRoot, "*", SearchOption.AllDirectories)
+                         .OrderBy(path => Relative(packageRoot, path), StringComparer.Ordinal))
+            {
+                Append(Relative(packageRoot, file));
+                Append(ComputeSha256(file));
+            }
+        }
+        using var sha = SHA256.Create();
+        return Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(builder.ToString())));
+
+        void Append(string value) => builder.Append(value.Length).Append(':').Append(value).Append('\n');
+    }
+
+    private static string ComputeNormalizedAssetsSha256(JsonElement root, string workspace)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+            WriteNormalizedJson(writer, root, Path.GetFullPath(workspace));
+        using var sha = SHA256.Create();
+        return Hex(sha.ComputeHash(stream.ToArray()));
+    }
+
+    private static void WriteNormalizedJson(Utf8JsonWriter writer, JsonElement element, string workspace)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in element.EnumerateObject().OrderBy(static item => item.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteNormalizedJson(writer, property.Value, workspace);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray()) WriteNormalizedJson(writer, item, workspace);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                var value = element.GetString() ?? string.Empty;
+                value = ReplacePath(value, workspace, "$WORKSPACE");
+                value = ReplacePath(value, workspace.Replace('\\', '/'), "$WORKSPACE");
+                writer.WriteStringValue(value);
+                break;
+            case JsonValueKind.Number:
+                element.WriteTo(writer);
+                break;
+            case JsonValueKind.True:
+                writer.WriteBooleanValue(true);
+                break;
+            case JsonValueKind.False:
+                writer.WriteBooleanValue(false);
+                break;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                writer.WriteNullValue();
+                break;
+        }
+    }
+
+    private static string ReplacePath(string value, string oldValue, string newValue)
+    {
+        var index = value.IndexOf(oldValue, StringComparison.OrdinalIgnoreCase);
+        while (index >= 0)
+        {
+            value = value.Substring(0, index) + newValue + value.Substring(index + oldValue.Length);
+            index = value.IndexOf(oldValue, index + newValue.Length, StringComparison.OrdinalIgnoreCase);
+        }
+        return value;
+    }
+
     private static bool IsBelow(string path, string root)
     {
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -205,8 +397,8 @@ internal static class PowerShellCompilationArtifactBuildCache
     private sealed class CacheManifest
     {
         public int SchemaVersion { get; set; } = 1;
-        public string Key { get; set; } = string.Empty;
-        public CacheFile[] Files { get; set; } = Array.Empty<CacheFile>();
+        public string? Key { get; set; }
+        public CacheFile?[]? Files { get; set; }
     }
 
     private sealed class CacheFile

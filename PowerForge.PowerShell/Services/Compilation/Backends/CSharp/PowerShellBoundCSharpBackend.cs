@@ -93,7 +93,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 PowerShellOutputCardinality.Collection => "EnumerateCollection",
                 PowerShellOutputCardinality.Scalar => "PreserveScalar",
                 _ => "RuntimeDependent"
-            });
+            },
+            hostedRegionSiteCount: CountHostedRegionSites(function.Statements));
     }
 
     private static void EmitStatement(

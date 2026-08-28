@@ -35,7 +35,7 @@ public enum PowerShellCompilationDeploymentModel
 public sealed class PowerShellCompilationTargetContract
 {
     /// <summary>Target-contract schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>Artifact shape governed by this target.</summary>
     public PowerShellCompilationArtifactKind ArtifactKind { get; set; }
@@ -67,7 +67,7 @@ public sealed class PowerShellCompilationTargetContract
     /// <summary>Whether the generated program may execute authored PowerShell source.</summary>
     public bool AllowsPowerShellRuntimeEvaluation { get; set; }
 
-    /// <summary>Whether the caller supplied this contract explicitly instead of using the compatibility projection.</summary>
+    /// <summary>Whether the caller supplied this contract explicitly instead of using the compatibility projection. This request provenance is not part of canonical target identity.</summary>
     public bool Explicit { get; set; }
 
     /// <summary>Support state based on target-host execution evidence.</summary>
@@ -81,10 +81,13 @@ public sealed class PowerShellCompilationTargetContract
 public sealed class PowerShellCompilationToolchainEvidence
 {
     /// <summary>Evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>SDK selected by the generated dotnet build.</summary>
     public string DotNetSdkVersion { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 over the exact selected SDK directory and its relative file identities.</summary>
+    public string DotNetSdkSha256 { get; set; } = string.Empty;
 
     /// <summary>PowerForge assembly version that owns compilation.</summary>
     public string CompilerVersion { get; set; } = string.Empty;
@@ -175,19 +178,30 @@ public static class PowerShellCompilationTargetContractService
     public static PowerShellCompilationTargetContract Normalize(PowerShellCompilationTargetContract contract)
     {
         if (contract is null) throw new ArgumentNullException(nameof(contract));
-        if (contract.SchemaVersion != 1) throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
+        if (contract.SchemaVersion is not 1 and not 2) throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
         contract.TargetFramework = contract.TargetFramework?.Trim() ?? string.Empty;
         contract.RuntimeIdentifier = contract.RuntimeIdentifier?.Trim() ?? string.Empty;
         contract.OperatingSystem = contract.OperatingSystem?.Trim() ?? string.Empty;
         contract.Architecture = contract.Architecture?.Trim() ?? string.Empty;
-        contract.SupportLevel = GetSupportLevel(contract.RuntimeIdentifier);
-        contract.Explicit = true;
+        var expectedOperatingSystem = GetRidPart(contract.RuntimeIdentifier, 0);
+        var expectedArchitecture = GetRidPart(contract.RuntimeIdentifier, -1);
+        var expectedSupportLevel = GetSupportLevel(contract.RuntimeIdentifier);
+        if (!contract.OperatingSystem.Equals(expectedOperatingSystem, StringComparison.OrdinalIgnoreCase) ||
+            !contract.Architecture.Equals(expectedArchitecture, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("PowerShell compilation target operating system or architecture conflicts with its runtime identifier.");
+        if (!contract.SupportLevel.Equals(expectedSupportLevel, StringComparison.Ordinal))
+            throw new InvalidOperationException("PowerShell compilation target support level conflicts with its runtime identifier.");
+        contract.OperatingSystem = expectedOperatingSystem;
+        contract.Architecture = expectedArchitecture;
+        contract.SupportLevel = expectedSupportLevel;
         var suppliedHash = contract.ContractSha256;
         contract.ContractSha256 = string.Empty;
         var actual = ComputeSha256(contract);
         if (!string.IsNullOrWhiteSpace(suppliedHash) && !suppliedHash.Equals(actual, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("PowerShell compilation target contract does not match its recorded SHA-256.");
-        contract.ContractSha256 = actual;
+        contract.SchemaVersion = 2;
+        contract.Explicit = true;
+        contract.ContractSha256 = ComputeSha256(contract);
         return contract;
     }
 
@@ -198,13 +212,17 @@ public static class PowerShellCompilationTargetContractService
     public static string ComputeSha256(PowerShellCompilationTargetContract contract)
     {
         if (contract is null) throw new ArgumentNullException(nameof(contract));
-        var values = new object[]
+        if (contract.SchemaVersion is not 1 and not 2)
+            throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
+        var values = new List<object>
         {
             contract.SchemaVersion, contract.ArtifactKind, contract.Mode, contract.TargetFramework,
             contract.RuntimeIdentifier, contract.OperatingSystem, contract.Architecture,
             contract.RuntimeRequirement, contract.Deployment, contract.SingleFile,
-            contract.AllowsPowerShellRuntimeEvaluation, contract.Explicit, contract.SupportLevel
+            contract.AllowsPowerShellRuntimeEvaluation
         };
+        if (contract.SchemaVersion == 1) values.Add(contract.Explicit);
+        values.Add(contract.SupportLevel);
         var text = new StringBuilder();
         foreach (var value in values)
         {

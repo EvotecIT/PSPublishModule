@@ -116,12 +116,77 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             singleFile: true,
             PowerShellCompilationExecutableOptimization.NativeAot,
             explicitContract: true);
-        target.Architecture = "arm64";
+        target.TargetFramework = "net9.0";
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             PowerShellCompilationTargetContractService.Normalize(target));
 
         Assert.Contains("SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TargetContractNormalizationPromotesImplicitRequestWithoutChangingCanonicalIdentity()
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier: null,
+            selfContained: false,
+            singleFile: false,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: false);
+        var originalHash = target.ContractSha256;
+
+        var normalized = PowerShellCompilationTargetContractService.Normalize(target);
+
+        Assert.True(normalized.Explicit);
+        Assert.Equal(originalHash, normalized.ContractSha256);
+    }
+
+    [Fact]
+    public void TargetContractNormalizationAcceptsAndMigratesLegacyV1Identity()
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier: null,
+            selfContained: false,
+            singleFile: false,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: false);
+        target.SchemaVersion = 1;
+        target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
+        var legacyHash = target.ContractSha256;
+
+        var normalized = PowerShellCompilationTargetContractService.Normalize(target);
+
+        Assert.Equal(2, normalized.SchemaVersion);
+        Assert.True(normalized.Explicit);
+        Assert.NotEqual(legacyHash, normalized.ContractSha256);
+        Assert.Equal(PowerShellCompilationTargetContractService.ComputeSha256(normalized), normalized.ContractSha256);
+    }
+
+    [Fact]
+    public void TargetContractNormalizationRejectsRidDerivedFieldConflictEvenWithMatchingHash()
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            "win-x64",
+            selfContained: true,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.NativeAot,
+            explicitContract: true);
+        target.OperatingSystem = "linux";
+        target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationTargetContractService.Normalize(target));
+
+        Assert.Contains("runtime identifier", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -142,8 +207,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             PowerShellCompilationTargetContractService.Normalize(target));
 
-        Assert.Contains("SHA-256", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("Experimental", target.SupportLevel);
+        Assert.Contains("support level", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Supported", target.SupportLevel);
     }
 
     [Fact]
@@ -219,6 +284,98 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void BuildCacheKeyIncludesProducingHostIdentity()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-CachedValue { return 17 }", ".psm1");
+        var workspace = Path.Combine(fixture.RootPath, "cache-key-workspace");
+        Directory.CreateDirectory(workspace);
+        File.WriteAllText(Path.Combine(workspace, "input.txt"), "stable");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HostBoundCache",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            UseBuildCache = true
+        };
+        var target = PowerShellCompilationTargetContractService.Create(
+            spec.Kind, spec.Mode, "net10.0", null, false, false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: false);
+        var graph = new PowerShellCompilationDependencyGraph { LockSha256 = "graph-lock" };
+        PowerShellCompilationToolchainEvidence Toolchain(string operatingSystem) => new()
+        {
+            DotNetSdkVersion = "10.0.100",
+            CompilerVersion = "1.0.0",
+            CompilerSha256 = "compiler-hash",
+            DotNetSdkSha256 = "sdk-hash",
+            BuildOperatingSystem = operatingSystem,
+            BuildArchitecture = "X64"
+        };
+
+        var windows = PowerShellCompilationArtifactBuildCache.CreateEvidence(spec, workspace, target, graph, Toolchain("Windows"));
+        var linux = PowerShellCompilationArtifactBuildCache.CreateEvidence(spec, workspace, target, graph, Toolchain("Linux"));
+
+        Assert.NotEqual(windows.Key, linux.Key);
+    }
+
+    [Fact]
+    public void BuildCacheRestoreFingerprintIncludesActualResolvedPackageBytes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.CacheInputs", Guid.NewGuid().ToString("N"));
+        var workspace = Path.Combine(root, "workspace");
+        var packageRoot = Path.Combine(root, "packages");
+        var package = Path.Combine(packageRoot, "example.package", "1.0.0");
+        Directory.CreateDirectory(Path.Combine(workspace, "obj"));
+        Directory.CreateDirectory(package);
+        var payload = Path.Combine(package, "lib.dll");
+        File.WriteAllText(payload, "first");
+        File.WriteAllText(
+            Path.Combine(workspace, "obj", "project.assets.json"),
+            JsonSerializer.Serialize(new
+            {
+                packageFolders = new Dictionary<string, object> { [packageRoot + Path.DirectorySeparatorChar] = new { } },
+                libraries = new Dictionary<string, object>
+                {
+                    ["example.package/1.0.0"] = new { type = "package", path = "example.package/1.0.0" }
+                }
+            }));
+        try
+        {
+            var first = PowerShellCompilationArtifactBuildCache.ComputeResolvedRestoreInputsSha256(workspace);
+            File.WriteAllText(payload, "second");
+            var second = PowerShellCompilationArtifactBuildCache.ComputeResolvedRestoreInputsSha256(workspace);
+
+            Assert.NotEqual(first, second);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Build_StrictBoundaryEvidenceCountsEachHostedRegionSite()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-TwoRegions { [CmdletBinding()] param([int] $Value) Get-RegionText; $Value += 1; Get-RegionText; return $Value }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BoundarySites",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.Boundaries!.TypedEntryPoints);
+        Assert.Equal(2, result.Manifest.Boundaries.HostedRegionSites);
+        Assert.Equal(3, result.Manifest.Boundaries.StaticBoundarySites);
+    }
+
+    [Fact]
     public void BuildCacheRejectsPayloadWithReparsePointAncestor()
     {
         using var fixture = ArtifactFixture.Create("function Get-CachedValue { return 17 }", ".psm1");
@@ -261,5 +418,100 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             try { Directory.Delete(cache, recursive: true); } catch { }
             try { Directory.Delete(outside, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void BuildCacheTreatsSemanticallyMalformedManifestAsAMiss()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-CachedValue { return 17 }", ".psm1");
+        var cache = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Cache", Guid.NewGuid().ToString("N"));
+        PowerShellCompilationBuildResult Build() => new PowerShellCompilationArtifactBuilder().Build(
+            new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath, fixture.OutputPath, "PowerForge.MalformedCache",
+                PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
+                allowUnreviewedDependencyResolution: true)
+            {
+                BuildCacheDirectory = cache,
+                UseBuildCache = true
+            });
+        try
+        {
+            var first = Build();
+            Assert.True(first.Succeeded, first.Error + Environment.NewLine + first.BuildOutput);
+            var key = first.Manifest!.BuildCache!.Key;
+            File.WriteAllText(Path.Combine(cache, key.Substring(0, 2), key, "cache-manifest.json"),
+                JsonSerializer.Serialize(new { schemaVersion = 1, key, files = (object?)null }));
+
+            var rebuilt = Build();
+
+            Assert.True(rebuilt.Succeeded, rebuilt.Error + Environment.NewLine + rebuilt.BuildOutput);
+            Assert.False(rebuilt.Manifest!.BuildCache!.Hit);
+            Assert.DoesNotContain("content-addressed hit", rebuilt.BuildOutput, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(Path.Combine(cache, key.Substring(0, 2), key, "cache-manifest.json"),
+                JsonSerializer.Serialize(new
+                {
+                    schemaVersion = 1,
+                    key,
+                    files = new[] { new { path = "bad\0path", sha256 = "00", sizeBytes = 0 } }
+                }));
+
+            var invalidPath = Build();
+
+            Assert.True(invalidPath.Succeeded, invalidPath.Error + Environment.NewLine + invalidPath.BuildOutput);
+            Assert.False(invalidPath.Manifest!.BuildCache!.Hit);
+            Assert.DoesNotContain("content-addressed hit", invalidPath.BuildOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(cache, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void BuildCacheRejectsConfiguredReparsePointRoot()
+    {
+        using var fixture = ArtifactFixture.Create("function Get-CachedValue { return 17 }", ".psm1");
+        var cache = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Cache", Guid.NewGuid().ToString("N"));
+        var outside = cache + ".outside";
+        Directory.CreateDirectory(outside);
+        Directory.CreateSymbolicLink(cache, outside);
+        try
+        {
+            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath, fixture.OutputPath, "PowerForge.LinkedCacheRoot",
+                PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
+                allowUnreviewedDependencyResolution: true)
+            {
+                BuildCacheDirectory = cache,
+                UseBuildCache = true
+            });
+
+            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+            Assert.False(result.Manifest!.BuildCache!.Hit);
+            Assert.Equal("UnsafeCacheRoot", result.Manifest.BuildCache.Reason);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
+        }
+        finally
+        {
+            if (Directory.Exists(cache) && (File.GetAttributes(cache) & FileAttributes.ReparsePoint) != 0)
+                Directory.Delete(cache);
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void CompiledMethodRetainsThePublishedCompleteConstructorSignature()
+    {
+        var signature = new[]
+        {
+            typeof(string), typeof(string), typeof(string), typeof(PowerShellCompilationParameter[]), typeof(int),
+            typeof(string), typeof(bool), typeof(bool), typeof(string[]), typeof(bool), typeof(bool),
+            typeof(PowerShellCompilationCommandBinding), typeof(bool), typeof(string), typeof(int), typeof(int),
+            typeof(int), typeof(PowerShellCompilationSourceMapEntry[]), typeof(PowerShellCompilationCommandProviderContract[]),
+            typeof(string), typeof(string[]), typeof(string), typeof(string)
+        };
+
+        Assert.NotNull(typeof(PowerShellCompiledMethod).GetConstructor(signature));
     }
 }

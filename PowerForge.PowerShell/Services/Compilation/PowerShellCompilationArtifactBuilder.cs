@@ -301,6 +301,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     compiledMethodDetails);
             }
 
+            GeneratedBuildProcessResult? restore = null;
+            if (spec.UseBuildCache)
+            {
+                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier);
+                if (restore.TimedOut)
+                    throw new TimeoutException($"Generated .NET restore exceeded {spec.TimeoutSeconds} seconds.");
+                if (restore.ExitCode != 0)
+                    throw new InvalidOperationException($"Generated .NET restore failed with exit code {restore.ExitCode}.{Environment.NewLine}{BoundOutput(restore.Output)}");
+            }
             var buildCache = PowerShellCompilationArtifactBuildCache.CreateEvidence(
                 spec,
                 workspace,
@@ -309,8 +318,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 toolchain);
             var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
-                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier);
-            result.BuildOutput = BoundOutput(process.Output);
+                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null);
+            result.BuildOutput = BoundOutput(string.Join(Environment.NewLine,
+                new[] { restore?.Output, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
             if (process.TimedOut)
                 throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
             if (process.ExitCode != 0)
@@ -520,7 +530,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         string projectPath,
         string publishDirectory,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        bool restoreCompleted)
     {
         var arguments = new List<string>
         {
@@ -531,6 +542,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             "--nologo",
             "--verbosity", "minimal"
         };
+        if (restoreCompleted) arguments.Add("--no-restore");
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier))
         {
             arguments.Add("--runtime");
@@ -547,6 +559,29 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var output = string.IsNullOrWhiteSpace(run.StdErr)
             ? run.StdOut
             : run.StdOut + Environment.NewLine + run.StdErr;
+        return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
+    }
+
+    private static GeneratedBuildProcessResult RunDotNetRestore(
+        PowerShellCompilationBuildSpec spec,
+        string projectPath,
+        string? runtimeIdentifier)
+    {
+        var arguments = new List<string>
+        {
+            "restore", projectPath, "--nologo", "--verbosity", "minimal"
+        };
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier))
+        {
+            arguments.Add("--runtime");
+            arguments.Add(runtimeIdentifier!);
+        }
+        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+            "dotnet",
+            Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+            arguments,
+            TimeSpan.FromSeconds(spec.TimeoutSeconds))).GetAwaiter().GetResult();
+        var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
     }
 

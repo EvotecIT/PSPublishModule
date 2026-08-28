@@ -9,6 +9,26 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void Build_StrictExecutableExecutesOptimizedAuthoredConstants()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-OptimizedValue { return 1.5 + 2.5 }; Get-OptimizedValue");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.OptimizedExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.IrOptimization!.ConstantExpressionsFolded > 0);
+        var processResult = RunProcess(result.ArtifactPath!);
+        Assert.Equal((0, "4", string.Empty),
+            (processResult.ExitCode, processResult.StandardOutput.Trim(), processResult.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_StrictTypedExecutableUsesClrDefaultForOmittedOptionalParameter()
     {
         using var fixture = ArtifactFixture.Create("param([int] $Count); return $Count");

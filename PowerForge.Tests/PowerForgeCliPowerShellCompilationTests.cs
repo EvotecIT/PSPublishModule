@@ -13,6 +13,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     [InlineData("powershell build missing.ps1 --kind exe --mode 999 --output json", "powershell.build", "999")]
     [InlineData("powershell build missing.ps1 --resource-mode 999 --output json", "powershell.build", "999")]
     [InlineData("powershell analyze missing.ps1 --resource-mode 999 --output json", "powershell.analyze", "999")]
+    [InlineData("powershell explain missing.ps1 --resource-mode 999 --output json", "powershell.explain", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
         var result = await RunCliAsync(FindRepositoryRoot(), arguments);
@@ -72,6 +73,41 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("Hybrid", 0, "RuntimeFallback")]
+    [InlineData("Strict", 1, "Rejected")]
+    public async Task Explain_EmitsRelocationSafeCausalDecisionTrace(string mode, int exitCode, string decision)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Explain Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        File.WriteAllText(source, "Invoke-DynamicThing $Name");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind exe --mode {mode} --output json");
+
+            Assert.Equal(exitCode, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(1, explanation.GetProperty("schemaVersion").GetInt32());
+            var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
+            Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
+            var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
+            Assert.Equal(decision, unit.GetProperty("decision").GetString());
+            Assert.Equal(24, unit.GetProperty("unitId").GetString()!.Length);
+            Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray());
+            Assert.DoesNotContain(root, explanation.GetRawText(), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

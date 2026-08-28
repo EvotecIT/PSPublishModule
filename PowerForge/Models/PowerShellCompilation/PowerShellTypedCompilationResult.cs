@@ -116,6 +116,40 @@ public sealed class PowerShellCompiledMethod
         string[]? outputValueStates = null,
         string? collectionElementType = null,
         string? outputScalarization = null)
+        : this(sourceName, generatedName, returnType, parameters, sourceLine, sourcePath,
+            requiresPowerShellStreams, requiresPowerShellCommandRegions, aliases, requiresPowerShellBoundParameters,
+            isAdvancedFunction, commandBinding, requiresPowerShellRuntimeState, declaredOutputType, sourceColumn,
+            sourceEndLine, sourceEndColumn, sourceMap, commandProviders, outputCardinality, outputValueStates,
+            collectionElementType, outputScalarization, 0)
+    {
+    }
+
+    /// <summary>Creates a complete compiled-method description with exact hosted boundary-site evidence.</summary>
+    public PowerShellCompiledMethod(
+        string sourceName,
+        string generatedName,
+        string returnType,
+        PowerShellCompilationParameter[] parameters,
+        int sourceLine,
+        string? sourcePath,
+        bool requiresPowerShellStreams,
+        bool requiresPowerShellCommandRegions,
+        string[]? aliases,
+        bool requiresPowerShellBoundParameters,
+        bool isAdvancedFunction,
+        PowerShellCompilationCommandBinding? commandBinding,
+        bool requiresPowerShellRuntimeState,
+        string? declaredOutputType,
+        int sourceColumn,
+        int sourceEndLine,
+        int sourceEndColumn,
+        PowerShellCompilationSourceMapEntry[]? sourceMap,
+        PowerShellCompilationCommandProviderContract[]? commandProviders,
+        string? outputCardinality,
+        string[]? outputValueStates,
+        string? collectionElementType,
+        string? outputScalarization,
+        int hostedRegionSiteCount)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -134,6 +168,7 @@ public sealed class PowerShellCompiledMethod
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
+        HostedRegionSiteCount = hostedRegionSiteCount;
         Aliases = aliases ?? Array.Empty<string>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         IsAdvancedFunction = isAdvancedFunction;
@@ -201,6 +236,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
+
+    /// <summary>Number of statically emitted calls into a hosted PowerShell command region.</summary>
+    public int HostedRegionSiteCount { get; }
 
     /// <summary>Whether the generated method expects bounded PowerShell runtime-state delegates and values.</summary>
     public bool RequiresPowerShellRuntimeState { get; }
