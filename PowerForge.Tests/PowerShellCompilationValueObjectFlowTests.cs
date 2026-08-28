@@ -87,4 +87,63 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.DoesNotContain("Add-Member", generated, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("PSObject.AsPSObject", generated, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Build_StrictBinaryModuleConvertsKnownNotePropertyToItsBoundClrType()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-TypedProperty { $item = [pscustomobject]@{ Name = 'Ada' }; [string] $name = $item.Name; return $name }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedPropertyRead",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal("Ada", RunModuleProof(result.ArtifactPath!, "Get-TypedProperty"));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModuleEnumeratesSupportedListOnArrayConcatenationRightHandSide()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-ListConcatenation { $right = [System.Collections.ArrayList]::new(); " +
+            "$null = $right.Add('Grace'); $null = $right.Add('Linus'); return ([object[]]@('Ada') + $right) }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedListConcatenation",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(new[] { "Ada", "Grace", "Linus" }, RunModuleProof(result.ArtifactPath!, "Get-ListConcatenation").Split(Environment.NewLine));
+    }
+
+    [Fact]
+    public void Build_StrictBinaryModulePreservesOriginalPropertyAndWritesNonTerminatingErrorForDuplicateAddMember()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-DuplicateProperty { [CmdletBinding()] param(); $item = [pscustomobject]@{ Name = 'original' }; " +
+            "$item | Add-Member -NotePropertyName Name -NotePropertyValue 'replacement'; return $item.Name }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DuplicateNoteProperty",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var proof = RunModuleProof(
+            result.ArtifactPath!,
+            "$errors = @(); $value = Add-DuplicateProperty -ErrorVariable +errors -ErrorAction SilentlyContinue; \"$value|$($errors.Count)\"");
+        Assert.Equal("original|1", proof);
+    }
 }

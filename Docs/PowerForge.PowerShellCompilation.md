@@ -180,6 +180,19 @@ powerforge powershell build .\Invoke-Report.ps1 `
 .\artifacts\Invoke-Report.exe --Path C:\Reports --Format Html
 ```
 
+Build a managed Hybrid executable when complete local functions are eligible but the entry script or dependencies still need hosted PowerShell semantics:
+
+```powershell
+powerforge powershell build .\Invoke-MixedReport.ps1 `
+    --kind exe `
+    --mode Hybrid `
+    --allow-unreviewed-dependencies `
+    --out .\artifacts `
+    --name Invoke-MixedReport
+```
+
+Eligible functions become registered generated cmdlets in the packaged host. The entry script and unsupported units remain embedded source, and the manifest reports the typed, hosted, fallback, and static crossing-site counts. This is a managed/current-host delivery foundation, not a claim that Hybrid is NativeAOT-ready or that any cross-published RID is supported.
+
 Compile an eligible top-level script into a PowerShell-free executable:
 
 ```powershell
@@ -233,6 +246,8 @@ powerforge powershell build .\Calculations.psm1 `
 ```
 
 Add `--output json` to either `analyze` or `build` for a stable machine-readable envelope. Analyzer diagnostics include a stable `featureId`, while `dependencies` explains what the selected artifact shape will compile, preserve, copy, embed, leave external, or reject.
+
+Every build consumes one normalized target contract. Compatibility options such as `--framework`, `--rid`, `--self-contained`, `--optimization`, and `--no-single-file` construct it; `--target-contract .\target.json` instead supplies an explicit integrity-checked contract. Successful artifacts emit target-contract, toolchain, dependency-lock, SBOM/provenance, and file-hash evidence. The CLI and cmdlet use a verified content-addressed build cache by default; use `--cache-directory <path>` / `-BuildCacheDirectory` to select its owner or `--no-build-cache` / `-UseBuildCache:$false` for a deliberately uncached build. Cache entries are keyed by target, graph lock, compiler/toolchain identity, and generated inputs and are rehashed before reuse.
 
 ## Use the PSPublishModule cmdlet
 
@@ -325,7 +340,7 @@ That means an arbitrary existing automation script is unlikely to qualify for St
 
 PowerForge does not aim to reimplement the complete PowerShell language and runtime. Dynamic scope, providers, remoting, arbitrary command discovery, ETS adaptation, host interaction, and every coercion rule would effectively require another PowerShell engine. The useful goal is a well-specified typed subset that grows according to real-product impact, while unsupported behavior remains explicit and correct.
 
-A Hybrid executable is not implemented today. It is the natural future bridge for scripts that cannot become runtime-free: package the PowerShell runtime for unsupported behavior, compile eligible local function graphs or command regions into a companion assembly, and route calls across an explicit boundary. Such an artifact could improve selected workloads and startup organization, but it must continue to report `requiresPowerShellRuntime: true` and must never be presented as Strict compilation.
+A managed Hybrid executable is now implemented as that bridge: it packages the hosted runtime/source closure, registers eligible local functions as generated cmdlets from the typed assembly, and routes the retained entry script through the same package host. Its manifest records that runtime evaluation is allowed, identifies embedded source and dependency closure, and exposes static boundary counts. Runtime invocation-cost profiling, NativeAOT-hosted Hybrid delivery, and named-RID/cross-platform promotion remain open; the artifact must never be presented as Strict compilation.
 
 ## Compiler architecture and feature growth
 
@@ -351,7 +366,7 @@ Every bound node carries:
 
 With that boundary, a feature is bound once and backends consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The former direct AST-to-C# emitter and its partial implementations were deleted after the existing behavior migrated; there is no compatibility switch that can silently bypass the IR.
 
-The active architecture milestone is canonical command and pipeline semantics. New command families should add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
+Canonical command and pipeline semantics are complete within their bounded provider contract. Active work is Milestone 14 target-host productization, measured Milestone 15 optimization, and Milestone 17 explainability. New command families still add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
 
 Every newly eligible language feature should satisfy the same acceptance packet:
 

@@ -85,7 +85,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest.DependencyClosure.BundledEntries > 0);
         Assert.Empty(result.Manifest.DependencyClosure.Limitations);
         Assert.Equal(64, result.Manifest.GeneratedSourceSha256.Length);
-        Assert.Equal(1, result.Manifest.CompiledMethods);
+        Assert.True(result.Manifest.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         Assert.Equal(0, result.Manifest.OmittedUnits);
 
@@ -238,20 +239,58 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_RejectsHybridExecutableInsteadOfPublishingPackageWithHybridManifest()
+    public void Build_HybridExecutableRegistersTypedCmdletsAndRetainsScriptFallback()
     {
-        using var fixture = ArtifactFixture.Create("param([int] $Value); return $Value");
+        using var fixture = ArtifactFixture.Create(
+            "param([int] $Value); function Get-Double { param([int] $Number) [int] $Result = $Number; $Result += $Number; return $Result }; Get-Double -Number $Value");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
-            "PowerForge.InvalidHybridExecutable",
+            "PowerForge.HybridExecutable",
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
 
-        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationArtifactBuilder().Build(spec));
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
-        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.RequiresPowerShellRuntime);
+        Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        Assert.True(result.Manifest.ContainsEmbeddedPowerShellSource);
+        Assert.True(result.Manifest.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+        Assert.Equal(1, result.Manifest.Boundaries!.TypedEntryPoints);
+        var run = RunProcess(result.ArtifactPath!, "-Value", "21");
+        Assert.Equal((0, "42", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridExecutableHashesAndExecutesRewrittenCompiledDependencies()
+    {
+        using var fixture = ArtifactFixture.Create(
+            ". \"$PSScriptRoot/Helper.ps1\"; 'ready'");
+        var helper = Path.Combine(fixture.RootPath, "Helper.ps1");
+        File.WriteAllText(
+            helper,
+            "function Get-Triple { param([int] $Number) [int] $Result = $Number; $Result += $Number; $Result += $Number; return $Result }");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HybridDependencyExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(result.Manifest!.CompiledMethods == 1,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var run = RunProcess(result.ArtifactPath!);
+        Assert.Equal((0, "ready", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]

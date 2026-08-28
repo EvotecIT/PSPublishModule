@@ -33,7 +33,8 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
                 .ToArray(),
             typed.Diagnostics,
             typed.SourcePaths,
-            typed.LifecycleSources);
+            typed.LifecycleSources,
+            typed.Optimization);
     }
 
     private static PowerShellCompiledMethod CreateMethod(PowerShellCompilationLifecycleSource source)

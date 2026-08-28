@@ -98,7 +98,7 @@ public sealed class PowerShellCompilationBuildSpec
         return mode switch
         {
             PowerShellCompilationMode.Package => kind == PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Hybrid => kind != PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid => true,
             PowerShellCompilationMode.Strict => true,
             _ => false
         };
@@ -115,8 +115,6 @@ public sealed class PowerShellCompilationBuildSpec
             throw new ArgumentException("Analyze selects planning behavior and is not an artifact build mode. Use Package, Hybrid, or Strict.", nameof(mode));
         if (mode == PowerShellCompilationMode.Package)
             throw new ArgumentException("Package compilation is supported only for Executable artifacts.", nameof(mode));
-        if (mode == PowerShellCompilationMode.Hybrid)
-            throw new ArgumentException("Hybrid executable compilation is not supported. Use Package for broad PowerShell compatibility or Strict for a genuinely typed executable.", nameof(mode));
         throw new ArgumentException($"Compilation mode '{mode}' is not supported for artifact kind '{kind}'.", nameof(mode));
     }
 
@@ -126,7 +124,8 @@ public sealed class PowerShellCompilationBuildSpec
         PowerShellCompilationMode mode)
     {
         EnsureModeSupported(kind, mode);
-        return kind == PowerShellCompilationArtifactKind.BinaryModule
+        return kind == PowerShellCompilationArtifactKind.BinaryModule ||
+               kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
             ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Library
                 ? PowerShellCompilationCapabilities.StaticRuntimeFacts
@@ -183,6 +182,15 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Optional optimization for a genuinely typed executable.</summary>
     public PowerShellCompilationExecutableOptimization Optimization { get; set; }
 
+    /// <summary>Optional explicit semantic, execution, and deployment target. When supplied, it must match the compatibility build fields.</summary>
+    public PowerShellCompilationTargetContract? TargetContract { get; set; }
+
+    /// <summary>Whether the content-addressed generated-build cache may be used.</summary>
+    public bool UseBuildCache { get; set; }
+
+    /// <summary>Optional machine-local root for content-addressed generated-build cache entries.</summary>
+    public string? BuildCacheDirectory { get; set; }
+
     /// <summary>Whether generated signable files should receive Authenticode signatures before hashes are recorded.</summary>
     public bool SignArtifact { get; set; }
 
@@ -229,7 +237,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 5;
+    public int SchemaVersion { get; set; } = 6;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -251,6 +259,21 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Optional runtime identifier.</summary>
     public string? RuntimeIdentifier { get; set; }
+
+    /// <summary>Canonical semantic, execution, and deployment target consumed by artifact generation.</summary>
+    public PowerShellCompilationTargetContract? TargetContract { get; set; }
+
+    /// <summary>Compiler and SDK provenance captured for this build.</summary>
+    public PowerShellCompilationToolchainEvidence? Toolchain { get; set; }
+
+    /// <summary>Content-addressed generated-build cache result.</summary>
+    public PowerShellCompilationBuildCacheEvidence? BuildCache { get; set; }
+
+    /// <summary>Bound-IR optimization evidence for generated typed methods.</summary>
+    public PowerShellCompilationOptimizationEvidence? IrOptimization { get; set; }
+
+    /// <summary>Static typed/hosted transition evidence for the artifact plan.</summary>
+    public PowerShellCompilationBoundaryEvidence? Boundaries { get; set; }
 
     /// <summary>Whether the artifact must execute inside or host a PowerShell runtime.</summary>
     public bool RequiresPowerShellRuntime { get; set; }

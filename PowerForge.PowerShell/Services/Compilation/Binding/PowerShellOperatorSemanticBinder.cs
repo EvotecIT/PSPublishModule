@@ -50,7 +50,9 @@ internal static class PowerShellOperatorSemanticBinder
                 return Reject(diagnostics, span, "PSB2218", "Typed array concatenation supports one-dimensional arrays only.");
             if (rightType == typeof(void))
                 return Reject(diagnostics, span, "PSB2219", "A void expression cannot participate in typed array concatenation.");
-            return new PowerShellBoundArrayConcatenationExpression(span, left, right, rightType.IsArray);
+            var enumerateRight = rightType.IsArray ||
+                                 (rightType != typeof(string) && typeof(System.Collections.IList).IsAssignableFrom(rightType));
+            return new PowerShellBoundArrayConcatenationExpression(span, left, right, enumerateRight);
         }
 
         if (operation is "And" or "Or")

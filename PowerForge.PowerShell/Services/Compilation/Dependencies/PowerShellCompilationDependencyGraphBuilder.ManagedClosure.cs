@@ -35,14 +35,15 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 var token = (reference.Flags & AssemblyFlags.PublicKey) != 0 && tokenBytes.Length > 0
                     ? PowerShellTargetRuntimeAssemblyCatalog.ComputePublicKeyToken(tokenBytes)
                     : string.Concat(tokenBytes.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
-                var stableKey = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(name, reference.Version, token);
+                var culture = reference.Culture.IsNil ? string.Empty : reader.GetString(reference.Culture);
+                var stableKey = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(name, reference.Version, token, culture);
                 if (targetRuntime.Contains(stableKey)) continue;
 
-                var adjacent = FindAdjacentManagedAssembly(directory, name, reference.Version, token);
+                var adjacent = FindAdjacentManagedAssembly(directory, name, reference.Version, token, culture);
                 string nodeId;
                 if (adjacent is null)
                 {
-                    nodeId = AddExternalManagedNode(name, reference.Version, token, targetFramework!, runtimeIdentifier);
+                    nodeId = AddExternalManagedNode(name, reference.Version, token, culture, targetFramework!, runtimeIdentifier);
                 }
                 else
                 {
@@ -102,10 +103,16 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string name,
         Version version,
         string publicKeyToken,
+        string culture,
         string targetFramework,
         string? runtimeIdentifier)
     {
-        var id = StableId("external-managed", name.ToUpperInvariant(), version.ToString(), publicKeyToken.ToUpperInvariant());
+        var id = StableId(
+            "external-managed",
+            name.ToUpperInvariant(),
+            version.ToString(),
+            publicKeyToken.ToUpperInvariant(),
+            PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture).ToUpperInvariant());
         if (_nodes.ContainsKey(id)) return id;
         _nodes.Add(id, new PowerShellCompilationDependencyNode
         {
@@ -120,6 +127,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 Name = name,
                 Version = version.ToString(),
                 PublicKeyToken = publicKeyToken,
+                Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture),
                 Source = "External",
                 TargetFramework = targetFramework,
                 RuntimeIdentifier = runtimeIdentifier ?? string.Empty,
@@ -134,7 +142,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         return id;
     }
 
-    private static string? FindAdjacentManagedAssembly(string directory, string name, Version version, string publicKeyToken)
+    private static string? FindAdjacentManagedAssembly(string directory, string name, Version version, string publicKeyToken, string culture)
     {
         foreach (var extension in new[] { ".dll", ".exe" })
         {
@@ -145,8 +153,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 var assembly = AssemblyName.GetAssemblyName(candidate);
                 var token = string.Concat((assembly.GetPublicKeyToken() ?? Array.Empty<byte>())
                     .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+                var assemblyCulture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(assembly.CultureName);
                 if (assembly.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true &&
-                    assembly.Version == version && token.Equals(publicKeyToken, StringComparison.OrdinalIgnoreCase))
+                    assembly.Version == version && token.Equals(publicKeyToken, StringComparison.OrdinalIgnoreCase) &&
+                    assemblyCulture.Equals(PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture), StringComparison.OrdinalIgnoreCase))
                     return Path.GetFullPath(candidate);
             }
             catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or FileNotFoundException)

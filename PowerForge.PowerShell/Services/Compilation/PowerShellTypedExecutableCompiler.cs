@@ -77,7 +77,8 @@ internal static class PowerShellTypedExecutableCompiler
                 .ToArray()),
             entry.Emission,
             localMethods.ToArray(),
-            descriptions.ToArray());
+            descriptions.ToArray(),
+            semantic.Optimization.ToPublicModel());
     }
 
     private static void ValidateSourceClosure(string entryPoint, string[] requestedSources)
@@ -264,18 +265,21 @@ internal sealed class PowerShellTypedExecutableCompilation
         PowerShellTypedExecutableContract entryPoint,
         PowerShellCSharpMethodEmission entryPointMethod,
         PowerShellCSharpMethodEmission[] localMethods,
-        PowerShellCompiledMethod[] methods)
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationOptimizationEvidence optimization)
     {
         EntryPoint = entryPoint;
         EntryPointMethod = entryPointMethod;
         LocalMethods = localMethods;
         Methods = methods;
+        Optimization = optimization;
     }
 
     internal PowerShellTypedExecutableContract EntryPoint { get; }
     internal PowerShellCSharpMethodEmission EntryPointMethod { get; }
     internal PowerShellCSharpMethodEmission[] LocalMethods { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
+    internal PowerShellCompilationOptimizationEvidence Optimization { get; }
 }
 
 internal sealed class PowerShellTypedExecutableContract

@@ -11,7 +11,7 @@ internal static class PowerShellTargetRuntimeAssemblyCatalog
     {
         PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(targetFramework);
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in PowerShellGeneratedTypePolicy.GetReferenceAssemblyPaths(targetFramework))
+        foreach (var path in PowerShellGeneratedTypePolicy.GetTargetRuntimeAssemblyPaths(targetFramework))
         {
             using var stream = File.OpenRead(path);
             using var pe = new PEReader(stream);
@@ -21,15 +21,22 @@ internal static class PowerShellTargetRuntimeAssemblyCatalog
             var definition = reader.GetAssemblyDefinition();
             var publicKey = reader.GetBlobBytes(definition.PublicKey);
             var token = publicKey.Length == 0 ? string.Empty : ComputePublicKeyToken(publicKey);
-            identities.Add(CreateStableKey(reader.GetString(definition.Name), definition.Version, token));
+            identities.Add(CreateStableKey(
+                reader.GetString(definition.Name),
+                definition.Version,
+                token,
+                definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture)));
         }
         if (identities.Count == 0)
             throw new InvalidOperationException($"Target framework '{targetFramework}' did not expose any certifiable reference-assembly identities.");
         return identities;
     }
 
-    internal static string CreateStableKey(string name, Version version, string publicKeyToken)
-        => $"{name}|{version}|{publicKeyToken}";
+    internal static string CreateStableKey(string name, Version version, string publicKeyToken, string culture = "")
+        => $"{name}|{version}|{publicKeyToken}|{NormalizeCulture(culture)}";
+
+    internal static string NormalizeCulture(string? culture)
+        => string.IsNullOrWhiteSpace(culture) ? "neutral" : culture!.Trim();
 
     internal static string ComputePublicKeyToken(byte[] publicKey)
     {

@@ -1,11 +1,16 @@
 using System.Management.Automation.Language;
+using System.Text;
 
 namespace PowerForge;
 
 public sealed partial class PowerShellCompilationArtifactBuilder
 {
-    private static string GeneratePackagedScript(string sourcePath, PackagedSourceSet packagedSources)
-        => PowerShellPackagedScriptRewriter.Rewrite(
+    private static string GeneratePackagedScript(
+        string sourcePath,
+        PackagedSourceSet packagedSources,
+        PowerShellTypedCompilationResult? hybrid = null)
+    {
+        var rewritten = PowerShellPackagedScriptRewriter.Rewrite(
             sourcePath,
             packagedCommandPathExpression: packagedSources.UsesExtractedRoot
                 ? "[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path"
@@ -18,12 +23,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             packagedScriptRootExpression: packagedSources.UsesExtractedRoot
                 ? "$([System.IO.Path]::GetDirectoryName([PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path))"
                 : null);
+        return hybrid is null ? rewritten : PowerShellHybridModuleComposer.ComposeExecutableRoot(rewritten, sourcePath, hybrid);
+    }
 
     private static PackagedSourceSet PreparePackagedSources(
         string workspace,
         string sourcePath,
         IEnumerable<string> compilationSourcePaths,
-        IEnumerable<PowerShellCompilationDependency> dependencyPlan)
+        IEnumerable<PowerShellCompilationDependency> dependencyPlan,
+        PowerShellTypedCompilationResult? hybrid = null)
     {
         var fullSourcePath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
@@ -65,6 +73,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
         var dependencyDirectory = Path.Combine(workspace, "EmbeddedDependencies");
         Directory.CreateDirectory(dependencyDirectory);
+        var hybridCompiledMethods = hybrid is null
+            ? null
+            : PowerShellHybridModuleComposer.GetExecutableCompiledMethodKeys(hybrid);
         var projectResources = new List<string>();
         var dependencySpecs = new List<string>();
         for (var index = 0; index < scriptDependencies.Length; index++)
@@ -73,11 +84,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
             ValidatePackagedDependency(dependency, scriptDependencies.Prepend(fullSourcePath).ToArray());
             var fileName = $"Dependency{index:D4}.ps1";
-            File.Copy(dependency, Path.Combine(dependencyDirectory, fileName), overwrite: false);
+            var target = Path.Combine(dependencyDirectory, fileName);
+            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(dependency, hybrid, hybridCompiledMethods!);
+            if (composed is null)
+                File.Copy(dependency, target, overwrite: false);
+            else
+                File.WriteAllText(target, composed, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(dependency))}, {GetExecutableUnixMode(dependency)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(target))}, {GetExecutableUnixMode(dependency)}),");
         }
         for (var index = 0; index < resourceDependencies.Length; index++)
         {

@@ -182,6 +182,71 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void Net472TargetRuntimeCatalogIncludesTheCompleteReferencePack()
+    {
+        var keys = PowerShellTargetRuntimeAssemblyCatalog.ReadStableKeys("net472");
+
+        Assert.Contains(keys, static key => key.StartsWith("System.Configuration|", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(keys, static key => key.StartsWith("System.Web|", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(keys, static key => key.StartsWith("netstandard|", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(keys, static key => key.StartsWith("System.Runtime|", StringComparison.OrdinalIgnoreCase));
+        Assert.True(keys.Count > 200, $"Expected the complete net472 reference pack plus facades, but found only {keys.Count} identities.");
+    }
+
+    [Fact]
+    public async Task StrictClosureVerifierRejectsDeliveredDependencyAbsentFromReviewedGraph()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "ReviewedClosure", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var project = Path.Combine(root, "Injected.csproj");
+            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Injected.cs"), "public static class Injected { public static int Value => 1; }");
+            var output = Path.Combine(root, "out");
+            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
+
+            var files = new[]
+            {
+                new PowerShellCompilationArtifactFile
+                {
+                    Path = Path.Combine(output, "Injected.dll"),
+                    Role = "RuntimeDependency"
+                }
+            };
+            var exception = Assert.Throws<InvalidOperationException>(() => Verify(files));
+            var externalGraph = new PowerShellCompilationDependencyGraph
+            {
+                Nodes = new[]
+                {
+                    new PowerShellCompilationDependencyNode
+                    {
+                        Roles = PowerShellCompilationDependencyGraphRole.Deployment,
+                        Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                        Disposition = PowerShellCompilationDependencyGraphDisposition.External,
+                        Exists = false,
+                        Identity = new PowerShellCompilationDependencyIdentity
+                        {
+                            Name = "Injected",
+                            Version = "1.0.0.0"
+                        }
+                    }
+                }
+            };
+            var externalException = Assert.Throws<InvalidOperationException>(() => Verify(files, graph: externalGraph));
+
+            Assert.Contains("reviewed dependency graph", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("reviewed dependency graph", externalException.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task StrictClosureVerifierRejectsManagedPInvokeUntilTargetHostNativeProofExists()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "NativeClosure", Guid.NewGuid().ToString("N"));
@@ -251,11 +316,15 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         string targetFramework = "net10.0",
         string? runtimeIdentifier = null,
         PowerShellCompilationDependencyGraph? graph = null)
-        => PowerShellStrictDependencyClosureVerifier.Verify(new PowerShellStrictDependencyClosureRequest(
+    {
+        graph ??= new PowerShellCompilationDependencyGraph();
+        graph.LockSha256 = PowerShellCompilationDependencyLockHasher.ComputeSha256(graph);
+        return PowerShellStrictDependencyClosureVerifier.Verify(new PowerShellStrictDependencyClosureRequest(
             files,
             targetFramework,
             runtimeIdentifier,
-            graph ?? new PowerShellCompilationDependencyGraph()));
+            graph));
+    }
 
     [Fact]
     public void ArrayAndForHeaderNodesPropagateNestedProcessEffects()

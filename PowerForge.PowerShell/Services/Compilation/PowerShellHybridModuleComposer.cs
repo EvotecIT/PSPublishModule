@@ -8,6 +8,29 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellHybridModuleComposer
 {
+    internal static string ComposeExecutableRoot(
+        string source,
+        string sourcePath,
+        PowerShellTypedCompilationResult typed)
+    {
+        var ast = Parser.ParseInput(source, out _, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException("Hybrid executable source could not be parsed while composing retained fallback code.");
+        var compiledNames = typed.Methods
+            .Where(method => method.Lifecycle is null && PowerShellCompilationPathSafety.PathEquals(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                sourcePath))
+            .Select(static method => method.SourceName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var result = new StringBuilder(ast.Extent.Text);
+        foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                     .Cast<FunctionDefinitionAst>()
+                     .Where(function => compiledNames.Contains(function.Name))
+                     .OrderByDescending(static function => function.Extent.StartOffset))
+            result.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+        return result.ToString();
+    }
+
     internal static string ComposeRoot(
         string sourcePath,
         string assemblyFileName,
@@ -181,6 +204,15 @@ internal static class PowerShellHybridModuleComposer
                 method.SourceLine))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
+
+    internal static HashSet<string> GetExecutableCompiledMethodKeys(PowerShellTypedCompilationResult typed)
+        => typed.Methods
+            .Where(static method => method.Lifecycle is null)
+            .Select(method => GetCompiledMethodKey(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                method.SourceName,
+                method.SourceLine))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<ModuleScopeFunction> ReadModuleScopeFunctions(IEnumerable<string> sourcePaths)
     {

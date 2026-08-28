@@ -17,7 +17,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     };
     private static readonly HashSet<string> HostedLifecycleMemberNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "__PowerForgeInputObject",
         "__powerForgePipeline",
         "__powerForgeLifecycleGate",
         "__powerForgeCleaned",
@@ -29,6 +28,9 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         "__powerForgeAvailabilityChanged",
         "__powerForgeRunspaceStateChanged",
         "__powerForgePipelineInputExplicitlyBound",
+        "__powerForgeCurrentPipelineObjectProperty",
+        "__powerForgeCurrentPipelineObjectField",
+        "GetCurrentPipelineObject",
         "GetLifecyclePipeline",
         "StopLifecycle",
         "CompleteStoppedLifecycle",
@@ -123,7 +125,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
-            filtered.SourcePaths);
+            filtered.SourcePaths,
+            optimization: filtered.Optimization);
     }
 
     internal static string Generate(
@@ -336,12 +339,6 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         }
         if (cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
         {
-            if (cmdlet.Method.Lifecycle.ValueFromPipeline || cmdlet.Method.Lifecycle.ValueFromPipelineByPropertyName)
-            {
-                builder.AppendLine("    [Parameter(ValueFromPipeline = true, DontShow = true)]");
-                builder.AppendLine("    public PSObject? __PowerForgeInputObject { get; set; }");
-                builder.AppendLine();
-            }
             PowerShellHostedLifecycleSourceGenerator.AppendMembers(builder, cmdlet.Method);
             builder.AppendLine("}");
             builder.AppendLine();
@@ -541,17 +538,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             if (!position.HasValue && method.CommandBinding.PositionalBinding && !hasExplicitPosition)
                 position = GetImplicitPosition(method, parameterIndex, binding.ParameterSetName);
             var effective = CloneBinding(binding, binding.ParameterSetName, position);
-            return method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline
-                ? new PowerShellCompilationParameterBinding(
-                    effective.ParameterSetName,
-                    effective.Mandatory && !effective.ValueFromPipeline && !effective.ValueFromPipelineByPropertyName,
-                    effective.Position,
-                    valueFromPipeline: false,
-                    valueFromPipelineByPropertyName: false,
-                    effective.ValueFromRemainingArguments,
-                    effective.DontShow,
-                    effective.HelpMessage)
-                : effective;
+            return effective;
         }).ToArray();
     }
 

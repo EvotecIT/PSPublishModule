@@ -146,6 +146,29 @@ internal static class PowerShellObjectSemanticBinder
         var receiver = bindExpression(receiverSyntax, null);
         var value = bindExpression(valueSyntax, null);
         if (receiver is null || value is null) return true;
+        if (receiverBinding.Type.TryGetKnownProperty(propertyName, out _))
+        {
+            var errorProvider = commandRegistry.Resolve("Write-Error");
+            if (errorProvider.Status != PowerShellCommandResolutionStatus.Resolved)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSB2912",
+                    "Bounded duplicate Add-Member requires the canonical Write-Error stream provider.",
+                    PowerShellSourceParser.GetSpan(document, command.Extent)));
+                return true;
+            }
+            var message = $"Cannot add a member with the name '{propertyName}' because a member with that name already exists. To overwrite the member anyway, add the Force parameter to your command.";
+            bound = new PowerShellBoundStreamWriteStatement(
+                PowerShellSourceParser.GetSpan(document, pipeline.Extent),
+                PowerShellStreamCommandKind.Error,
+                errorProvider.Contract!,
+                new PowerShellBoundLiteralExpression(
+                    PowerShellSourceParser.GetSpan(document, command.Extent),
+                    message,
+                    new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "The statically known duplicate Add-Member contract owns its non-terminating error text."),
+                    PowerShellValueState.Known));
+            return true;
+        }
         receiverBinding.AddKnownProperty(propertyName, value.Type);
         bound = new PowerShellBoundClrMemberAssignmentStatement(
             PowerShellSourceParser.GetSpan(document, pipeline.Extent),

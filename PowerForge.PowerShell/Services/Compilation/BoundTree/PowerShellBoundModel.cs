@@ -508,6 +508,9 @@ internal sealed class PowerShellBoundFunction
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
         => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+
+    internal PowerShellBoundFunction WithBody(PowerShellBoundBlock body)
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition);
 }
 
 internal sealed class PowerShellBoundSourceDocument

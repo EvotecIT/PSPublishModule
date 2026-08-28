@@ -61,6 +61,27 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         }
     }
 
+    [Fact]
+    public void Build_StrictLibraryAbiMarksEnvironmentValueAsNullable()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-MissingEnvironmentValue { return $env:POWERFORGE_ENVIRONMENT_VALUE_THAT_DOES_NOT_EXIST }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.NullableEnvironmentAbi",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var method = Assert.Single(result.Manifest!.PublicAbi!.Methods);
+        Assert.Contains("Unknown", method.OutputValueStates);
+        Assert.True(method.CanProduceNull);
+        Assert.True(method.Nullable);
+    }
+
     [Theory]
     [InlineData("net8.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]

@@ -296,7 +296,8 @@ public sealed class PowerShellTypedCompilationResult
         PowerShellCompiledMethod[] methods,
         PowerShellCompilationDiagnostic[] diagnostics,
         string[]? sourcePaths,
-        PowerShellCompilationLifecycleSource[]? lifecycleSources = null)
+        PowerShellCompilationLifecycleSource[]? lifecycleSources = null,
+        PowerShellCompilationOptimizationEvidence? optimization = null)
     {
         SourcePath = sourcePath ?? string.Empty;
         NamespaceName = namespaceName ?? string.Empty;
@@ -306,6 +307,7 @@ public sealed class PowerShellTypedCompilationResult
         Diagnostics = diagnostics ?? Array.Empty<PowerShellCompilationDiagnostic>();
         SourcePaths = sourcePaths ?? (string.IsNullOrWhiteSpace(SourcePath) ? Array.Empty<string>() : new[] { SourcePath });
         LifecycleSources = lifecycleSources ?? Array.Empty<PowerShellCompilationLifecycleSource>();
+        Optimization = optimization ?? new PowerShellCompilationOptimizationEvidence();
     }
 
     /// <summary>Full PowerShell source path.</summary>
@@ -331,6 +333,9 @@ public sealed class PowerShellTypedCompilationResult
 
     /// <summary>Neutral hosted lifecycle candidates bound by the canonical front end.</summary>
     public PowerShellCompilationLifecycleSource[] LifecycleSources { get; }
+
+    /// <summary>Bound-IR optimization evidence produced while compiling these methods.</summary>
+    public PowerShellCompilationOptimizationEvidence Optimization { get; }
 
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;

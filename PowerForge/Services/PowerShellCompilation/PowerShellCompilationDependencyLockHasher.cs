@@ -11,6 +11,7 @@ public static class PowerShellCompilationDependencyLockHasher
     {
         if (graph is null) throw new ArgumentNullException(nameof(graph));
         var builder = new StringBuilder();
+        Append("graph", graph.SchemaVersion, graph.RootNodeId);
         foreach (var node in graph.Nodes.OrderBy(static item => item.Id, StringComparer.Ordinal))
         {
             Append("node", node.Id, node.Kind, node.Roles, node.Disposition, node.Exists,
@@ -18,7 +19,7 @@ public static class PowerShellCompilationDependencyLockHasher
                 node.Identity.RequiredVersion, node.Identity.MaximumVersion, node.Identity.Guid,
                 node.Identity.Sha256, node.Identity.Source,
                 node.Identity.Edition, node.Identity.TargetFramework, node.Identity.RuntimeIdentifier,
-                node.Identity.Architecture, node.Identity.PublicKeyToken, node.Identity.Provenance, node.Identity.InteropAdapter,
+                node.Identity.Architecture, node.Identity.PublicKeyToken, node.Identity.Culture, node.Identity.Provenance, node.Identity.InteropAdapter,
                 node.Identity.ApartmentState, node.Policy.Redistribution,
                 node.Policy.Publisher, node.Policy.Signature, node.Policy.Servicing, node.Policy.License,
                 node.Interop.Owner, node.Interop.Platform, node.Interop.Errors, node.Interop.Cancellation,

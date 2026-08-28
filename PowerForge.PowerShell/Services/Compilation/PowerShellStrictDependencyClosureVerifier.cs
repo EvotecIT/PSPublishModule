@@ -41,6 +41,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
     internal static PowerShellCompilationDependencyClosure Verify(PowerShellStrictDependencyClosureRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
+        PowerShellCompilationDependencyLockHasher.EnsureValid(request.DependencyGraph, nameof(request.DependencyGraph));
         var result = new PowerShellCompilationDependencyClosure
         {
             TargetFramework = request.TargetFramework,
@@ -73,7 +74,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 using var pe = new PEReader(stream);
                 if (pe.HasMetadata)
                 {
-                    VerifyManagedAssembly(pe, file.Path, managedAssemblies);
+                    VerifyManagedAssembly(pe, file.Path, managedAssemblies, ComputeSha256(file.Path));
                     result.ManagedAssemblies++;
                 }
                 else
@@ -110,6 +111,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
         }
 
         VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies);
+        VerifyReviewedDependencyGraph(request, managedAssemblies, targetRuntimeAssemblies);
         VerifyNativeReferenceClosure(managedAssemblies);
         result.Verified = result.Limitations.Count == 0;
         return result;
@@ -157,7 +159,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
             using var pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
             if (pe.HasMetadata)
             {
-                VerifyManagedAssembly(pe, path, managedAssemblies);
+                VerifyManagedAssembly(pe, path, managedAssemblies, ComputeSha256(path));
                 result.ManagedAssemblies++;
                 return true;
             }
@@ -378,13 +380,14 @@ internal static class PowerShellStrictDependencyClosureVerifier
         using var pe = new PEReader(stream);
         if (!pe.HasMetadata)
             throw new InvalidDataException($"Expected managed assembly '{displayPath}' does not contain CLR metadata.");
-        VerifyManagedAssembly(pe, displayPath, managedAssemblies);
+        VerifyManagedAssembly(pe, displayPath, managedAssemblies, ComputeSha256(bytes));
     }
 
     private static void VerifyManagedAssembly(
         PEReader pe,
         string displayPath,
-        ICollection<ManagedAssemblyInspection> managedAssemblies)
+        ICollection<ManagedAssemblyInspection> managedAssemblies,
+        string contentSha256)
     {
         var reader = pe.GetMetadataReader();
         if (!reader.IsAssembly)
@@ -394,7 +397,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
             reader.GetString(definition.Name),
             definition.Version,
             reader.GetBlobBytes(definition.PublicKey),
-            publicKey: true);
+            publicKey: true,
+            definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture));
         var references = new List<AssemblyIdentity>();
         foreach (var referenceHandle in reader.AssemblyReferences)
         {
@@ -404,7 +408,8 @@ internal static class PowerShellStrictDependencyClosureVerifier
                 name,
                 reference.Version,
                 reader.GetBlobBytes(reference.PublicKeyOrToken),
-                (reference.Flags & AssemblyFlags.PublicKey) != 0));
+                (reference.Flags & AssemblyFlags.PublicKey) != 0,
+                reference.Culture.IsNil ? string.Empty : reader.GetString(reference.Culture)));
             if (name.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("Microsoft.PowerShell.SDK", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' references forbidden PowerShell assembly '{name}'.");
@@ -429,7 +434,7 @@ internal static class PowerShellStrictDependencyClosureVerifier
             var name = reader.GetString(module.Name);
             if (!string.IsNullOrWhiteSpace(name)) nativeImports.Add(name);
         }
-        managedAssemblies.Add(new ManagedAssemblyInspection(assemblyIdentity, displayPath, references.ToArray(), nativeImports.ToArray()));
+        managedAssemblies.Add(new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray()));
     }
 
     private static void VerifyManagedReferenceClosure(
@@ -447,6 +452,64 @@ internal static class PowerShellStrictDependencyClosureVerifier
         }
     }
 
+    private static void VerifyReviewedDependencyGraph(
+        PowerShellStrictDependencyClosureRequest request,
+        IEnumerable<ManagedAssemblyInspection> assemblies,
+        ISet<string> targetRuntimeAssemblies)
+    {
+        var locked = request.DependencyGraph.Nodes
+            .Where(static node => node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment))
+            .Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule)
+            .Where(static node => node.Exists)
+            .Where(static node => node.Disposition is PowerShellCompilationDependencyGraphDisposition.Referenced or
+                PowerShellCompilationDependencyGraphDisposition.Bundled or
+                PowerShellCompilationDependencyGraphDisposition.PrivateRestored)
+            .Where(static node => Version.TryParse(node.Identity.Version, out _))
+            .GroupBy(
+                static node => PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(
+                    node.Identity.Name,
+                    Version.Parse(node.Identity.Version),
+                    node.Identity.PublicKeyToken,
+                    node.Identity.Culture),
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        foreach (var assembly in assemblies)
+        {
+            if (targetRuntimeAssemblies.Contains(assembly.Identity.StableKey) ||
+                IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
+                continue;
+            if (!locked.TryGetValue(assembly.Identity.StableKey, out var candidates))
+                throw new InvalidOperationException(
+                    $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' is absent from the reviewed dependency graph.");
+            var contentHashes = candidates.Select(static node => node.Identity.Sha256)
+                .Where(static hash => !string.IsNullOrWhiteSpace(hash))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (contentHashes.Length == 0)
+                throw new InvalidOperationException(
+                    $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' has no SHA-256 content identity in the reviewed dependency graph.");
+            if (!contentHashes.Contains(assembly.ContentSha256, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' does not match the SHA-256 content identity in the reviewed dependency graph.");
+        }
+    }
+
+    private static bool IsCompilerOwnedPrimaryAssembly(
+        IEnumerable<PowerShellCompilationArtifactFile> files,
+        string displayPath)
+    {
+        foreach (var file in files.Where(static file => file.Role is "Primary" or "GeneratedAssembly" or "TypedAssembly"))
+        {
+            if (PowerShellCompilationPathSafety.PathEquals(file.Path, displayPath)) return true;
+            var separator = displayPath.IndexOf('!');
+            if (separator <= 0 || !PowerShellCompilationPathSafety.PathEquals(file.Path, displayPath.Substring(0, separator))) continue;
+            var entryName = Path.GetFileNameWithoutExtension(displayPath.Substring(separator + 1));
+            var primaryName = Path.GetFileNameWithoutExtension(file.Path);
+            if (entryName.Equals(primaryName, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
     private static void VerifyNativeReferenceClosure(IEnumerable<ManagedAssemblyInspection> assemblies)
     {
         foreach (var assembly in assemblies)
@@ -460,12 +523,13 @@ internal static class PowerShellStrictDependencyClosureVerifier
         string name,
         Version version,
         byte[] publicKeyOrToken,
-        bool publicKey)
+        bool publicKey,
+        string culture)
     {
         var token = publicKey && publicKeyOrToken.Length > 0
             ? PowerShellTargetRuntimeAssemblyCatalog.ComputePublicKeyToken(publicKeyOrToken)
             : string.Concat(publicKeyOrToken.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
-        return new AssemblyIdentity(name, version, token);
+        return new AssemblyIdentity(name, version, token, culture);
     }
 
     private static bool IsProcessType(MetadataReader reader, EntityHandle handle)
@@ -501,6 +565,12 @@ internal static class PowerShellStrictDependencyClosureVerifier
         return string.Concat(sha.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
     }
 
+    private static string ComputeSha256(byte[] bytes)
+    {
+        using var sha = SHA256.Create();
+        return string.Concat(sha.ComputeHash(bytes).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
     private enum DotNetBundleFileType : byte
     {
         Unknown,
@@ -513,34 +583,38 @@ internal static class PowerShellStrictDependencyClosureVerifier
 
     private sealed class ManagedAssemblyInspection
     {
-        internal ManagedAssemblyInspection(AssemblyIdentity identity, string displayPath, AssemblyIdentity[] references, string[] nativeImports)
+        internal ManagedAssemblyInspection(AssemblyIdentity identity, string displayPath, string contentSha256, AssemblyIdentity[] references, string[] nativeImports)
         {
             Identity = identity;
             DisplayPath = displayPath;
+            ContentSha256 = contentSha256;
             References = references;
             NativeImports = nativeImports;
         }
 
         internal AssemblyIdentity Identity { get; }
         internal string DisplayPath { get; }
+        internal string ContentSha256 { get; }
         internal AssemblyIdentity[] References { get; }
         internal string[] NativeImports { get; }
     }
 
     private sealed class AssemblyIdentity
     {
-        internal AssemblyIdentity(string name, Version version, string publicKeyToken)
+        internal AssemblyIdentity(string name, Version version, string publicKeyToken, string culture)
         {
             Name = name;
             Version = version;
             PublicKeyToken = publicKeyToken;
+            Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture);
         }
 
         internal string Name { get; }
         internal Version Version { get; }
         internal string PublicKeyToken { get; }
-        internal string StableKey => PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(Name, Version, PublicKeyToken);
-        internal string DisplayName => $"{Name}, Version={Version}, PublicKeyToken={(PublicKeyToken.Length == 0 ? "null" : PublicKeyToken)}";
+        internal string Culture { get; }
+        internal string StableKey => PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(Name, Version, PublicKeyToken, Culture);
+        internal string DisplayName => $"{Name}, Version={Version}, Culture={Culture}, PublicKeyToken={(PublicKeyToken.Length == 0 ? "null" : PublicKeyToken)}";
     }
 
     private sealed class DotNetBundleManifest

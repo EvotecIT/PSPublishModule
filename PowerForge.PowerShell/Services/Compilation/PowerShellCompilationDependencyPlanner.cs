@@ -360,7 +360,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         PowerShellCompilationMode mode,
         bool isEntryPoint)
     {
-        if (kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package)
+        if (kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid)
             return isEntryPoint ? PowerShellCompilationDependencyDisposition.Embedded : PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted;
         if (kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid)
             return PowerShellCompilationDependencyDisposition.PreservedScript;
@@ -368,8 +368,10 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     }
 
     private static string GetSourceNote(PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
-        => kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
-            ? "The entry script is embedded; reachable literal dot-source dependencies are embedded and extracted into a contained temporary layout."
+        => kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
+            ? mode == PowerShellCompilationMode.Hybrid
+                ? "Eligible functions compile into registered cmdlets while the entry script and unsupported regions are embedded for the PowerShell fallback host."
+                : "The entry script is embedded; reachable literal dot-source dependencies are embedded and extracted into a contained temporary layout."
             : kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
                 ? "Eligible functions compile into cmdlets while unsupported script regions remain in the generated Hybrid module."
                 : kind == PowerShellCompilationArtifactKind.Library && mode == PowerShellCompilationMode.Hybrid
@@ -379,14 +381,14 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     private static PowerShellCompilationDependencyDisposition GetRuntimeSourceDisposition(
         PowerShellCompilationArtifactKind kind,
         PowerShellCompilationMode mode)
-        => kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
+        => kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
             ? PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted
             : kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
                 ? PowerShellCompilationDependencyDisposition.PreservedScript
                 : PowerShellCompilationDependencyDisposition.NotIncluded;
 
     private static string GetRuntimeSourceNote(PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
-        => kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
+        => kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
             ? "The reachable script dependency is embedded and extracted into the contained entrypoint layout."
             : kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
                 ? "The source has runtime loading or scope semantics and remains on the generated Hybrid script path."
@@ -401,7 +403,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         if (kind != PowerShellCompilationArtifactKind.BinaryModule)
             return IsScriptRuntimeHook(discovery, sourcePath)
                 ? PowerShellCompilationDependencyDisposition.NotIncluded
-                : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
+                : kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
                     ? PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted
                     : PowerShellCompilationDependencyDisposition.CopiedAdjacent;
         if (mode == PowerShellCompilationMode.Strict && IsScriptRuntimeHook(discovery, sourcePath))
@@ -418,7 +420,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         if (kind != PowerShellCompilationArtifactKind.BinaryModule)
             return IsScriptRuntimeHook(discovery, sourcePath)
                 ? "Manifest script runtime hooks are not copied into CLR libraries or standalone script executables."
-                : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
+                : kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
                     ? "The manifest-required contained file is embedded and extracted into the packaged source layout."
                     : "The manifest-required contained file is copied beside the generated artifact with its relative path preserved.";
         if (mode == PowerShellCompilationMode.Strict && IsScriptRuntimeHook(discovery, sourcePath))

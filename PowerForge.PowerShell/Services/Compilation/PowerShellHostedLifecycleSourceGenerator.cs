@@ -19,8 +19,22 @@ internal static class PowerShellHostedLifecycleSourceGenerator
         builder.AppendLine("    private global::System.EventHandler<global::System.Management.Automation.Runspaces.RunspaceAvailabilityEventArgs>? __powerForgeAvailabilityChanged;");
         builder.AppendLine("    private global::System.EventHandler<global::System.Management.Automation.Runspaces.RunspaceStateEventArgs>? __powerForgeRunspaceStateChanged;");
         if (lifecycle.ValueFromPipeline || lifecycle.ValueFromPipelineByPropertyName)
+        {
             builder.AppendLine("    private bool __powerForgePipelineInputExplicitlyBound;");
+            builder.AppendLine("    private static readonly global::System.Reflection.PropertyInfo? __powerForgeCurrentPipelineObjectProperty = typeof(global::System.Management.Automation.Cmdlet).GetProperty(\"CurrentPipelineObject\", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic);");
+            builder.AppendLine("    private static readonly global::System.Reflection.FieldInfo? __powerForgeCurrentPipelineObjectField = typeof(global::System.Management.Automation.Cmdlet).GetField(\"currentObjectInPipeline\", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic);");
+        }
         builder.AppendLine();
+        if (lifecycle.ValueFromPipeline || lifecycle.ValueFromPipelineByPropertyName)
+        {
+            builder.AppendLine("    private object? GetCurrentPipelineObject()");
+            builder.AppendLine("    {");
+            builder.AppendLine("        if (__powerForgeCurrentPipelineObjectProperty is not null) return __powerForgeCurrentPipelineObjectProperty.GetValue(this);");
+            builder.AppendLine("        if (__powerForgeCurrentPipelineObjectField is not null) return __powerForgeCurrentPipelineObjectField.GetValue(this);");
+            builder.AppendLine("        throw new global::System.PlatformNotSupportedException(\"The active PowerShell host does not expose its current pipeline record to the hosted lifecycle adapter.\");");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
         builder.AppendLine("    protected override void BeginProcessing()");
         builder.AppendLine("    {");
         if (lifecycle.HasClean)
@@ -254,7 +268,7 @@ internal static class PowerShellHostedLifecycleSourceGenerator
             builder.AppendLine("            if (__powerForgePipelineInputExplicitlyBound)");
             builder.AppendLine("                WriteLifecycleOutput(pipeline.Process());");
             builder.AppendLine("            else");
-            builder.AppendLine("                WriteLifecycleOutput(pipeline.Process(__PowerForgeInputObject));");
+            builder.AppendLine("                WriteLifecycleOutput(pipeline.Process(GetCurrentPipelineObject()));");
         }
         else if (lifecycle.HasProcess)
         {

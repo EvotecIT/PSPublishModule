@@ -43,7 +43,7 @@ The product succeeds when users can predict which of these outcomes they are get
 
 ## Current position
 
-The current `feature/powershell-compilation-roadmap` head contains `origin/main` and was re-proven on 2026-08-27 after the semantic-pipeline migration and review-remediation waves. The results below prove a clean branch candidate, not a default-branch merge, published package, or released product.
+The current `feature/powershell-compilation-roadmap` head contains `origin/main` and was re-proven on 2026-08-28 after the semantic-pipeline migration, exact-closure remediation, and first Milestone 14–15 delivery waves. The results below prove a branch candidate, not a default-branch merge, published package, or released product.
 
 The compiler already provides:
 
@@ -62,12 +62,16 @@ The compiler already provides:
 - [x] a product-neutral acceptance corpus and replaceable real-module census inputs
 - [x] PowerShell 5.1 and supported PowerShell 7 differential coverage, including hosted lifecycle raw-input, cleanup, and explicit `clean` version behavior
 - [x] net472, net8.0, and net10.0 compiler build lanes
+- [x] an explicit integrity-bound target contract in engine, CLI/cmdlet, generated source, manifests, provenance, and SBOM sidecars
+- [x] a verified content-addressed build cache that rejects incomplete, modified, and cross-target entries
+- [x] a managed Hybrid executable path that registers compiled cmdlets while retaining unsupported source and dependency units for hosted execution
+- [x] immutable constant-folding and dead-branch-elimination passes over bound IR with optimization evidence in the artifact manifest
 
 The companion guide owns the exact current benchmark numbers and runtime proof. This roadmap must not copy those figures as timeless claims; every performance or platform promotion uses a fresh clean-worktree run pinned to a source revision, toolchain, target framework, runtime identifier, and benchmark run ID.
 
 The lowered C# method backend does not reference SMA AST types, and the former direct AST-to-C# emitter was deleted. Eligibility, call graphs, executable binding, source mapping, command providers, dependency locks, and hosted lifecycle metadata now consume canonical semantic or lowered contracts.
 
-The dependency-ordered semantic pipeline migration checkpoint and bounded Milestones 11–13 are **Complete**. The broader architecture completion gate remains **Partial** until Milestone 14 target contracts, provenance, native/process target-host execution, supported-RID promotion, and the Milestone 17 explainability contract pass; those delivery claims are not inferred from dependency discovery.
+The dependency-ordered semantic pipeline migration checkpoint and bounded Milestones 6 and 9–13 are **Complete** after the latest review defects were reproduced and fixed at their canonical owners. Milestones 14 and 15 are **Partial**: managed target contracts, evidence, caching, Hybrid EXE, constant folding, and dead-branch elimination are implemented, while named-RID NativeAOT execution, cross-platform target-host certification, runtime boundary-cost profiling, and the remaining measured optimization families stay open. The broader architecture completion gate remains **Partial** until those Milestone 14 delivery gates and the Milestone 17 explainability contract pass; delivery claims are not inferred from dependency discovery or cross-publish success.
 
 ## Artifact ladder
 
@@ -81,14 +85,14 @@ The modes are different products with different guarantees. They must not be col
 | Strict CLR library | Candidate with clean-consumer proof, callable ABI v4, and fail-closed managed-closure certification | No for a certified artifact | Managed DLL | Direct use from C# and other CLR hosts |
 | Strict managed EXE | Candidate with generated-project execution proof and fail-closed managed-closure certification | No for a certified artifact | JIT-compiled managed executable | Small runtime-free CLI/application |
 | Strict NativeAOT EXE | Experimental build path; opaque or native closure is rejected as uncertifiable until a target-specific verifier and execution lane prove it | No for a future certified artifact; current uncertifiable output is not promoted | RID-specific native executable | No installed PowerShell or .NET requirement, low startup/footprint potential |
-| Hybrid EXE | Planned | Yes, explicit fallback only | Packaged host plus typed assembly | Broad script compatibility with coarse compiled acceleration |
+| Hybrid EXE | Managed foundation available; named-RID/native-host promotion remains experimental | Yes, explicit retained entry/dependency source and bounded hosted fallback | Packaged managed host plus registered typed cmdlets | Broad script compatibility with coarse compiled acceleration |
 | Native shared library | Deferred | No | Platform ABI such as `.dll`, `.so`, or `.dylib` | Add only for a real non-.NET embedding consumer |
 
 A C# DLL means a managed CLR library with a documented .NET API. It is not a native shared library. Native shared-library export introduces a platform ABI, marshalling, lifetime, and error-contract product of its own and must not be implied by NativeAOT executable support.
 
 ## Explicit target contract
 
-`Strict`, `Hybrid`, and an artifact kind are not enough to describe semantic compatibility. Every compilation plan and artifact manifest should carry an explicit target contract with these dimensions:
+`Strict`, `Hybrid`, and an artifact kind are not enough to describe semantic compatibility. Every successful artifact now carries one normalized, integrity-bound target contract with these dimensions:
 
 - PowerShell semantic profile, including the behavior family being targeted rather than only a target framework;
 - execution model: `RuntimeFree`, `PowerShellHosted`, or `Mixed`;
@@ -766,15 +770,15 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 6. Define runtime-free artifact contract and managed ABI | Complete | Strict publication is fail-closed and ABI v4 carries value state, output/null/cardinality, streams, and binding semantics |
 | 7. Preserve help and module contracts | Complete | Compiled functions retain full help/export behavior |
 | Semantic pipeline migration checkpoint | Complete | Publication certification, consumed locks, command-family lowering, lifecycle ownership, and responsibility-based growth headroom are closed |
-| Overall architecture completion gate | Partial / Milestones 14 and 17 | The compiler core is unblocked; target-contract, provenance, target-host, and explainability product gates stay open |
+| Overall architecture completion gate | Partial / Milestones 14 and 17 | The compiler core is unblocked and target-contract/provenance foundations exist; target-host promotion and explainability product gates stay open |
 | 8. Build command and pipeline semantics | Complete | Deterministic injected providers, typed family stages, complete CLR stream sinks, and runtime-free adapter execution share one semantic route |
 | 9. Resolve modules, dependencies, and interop | Complete | Builds consume exact graph locks; transitive module, managed, native/process, and COM dispositions are deterministic and clean-target tested |
 | 10. Complete advanced-function lifecycle | Complete | Canonical lifecycle IR preserves raw records, guarantees cleanup, and enforces PowerShell 5.1/7/7.3+ behavior explicitly |
 | 11. Complete value and object flows | Complete / bounded contract | Known object and collection shapes compile while arbitrary ETS identity remains an explicit fallback boundary |
 | 12. Expand bounded runtime state | Complete / bounded contract | Read-only invocation state propagates through IR and call graphs; mutable dynamic scope remains runtime-backed |
 | 13. Run generic coverage waves | Complete / current wave | Product-neutral corpus and exact-pinned census prove the new semantic families without product branches |
-| 14. Productize managed, Hybrid, and native delivery | Planned | Reproducible DLL/EXE outputs have runtime, RID, ABI, and provenance proof |
-| 15. Optimize proven IR | Planned | Performance work follows semantic stability and hand-C# comparison |
+| 14. Productize managed, Hybrid, and native delivery | Partial / managed foundation | Explicit target contracts, evidence, verified caching, and managed Hybrid EXE exist; named-RID NativeAOT and cross-platform target-host promotion remain open |
+| 15. Optimize proven IR | Partial / first passes | Immutable constant folding and dead-branch elimination emit evidence; allocation, fusion, coalescing, loop, conversion, mapping, and benchmark gates remain open |
 | 16. Productize the provider SDK and trust model | Planned | Versioned external providers are discoverable, validated, isolated, and conformance-tested without executing source during analysis |
 | 17. Add compiler explainability and reproducible diagnostics | Planned | Users can inspect decisions, reproduce failures, and debug generated artifacts from stable evidence bundles |
 
@@ -921,9 +925,24 @@ Exit gate: compiling a function does not remove or degrade its help or exported 
 
 This is the first new module-surface feature after migration because it proves that source metadata can flow through the IR, lowering, generated module, and artifact validation paths. It also removes the current help-preservation barrier from real-module coverage measurements.
 
-Implemented evidence re-proven on the 2026-08-27 semantic-closure candidate:
+Implemented evidence from the 2026-08-28 closure candidate is refreshed after the final validation run below. The review-remediation wave specifically proves that:
 
-- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --framework net10.0 --no-restore --filter "FullyQualifiedName~PowerShellCompilation|FullyQualifiedName~PowerShellCommandSemanticRegistry"` passed 815/815 tests, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4, analyzer-JSON-to-reviewed-lock round trips, target-reference-pack closure identities, transitive managed/native discovery, opaque-native fail-closed certification, exact provider parameters, value/object flows, bounded runtime state, event-owned prompt lifecycle stop/clean, trimming, NativeAOT build contracts, and delivered-artifact inspection;
+- known `PSCustomObject` note-property reads convert from the adapter result to the bound CLR type instead of emitting uncompilable assignments;
+- duplicate bounded `Add-Member` writes preserve the original value and emit a nonterminating error, while supported `IList` operands enumerate during array concatenation;
+- absent environment variables remain semantically nullable/unknown through ABI emission;
+- hosted lifecycle plumbing reads the original pipeline record privately and does not add a public or bindable synthetic parameter;
+- Strict closure reconciles every delivered dependency against the consumed reviewed graph, whose exact identities include managed culture/public-key-token/content hash and module GUID/content hash;
+- target reference-pack certification uses the selected framework catalog, including the complete net472 reference assembly set rather than the generated-code implicit-reference subset.
+- delivered managed closure admits only reviewed, existing, deliverable dispositions with exact content hashes; an external/missing node cannot authorize staged bytes merely because its name and assembly identity match;
+- Hybrid dependency resource hashes cover the rewritten embedded bytes that the host extracts and verifies;
+- the generated workspace and emitted project pin the same exact SDK version recorded in provenance and the cache key;
+- cache restore rejects reparse-point files and ancestors before reading payload bytes;
+- net472 target-runtime identity includes both the top-level reference assemblies and the complete facade set;
+- target promotion state is compiler-owned, so an explicit RID contract cannot self-assert `Supported`.
+
+Integrated evidence from the final 2026-08-28 closure candidate:
+
+- `dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release --framework net10.0 --no-restore --filter "FullyQualifiedName~PowerShellCompilation|FullyQualifiedName~PowerShellCommandSemanticRegistry"` passed 832/832 tests, including generated artifacts, differential behavior, help/MAML, statement-level source maps, callable ABI v4, analyzer-JSON-to-reviewed-lock round trips, target-reference-pack and net472 facade identities, transitive managed/native discovery, exact reviewed-delivery reconciliation, opaque-native fail-closed certification, exact provider parameters, value/object flows, bounded runtime state, event-owned prompt lifecycle stop/clean, trimming, NativeAOT build contracts, exact SDK pinning, reparse-safe cache restore, rewritten Hybrid dependency integrity, compiler-owned target promotion, and delivered-artifact inspection;
 - `PowerForge.PowerShell.csproj` built with zero warnings and errors for `net472`, `net8.0`, and `net10.0` after the final compatibility changes;
 - the portable generic Hybrid corpus emits 8/8 functions (100%) with zero fallback or eligible-function loss and now covers bounded environment, PSCustomObject, `Add-Member`, and `ArrayList` flows;
 - the refreshed exact-pinned six-product lane reports 122/1,235 emitted functions (9.88%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
@@ -933,7 +952,7 @@ Implemented evidence re-proven on the 2026-08-27 semantic-closure candidate:
 - typed targets reject native-process effects before emission, while strict dependency verification rejects managed `System.Diagnostics.Process.Start` references before runtime-free certification;
 - the former 139/1,235 result is retained in the companion guide as a historical snapshot of the deleted direct AST emitter, not represented as current all-IR coverage;
 - the lowered C# method backend has no reference to `System.Management.Automation.Language`; the former direct AST-to-C# emitter files, transpiler graph reconstruction, and AST-aware Strict executable shaping are absent;
-- deterministic graph schema 4 snapshots drive analysis/build planning and manifest schema 5; build requires a reviewed lock by default, marks an explicit development opt-out as unreviewed, rejects source, content-hash, and analysis-to-build drift, records selected manifest identities separately from requested constraints, resolves local/acquired transitive modules plus managed/P/Invoke closure without importing source, and records managed, native, process, and literal `New-Object -ComObject` boundaries;
+- deterministic graph schema 5 snapshots drive analysis/build planning and manifest schema 6; build requires a reviewed lock by default, marks an explicit development opt-out as unreviewed, rejects source, exact-identity, content-hash, delivered-closure, and analysis-to-build drift, records selected manifest identities separately from requested constraints, resolves local/acquired transitive modules plus managed/P/Invoke closure without importing source, and records managed, native, process, and literal `New-Object -ComObject` boundaries;
 - PowerShell 7 Hybrid advanced-function fixtures preserve original pipeline-record identity and properties while executing `begin`, per-record `process`, `end`, and `clean` through a hosted `SteppablePipeline`; cleanup runs across begin/process/end failure paths, PowerShell 5.1 behavior and pre-7.3 `clean` rejection are explicit, and Strict rejects hosted-only lifecycle;
 - deterministic external command-provider registration, typed projection/filter/map/sort stages, distinct information and `Write-Host`/`PSHOST` sinks, complete PowerShell stream ownership, and injected runtime-free adapters flow through the canonical semantic/lowered contracts; the strict library proof executes an injected provider without an SMA dependency;
 - the clean-target interop matrix records TFM/RID/bitness, ownership, error, cancellation, cleanup, threading, and COM apartment contracts without activating COM or executing authored source; actual native/process adapter execution and supported-RID promotion remain Milestone 14 target-host gates;
@@ -1117,19 +1136,33 @@ Completion here means the current ten bounded waves went through the generic sem
 
 Milestone 14 may develop in parallel with Milestone 17, but it cannot satisfy its productization exit gate until the stable explain/evidence bundle and reproducible diagnostic-chain contract from Milestone 17 are available. Target publication without that evidence would recreate an unreviewable build boundary.
 
-- [ ] Add the explicit target-contract model to engine requests, CLI/cmdlet input, generated projects, and manifests.
-- [ ] Keep existing framework-dependent, self-contained, trimmed, and NativeAOT Strict outputs on one generated C# backend.
+- [x] Add the explicit integrity-bound target-contract model to engine requests, CLI/cmdlet input, generated projects, and manifests.
+- [x] Keep existing framework-dependent, self-contained, trimmed, and NativeAOT Strict outputs on one generated C# backend.
 - [ ] Add a ReadyToRun benchmark lane without promoting it to a public mode until evidence justifies it.
-- [ ] Complete Hybrid EXE using the same bound plan, typed assembly, and fallback contract as Hybrid modules.
-- [ ] Measure and expose typed/fallback boundary crossings so the tool can warn when Hybrid compilation is unlikely to help.
-- [ ] Pin or record SDK, compiler-runtime, package, and native dependency identity for reproducible release builds.
-- [ ] Add a content-addressed incremental build cache keyed by normalized source identity, compiler and semantic-profile versions, target contract, dependency lock, TFM/RID, and relevant toolchain inputs; reject incomplete or cross-target cache hits.
-- [ ] Emit source, PDB/symbol, public ABI, dependency, SBOM/provenance, and artifact-integrity evidence as applicable.
+- [x] Complete the managed Hybrid EXE foundation using the same bound plan, generated cmdlets, embedded retained-source/dependency plan, and fallback contract as Hybrid modules; NativeAOT-hosted Hybrid promotion remains open.
+- [ ] Measure runtime typed/fallback boundary crossings and their cost so the tool can warn when Hybrid compilation is unlikely to help; manifests now expose deterministic static typed, hosted, fallback, and crossing-site counts plus an advisory, but runtime profiling is not yet claimed.
+- [x] Pin or record SDK, compiler-runtime, package, managed/native dependency, target-contract, and reviewed-lock identity for reproducible release builds.
+- [x] Add a content-addressed incremental build cache keyed by normalized generated inputs, compiler version/source identity, target contract, dependency lock, TFM/RID, and relevant toolchain inputs; verify every restored payload and reject incomplete, modified, reparse-point, escaping, or cross-target entries.
+- [x] Emit source, PDB/symbol, public ABI, dependency graph/lock, target contract, CycloneDX SBOM, build provenance, and artifact-integrity evidence as applicable.
 - [ ] Run Strict managed and NativeAOT artifacts on every named supported RID rather than treating cross-publish success as execution proof.
 - [ ] Verify Windows and Unix exit codes, stdout/stderr encoding, signals/cancellation, file permissions, resources, and native dependencies.
-- [ ] Preserve signing and atomic publication in PowerForge’s shared packaging owner.
-- [ ] Document supported versus experimental TFMs/RIDs and the installed runtime requirements for every artifact profile.
+- [x] Preserve signing and atomic publication in PowerForge’s shared packaging owner.
+- [x] Document the current supported versus experimental TFM/RID boundary and installed runtime requirements for every implemented artifact profile below.
 - [ ] Keep native shared-library export deferred until a concrete embedding consumer defines its ABI.
+
+Current target-profile contract:
+
+| Artifact profile | External runtime requirement | Runtime evaluation | Current promotion state |
+| --- | --- | --- | --- |
+| Strict/Hybrid CLR library, portable `net472`/`net8.0`/`net10.0` | compatible .NET runtime | no hosted fallback in the delivered library | Supported within the bounded CLR ABI and clean-consumer tests |
+| Strict/Hybrid binary module, portable `net472`/`net8.0`/`net10.0` | compatible PowerShell host | generated cmdlet/host lifecycle as declared | Supported within the tested PowerShell 5.1/7 host matrix |
+| Package or managed Hybrid EXE, framework-dependent | compatible .NET runtime; PowerShell SDK/source closure is packaged | yes | Implemented and current-host executed; named RID/platform promotion remains experimental |
+| Package or managed Hybrid EXE, self-contained/trimmed | no separately installed .NET or PowerShell runtime | yes | Build contract implemented; each explicit RID remains experimental until target-host execution passes |
+| Strict managed EXE, framework-dependent/self-contained/trimmed | .NET for framework-dependent; none for self-contained/trimmed | no | Build and current-host execution are proven for tested profiles; unnamed or cross-published RIDs are not promoted |
+| Strict NativeAOT EXE | none | no | Publication contract is fail-closed, but every named RID remains experimental pending target-host execution and native-closure proof |
+| ReadyToRun | depends on deployment choice | profile-dependent | Benchmark-only; public target requests are rejected |
+
+`RuntimeRequirement` records what the target host must supply. `AllowsPowerShellRuntimeEvaluation` separately records whether the artifact can enter a hosted source/fallback boundary; bundling PowerShell SDK assemblies does not falsely turn that capability into an external PowerShell installation requirement. A RID is never marked supported from cross-publish alone.
 
 Exit gate:
 
@@ -1140,8 +1173,8 @@ Exit gate:
 
 ## Milestone 15 — Optimize proven IR
 
-- [ ] constant folding.
-- [ ] dead-branch elimination.
+- [x] immutable constant folding for conservative pure literal operations while retaining authored source spans.
+- [x] immutable dead-branch elimination for statically literal `if`/`while` conditions while retaining selected authored spans.
 - [ ] allocation reduction.
 - [ ] pipeline-stage fusion.
 - [ ] command-region coalescing.
@@ -1286,7 +1319,7 @@ The redesign is complete only when all of the following are true:
 - [x] established applicable PowerShell 5.1 and PowerShell 7 differential lanes in that suite pass;
 - [x] hosted lifecycle has an explicit PowerShell 5.1/7 version-capability matrix and differential proof;
 - [x] net472, net8.0, and net10.0 builds remain warning-free on the integrated branch candidate;
-- [ ] each artifact records one explicit semantic/execution/deployment target contract from Milestone 14 rather than inferring it from mode/kind/TFM fields;
+- [x] each artifact records one normalized, integrity-bound semantic/execution/deployment target contract from Milestone 14; compatibility fields may construct that contract, but artifact generation and evidence consume the contract;
 - [x] Strict publication fails when delivered dependency closure cannot mechanically exclude PowerShell runtime, source fallback, or missing non-framework managed references;
 - [x] every emitted runtime-free helper has one versioned owner and is trim/NativeAOT clean, or the artifact explicitly records that no support substrate is present;
 - [x] generated CLR libraries carry a normalized public ABI map with bound null/value/cardinality and success-stream semantics and pass clean-consumer tests;
@@ -1295,7 +1328,7 @@ The redesign is complete only when all of the following are true:
 - [ ] Hybrid/fallback diagnostics retain the causal function-command-module-dependency chain and boundary contract;
 - [ ] representative external binary-module, managed-wrapper, native/process, and Windows COM artifacts pass clean-target validation;
 - [ ] named NativeAOT RIDs have target-host execution proof;
-- [ ] generated source, ABI, dependencies, and build inputs have provenance bound to the consumed lock and explicit target contract;
+- [x] generated source, ABI, dependencies, target contract, SBOM, artifact hashes, build inputs, and toolchain evidence have provenance bound to the consumed reviewed lock and explicit target contract;
 - [x] generated artifacts preserve invocation, export, help, source-map, fallback, original pipeline-input, and synchronized lifecycle-cleanup contracts in the supported profiles;
 - [x] touched non-generated compiler production/test files stay below 800 lines;
 - [x] active compiler owners have responsibility-based headroom for planned value/object/command expansion, not only sub-800 line counts;

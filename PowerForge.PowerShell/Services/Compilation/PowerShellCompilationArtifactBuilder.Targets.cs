@@ -1,0 +1,217 @@
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+
+namespace PowerForge;
+
+public sealed partial class PowerShellCompilationArtifactBuilder
+{
+    private static PowerShellCompilationBoundaryEvidence CreateBoundaryEvidence(
+        IReadOnlyCollection<PowerShellCompiledMethod> methods,
+        int fallbackUnits)
+    {
+        var typedEntries = methods.Count(static method => method.Lifecycle is null);
+        var hostedRegions = methods.Count(static method => method.RequiresPowerShellCommandRegions);
+        return new PowerShellCompilationBoundaryEvidence
+        {
+            TypedEntryPoints = typedEntries,
+            HostedRegionSites = hostedRegions,
+            RuntimeFallbackUnits = fallbackUnits,
+            Advisory = fallbackUnits > typedEntries
+                ? "Runtime fallback units exceed typed entry points; profile this Hybrid artifact before assuming compilation improves the workload."
+                : string.Empty
+        };
+    }
+
+    private static void ApplyExplicitTargetContract(PowerShellCompilationBuildSpec spec)
+    {
+        if (spec.TargetContract is null) return;
+        var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
+        if (target.ArtifactKind != spec.Kind || target.Mode != spec.Mode)
+            throw new ArgumentException("The explicit PowerShell compilation target kind and mode must match the build request.", nameof(spec));
+        spec.TargetFramework = target.TargetFramework;
+        spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? null : target.RuntimeIdentifier;
+        spec.SingleFile = target.SingleFile;
+        spec.SelfContained = target.Deployment is PowerShellCompilationDeploymentModel.SelfContained or
+            PowerShellCompilationDeploymentModel.Trimmed or PowerShellCompilationDeploymentModel.ReadyToRun or
+            PowerShellCompilationDeploymentModel.NativeAot;
+        spec.Optimization = target.Deployment switch
+        {
+            PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
+            PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
+            PowerShellCompilationDeploymentModel.ReadyToRun => throw new ArgumentException(
+                "ReadyToRun remains a benchmark-only lane and cannot be selected as a public artifact target.", nameof(spec)),
+            _ => PowerShellCompilationExecutableOptimization.None
+        };
+    }
+
+    private static PowerShellCompilationTargetContract ResolveTargetContract(
+        PowerShellCompilationBuildSpec spec,
+        string? runtimeIdentifier)
+    {
+        var target = spec.TargetContract is null
+            ? PowerShellCompilationTargetContractService.Create(
+                spec.Kind,
+                spec.Mode,
+                spec.TargetFramework,
+                runtimeIdentifier,
+                spec.SelfContained,
+                spec.SingleFile,
+                spec.Optimization,
+                explicitContract: false)
+            : PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
+        var expected = PowerShellCompilationTargetContractService.Create(
+            spec.Kind,
+            spec.Mode,
+            spec.TargetFramework,
+            runtimeIdentifier,
+            spec.SelfContained,
+            spec.SingleFile,
+            spec.Optimization,
+            explicitContract: target.Explicit);
+        if (target.ArtifactKind != expected.ArtifactKind || target.Mode != expected.Mode ||
+            !target.TargetFramework.Equals(expected.TargetFramework, StringComparison.OrdinalIgnoreCase) ||
+            !target.RuntimeIdentifier.Equals(expected.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) ||
+            target.RuntimeRequirement != expected.RuntimeRequirement || target.Deployment != expected.Deployment ||
+            target.SingleFile != expected.SingleFile ||
+            target.AllowsPowerShellRuntimeEvaluation != expected.AllowsPowerShellRuntimeEvaluation ||
+            !target.SupportLevel.Equals(expected.SupportLevel, StringComparison.Ordinal))
+            throw new InvalidOperationException("The explicit PowerShell compilation target conflicts with the resolved semantic, runtime, or deployment build contract.");
+        target.OperatingSystem = expected.OperatingSystem;
+        target.Architecture = expected.Architecture;
+        target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
+        return target;
+    }
+
+    private static PowerShellCompilationToolchainEvidence CaptureToolchain(
+        string workspace,
+        PowerShellCompilationTargetContract target,
+        PowerShellCompilationDependencyGraph dependencyGraph)
+    {
+        var sdk = new ProcessRunner().RunAsync(new ProcessRunRequest(
+            "dotnet",
+            Directory.GetCurrentDirectory(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        if (!sdk.Succeeded)
+            throw new InvalidOperationException("Unable to capture the exact dotnet SDK identity before compilation.");
+        var sdkVersion = sdk.StdOut.Trim();
+        WriteSdkSelection(workspace, sdkVersion);
+        var workspaceSdk = new ProcessRunner().RunAsync(new ProcessRunRequest(
+            "dotnet",
+            workspace,
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        if (!workspaceSdk.Succeeded || !workspaceSdk.StdOut.Trim().Equals(sdkVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException("Generated compilation workspace did not select the recorded dotnet SDK identity.");
+        return new PowerShellCompilationToolchainEvidence
+        {
+            DotNetSdkVersion = sdkVersion,
+            CompilerVersion = typeof(PowerShellCompilationArtifactBuilder).Assembly.GetName().Version?.ToString() ?? string.Empty,
+            CompilerSha256 = ComputeSha256(typeof(PowerShellCompilationArtifactBuilder).Assembly.Location),
+            BuildOperatingSystem = RuntimeInformation.OSDescription,
+            BuildArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+            TargetContractSha256 = target.ContractSha256,
+            DependencyLockSha256 = dependencyGraph.LockSha256
+        };
+    }
+
+    private static void WriteSdkSelection(string workspace, string sdkVersion)
+    {
+        if (string.IsNullOrWhiteSpace(sdkVersion))
+            throw new InvalidOperationException("The selected dotnet SDK returned an empty version identity.");
+        File.WriteAllText(
+            Path.Combine(workspace, "global.json"),
+            JsonSerializer.Serialize(new
+            {
+                sdk = new
+                {
+                    version = sdkVersion,
+                    rollForward = "disable",
+                    allowPrerelease = true
+                }
+            }, EvidenceJsonOptions),
+            new UTF8Encoding(false));
+    }
+
+    private static void WriteTargetContract(string workspace, PowerShellCompilationTargetContract target)
+        => File.WriteAllText(
+            Path.Combine(workspace, "PowerForge.TargetContract.json"),
+            JsonSerializer.Serialize(target, EvidenceJsonOptions),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+    private static PowerShellCompilationArtifactFile[] WriteBuildEvidence(
+        string stagingDirectory,
+        string artifactName,
+        PowerShellCompilationBuildSpec spec,
+        PowerShellCompilationTargetContract target,
+        PowerShellCompilationToolchainEvidence toolchain,
+        PowerShellCompilationDependencyGraph graph,
+        string generatedSourceSha256)
+    {
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var sources = new[] { spec.SourcePath }.Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
+            .Select(Path.GetFullPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer)
+            .Select(path => new
+            {
+                path = FrameworkCompatibility.GetRelativePath(sourceRoot, path).Replace('\\', '/'),
+                sha256 = ComputeSha256(path)
+            }).ToArray();
+        var targetPath = Path.Combine(stagingDirectory, artifactName + ".powerforge-target.json");
+        var provenancePath = Path.Combine(stagingDirectory, artifactName + ".powerforge-provenance.json");
+        var sbomPath = Path.Combine(stagingDirectory, artifactName + ".powerforge-sbom.cdx.json");
+        File.WriteAllText(targetPath, JsonSerializer.Serialize(target, EvidenceJsonOptions), new UTF8Encoding(false));
+        File.WriteAllText(provenancePath, JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            targetContractSha256 = target.ContractSha256,
+            dependencyLockSha256 = graph.LockSha256,
+            generatedSourceSha256,
+            reviewedDependencyLock = spec.ExpectedDependencyLock is not null,
+            toolchain,
+            sources
+        }, EvidenceJsonOptions), new UTF8Encoding(false));
+        File.WriteAllText(sbomPath, JsonSerializer.Serialize(new
+        {
+            bomFormat = "CycloneDX",
+            specVersion = "1.5",
+            serialNumber = "urn:uuid:" + GuidFromSha256(target.ContractSha256 + graph.LockSha256),
+            version = 1,
+            metadata = new { component = new { type = "application", name = artifactName } },
+            components = graph.Nodes
+                .Where(static node => node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment))
+                .OrderBy(static node => node.Id, StringComparer.Ordinal)
+                .Select(static node => new
+                {
+                    type = node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule ? "library" : "file",
+                    name = node.Identity.Name,
+                    version = node.Identity.Version,
+                    hashes = string.IsNullOrWhiteSpace(node.Identity.Sha256)
+                        ? Array.Empty<object>()
+                        : new object[] { new { alg = "SHA-256", content = node.Identity.Sha256 } },
+                    properties = new[]
+                    {
+                        new { name = "powerforge:disposition", value = node.Disposition.ToString() },
+                        new { name = "powerforge:source", value = node.Identity.Source }
+                    }
+                }).ToArray()
+        }, EvidenceJsonOptions), new UTF8Encoding(false));
+        return new[]
+        {
+            CreateArtifactFile(targetPath, "TargetContract"),
+            CreateArtifactFile(provenancePath, "BuildProvenance"),
+            CreateArtifactFile(sbomPath, "Sbom")
+        };
+    }
+
+    private static string GuidFromSha256(string value)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(value));
+        return new Guid(hash.Take(16).ToArray()).ToString("D");
+    }
+
+    private static JsonSerializerOptions EvidenceJsonOptions { get; } = new() { WriteIndented = true };
+}

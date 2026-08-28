@@ -1929,6 +1929,18 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>BuildCacheDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional machine-local content-addressed build-cache root.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>CertificateStoreLocation</maml:name>
           <maml:description>
             <maml:para>Certificate store used for Authenticode signing.</maml:para>
@@ -2194,6 +2206,18 @@
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>TargetContract</maml:name>
+          <maml:description>
+            <maml:para>Explicit semantic, execution, and deployment target. Its kind and mode must match the resolved input.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationTargetContract</command:parameterValue>
+          <dev:type>
+            <maml:name>PowerShellCompilationTargetContract</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>TargetFramework</maml:name>
           <maml:description>
             <maml:para>Generated .NET target framework.</maml:para>
@@ -2229,6 +2253,18 @@
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseBuildCache</maml:name>
+          <maml:description>
+            <maml:para>Use the verified content-addressed generated-build cache.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -2240,6 +2276,18 @@
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>BuildCacheDirectory</maml:name>
+        <maml:description>
+          <maml:para>Optional machine-local content-addressed build-cache root.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -2510,6 +2558,18 @@
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>TargetContract</maml:name>
+        <maml:description>
+          <maml:para>Explicit semantic, execution, and deployment target. Its kind and mode must match the resolved input.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationTargetContract</command:parameterValue>
+        <dev:type>
+          <maml:name>PowerShellCompilationTargetContract</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>TargetFramework</maml:name>
         <maml:description>
           <maml:para>Generated .NET target framework.</maml:para>
@@ -2541,6 +2601,18 @@
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UseBuildCache</maml:name>
+        <maml:description>
+          <maml:para>Use the verified content-addressed generated-build cache.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

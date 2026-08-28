@@ -106,7 +106,6 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("__PowerForgeInputObject")]
     [InlineData("__powerForgePipeline")]
     [InlineData("__powerForgeLifecycleGate")]
     [InlineData("__powerForgeCleaned")]
@@ -154,6 +153,29 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             diagnostic.FeatureId == "binary-module.cmdlet-shape");
         Assert.Contains("generated or inherited", diagnostic.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(parameterName, diagnostic.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HybridLifecycleAllowsFormerSyntheticPipelineParameterNameAsAuthoredInput()
+    {
+        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([string] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
+        var empty = new PowerShellTypedCompilationResult(
+            fixture.ScriptPath,
+            "PowerForge.Compiled",
+            "LifecycleAuthoredInputMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { fixture.ScriptPath },
+            PowerShellLifecycleSourceBinder.Bind(document, "net10.0"));
+
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+        var validated = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(planned, new[] { "Invoke-Lifecycle" }, "net10.0");
+
+        Assert.Single(validated.Methods);
+        Assert.DoesNotContain(validated.Diagnostics, static diagnostic => diagnostic.FeatureId == "binary-module.cmdlet-shape");
     }
 
     [Fact]

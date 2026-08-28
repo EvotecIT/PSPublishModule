@@ -82,6 +82,18 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public PowerShellCompilationExecutableOptimization Optimization { get; set; }
 
+    /// <summary>Explicit semantic, execution, and deployment target. Its kind and mode must match the resolved input.</summary>
+    [Parameter]
+    public PowerShellCompilationTargetContract? TargetContract { get; set; }
+
+    /// <summary>Use the verified content-addressed generated-build cache.</summary>
+    [Parameter]
+    public bool UseBuildCache { get; set; } = true;
+
+    /// <summary>Optional machine-local content-addressed build-cache root.</summary>
+    [Parameter]
+    public string? BuildCacheDirectory { get; set; }
+
     /// <summary>Authenticode-sign generated signable files before integrity hashes are recorded.</summary>
     [Parameter]
     public SwitchParameter SignArtifact { get; set; }
@@ -170,6 +182,9 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,
             Optimization = Optimization,
+            TargetContract = TargetContract,
+            UseBuildCache = UseBuildCache,
+            BuildCacheDirectory = BuildCacheDirectory,
             SignArtifact = SignArtifact.IsPresent,
             CertificateThumbprint = CertificateThumbprint,
             CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation,

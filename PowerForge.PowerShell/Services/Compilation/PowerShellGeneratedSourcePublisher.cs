@@ -19,6 +19,8 @@ internal static class PowerShellGeneratedSourcePublisher
         var files = Directory.EnumerateFiles(workspace, "*", SearchOption.TopDirectoryOnly)
             .Where(path => Path.GetExtension(path).Equals(".cs", StringComparison.OrdinalIgnoreCase) ||
                            Path.GetExtension(path).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                           Path.GetFileName(path).Equals("PowerForge.TargetContract.json", StringComparison.OrdinalIgnoreCase) ||
+                           Path.GetFileName(path).Equals("global.json", StringComparison.OrdinalIgnoreCase) ||
                            PowerShellCompilationPathSafety.PathEquals(path, projectPath))
             .OrderBy(static path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -37,12 +39,12 @@ internal static class PowerShellGeneratedSourcePublisher
             foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
-        WriteBuildIsolationFiles(sourceDirectory, spec.TargetFramework);
+        WriteBuildIsolationFiles(sourceDirectory);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
     }
 
-    private static void WriteBuildIsolationFiles(string sourceDirectory, string targetFramework)
+    private static void WriteBuildIsolationFiles(string sourceDirectory)
     {
         var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         File.WriteAllText(Path.Combine(sourceDirectory, "Directory.Build.props"), "<Project />" + Environment.NewLine, utf8);
@@ -51,11 +53,9 @@ internal static class PowerShellGeneratedSourcePublisher
             Path.Combine(sourceDirectory, "Directory.Packages.props"),
             "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>" + Environment.NewLine,
             utf8);
-        var sdkVersion = targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "10.0.100" : "8.0.100";
-        File.WriteAllText(
-            Path.Combine(sourceDirectory, "global.json"),
-            "{\n  \"sdk\": {\n    \"version\": \"" + sdkVersion + "\",\n    \"rollForward\": \"latestMajor\",\n    \"allowPrerelease\": true\n  }\n}\n",
-            utf8);
+        var globalJson = Path.Combine(sourceDirectory, "global.json");
+        if (!File.Exists(globalJson))
+            throw new InvalidOperationException("Generated source publication did not receive the exact SDK selection used by the artifact build.");
     }
 
     private static void WriteSourceMap(

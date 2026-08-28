@@ -32,6 +32,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(PowerShellCompatibilityReport))]
 [JsonSerializable(typeof(PowerShellCompilationPlan))]
 [JsonSerializable(typeof(PowerShellCompilationBuildResult))]
+[JsonSerializable(typeof(PowerShellCompilationTargetContract))]
 [JsonSerializable(typeof(PowerShellCompilationCensusResult))]
 [JsonSerializable(typeof(DocumentationBuildResult))]
 [JsonSerializable(typeof(DotNetPublishSpec))]

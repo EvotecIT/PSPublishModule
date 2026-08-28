@@ -103,7 +103,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(5, result.Manifest!.SchemaVersion);
+        Assert.Equal(6, result.Manifest!.SchemaVersion);
         Assert.True(result.Manifest.DependencyLockReviewed);
         Assert.NotNull(result.Manifest.DependencyGraph);
         Assert.Equal(expected.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
@@ -236,11 +236,56 @@ public sealed class PowerShellCompilationDependencyGraphTests
     }
 
     [Fact]
+    public void DependencyGraphConflictsIncludeExactManagedAndModuleIdentityCollisions()
+    {
+        var managed = new[]
+        {
+            DependencyNode(PowerShellCompilationDependencyNodeKind.ManagedLibrary, "Shared.Managed", "1.0.0.0", publicKeyToken: "aaaaaaaaaaaaaaaa", culture: "neutral", sha256: "1111"),
+            DependencyNode(PowerShellCompilationDependencyNodeKind.ManagedLibrary, "Shared.Managed", "1.0.0.0", publicKeyToken: "bbbbbbbbbbbbbbbb", culture: "fr-FR", sha256: "2222")
+        };
+        var modules = new[]
+        {
+            DependencyNode(PowerShellCompilationDependencyNodeKind.ModuleManifest, "Shared.Module", "1.0.0", guid: "00000000-0000-0000-0000-000000000001", sha256: "3333"),
+            DependencyNode(PowerShellCompilationDependencyNodeKind.ModuleManifest, "Shared.Module", "1.0.0", guid: "00000000-0000-0000-0000-000000000002", sha256: "4444")
+        };
+
+        var conflicts = PowerShellCompilationDependencyGraphBuilder.FindConflicts(managed.Concat(modules));
+
+        Assert.Contains(conflicts, static conflict => conflict.Contains("Shared.Managed", StringComparison.Ordinal) && conflict.Contains("public-key token", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(conflicts, static conflict => conflict.Contains("Shared.Managed", StringComparison.Ordinal) && conflict.Contains("culture", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(conflicts, static conflict => conflict.Contains("Shared.Managed", StringComparison.Ordinal) && conflict.Contains("SHA-256", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(conflicts, static conflict => conflict.Contains("Shared.Module", StringComparison.Ordinal) && conflict.Contains("GUID", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(conflicts, static conflict => conflict.Contains("Shared.Module", StringComparison.Ordinal) && conflict.Contains("SHA-256", StringComparison.OrdinalIgnoreCase));
+
+        static PowerShellCompilationDependencyNode DependencyNode(
+            PowerShellCompilationDependencyNodeKind kind,
+            string name,
+            string version,
+            string publicKeyToken = "",
+            string culture = "",
+            string guid = "",
+            string sha256 = "")
+            => new()
+            {
+                Kind = kind,
+                Identity = new PowerShellCompilationDependencyIdentity
+                {
+                    Name = name,
+                    Version = version,
+                    PublicKeyToken = publicKeyToken,
+                    Culture = culture,
+                    Guid = guid,
+                    Sha256 = sha256
+                }
+            };
+    }
+
+    [Fact]
     public void DependencyLockHashUsesOneFixedLineFeedOnEveryOperatingSystem()
     {
         var graph = new PowerShellCompilationDependencyGraph { Conflicts = new[] { "x" } };
 
-        Assert.Equal("3836789b71b5d9c7c6850b201328a35c7be8ebaa7f30fa964c0173fc15b9ccc2", PowerShellCompilationDependencyLockHasher.ComputeSha256(graph));
+        Assert.Equal("8ef1dc975925dad2c07bf475dfb7467af254dfd8eefc5e07b8add729047e470e", PowerShellCompilationDependencyLockHasher.ComputeSha256(graph));
     }
 
     [Fact]
@@ -354,7 +399,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         var hybrid = Resolve(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
         var strict = Resolve(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
 
-        Assert.Equal(4, strict.SchemaVersion);
+        Assert.Equal(5, strict.SchemaVersion);
         Assert.All(new[] { package, hybrid }, graph => Assert.All(
             graph.Nodes.Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.ComObject),
             static node =>

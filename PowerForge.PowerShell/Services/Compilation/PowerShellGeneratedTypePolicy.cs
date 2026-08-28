@@ -111,6 +111,20 @@ internal static class PowerShellGeneratedTypePolicy
             .ToArray();
     }
 
+    internal static string[] GetTargetRuntimeAssemblyPaths(string targetFramework)
+    {
+        var referenceDirectory = ResolveReferenceDirectory(targetFramework)
+            ?? throw new InvalidOperationException($"Reference assemblies for target framework '{targetFramework}' could not be located.");
+        return Directory.EnumerateFiles(
+                referenceDirectory,
+                "*.dll",
+                targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+                    ? SearchOption.AllDirectories
+                    : SearchOption.TopDirectoryOnly)
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static string? ResolveReferenceDirectory(string targetFramework)
     {
         if (targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase))

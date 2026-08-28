@@ -26,7 +26,6 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Theory]
-    [InlineData("exe", "Hybrid", "Hybrid executable")]
     [InlineData("library", "Package", "only for Executable")]
     [InlineData("dll", "Package", "only for Executable")]
     public async Task Analyze_RejectsArtifactModesThatCannotProduceTheRequestedKind(
@@ -49,6 +48,30 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.False(document.RootElement.GetProperty("success").GetBoolean());
             Assert.Contains(errorFragment, document.RootElement.GetProperty("error").GetString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Analyze_AcceptsHybridExecutableMode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Hybrid Analyze Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        File.WriteAllText(source, "param([int] $Value); return $Value");
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell analyze \"{source}\" --kind exe --mode Hybrid --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.True(document.RootElement.GetProperty("success").GetBoolean());
         }
         finally
         {

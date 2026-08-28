@@ -48,7 +48,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                         "RequiredModules identity is locked; unresolved acquisition remains an explicit restore operation.",
                         module.RequiredVersion ?? module.ModuleVersion ?? module.MaximumVersion ?? string.Empty,
                         targetFramework,
-                        runtimeIdentifier)
+                        runtimeIdentifier,
+                        string.Join("|", module.ModuleVersion, module.RequiredVersion, module.MaximumVersion, module.Guid))
                     : AddLocalNode(
                         localManifest,
                         PowerShellCompilationDependencyNodeKind.ModuleManifest,
@@ -138,7 +139,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         identity.MinimumVersion = module.ModuleVersion ?? string.Empty;
         identity.RequiredVersion = module.RequiredVersion ?? string.Empty;
         identity.MaximumVersion = module.MaximumVersion ?? string.Empty;
-        identity.Guid = module.Guid ?? string.Empty;
+        identity.Guid = resolvedManifestPath is null
+            ? module.Guid ?? string.Empty
+            : ModuleManifestValueReader.ReadTopLevelString(resolvedManifestPath, "GUID") ?? module.Guid ?? string.Empty;
         identity.Provenance = "ManifestRequiredModule";
     }
 
@@ -273,16 +276,46 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         }
     }
 
-    private static string[] FindConflicts(IEnumerable<PowerShellCompilationDependencyNode> nodes)
-        => nodes
+    internal static string[] FindConflicts(IEnumerable<PowerShellCompilationDependencyNode> nodes)
+    {
+        var conflicts = new List<string>();
+        var groups = nodes
             .Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ExternalModule or
                 PowerShellCompilationDependencyNodeKind.ModuleManifest or
                 PowerShellCompilationDependencyNodeKind.ManagedLibrary or
                 PowerShellCompilationDependencyNodeKind.BinaryModule)
-            .GroupBy(static node => node.Identity.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(static group => group.Select(static node => node.Identity.Version).Where(static version => version.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
-            .Select(group => $"Dependency '{group.Key}' has incompatible locked versions: {string.Join(", ", group.Select(static node => node.Identity.Version).Where(static version => version.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static version => version, StringComparer.OrdinalIgnoreCase))}.")
-            .OrderBy(static conflict => conflict, StringComparer.Ordinal)
-            .ToArray();
+            .Where(static node => !string.IsNullOrWhiteSpace(node.Identity.Name))
+            .GroupBy(static node => node.Identity.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in groups)
+        {
+            AddConflict(group, "versions", static node => node.Identity.Version);
+            foreach (var versionGroup in group.GroupBy(static node => node.Identity.Version, StringComparer.OrdinalIgnoreCase))
+            {
+                var managed = versionGroup.Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule).ToArray();
+                AddConflict(managed, "public-key tokens", static node => node.Identity.PublicKeyToken);
+                AddConflict(managed, "cultures", static node => PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(node.Identity.Culture));
+                AddConflict(managed, "SHA-256 content hashes", static node => node.Identity.Sha256);
+
+                var modules = versionGroup.Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ExternalModule or PowerShellCompilationDependencyNodeKind.ModuleManifest).ToArray();
+                AddConflict(modules, "GUIDs", static node => node.Identity.Guid);
+                AddConflict(modules, "SHA-256 content hashes", static node => node.Identity.Sha256);
+            }
+
+            void AddConflict(
+                IEnumerable<PowerShellCompilationDependencyNode> candidates,
+                string identityPart,
+                Func<PowerShellCompilationDependencyNode, string> selector)
+            {
+                var values = candidates.Select(selector)
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (values.Length > 1)
+                    conflicts.Add($"Dependency '{group.Key}' has incompatible locked {identityPart}: {string.Join(", ", values)}.");
+            }
+        }
+        return conflicts.OrderBy(static conflict => conflict, StringComparer.Ordinal).ToArray();
+    }
 
 }

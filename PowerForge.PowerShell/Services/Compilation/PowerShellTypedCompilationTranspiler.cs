@@ -108,7 +108,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework);
-        var boundEmissions = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry);
+        var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry);
+        var boundEmissions = boundResult.Emissions;
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
@@ -228,7 +229,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework);
+        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, boundResult.Optimization);
     }
 
     private static void EmitFunctionGraph(
@@ -292,7 +293,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             : null;
     }
 
-    private static IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> CreateBoundEmissionIndex(
+    private static BoundEmissionIndex CreateBoundEmissionIndex(
         IReadOnlyList<ParsedSource> sources,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
@@ -333,7 +334,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             if (!paths.TryGetValue(function.Symbol.DocumentId, out var path)) continue;
             emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
         }
-        return emissions;
+        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel());
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -399,7 +400,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         string[] methodSources,
         IEnumerable<PowerShellCompilationDiagnostic> diagnostics,
         IEnumerable<ParsedSource> parsedFiles,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationOptimizationEvidence? optimization = null)
     {
         var template = ReadTemplate();
         var source = template
@@ -419,7 +421,22 @@ public sealed class PowerShellTypedCompilationTranspiler
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             sourcePaths,
-            parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework)).ToArray());
+            parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework)).ToArray(),
+            optimization);
+    }
+
+    private sealed class BoundEmissionIndex
+    {
+        internal BoundEmissionIndex(
+            IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> emissions,
+            PowerShellCompilationOptimizationEvidence optimization)
+        {
+            Emissions = emissions;
+            Optimization = optimization;
+        }
+
+        internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
+        internal PowerShellCompilationOptimizationEvidence Optimization { get; }
     }
 
     private static string ReadTemplate()

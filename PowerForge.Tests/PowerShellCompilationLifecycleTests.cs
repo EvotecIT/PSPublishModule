@@ -81,9 +81,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var proof = RunModuleProof(
             result.ArtifactPath!,
             "$command = Get-Command Invoke-Lifecycle; " +
-            "\"$($command.CommandType)|$($command.Parameters.ContainsKey('Verbose'))|$($command.Parameters.ContainsKey('WhatIf'))\"; " +
+            "\"$($command.CommandType)|$($command.Parameters.ContainsKey('Verbose'))|$($command.Parameters.ContainsKey('WhatIf'))|$($command.Parameters.ContainsKey('__PowerForgeInputObject'))\"; " +
             $"1,2 | Invoke-Lifecycle -CleanupPath '{escapedCleanup}' -Confirm:$false");
-        Assert.Equal(new[] { "Cmdlet|True|True", "1", "3", "end:3" }, proof.Split(Environment.NewLine));
+        Assert.Equal(new[] { "Cmdlet|True|True|False", "1", "3", "end:3" }, proof.Split(Environment.NewLine));
         Assert.Equal("cleaned", File.ReadAllText(cleanup));
 
         var byProperty = RunModuleProof(
@@ -196,6 +196,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             TargetFramework = "net10.0"
         });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+
+        var syntheticBinding = RunModuleProof(
+            result.ArtifactPath!,
+            "try { Test-RecordIdentity -__PowerForgeInputObject 7 } catch { $_.FullyQualifiedErrorId }");
+        Assert.Contains("NamedParameterNotFound", syntheticBinding, StringComparison.OrdinalIgnoreCase);
 
         var identity = RunModuleProof(
             result.ArtifactPath!,

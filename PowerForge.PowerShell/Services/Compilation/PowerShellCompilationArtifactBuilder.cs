@@ -35,7 +35,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        ApplyExplicitTargetContract(spec);
         ValidateSpec(spec);
+        var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
+        if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
         PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory);
 
         Directory.CreateDirectory(spec.OutputDirectory);
@@ -68,6 +71,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains incompatible identities: " + string.Join(" ", dependencyGraph.Conflicts));
             if (dependencyGraph.Cycles.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains a static dependency cycle: " + string.Join(" -> ", dependencyGraph.Cycles[0]));
+            var targetContract = ResolveTargetContract(spec, runtimeIdentifier);
+            var toolchain = CaptureToolchain(workspace, targetContract, dependencyGraph);
+            WriteTargetContract(workspace, targetContract);
             var missingDependencies = dependencyPlan
                 .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
                 .ToArray();
@@ -99,6 +105,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             int compiledMethods;
             int runtimeRoutedUnits;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
+            var optimizationEvidence = new PowerShellCompilationOptimizationEvidence();
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
             PowerShellCompilationDependencyClosure? dependencyClosure = null;
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
@@ -129,7 +136,27 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 compiledUnits = plan.TotalUnits;
                 compiledMethods = executable.Methods.Length;
                 compiledMethodDetails = executable.Methods;
+                optimizationEvidence = executable.Optimization;
                 runtimeRoutedUnits = plan.TotalUnits;
+            }
+            else if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Hybrid)
+            {
+                var hybrid = PrepareHybridExecutable(
+                    workspace,
+                    artifactName,
+                    spec,
+                    compilationSourcePaths,
+                    plan,
+                    dependencyPlan);
+                typed = hybrid.Typed;
+                projectPath = hybrid.ProjectPath;
+                requiresPowerShellRuntime = true;
+                compiledMethodDetails = hybrid.CompiledMethods;
+                compiledMethods = hybrid.CompiledMethods.Length;
+                compiledUnits = compiledMethods;
+                runtimeRoutedUnits = compiledUnits;
+                usesPowerShellRuntimeFallback = plan.TotalUnits > compiledUnits;
+                optimizationEvidence = typed.Optimization;
             }
             else if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
             {
@@ -222,6 +249,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 compiledMethodDetails = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && exportedFunctions is not null
                     ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
                     : typed.Methods;
+                optimizationEvidence = typed.Optimization;
             }
             else
             {
@@ -273,13 +301,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     compiledMethodDetails);
             }
 
-            var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
-            var process = RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier);
+            var buildCache = PowerShellCompilationArtifactBuildCache.CreateEvidence(
+                spec,
+                workspace,
+                targetContract,
+                dependencyGraph,
+                toolchain);
+            var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
+                ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
+                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier);
             result.BuildOutput = BoundOutput(process.Output);
             if (process.TimedOut)
                 throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
             if (process.ExitCode != 0)
                 throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
+            PowerShellCompilationArtifactBuildCache.Store(spec, buildCache, publishDirectory);
             VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
 
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
@@ -291,6 +327,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     artifactName,
                     dependencyPlan,
                     stagedArtifact.Files));
+                stagedArtifact = stagedArtifact.WithAdditionalFiles(WriteBuildEvidence(
+                    artifactStagingDirectory,
+                    artifactName,
+                    spec,
+                    targetContract,
+                    toolchain,
+                    dependencyGraph,
+                    runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && typed is not null)
                 {
                     var externalHelpPath = PowerShellCompiledHelpWriter.WriteExternalHelp(
@@ -358,6 +402,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) + runtimeManifestHooks.Length
                     : 0;
                 var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
+                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, fallbackUnits);
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
                     .ToArray();
@@ -370,13 +415,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     SourceFiles = compilationSourcePaths,
                     TargetFramework = spec.TargetFramework,
                     RuntimeIdentifier = runtimeIdentifier,
+                    TargetContract = targetContract,
+                    Toolchain = toolchain,
+                    BuildCache = buildCache,
+                    IrOptimization = optimizationEvidence,
+                    Boundaries = boundaryEvidence,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
                     UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
                     SemanticProfile = runtimeFreeContract?.SemanticProfile,
                     PublicAbi = runtimeFreeContract?.PublicAbi,
                     GeneratedSourceSha256 = runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty,
-                    ContainsEmbeddedPowerShellSource = stagedArtifact.Files.Any(static file =>
-                        PowerShellStrictDependencyClosureVerifier.IsPowerShellSource(file.Path)),
+                    ContainsEmbeddedPowerShellSource = spec.Kind == PowerShellCompilationArtifactKind.Executable && requiresPowerShellRuntime ||
+                        stagedArtifact.Files.Any(static file => PowerShellStrictDependencyClosureVerifier.IsPowerShellSource(file.Path)),
                     AllowsPowerShellRuntimeEvaluation = requiresPowerShellRuntime || usesPowerShellRuntimeFallback,
                     DependencyClosureVerified = dependencyClosure?.Verified == true,
                     DependencyClosure = dependencyClosure,
@@ -461,163 +511,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             : string.Join(" ", limitations);
         throw new InvalidOperationException(
             "Strict runtime-free artifact publication requires a fully certified delivered dependency closure. " + detail);
-    }
-
-    private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
-    {
-        if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), spec.Kind))
-            throw new ArgumentOutOfRangeException(nameof(spec), "Artifact kind is not defined.");
-        if (!Enum.IsDefined(typeof(PowerShellCompilationMode), spec.Mode))
-            throw new ArgumentOutOfRangeException(nameof(spec), "Compilation mode is not defined.");
-        if (!Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), spec.Optimization))
-            throw new ArgumentOutOfRangeException(nameof(spec), "Executable optimization is not defined.");
-        if (!Enum.IsDefined(typeof(PowerShellCompilationResourceMode), spec.ResourceMode))
-            throw new ArgumentOutOfRangeException(nameof(spec), "Resource mode is not defined.");
-        if (!Enum.IsDefined(typeof(CertificateStoreLocation), spec.CertificateStoreLocation))
-            throw new ArgumentOutOfRangeException(nameof(spec), "Certificate store location is not defined.");
-        if (spec.ExpectedDependencyLock is not null && spec.AllowUnreviewedDependencyResolution)
-            throw new ArgumentException("ExpectedDependencyLock and AllowUnreviewedDependencyResolution are mutually exclusive.", nameof(spec));
-        if (spec.Optimization == PowerShellCompilationExecutableOptimization.NativeAot &&
-            spec.CommandProviders.Any(static provider => provider.Adapter.RuntimeFree && !provider.Adapter.AotCompatible))
-            throw new ArgumentException("NativeAOT compilation requires every runtime-free command provider adapter to declare AotCompatible.", nameof(spec));
-        if (spec.Mode == PowerShellCompilationMode.Analyze)
-            throw new ArgumentException("Analyze mode reports eligibility and does not produce artifacts. Use the analyzer API or CLI analyze command.", nameof(spec));
-        if (!File.Exists(spec.SourcePath))
-            throw new FileNotFoundException("PowerShell source file was not found.", spec.SourcePath);
-        var extension = Path.GetExtension(spec.SourcePath);
-        if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("PowerShell artifacts accept .ps1 and .psm1 source files.", nameof(spec));
-        if (spec.Kind == PowerShellCompilationArtifactKind.Executable &&
-            !extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Executable compilation requires a standalone .ps1 entrypoint; a .psm1 module has no unambiguous application entrypoint.", nameof(spec));
-        var effectiveManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-            ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath)
-            : spec.ModuleManifestPath;
-        if (!string.IsNullOrWhiteSpace(effectiveManifestPath) &&
-            (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || File.Exists(effectiveManifestPath)))
-        {
-            var moduleManifestPath = effectiveManifestPath!;
-            if (!File.Exists(moduleManifestPath))
-                throw new FileNotFoundException("PowerShell module manifest was not found.", moduleManifestPath);
-            if (!Path.GetExtension(moduleManifestPath).Equals(".psd1", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("ModuleManifestPath must reference a .psd1 file.", nameof(spec));
-            var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath));
-            var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(moduleManifestPath));
-            if (!PowerShellCompilationPathSafety.PathEquals(sourceDirectory, manifestDirectory))
-                throw new ArgumentException("The source .psm1 and module manifest must reside in the same module directory.", nameof(spec));
-            PowerShellCompiledModuleManifest.EnsureManifestOwnsSource(spec.SourcePath, moduleManifestPath);
-            PowerShellCompilationPathSafety.EnsureNoLinks(
-                sourceDirectory!,
-                Path.GetFullPath(moduleManifestPath),
-                $"PowerShell module manifest '{moduleManifestPath}' traverses a symbolic link or junction.");
-        }
-        if (spec.TimeoutSeconds < 1)
-            throw new ArgumentOutOfRangeException(nameof(spec), "Build timeout must be positive.");
-        if (spec.SignArtifact && string.IsNullOrWhiteSpace(spec.TimeStampServer))
-            throw new ArgumentException("Signing requires an RFC3161 timestamp server URL.", nameof(spec));
-        if (spec.SigningTimeoutSeconds < 1)
-            throw new ArgumentOutOfRangeException(nameof(spec), "Signing timeout must be positive.");
-        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) && !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Executables currently target net8.0 or net10.0.", nameof(spec));
-        PowerShellCompilationBuildSpec.EnsureModeSupported(spec.Kind, spec.Mode);
-        if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
-            (spec.SelfContained || !string.IsNullOrWhiteSpace(spec.RuntimeIdentifier)))
-            throw new ArgumentException("SelfContained and RuntimeIdentifier are executable-only publication options.", nameof(spec));
-        if (spec.Optimization != PowerShellCompilationExecutableOptimization.None)
-        {
-            if (spec.Kind != PowerShellCompilationArtifactKind.Executable || spec.Mode != PowerShellCompilationMode.Strict)
-                throw new ArgumentException("Executable optimization is supported only for Strict genuinely typed executables.", nameof(spec));
-            if (!spec.SelfContained || string.IsNullOrWhiteSpace(spec.RuntimeIdentifier) || !spec.SingleFile)
-                throw new ArgumentException("Trimmed and NativeAot executables require SelfContained, RuntimeIdentifier, and SingleFile.", nameof(spec));
-        }
-        if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
-            !spec.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
-            !spec.TargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-            !spec.TargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Typed libraries and binary modules currently target net472, net8.0, or net10.0.", nameof(spec));
-    }
-
-    private static string[] ResolveCompilationSourcePaths(PowerShellCompilationBuildSpec spec)
-    {
-        var sourcePath = Path.GetFullPath(spec.SourcePath);
-        var sourceRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
-        var paths = new[] { sourcePath }
-            .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
-            .Distinct(PowerShellCompilationPathSafety.PathComparer)
-            .ToArray();
-        foreach (var path in paths)
-        {
-            if (!File.Exists(path))
-                throw new FileNotFoundException("PowerShell compilation source file was not found.", path);
-            var extension = Path.GetExtension(path);
-            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException($"PowerShell compilation source '{path}' must be a .ps1 or .psm1 file.", nameof(spec));
-            if (!PowerShellCompilationPathSafety.PathEquals(path, sourcePath))
-                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
-            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, path, $"Compilation source '{path}' traverses a symbolic link or junction.");
-        }
-        return paths;
-    }
-
-    private static PowerShellCompilationPlan AnalyzeCompilationSources(
-        IEnumerable<string> sourcePaths,
-        PowerShellCompilationMode mode,
-        string targetFramework,
-        PowerShellCompilationCapability capabilities,
-        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
-    {
-        var analyzer = new PowerShellCompilationAnalyzer(commandProviders);
-        var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
-        var basePath = paths.Length == 0
-            ? Directory.GetCurrentDirectory()
-            : Path.GetDirectoryName(paths[0]) ?? Directory.GetCurrentDirectory();
-        return analyzer.AnalyzeFiles(mode, paths, basePath, targetFramework, capabilities);
-    }
-
-    private static void ValidateRuntimeHookSourceOwnership(
-        PowerShellCompilationBuildSpec spec,
-        IEnumerable<string> compilationSourcePaths)
-    {
-        if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule)
-            return;
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var compilationSources = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        var overlap = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
-            .Select(reference => Path.GetFullPath(Path.Combine(
-                sourceRoot,
-                PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(reference))))
-            .FirstOrDefault(compilationSources.Contains);
-        if (overlap is not null)
-        {
-            throw new InvalidOperationException(
-                $"PowerShell source '{overlap}' cannot be both an explicit compilation source and a manifest runtime hook. Remove it from CompilationSourcePaths so its runtime scope and loading semantics are preserved.");
-        }
-    }
-
-    private static void ValidateRuntimeSourcePaths(
-        PowerShellCompilationBuildSpec spec,
-        IEnumerable<string> compilationSourcePaths)
-    {
-        if (spec.RuntimeSourcePaths is not { Length: > 0 }) return;
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var compiled = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        foreach (var runtimeSource in spec.RuntimeSourcePaths
-                     .Where(static path => !string.IsNullOrWhiteSpace(path))
-                     .Select(path => Path.GetFullPath(path.Trim().Trim('"')))
-                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
-        {
-            if (!File.Exists(runtimeSource))
-                throw new FileNotFoundException("PowerShell runtime source file was not found.", runtimeSource);
-            var extension = Path.GetExtension(runtimeSource);
-            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
-                !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException($"PowerShell runtime source '{runtimeSource}' must be a .ps1 or .psm1 file.", nameof(spec));
-            if (!compiled.Contains(runtimeSource))
-                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, runtimeSource, $"Runtime source '{runtimeSource}' escapes the root module directory.");
-            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, runtimeSource, $"Runtime source '{runtimeSource}' traverses a symbolic link or junction.");
-        }
     }
 
     internal static bool ShouldEnablePublishSingleFile(PowerShellCompilationBuildSpec spec)

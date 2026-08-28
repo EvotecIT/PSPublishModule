@@ -50,7 +50,7 @@ public sealed class PowerShellCompilationAnalyzerTests
 
     [Theory]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, true)]
-    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, false)]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict, true)]
     [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Package, false)]
     [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, true)]
@@ -72,7 +72,7 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Fact]
-    public void Analyze_RejectsAnExplicitModeThatCannotProduceTheResolvedArtifactKind()
+    public void Analyze_AcceptsHybridForAnExecutableInput()
     {
         using var fixture = CompilationFixture.Create("param([int] $Value); return $Value");
         var resolved = new PowerShellCompilationInputResolver().Resolve(
@@ -80,11 +80,11 @@ public sealed class PowerShellCompilationAnalyzerTests
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Package);
 
-        var exception = Assert.Throws<ArgumentException>(() => new PowerShellCompilationAnalyzer().Analyze(
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
             resolved,
-            PowerShellCompilationMode.Hybrid));
+            PowerShellCompilationMode.Hybrid);
 
-        Assert.Contains("Hybrid executable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PowerShellCompilationMode.Hybrid, plan.Mode);
     }
 
     [Fact]

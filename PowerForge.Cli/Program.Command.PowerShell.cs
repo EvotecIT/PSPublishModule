@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
 
@@ -43,8 +43,8 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--framework", "--dependency-lock", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
-                new[] { "--self-contained", "--allow-unreviewed-dependencies", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--framework", "--dependency-lock", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--self-contained", "--allow-unreviewed-dependencies", "--no-build-cache", "--emit-source", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.build");
@@ -105,6 +105,16 @@ internal static partial class Program
                     CliJson.Options)
                     ?? throw new InvalidDataException($"Dependency lock '{fullDependencyLockPath}' did not contain a graph.");
             }
+            PowerShellCompilationTargetContract? targetContract = null;
+            var targetContractPath = TryGetOptionValue(args, "--target-contract");
+            if (!string.IsNullOrWhiteSpace(targetContractPath))
+            {
+                var fullTargetContractPath = Path.GetFullPath(targetContractPath.Trim().Trim('"'));
+                targetContract = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(
+                    File.ReadAllText(fullTargetContractPath),
+                    CliJson.Options)
+                    ?? throw new InvalidDataException($"Target contract '{fullTargetContractPath}' did not contain a contract.");
+            }
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
@@ -118,6 +128,9 @@ internal static partial class Program
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
                 SingleFile = !args.Any(static argument => argument.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),
                 Optimization = optimization,
+                TargetContract = targetContract,
+                UseBuildCache = !args.Any(static argument => argument.Equals("--no-build-cache", StringComparison.OrdinalIgnoreCase)),
+                BuildCacheDirectory = TryGetOptionValue(args, "--cache-directory"),
                 SignArtifact = args.Any(static argument => argument.Equals("--sign", StringComparison.OrdinalIgnoreCase)),
                 CertificateThumbprint = TryGetOptionValue(args, "--certificate-thumbprint"),
                 CertificateStoreLocation = certificateStore,

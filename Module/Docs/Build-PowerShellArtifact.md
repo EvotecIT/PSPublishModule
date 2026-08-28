@@ -11,7 +11,7 @@ Builds a packaged executable, typed CLR library, or importable binary/hybrid mod
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-DependencyLock <PowerShellCompilationDependencyGraph>] [-AllowUnreviewedDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
+Build-PowerShellArtifact [-Path] <string[]> [-EntryPoint <string>] [-Kind <PowerShellCompilationArtifactKind>] [-OutputDirectory <string>] [-Name <string>] [-Mode <PowerShellCompilationMode>] [-ResourceMode <PowerShellCompilationResourceMode>] [-IncludeResource <string[]>] [-ExcludeResource <string[]>] [-TargetFramework <string>] [-RuntimeIdentifier <string>] [-SelfContained] [-SingleFile <bool>] [-Optimization <PowerShellCompilationExecutableOptimization>] [-TargetContract <PowerShellCompilationTargetContract>] [-UseBuildCache <bool>] [-BuildCacheDirectory <string>] [-SignArtifact] [-CertificateThumbprint <string>] [-CertificateStoreLocation <CertificateStoreLocation>] [-TimeStampServer <string>] [-SigningTimeoutSeconds <int>] [-KeepBuildWorkspace] [-EmitSource] [-TimeoutSeconds <int>] [-DependencyLock <PowerShellCompilationDependencyGraph>] [-AllowUnreviewedDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -44,6 +44,22 @@ Explicitly allow a development build to resolve dependencies without a separatel
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -BuildCacheDirectory
+Optional machine-local content-addressed build-cache root.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -375,6 +391,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -TargetContract
+Explicit semantic, execution, and deployment target. Its kind and mode must match the resolved input.
+
+```yaml
+Type: PowerShellCompilationTargetContract
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -TargetFramework
 Generated .NET target framework.
 
@@ -412,6 +444,22 @@ RFC3161 timestamp service used for Authenticode signing.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UseBuildCache
+Use the verified content-addressed generated-build cache.
+
+```yaml
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

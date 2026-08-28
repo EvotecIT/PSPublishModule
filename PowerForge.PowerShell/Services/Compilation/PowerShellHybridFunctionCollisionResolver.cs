@@ -88,7 +88,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
                 .OrderBy(static diagnostic => diagnostic.Line)
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
-            filtered.SourcePaths);
+            filtered.SourcePaths,
+            optimization: filtered.Optimization);
     }
 
     private static bool IsCommandReferenceCandidate(Ast node, HashSet<string> invokeCommandAliases)

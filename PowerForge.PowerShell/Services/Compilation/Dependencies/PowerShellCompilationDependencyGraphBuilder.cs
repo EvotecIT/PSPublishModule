@@ -256,10 +256,16 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string note,
         string version,
         string? targetFramework,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        string? identityDiscriminator = null)
     {
         var normalizedName = name.Trim();
-        var id = StableId("external", kind.ToString(), normalizedName.ToUpperInvariant(), version.ToUpperInvariant());
+        var id = StableId(
+            "external",
+            kind.ToString(),
+            normalizedName.ToUpperInvariant(),
+            version.ToUpperInvariant(),
+            (identityDiscriminator ?? string.Empty).ToUpperInvariant());
         if (_nodes.TryGetValue(id, out var existing))
         {
             existing.Roles |= PowerShellCompilationDependencyGraphRole.Dependency | PowerShellCompilationDependencyGraphRole.Deployment;
@@ -434,6 +440,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             identity.Version = assembly.Version?.ToString() ?? string.Empty;
             identity.PublicKeyToken = string.Concat((assembly.GetPublicKeyToken() ?? Array.Empty<byte>())
                 .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+            identity.Culture = PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(assembly.CultureName);
             identity.Architecture = ReadPortableExecutableArchitecture(path);
             identity.Provenance = "ManagedMetadataReadOnly";
         }
