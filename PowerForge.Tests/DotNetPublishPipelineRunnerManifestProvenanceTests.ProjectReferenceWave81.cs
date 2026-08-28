@@ -234,7 +234,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string? propertyXml,
         string? targetXml,
         out string outputDirectory,
-        out byte[] provenAppBytes)
+        out byte[] provenAppBytes,
+        Func<string, string, byte[], IProcessRunner>? processRunnerFactory = null)
     {
         RunGit(root, "init");
         RunGit(root, "config user.name \"PowerForge Tests\"");
@@ -306,7 +307,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }
             ]
         };
-        return new DotNetPublishPipelineRunner(new NullLogger()).Run(plan, progress: null);
+        IProcessRunner? processRunner = processRunnerFactory?.Invoke(
+            projectPath,
+            Path.Combine(root, "bin", "Release", "net8.0", "App.dll"),
+            provenAppBytes);
+        DotNetPublishPipelineRunner runner = processRunner is null
+            ? new DotNetPublishPipelineRunner(new NullLogger())
+            : new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
+        return runner.Run(plan, progress: null);
     }
 
     private static bool PathsEqual(string first, string second)

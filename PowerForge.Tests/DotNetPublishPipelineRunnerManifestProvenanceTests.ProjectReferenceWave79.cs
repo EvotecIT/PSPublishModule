@@ -207,7 +207,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "*.dll").Single();
 
             Assert.Equal(provenBytes, File.ReadAllBytes(snapshotPath));
-            Assert.Contains("AfterTargets=\"ComputeFilesToPublish\"", targets, StringComparison.Ordinal);
+            Assert.Contains(
+                "BeforeTargets=\"_ComputeResolvedFilesToPublishTypes\"",
+                targets,
+                StringComparison.Ordinal);
             Assert.Contains(snapshotPath, targets, StringComparison.Ordinal);
         }
         finally

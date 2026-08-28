@@ -299,7 +299,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string rid,
         DotNetPublishStyle? styleOverride,
         string reservationOwner,
-        NoBuildPublishInputSnapshot? inputSnapshot)
+        NoBuildPublishInputSnapshot? inputSnapshot,
+        PublishProvenanceLease? provenanceLease)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
@@ -380,8 +381,10 @@ public sealed partial class DotNetPublishPipelineRunner
             inputSnapshot?.TargetsPath);
 
         _logger.Info($"Publishing {target.Name} ({rid}) -> {publishDir}");
+        provenanceLease?.ValidateUnchanged();
         RunDotnet(plan.ProjectRoot, publishArgs, plan.EnvironmentVariables);
         inputSnapshot?.ValidateUnchanged();
+        provenanceLease?.ValidateUnchanged();
 
         var cleanup = ApplyCleanup(publishDir, target.Publish);
 

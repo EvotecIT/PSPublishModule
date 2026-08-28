@@ -318,7 +318,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XAttribute(
                     "Name",
                     "_PowerForgeBindNoBuildPublishInputs_" + Guid.NewGuid().ToString("N")),
-                new XAttribute("AfterTargets", "ComputeFilesToPublish"));
+                new XAttribute("BeforeTargets", "_ComputeResolvedFilesToPublishTypes"));
             var itemGroup = new XElement("ItemGroup");
             int index = 0;
             foreach ((NoBuildPublishInput[] inputs, string snapshotPath) in mappedInputs)

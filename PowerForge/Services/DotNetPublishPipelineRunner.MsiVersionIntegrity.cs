@@ -262,6 +262,18 @@ public sealed partial class DotNetPublishPipelineRunner
               || untrustedIgnoredBuildInput
               || hasReplacementRefs
               || revisionChangedDuringVerification;
+        string[] publishInputFiles = dirtyScope.BuildInputs
+            .Concat(dirtyScope.SourceInputs)
+            .Concat(allExplicitInputPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path)))
+                .Where(File.Exists))
+            .Where(File.Exists)
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty,
@@ -271,7 +283,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray(),
             dirtyReasons.ToArray(),
-            dirtyScope.NoBuildPublishInputs);
+            dirtyScope.NoBuildPublishInputs,
+            gitRoot,
+            publishInputFiles);
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -955,13 +969,17 @@ public sealed partial class DotNetPublishPipelineRunner
             bool? dirty,
             string[]? dirtyPaths = null,
             string[]? dirtyReasons = null,
-            NoBuildPublishInput[]? noBuildPublishInputs = null)
+            NoBuildPublishInput[]? noBuildPublishInputs = null,
+            string? sourceRoot = null,
+            string[]? publishInputFiles = null)
         {
             Revision = revision;
             Dirty = dirty;
             DirtyPaths = dirtyPaths ?? Array.Empty<string>();
             DirtyReasons = dirtyReasons ?? Array.Empty<string>();
             NoBuildPublishInputs = noBuildPublishInputs ?? Array.Empty<NoBuildPublishInput>();
+            SourceRoot = sourceRoot;
+            PublishInputFiles = publishInputFiles ?? Array.Empty<string>();
         }
 
         public string? Revision { get; }
@@ -973,6 +991,10 @@ public sealed partial class DotNetPublishPipelineRunner
         public string[] DirtyReasons { get; }
 
         internal NoBuildPublishInput[] NoBuildPublishInputs { get; }
+
+        internal string? SourceRoot { get; }
+
+        internal string[] PublishInputFiles { get; }
     }
 
     private sealed class MsiVersionStateWrite

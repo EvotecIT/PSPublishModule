@@ -123,6 +123,22 @@ public sealed partial class DotNetPublishPipelineRunner
                                     target is not null &&
                                     target.Name.Equals(step.TargetName, StringComparison.OrdinalIgnoreCase) &&
                                     target.Publish?.Sign?.Enabled == true);
+                            SourceProvenance? publishProvenance = requiresPublishProvenance
+                                ? ReadPortableInventorySourceProvenance(plan)
+                                : null;
+                            using PublishProvenanceLease? provenanceLease = requiresPublishProvenance
+                                ? PublishProvenanceLease.Create(
+                                    publishProvenance!.SourceRoot,
+                                    publishProvenance.PublishInputFiles)
+                                : null;
+                            if (provenanceLease is not null)
+                            {
+                                SourceProvenance confirmedProvenance =
+                                    ReadPortableInventorySourceProvenance(plan);
+                                provenanceLease.EnsureCovers(confirmedProvenance.PublishInputFiles);
+                                provenanceLease.ValidateUnchanged();
+                                publishProvenance = confirmedProvenance;
+                            }
                             using NoBuildPublishInputSnapshot? inputSnapshot =
                                 requiresPublishProvenance
                                     ? CreateNoBuildPublishInputSnapshot(
@@ -131,7 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         step.Framework ?? string.Empty,
                                         step.Runtime!,
                                         step.Style,
-                                        ReadPortableInventorySourceProvenance(plan))
+                                        publishProvenance!)
                                     : null;
                             artefacts.Add(Publish(
                                 plan,
@@ -140,7 +156,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 step.Runtime!,
                                 step.Style,
                                 msiReservationOwner,
-                                inputSnapshot));
+                                inputSnapshot,
+                                provenanceLease));
                             break;
                         }
                         case DotNetPublishStepKind.Bundle:
