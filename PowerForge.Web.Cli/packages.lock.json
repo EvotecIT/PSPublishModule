@@ -4,11 +4,11 @@
     "net10.0": {
       "DBAClientX.SQLite": {
         "type": "Direct",
-        "requested": "[0.14.0, )",
-        "resolved": "0.14.0",
-        "contentHash": "9Z6+GKAMgfat9dPwIuaNkUWgvwy7bsGJ9/U4ymiJbrowk9qfDfIFBupCerEjM9wNNRwBPR1vJo91GZXnR7btDg==",
+        "requested": "[0.15.0, )",
+        "resolved": "0.15.0",
+        "contentHash": "s97XhgF8sczbnhHkFZ11bLlGzZHd+MmKc2xmdDOJUCS4tNJdiopunRYJG5qURKvrM3r/cZCUNw9p90yyHCb4uQ==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.0",
+          "DBAClientX.Core": "1.0.1",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -65,31 +65,31 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.0",
-        "contentHash": "J6OGi0GWhP4qspzoeDrPMZgVubGmmc7MTnTdbnPsY4zkrGQ+a/xJNomZWO1P3FO7OLqP6mSiN9nKYugtblkAbQ=="
+        "resolved": "1.0.1",
+        "contentHash": "uyAREPsJoJCu3G32HHCW81myiIbqxaxBKSCBinZ1MBArFDKod+gRS7Hw1VnYD1yGOooQ47LMKKBnKpKDekGYuw=="
       },
       "Google.Apis": {
         "type": "Transitive",
-        "resolved": "1.75.0",
-        "contentHash": "ZqODi2IvyTBezeGztemXv6U/+VinyqxxPiyoW2CZbzIrUp+a35Rt5tzUjXHPXK9nA1YQi/w8ABpYQpBm31ditw==",
+        "resolved": "1.76.0",
+        "contentHash": "sIhJW2vT1cXE/yUFp1q1Mv7EUgbGu2uMIcqqv+BgElRdGQApxiYpZ/jG6hFkQB8/AG9kGurJOzLOM9PZ++GEtA==",
         "dependencies": {
-          "Google.Apis.Core": "1.75.0"
+          "Google.Apis.Core": "1.76.0"
         }
       },
       "Google.Apis.Auth": {
         "type": "Transitive",
-        "resolved": "1.75.0",
-        "contentHash": "hzuGwUBIQYdFkChXm62E5Suxe+q5PHt2uE5EunGBco2j01uQJGlUgzNujZvGHMlAIEHaytzhdn3v3v52ZPgv2Q==",
+        "resolved": "1.76.0",
+        "contentHash": "WzRCykQ0OApOEFdUYYBJ6riIxs+xk635s0KsGb83zJcABa66DCgaAXiWZuZjSqnwA3hjm7u8mmzR4EUHpJ1UfQ==",
         "dependencies": {
-          "Google.Apis": "1.75.0",
-          "Google.Apis.Core": "1.75.0",
+          "Google.Apis": "1.76.0",
+          "Google.Apis.Core": "1.76.0",
           "System.Management": "7.0.2"
         }
       },
       "Google.Apis.Core": {
         "type": "Transitive",
-        "resolved": "1.75.0",
-        "contentHash": "7AuI44XP4LzMFiOjdk4GCtCxJTIWZcjrXLeGjLYYSpTHHbiPkvm76XNym7zPOnD90sIg+zdTulg+I6D5W5spTQ==",
+        "resolved": "1.76.0",
+        "contentHash": "P2nFbC0SsnUe8sGjhpCLs6CHIWFzURgUS2M9l9aUV1vJjVXpesRbegEYZS/dLKehcgx8twDP7xA5OMGygMD55g==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }
@@ -363,7 +363,7 @@
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
-          "Google.Apis.Auth": "[1.75.0, )",
+          "Google.Apis.Auth": "[1.76.0, )",
           "HtmlTinkerX": "[3.0.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.2.4, )",
