@@ -442,6 +442,7 @@ function Assert-AuthoritativeCaptureProvenance {
     $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     if ($expectedHash -ne $actualHash) { throw 'Local capture provenance differs from the retained GitHub Actions artifact.' }
     $script:validatedCaptureProvenance = $provenance
+    $script:validatedCaptureProvenancePath = $path
     Add-AllowedConsumerEvidencePath -Path $path -Name '--capture-provenance'
 }
 

@@ -55,12 +55,14 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("UploadExisting is forbidden at the pinned local operator boundary", script, StringComparison.Ordinal);
         Assert.Contains("if ($null -ne (Get-OptionValue -Option '--capture-provenance'))", script, StringComparison.Ordinal);
         Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
+        Assert.Contains("$script:validatedCaptureProvenancePath = $path", script, StringComparison.Ordinal);
         Assert.Contains("--apple-source-commit must match the exact consumer HEAD", evidence, StringComparison.Ordinal);
         Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
         Assert.Contains("if ($ArgumentList[0] -ne 'apple-release' -or", evidence, StringComparison.Ordinal);
         Assert.Contains("$argument -eq '--capture-provenance'", evidence, StringComparison.Ordinal);
         Assert.Contains("$forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead", script, StringComparison.Ordinal);
         Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and approved inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("Split-Path -Parent $script:validatedCaptureProvenancePath", evidence, StringComparison.Ordinal);
         Assert.Contains("Resolve-PathFromBase -BasePath", evidence, StringComparison.Ordinal);
         Assert.Contains("No screenshot configuration matches the selected release targets", evidence, StringComparison.Ordinal);
         Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);

@@ -189,11 +189,8 @@ public sealed partial class AppleReleaseWorkflowTests
         {
             Directory.CreateDirectory(Path.Combine(sandbox, "capture", "phone"));
             var nested = Path.Combine(sandbox, "capture", "phone", "home.png");
-            var rootImage = Path.Combine(sandbox, "capture", "home.png");
             File.WriteAllText(nested, "nested screenshot bytes");
-            File.WriteAllText(rootImage, "root screenshot bytes");
             var nestedHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(nested))).ToLowerInvariant();
-            var rootHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(rootImage))).ToLowerInvariant();
             const string commit = "0123456789abcdef0123456789abcdef01234567";
             File.WriteAllText(Path.Combine(sandbox, "powerforge.release.json"),
                 """{ "AppleApps": { "ProjectRoot": ".", "ScreenshotConfigPaths": [ "screenshots.json" ], "Apps": [ { "Name": "App", "Platform": "IOS", "AppStoreConnectAppId": "123" } ] } }""");
@@ -208,8 +205,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 VersionString = "1.2.3",
                 Screenshots = new object[]
                 {
-                    new { File = "capture/phone/home.png", Sha256 = nestedHash, Width = 100, Height = 200 },
-                    new { File = "capture/home.png", Sha256 = rootHash, Width = 100, Height = 200 }
+                    new { File = "capture/phone/home.png", Sha256 = nestedHash, Width = 100, Height = 200 }
                 }
             }));
             File.WriteAllText(Path.Combine(sandbox, ".gitignore"), "capture/\n*.approval.json\n");
@@ -229,10 +225,11 @@ public sealed partial class AppleReleaseWorkflowTests
                     workflowRef = 'EvotecIT/TestApp/.github/workflows/capture.yml@refs/heads/main';
                     marketingVersion = '1.2.3'; screenshots = @(
                         [pscustomobject]@{ path='phone/home.png'; sha256='NESTED_HASH'; width=100; height=200 },
-                        [pscustomobject]@{ path='home.png'; sha256='ROOT_HASH'; width=100; height=200 },
+                        [pscustomobject]@{ path='home.png'; sha256='NESTED_HASH'; width=100; height=200 },
                         [pscustomobject]@{ path='website-candidate/home.png'; sha256='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; width=1200; height=800 })
                 }
                 $consumer = [IO.Path]::GetFullPath($Consumer)
+                $script:validatedCaptureProvenancePath = Join-Path $consumer 'capture/powerforge-apple-screenshot-provenance.json'
                 $ArgumentList = @('apple-release','Screenshots','--config','powerforge.release.json')
                 function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
                 function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
@@ -278,8 +275,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 try { Assert-ConsumerRepositoryContent; throw 'Unreviewed file was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*non-reviewed content*') { throw }; 'PASS' }
                 """
-                .Replace("NESTED_HASH", nestedHash, StringComparison.Ordinal)
-                .Replace("ROOT_HASH", rootHash, StringComparison.Ordinal));
+                .Replace("NESTED_HASH", nestedHash, StringComparison.Ordinal));
 
             var result = Run(
                 "pwsh",

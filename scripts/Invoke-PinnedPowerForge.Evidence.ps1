@@ -436,31 +436,24 @@ function Assert-ScreenshotPublicationBinding {
     }
     if ($matchedConfigCount -eq 0) { throw 'No screenshot configuration matches the selected release targets.' }
 
-    $candidateRoots = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if ([string]::IsNullOrWhiteSpace([string]$script:validatedCaptureProvenancePath)) {
+        throw 'Screenshot publication requires the validated local capture provenance path.'
+    }
+    $retainedRoot = [IO.Path]::GetFullPath((Split-Path -Parent $script:validatedCaptureProvenancePath))
+    $retainedPrefix = $retainedRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $pathComparison = if ($IsWindows -or $IsMacOS) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $counts = @{}
     foreach ($approved in $approvedItems) {
-        foreach ($entry in $provenanceEntries | Where-Object {
-            ([string]$_.sha256).Equals($approved.Sha256, [StringComparison]::OrdinalIgnoreCase) -and
-            [int]$_.width -eq $approved.Width -and [int]$_.height -eq $approved.Height
-        }) {
-            $nativePath = ([string]$entry.path).Replace('/', [IO.Path]::DirectorySeparatorChar)
-            $suffix = [string][IO.Path]::DirectorySeparatorChar + $nativePath
-            if ($approved.Path.EndsWith($suffix, [StringComparison]::Ordinal)) {
-                $root = $approved.Path.Substring(0, $approved.Path.Length - $nativePath.Length).TrimEnd([IO.Path]::DirectorySeparatorChar)
-                $null = $candidateRoots.Add($root)
-            }
+        if (-not $approved.Path.StartsWith($retainedPrefix, $pathComparison)) {
+            throw 'Screenshot approval manifests do not identify one exact retained capture root and approved inventory.'
         }
+        $relative = [IO.Path]::GetRelativePath($retainedRoot, $approved.Path).Replace('\', '/')
+        $key = Get-ScreenshotInventoryKey -Path $relative -Sha256 $approved.Sha256 -Width $approved.Width -Height $approved.Height
+        $counts[$key] = 1 + [int]($counts[$key] ?? 0)
     }
-    $validRoots = [Collections.Generic.List[string]]::new()
-    foreach ($root in $candidateRoots) {
-        $counts = @{}
-        foreach ($approved in $approvedItems) {
-            $relative = [IO.Path]::GetRelativePath($root, $approved.Path).Replace('\', '/')
-            $key = Get-ScreenshotInventoryKey -Path $relative -Sha256 $approved.Sha256 -Width $approved.Width -Height $approved.Height
-            $counts[$key] = 1 + [int]($counts[$key] ?? 0)
-        }
-        if (Test-ScreenshotInventorySubsetCounts -Expected $inventoryCounts -Actual $counts) { $validRoots.Add($root) }
+    if (-not (Test-ScreenshotInventorySubsetCounts -Expected $inventoryCounts -Actual $counts)) {
+        throw 'Screenshot approval manifests do not identify one exact retained capture root and approved inventory.'
     }
-    if ($validRoots.Count -ne 1) { throw 'Screenshot approval manifests do not identify one exact retained capture root and approved inventory.' }
     foreach ($path in $manifestPaths) { Add-AllowedConsumerEvidencePath -Path $path -Name 'Screenshot approval manifest' }
     foreach ($approved in $approvedItems) { Add-AllowedConsumerEvidencePath -Path $approved.Path -Name 'Approved screenshot' }
 }
