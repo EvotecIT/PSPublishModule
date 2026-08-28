@@ -651,6 +651,8 @@ internal sealed partial class PowerForgeReleaseService
                 appleReleaseVersion,
                 request.SkipBuild,
                 selectedAppleTargets);
+            if (request.ValidateOnly)
+                ResolveAppleValidationTargetIdentities(applePlan);
             result.AppleAppPlan = applePlan;
             if (request.PlanOnly)
                 result.AppleReceipt = CreateApplePlanReceipt(applePlan);
@@ -2276,29 +2278,11 @@ internal sealed partial class PowerForgeReleaseService
             preflightAttempted.Add(app);
             try
             {
-                if (plan.Action != PowerForgeAppleReleaseAction.Cleanup)
-                    result.ProjectGenerated = _generateAppleProject(app);
-                if (plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
-                    app.VersionUpdateRequested &&
-                    app.BuildNumberPolicy == AppleBuildNumberPolicy.IncrementExisting &&
-                    string.IsNullOrWhiteSpace(app.BuildNumber))
-                {
-                    app.BuildNumber = ResolveAppleBuildNumber(
-                        new AppleAppConfiguration
-                        {
-                            BuildNumberPolicy = app.BuildNumberPolicy
-                        },
-                        app.ProjectPath,
-                        new XcodeProjectVersionEditor());
-                }
-
+                result.ProjectGenerated = PrepareAppleProjectAndReleaseIdentity(plan, app);
                 var needsReleaseIdentity = RequiresAppleReleaseIdentity(plan);
                 if (needsReleaseIdentity)
                 {
-                    var values = ResolveAppleDistributionValues(app, versionUpdate: null);
-                    app.MarketingVersion = values.MarketingVersion;
-                    app.BuildNumber = values.BuildNumber;
-                    valuesByApp[app] = values;
+                    valuesByApp[app] = (app.MarketingVersion!, app.BuildNumber!);
                 }
 
                 var matchingScreenshotSpec = app.DistributionRoute == AppleDistributionRoute.AppStore &&
@@ -3003,7 +2987,9 @@ internal sealed partial class PowerForgeReleaseService
         paths.AddRange(plan.ScreenshotConfigPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
 
         return paths
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(FrameworkCompatibility.GetPathStringComparisonForPath(plan.ProjectRoot) == StringComparison.OrdinalIgnoreCase
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal)
             .Select(path =>
             {
                 var json = ReadApprovedMutationInputText(plan, path);

@@ -3,6 +3,72 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void Execute_AppleScreenshotPlan_PreservesCaseDistinctConfigsOnCaseSensitiveFileSystems()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var lowerPath = Path.Combine(root, "screenshots.json");
+            File.WriteAllText(lowerPath, "lower");
+            var upperPath = Path.Combine(root, "Screenshots.json");
+            if (File.Exists(upperPath))
+                return;
+
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var firstShots = Directory.CreateDirectory(Path.Combine(root, "first-shots"));
+            var secondShots = Directory.CreateDirectory(Path.Combine(root, "second-shots"));
+            File.WriteAllText(Path.Combine(firstShots.FullName, "home.png"), "first pixels");
+            File.WriteAllText(Path.Combine(secondShots.FullName, "home.png"), "second pixels");
+            WriteScreenshotConfig(root, "screenshots.json", "111", "1.2.0", "iOS", "first-shots", qualityEnabled: false);
+            WriteScreenshotConfig(root, "Screenshots.json", "222", "1.2.0", "iOS", "second-shots", qualityEnabled: false);
+
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var first = Assert.Single(spec.AppleApps!.Apps);
+            first.AppStoreConnectAppId = "111";
+            spec.AppleApps.ScreenshotConfigPath = null;
+            spec.AppleApps.ScreenshotConfigPaths = ["screenshots.json", "Screenshots.json"];
+            spec.AppleApps.SyncScreenshots = true;
+            spec.AppleApps.Apps =
+            [
+                first,
+                new AppleAppConfiguration
+                {
+                    Name = "Other iOS",
+                    BundleId = "com.evotecit.other",
+                    Platform = ApplePlatform.iOS,
+                    ProjectPath = "CasaRay.xcodeproj",
+                    Scheme = "Other",
+                    AppStoreConnectAppId = "222"
+                }
+            ];
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("A non-replacing screenshot plan must not query release state."),
+                    checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                        PlanOnly = true
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains("screenshots.json", result.AppleReceipt!.MutationInputFiles.Keys);
+            Assert.Contains("Screenshots.json", result.AppleReceipt.MutationInputFiles.Keys);
+            Assert.Contains("first-shots/home.png", result.AppleReceipt.MutationInputFiles.Keys);
+            Assert.Contains("second-shots/home.png", result.AppleReceipt.MutationInputFiles.Keys);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_TargetedAppleScreenshotPlan_BindsOnlyTheDiscoveredSelectedAppInputs()
     {
         var root = CreateSandbox();

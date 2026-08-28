@@ -402,6 +402,27 @@ function New-TrackedToolSnapshot {
     return $snapshotRoot
 }
 
+function New-ExactConsumerResolutionCheckout {
+    param([Parameter(Mandatory)][string] $SourceCommit)
+    $snapshotRoot = Join-Path $temporaryRoot 'consumer-source'
+    & $script:gitPath clone --quiet --no-checkout --local --no-hardlinks -- $consumer $snapshotRoot
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $snapshotRoot '.git'))) {
+        throw 'Unable to clone the exact consumer source for target resolution.'
+    }
+    & $script:gitPath -C $snapshotRoot checkout --quiet --detach $SourceCommit
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to check out the exact consumer commit for target resolution.' }
+    $snapshotHead = (& $script:gitPath -C $snapshotRoot rev-parse HEAD 2>$null).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $snapshotHead -ne $SourceCommit.ToLowerInvariant()) {
+        throw 'Consumer target-resolution checkout does not match the exact reviewed commit.'
+    }
+    $snapshotItem = Get-Item -LiteralPath $snapshotRoot -Force
+    if (-not $snapshotItem.PSIsContainer -or $snapshotItem.LinkType -or
+        ($snapshotItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Consumer target-resolution checkout must be an unlinked directory.'
+    }
+    return $snapshotRoot
+}
+
 function Assert-AuthoritativeCaptureProvenance {
     param(
         [Parameter(Mandatory)][string] $GhPath,
@@ -608,11 +629,15 @@ try {
     $resolvedAppleTargets = $null
     if ($ArgumentList[0] -eq 'apple-release' -and $ArgumentList.Count -gt 1 -and
         $ArgumentList[1] -in @('Screenshots', 'Advance')) {
+        $consumerResolutionRoot = New-ExactConsumerResolutionCheckout -SourceCommit $consumerHead
         $resolutionOutput = Join-Path $temporaryRoot 'apple-target-resolution.json'
-        $resolutionArguments = Get-AppleTargetResolutionArgumentList -Arguments $forwardedArgumentList
+        $resolutionArguments = Get-AppleTargetResolutionSnapshotArgumentList `
+            -Arguments $forwardedArgumentList `
+            -ConsumerRoot $consumer `
+            -SnapshotRoot $consumerResolutionRoot
         $resolutionExitCode = Invoke-RedactedProcess `
             -FilePath $dotnet `
-            -WorkingDirectory $consumer `
+            -WorkingDirectory $consumerResolutionRoot `
             -Arguments (@($cliAssembly) + $resolutionArguments) `
             -NuGetPackagesPath $nugetPackages `
             -CaptureStandardOutputPath $resolutionOutput `

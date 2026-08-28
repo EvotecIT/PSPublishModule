@@ -118,6 +118,39 @@ public sealed partial class AppleReleaseWorkflowTests
                     throw "Unexpected target-resolution arguments: $($resolvedArguments -join '|')"
                 }
 
+                $consumer = Join-Path (Split-Path -Parent $Output) 'consumer'
+                $snapshot = Join-Path (Split-Path -Parent $Output) 'snapshot'
+                New-Item -ItemType Directory -Path $consumer, $snapshot -Force | Out-Null
+                $releaseConfig = Join-Path $consumer 'powerforge.release.json'
+                '{ "AppleApps": { "ProjectRoot": ".", "Apps": [ { "Name": "App", "ProjectPath": "App.xcodeproj" } ] } }' |
+                    Set-Content -LiteralPath $releaseConfig
+                Copy-Item -LiteralPath $releaseConfig -Destination (Join-Path $snapshot 'powerforge.release.json')
+                $snapshotArguments = @(Get-AppleTargetResolutionSnapshotArgumentList `
+                    -Arguments @('apple-release', 'Screenshots', '--config', $releaseConfig, '--target', 'App') `
+                    -ConsumerRoot $consumer `
+                    -SnapshotRoot $snapshot)
+                $snapshotConfig = $snapshotArguments[[Array]::IndexOf($snapshotArguments, '--config') + 1]
+                if ($snapshotConfig -ne (Join-Path $snapshot 'powerforge.release.json')) {
+                    throw "Target-resolution config was not rebound to the exact consumer snapshot: $snapshotConfig"
+                }
+                $caseSensitivePaths = @(Get-UniquePlatformPaths -Paths @('screenshots.json', 'Screenshots.json') -Comparer ([StringComparer]::Ordinal))
+                $caseInsensitivePaths = @(Get-UniquePlatformPaths -Paths @('screenshots.json', 'Screenshots.json') -Comparer ([StringComparer]::OrdinalIgnoreCase))
+                if ($caseSensitivePaths.Count -ne 2 -or $caseInsensitivePaths.Count -ne 1) {
+                    throw 'Screenshot path uniqueness does not honor the supplied file-system comparer.'
+                }
+
+                '{ "AppleApps": { "ProjectRoot": "ABSOLUTE_ROOT", "Apps": [ { "Name": "App", "ProjectPath": "App.xcodeproj" } ] } }'.Replace('ABSOLUTE_ROOT', $consumer.Replace('\', '\\')) |
+                    Set-Content -LiteralPath $releaseConfig
+                try {
+                    Get-AppleTargetResolutionSnapshotArgumentList `
+                        -Arguments @('apple-release', 'Screenshots', '--config', $releaseConfig) `
+                        -ConsumerRoot $consumer `
+                        -SnapshotRoot $snapshot | Out-Null
+                    throw 'An absolute AppleApps.ProjectRoot escaped snapshot target resolution.'
+                } catch {
+                    if ($_.Exception.Message -notlike '*consumer-relative AppleApps.ProjectRoot*') { throw }
+                }
+
                 [pscustomobject]@{
                     command = 'apple-release'
                     success = $true
@@ -307,12 +340,24 @@ public sealed partial class AppleReleaseWorkflowTests
             File.WriteAllText(Path.Combine(sandbox, "screenshots.json"),
                 """{ "AppId": "123", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "screenshots.approval.json" } }""");
             File.WriteAllText(Path.Combine(sandbox, "other-screenshots.json"),
-                """{ "AppId": "888", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "missing-other.approval.json" } }""");
+                """{ "AppId": "888", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "other-screenshots.approval.json" } }""");
             File.WriteAllText(Path.Combine(sandbox, "beta-screenshots.json"),
                 """{ "AppId": "999", "Platform": "IOS", "UseReleaseVersion": true, "Quality": { "ApprovalManifestPath": "missing-beta.approval.json" } }""");
             File.WriteAllText(Path.Combine(sandbox, "historical-screenshots.json"),
                 """{ "AppId": "123", "Platform": "IOS", "VersionString": "1.1.0", "Quality": { "ApprovalManifestPath": "missing-historical.approval.json" } }""");
             File.WriteAllText(Path.Combine(sandbox, "screenshots.approval.json"), JsonSerializer.Serialize(new
+            {
+                CaptureRunId = "42",
+                CaptureRepository = "EvotecIT/TestApp",
+                CaptureWorkflowRef = "EvotecIT/TestApp/.github/workflows/capture.yml@refs/heads/main",
+                SourceCommit = commit,
+                VersionString = "1.2.3",
+                Screenshots = new object[]
+                {
+                    new { File = "capture/phone/home.png", Sha256 = nestedHash, Width = 100, Height = 200 }
+                }
+            }));
+            File.WriteAllText(Path.Combine(sandbox, "other-screenshots.approval.json"), JsonSerializer.Serialize(new
             {
                 CaptureRunId = "42",
                 CaptureRepository = "EvotecIT/TestApp",
@@ -355,6 +400,10 @@ public sealed partial class AppleReleaseWorkflowTests
                 . $Support
                 $appTargets = @([pscustomobject]@{ name='App'; platform='iOS'; distributionRoute='AppStore'; appId='123'; marketingVersion='1.2.3' })
                 Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $appTargets
+                $sharedPixelTargets = @(
+                    $appTargets[0],
+                    [pscustomobject]@{ name='Other'; platform='iOS'; distributionRoute='AppStore'; appId='888'; marketingVersion='1.2.3' })
+                Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $sharedPixelTargets
                 $mismatchedVersionTargets = @([pscustomobject]@{ name='App'; platform='iOS'; distributionRoute='AppStore'; appId='123'; marketingVersion='1.2.4' })
                 try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $mismatchedVersionTargets; throw 'A mismatched target marketing version was accepted.' }
                 catch { if ($_.Exception.Message -notlike '*does not match selected Apple app*version*') { throw } }
@@ -392,7 +441,7 @@ public sealed partial class AppleReleaseWorkflowTests
                     $caseVariantCreated = $true
                 }
                 $caseVariantApproval | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $approvalPath
-                if ($IsWindows) {
+                if ((Get-ConsumerPathComparer).Compare('a', 'A') -eq 0) {
                     Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $appTargets
                 } else {
                     try { Assert-ScreenshotPublicationBinding -SourceCommit '0123456789abcdef0123456789abcdef01234567' -ResolvedTargets $appTargets; throw 'Case-variant inventory path was accepted.' }

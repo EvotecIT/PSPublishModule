@@ -173,6 +173,68 @@ function Get-AppleTargetResolutionArgumentList {
     return @($result)
 }
 
+function Get-AppleTargetResolutionSnapshotArgumentList {
+    param(
+        [Parameter(Mandatory)][string[]] $Arguments,
+        [Parameter(Mandatory)][string] $ConsumerRoot,
+        [Parameter(Mandatory)][string] $SnapshotRoot
+    )
+    $consumerRootPath = [IO.Path]::GetFullPath($ConsumerRoot)
+    $snapshotRootPath = [IO.Path]::GetFullPath($SnapshotRoot)
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $consumerPrefix = $consumerRootPath.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $result = [Collections.Generic.List[string]]::new()
+    foreach ($argument in @(Get-AppleTargetResolutionArgumentList -Arguments $Arguments)) { $result.Add($argument) }
+
+    $configIndex = -1
+    $configValue = $null
+    $configCombined = $false
+    for ($index = 0; $index -lt $result.Count; $index++) {
+        if ($result[$index] -eq '--config') {
+            if ($index + 1 -ge $result.Count) { throw 'Target resolution requires a value for --config.' }
+            if ($configIndex -ge 0) { throw 'Target resolution requires exactly one --config.' }
+            $configIndex = $index + 1
+            $configValue = $result[$configIndex]
+        } elseif ($result[$index].StartsWith('--config=', [StringComparison]::OrdinalIgnoreCase)) {
+            if ($configIndex -ge 0) { throw 'Target resolution requires exactly one --config.' }
+            $configIndex = $index
+            $configCombined = $true
+            $configValue = $result[$index].Substring('--config='.Length)
+        }
+    }
+    if ($configIndex -lt 0 -or [string]::IsNullOrWhiteSpace($configValue)) {
+        throw 'Target resolution requires exactly one --config.'
+    }
+
+    $sourceConfigPath = if ([IO.Path]::IsPathRooted($configValue)) {
+        [IO.Path]::GetFullPath($configValue)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $consumerRootPath $configValue))
+    }
+    if (-not $sourceConfigPath.StartsWith($consumerPrefix, $comparison)) {
+        throw 'Target-resolution --config must stay inside the exact consumer checkout.'
+    }
+    $relativeConfigPath = [IO.Path]::GetRelativePath($consumerRootPath, $sourceConfigPath)
+    $snapshotConfigPath = [IO.Path]::GetFullPath((Join-Path $snapshotRootPath $relativeConfigPath))
+    if (-not (Test-Path -LiteralPath $snapshotConfigPath -PathType Leaf)) {
+        throw 'Target-resolution --config was not materialized in the exact consumer snapshot.'
+    }
+
+    $release = Get-Content -LiteralPath $sourceConfigPath -Raw | ConvertFrom-Json
+    if ([IO.Path]::IsPathRooted([string]$release.AppleApps.ProjectRoot)) {
+        throw 'Pinned target resolution requires consumer-relative AppleApps.ProjectRoot.'
+    }
+    foreach ($app in @($release.AppleApps.Apps)) {
+        if ([IO.Path]::IsPathRooted([string]$app.ProjectPath)) {
+            throw "Pinned target resolution requires a consumer-relative ProjectPath for Apple app '$([string]$app.Name)'."
+        }
+    }
+
+    $replacement = $snapshotConfigPath
+    $result[$configIndex] = if ($configCombined) { "--config=$replacement" } else { $replacement }
+    return @($result)
+}
+
 function Read-ResolvedAppleTargets {
     param([Parameter(Mandatory)][string] $Path)
     try { $envelope = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
@@ -368,10 +430,9 @@ function Register-StandaloneScreenshotEvidence {
         $apple = $release.AppleApps
         $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
         $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
-        @(@([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
+        @(Get-UniquePlatformPaths -Paths @(@([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
-            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) } |
-            Sort-Object -Unique)
+            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) }))
     } else {
         @(Resolve-OptionPath -Value (Get-OptionValue -Option '--config'))
     }
@@ -418,6 +479,29 @@ function Test-ScreenshotInventorySubsetCounts {
     return $true
 }
 
+function Get-ConsumerPathComparer {
+    $ignoreCase = Invoke-GitText -Root $consumer -Arguments @('config', '--bool', 'core.ignorecase')
+    if ($ignoreCase -eq 'true') { return [StringComparer]::OrdinalIgnoreCase }
+    if ($ignoreCase -eq 'false') { return [StringComparer]::Ordinal }
+    throw 'Consumer repository core.ignorecase must describe the checkout file-system semantics.'
+}
+
+function Get-UniquePlatformPaths {
+    param(
+        [string[]] $Paths,
+        [StringComparer] $Comparer = $(Get-ConsumerPathComparer)
+    )
+    $comparer = $Comparer
+    $seen = [Collections.Generic.HashSet[string]]::new($comparer)
+    $result = [Collections.Generic.List[string]]::new()
+    foreach ($path in @($Paths)) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and $seen.Add($path)) { $result.Add($path) }
+    }
+    $values = $result.ToArray()
+    [Array]::Sort($values, $comparer)
+    return $values
+}
+
 function Assert-ScreenshotPublicationBinding {
     param(
         [Parameter(Mandatory)][string] $SourceCommit,
@@ -432,12 +516,11 @@ function Assert-ScreenshotPublicationBinding {
     $apple = $release.AppleApps
     $projectRootValue = if ([string]::IsNullOrWhiteSpace([string]$apple.ProjectRoot)) { '.' } else { [string]$apple.ProjectRoot }
     $projectRoot = Resolve-PathFromBase -BasePath (Split-Path -Parent $releaseConfigPath) -Value $projectRootValue
-    $configValues = @(
+    $configValues = @(Get-UniquePlatformPaths -Paths @(
         @([string]$apple.ScreenshotConfigPath) + @($apple.ScreenshotConfigPaths) |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
-            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) } |
-            Sort-Object -Unique
-    )
+            ForEach-Object { Resolve-PathFromBase -BasePath $projectRoot -Value ([string]$_) }
+    ))
     $requiresBinding = $operation -eq 'Screenshots' -or
         ($operation -eq 'Advance' -and $apple.SyncScreenshots -eq $true -and $configValues.Count -gt 0)
     if (-not $requiresBinding) { return }
@@ -453,7 +536,7 @@ function Assert-ScreenshotPublicationBinding {
 
     $provenance = $script:validatedCaptureProvenance
     $provenanceEntries = @($provenance.screenshots)
-    $pathComparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $pathComparer = Get-ConsumerPathComparer
     $inventoryCounts = [Collections.Generic.Dictionary[string, int]]::new($pathComparer)
     $provenancePaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
     foreach ($entry in $provenanceEntries) {
@@ -464,7 +547,7 @@ function Assert-ScreenshotPublicationBinding {
         $inventoryCounts[$key] = 1
     }
     $approvedItems = [Collections.Generic.List[object]]::new()
-    $approvedPaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
+    $approvedItemsByPath = [Collections.Generic.Dictionary[string, object]]::new($pathComparer)
     $manifestPaths = [Collections.Generic.List[string]]::new()
     $configuredScreenshots = [Collections.Generic.List[object]]::new()
     foreach ($screenshotConfigPath in $configValues) {
@@ -526,16 +609,28 @@ function Assert-ScreenshotPublicationBinding {
             throw "Screenshot approval manifest '$manifestPath' is not bound to the authoritative capture run, repository, workflow, source commit, and marketing version."
         }
         $manifestPaths.Add($manifestPath)
+        $manifestApprovedPaths = [Collections.Generic.HashSet[string]]::new($pathComparer)
         foreach ($entry in @($manifest.Screenshots)) {
             $approvedPath = Resolve-PathFromBase -BasePath (Split-Path -Parent $screenshotConfigPath) -Value ([string]$entry.File)
             if (-not (Test-Path -LiteralPath $approvedPath -PathType Leaf)) { throw "Approved screenshot was not found: $approvedPath" }
             Assert-UnlinkedPath -Path $approvedPath -Name 'Approved screenshot'
-            if (-not $approvedPaths.Add($approvedPath)) { throw "Screenshot approval manifests contain duplicate approved screenshot path '$approvedPath'." }
+            if (-not $manifestApprovedPaths.Add($approvedPath)) { throw "Screenshot approval manifest '$manifestPath' contains duplicate approved screenshot path '$approvedPath'." }
             $sha256 = ([string]$entry.Sha256).ToLowerInvariant()
             if (-not (Get-FileHash -LiteralPath $approvedPath -Algorithm SHA256).Hash.Equals($sha256, [StringComparison]::OrdinalIgnoreCase)) {
                 throw "Approved screenshot bytes do not match manifest: $approvedPath"
             }
-            $approvedItems.Add([pscustomobject]@{ Path = $approvedPath; Sha256 = $sha256; Width = [int]$entry.Width; Height = [int]$entry.Height })
+            $approved = [pscustomobject]@{ Path = $approvedPath; Sha256 = $sha256; Width = [int]$entry.Width; Height = [int]$entry.Height }
+            $existingApproved = $null
+            if ($approvedItemsByPath.TryGetValue($approvedPath, [ref]$existingApproved)) {
+                if (-not $existingApproved.Sha256.Equals($approved.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+                    $existingApproved.Width -ne $approved.Width -or
+                    $existingApproved.Height -ne $approved.Height) {
+                    throw "Screenshot approval manifests disagree about retained screenshot '$approvedPath'."
+                }
+            } else {
+                $approvedItemsByPath[$approvedPath] = $approved
+                $approvedItems.Add($approved)
+            }
         }
     }
 

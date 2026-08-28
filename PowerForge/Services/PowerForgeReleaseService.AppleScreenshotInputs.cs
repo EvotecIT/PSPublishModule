@@ -6,6 +6,10 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[]? configured = null)
     {
+        if (plan.Action == PowerForgeAppleReleaseAction.Ship &&
+            plan.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
+            return Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+
         if (!plan.SyncScreenshots && !plan.CheckReleaseReadiness &&
             (!plan.SubmitForReview || plan.SkipReviewReadinessCheck))
             return Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
@@ -26,7 +30,7 @@ internal sealed partial class PowerForgeReleaseService
                 selected.Add(match.Value);
         }
 
-        var comparer = Path.DirectorySeparatorChar == '\\'
+        var comparer = FrameworkCompatibility.GetPathStringComparisonForPath(plan.ProjectRoot) == StringComparison.OrdinalIgnoreCase
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         return selected
@@ -34,4 +38,5 @@ internal sealed partial class PowerForgeReleaseService
             .Select(static group => group.First())
             .ToArray();
     }
+
 }
