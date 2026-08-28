@@ -284,7 +284,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray(),
             dirtyReasons.ToArray(),
             dirtyScope.NoBuildPublishInputs,
-            gitRoot,
             publishInputFiles);
     }
 
@@ -970,7 +969,6 @@ public sealed partial class DotNetPublishPipelineRunner
             string[]? dirtyPaths = null,
             string[]? dirtyReasons = null,
             NoBuildPublishInput[]? noBuildPublishInputs = null,
-            string? sourceRoot = null,
             string[]? publishInputFiles = null)
         {
             Revision = revision;
@@ -978,7 +976,6 @@ public sealed partial class DotNetPublishPipelineRunner
             DirtyPaths = dirtyPaths ?? Array.Empty<string>();
             DirtyReasons = dirtyReasons ?? Array.Empty<string>();
             NoBuildPublishInputs = noBuildPublishInputs ?? Array.Empty<NoBuildPublishInput>();
-            SourceRoot = sourceRoot;
             PublishInputFiles = publishInputFiles ?? Array.Empty<string>();
         }
 
@@ -991,8 +988,6 @@ public sealed partial class DotNetPublishPipelineRunner
         public string[] DirtyReasons { get; }
 
         internal NoBuildPublishInput[] NoBuildPublishInputs { get; }
-
-        internal string? SourceRoot { get; }
 
         internal string[] PublishInputFiles { get; }
     }

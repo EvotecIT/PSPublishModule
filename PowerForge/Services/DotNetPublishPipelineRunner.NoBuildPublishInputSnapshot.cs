@@ -160,10 +160,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         throw new InvalidOperationException(
                             $"Duplicate no-build publish inputs disagree about the proven hash: {input.FullPath}.");
                     }
-                    string extension = Path.GetExtension(input.FullPath);
-                    string snapshotPath = Path.Combine(
+                    string snapshotDirectory = Path.Combine(
                         inputRoot,
-                        index++.ToString("D6", System.Globalization.CultureInfo.InvariantCulture) + extension);
+                        index++.ToString("D6", System.Globalization.CultureInfo.InvariantCulture));
+                    Directory.CreateDirectory(snapshotDirectory);
+                    string snapshotPath = Path.Combine(
+                        snapshotDirectory,
+                        Path.GetFileName(input.FullPath));
                     string actualSha256 = CopyAndHashSnapshot(input.FullPath, snapshotPath, leases);
                     if (!string.Equals(actualSha256, input.Sha256, StringComparison.OrdinalIgnoreCase))
                     {

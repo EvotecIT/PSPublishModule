@@ -24,14 +24,12 @@ public sealed partial class DotNetPublishPipelineRunner
             _expectedHashes = new Dictionary<string, string>(comparer);
         }
 
-        internal static PublishProvenanceLease Create(
-            string? sourceRoot,
-            IEnumerable<string> paths)
+        internal static PublishProvenanceLease Create(IEnumerable<string> paths)
         {
             var lease = new PublishProvenanceLease(paths);
             try
             {
-                lease.StartWatchers(sourceRoot);
+                lease.StartWatchers();
                 foreach (string path in lease._guardedPaths)
                 {
                     if (!File.Exists(path))
@@ -113,33 +111,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 lease.Dispose();
         }
 
-        private void StartWatchers(string? sourceRoot)
+        private void StartWatchers()
         {
-            var roots = new List<(string Path, bool Recursive)>();
-            if (!string.IsNullOrWhiteSpace(sourceRoot))
-            {
-                string fullSourceRoot = Path.GetFullPath(sourceRoot!);
-                if (Directory.Exists(fullSourceRoot) &&
-                    _guardedPaths.Any(path => IsSameOrBelowBuildInputPath(path, fullSourceRoot)))
-                {
-                    roots.Add((fullSourceRoot, true));
-                }
-            }
-
             foreach (string directory in _guardedPaths
-                         .Where(path => roots.All(root =>
-                             !IsSameOrBelowBuildInputPath(path, root.Path)))
                          .Select(path => Path.GetDirectoryName(path)!)
                          .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
             {
-                roots.Add((directory, false));
-            }
-
-            foreach ((string root, bool recursive) in roots)
-            {
-                var watcher = new FileSystemWatcher(root)
+                var watcher = new FileSystemWatcher(directory)
                 {
-                    IncludeSubdirectories = recursive,
+                    IncludeSubdirectories = false,
                     InternalBufferSize = 64 * 1024,
                     NotifyFilter = NotifyFilters.FileName |
                                    NotifyFilters.LastWrite |
@@ -154,6 +134,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
             }
+        }
+
+        internal static string[] BuildGuardedPaths(
+            IEnumerable<string> publishInputFiles,
+            IEnumerable<NoBuildPublishInput> noBuildPublishInputs,
+            bool includeNoBuildPublishInputs)
+        {
+            IEnumerable<string> paths = publishInputFiles;
+            if (includeNoBuildPublishInputs)
+                paths = paths.Concat(noBuildPublishInputs.Select(input => input.FullPath));
+
+            return paths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath)
+                .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .ToArray();
         }
 
         private void MarkChanged(object sender, FileSystemEventArgs args)

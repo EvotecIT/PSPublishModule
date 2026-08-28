@@ -204,7 +204,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string targets = File.ReadAllText(snapshot.TargetsPath);
             string snapshotPath = Directory.GetFiles(
                 Path.Combine(Path.GetDirectoryName(snapshot.TargetsPath)!, "inputs"),
-                "*.dll").Single();
+                "*.dll",
+                SearchOption.AllDirectories).Single();
 
             Assert.Equal(provenBytes, File.ReadAllBytes(snapshotPath));
             Assert.Contains(
@@ -249,7 +250,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void Run_NoBuildPublishConsumesProvenSnapshotWhenProjectReferenceOutputIsReplaced()
+    public void Run_NoBuildPublishRejectsProjectReferenceOutputReplacement()
     {
         if (!OperatingSystem.IsWindows())
             return;
@@ -345,8 +346,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             DotNetPublishResult result = runner.Run(plan, progress: null);
 
-            Assert.True(result.Succeeded, result.ErrorMessage);
-            Assert.Equal(provenBytes, File.ReadAllBytes(Path.Combine(outputDirectory, "Library.dll")));
+            Assert.False(result.Succeeded);
+            Assert.Contains(
+                "cannot access the file",
+                result.ErrorMessage ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase);
             Assert.Equal(provenBytes, File.ReadAllBytes(libraryOutput));
         }
         finally

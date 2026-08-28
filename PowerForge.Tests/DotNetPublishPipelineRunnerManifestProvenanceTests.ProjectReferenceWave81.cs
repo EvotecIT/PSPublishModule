@@ -137,7 +137,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot snapshot =
                 DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([first, second], null);
             string[] snapshotFiles = Directory.GetFiles(
-                Path.Combine(Path.GetDirectoryName(snapshot.TargetsPath)!, "inputs"));
+                Path.Combine(Path.GetDirectoryName(snapshot.TargetsPath)!, "inputs"),
+                "*",
+                SearchOption.AllDirectories);
             XDocument targets = XDocument.Load(snapshot.TargetsPath);
             XElement[] replacements = targets.Descendants("ResolvedFileToPublish")
                 .Where(element => element.Attribute("Include") is not null)
