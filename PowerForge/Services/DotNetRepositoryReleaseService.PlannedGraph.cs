@@ -10,6 +10,22 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    private static readonly HashSet<string> PlannedBuiltInSdkNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "FSharp.NET.Sdk",
+        "Microsoft.Docker.Sdk",
+        "Microsoft.NET.Sdk",
+        "Microsoft.NET.Sdk.BlazorWebAssembly",
+        "Microsoft.NET.Sdk.Publish",
+        "Microsoft.NET.Sdk.Razor",
+        "Microsoft.NET.Sdk.StaticWebAssets",
+        "Microsoft.NET.Sdk.Web",
+        "Microsoft.NET.Sdk.Web.ProjectSystem",
+        "Microsoft.NET.Sdk.WebAssembly",
+        "Microsoft.NET.Sdk.WindowsDesktop",
+        "Microsoft.NET.Sdk.Worker"
+    };
+
     private static PlannedEvaluation EvaluatePlannedProject(
         string projectPath,
         string? configuration,
@@ -48,19 +64,116 @@ public sealed partial class DotNetRepositoryReleaseService
 
         var items = new List<PlannedItem>();
         var definitions = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pathComparer = FrameworkCompatibility.GetPathStringComparison(projectDirectory) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var visited = new HashSet<string>(pathComparer);
         var directory = new DirectoryInfo(projectDirectory);
+        var projectRoot = LoadPlannedRoot(fullProjectPath, plannedProjectContentsByPath);
+        var localProperties = ReadPlannedLocalProperties(projectRoot);
+        ResolvePlannedSdkImports(projectRoot, projectDirectory, properties, out var sdkProps, out var sdkTargets);
+        foreach (var sdkPropsPath in sdkProps)
+            EvaluatePlannedFile(sdkPropsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         var packagesProps = FindNearestBuildFile(directory, "Directory.Packages.props");
-        var buildProps = FindNearestBuildFile(directory, "Directory.Build.props");
-        var buildTargets = FindNearestBuildFile(directory, "Directory.Build.targets");
+        var buildProps = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.props", "ImportDirectoryBuildProps", "DirectoryBuildPropsPath", properties);
         if (packagesProps is not null)
-            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         if (buildProps is not null)
-            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
-        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        var buildTargets = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.targets", "ImportDirectoryBuildTargets", "DirectoryBuildTargetsPath", properties);
         if (buildTargets is not null)
-            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        foreach (var sdkTargetsPath in sdkTargets)
+            EvaluatePlannedFile(sdkTargetsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         return new PlannedEvaluation(properties, items);
+    }
+
+    private static XElement LoadPlannedRoot(string path, IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(fullPath, out var plannedContent)
+            ? XDocument.Parse(plannedContent, LoadOptions.PreserveWhitespace).Root
+            : XDocument.Load(fullPath, LoadOptions.PreserveWhitespace).Root;
+        return root ?? throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because '{fullPath}' has no project root element.");
+    }
+
+    private static ISet<string> ReadPlannedLocalProperties(XElement projectRoot)
+        => new HashSet<string>(
+            SplitPlannedItems(projectRoot.Attribute("TreatAsLocalProperty")?.Value),
+            StringComparer.OrdinalIgnoreCase);
+
+    private static string? ResolvePlannedDirectoryBuildFile(
+        DirectoryInfo directory,
+        string projectDirectory,
+        string defaultFileName,
+        string importPropertyName,
+        string pathPropertyName,
+        IReadOnlyDictionary<string, string> properties)
+    {
+        if (properties.TryGetValue(importPropertyName, out var importValue))
+        {
+            importValue = ExpandPlannedProperties(importValue, properties);
+            if (importValue.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because {importPropertyName} '{importValue}' is unresolved.");
+            if (!string.Equals(importValue.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                return null;
+        }
+        if (!properties.TryGetValue(pathPropertyName, out var configuredPath) || string.IsNullOrWhiteSpace(configuredPath))
+            return FindNearestBuildFile(directory, defaultFileName);
+        configuredPath = ExpandPlannedProperties(configuredPath, properties);
+        if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because {pathPropertyName} '{configuredPath}' is unresolved.");
+        var resolvedPath = ResolvePlannedPath(projectDirectory, configuredPath);
+        return File.Exists(resolvedPath) ? resolvedPath : null;
+    }
+
+    private static void ResolvePlannedSdkImports(
+        XElement projectRoot,
+        string projectDirectory,
+        IReadOnlyDictionary<string, string> properties,
+        out IReadOnlyList<string> props,
+        out IReadOnlyList<string> targets)
+    {
+        var declarations = new List<string>();
+        declarations.AddRange(SplitPlannedItems(projectRoot.Attribute("Sdk")?.Value));
+        foreach (var sdk in projectRoot.Elements().Where(element => element.Name.LocalName.Equals("Sdk", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!ConditionMatches(sdk.Attribute("Condition")?.Value, properties, projectDirectory))
+                continue;
+            var name = sdk.Attribute("Name")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+                declarations.Add(name! + (string.IsNullOrWhiteSpace(sdk.Attribute("Version")?.Value) ? string.Empty : "/" + sdk.Attribute("Version")!.Value.Trim()));
+        }
+
+        var resolvedProps = new List<string>();
+        var resolvedTargets = new List<string>();
+        foreach (var declaration in declarations)
+        {
+            var expanded = ExpandPlannedProperties(declaration, properties);
+            if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because SDK '{expanded}' is unresolved.");
+            var separator = expanded.IndexOf('/');
+            var sdkName = (separator < 0 ? expanded : expanded.Substring(0, separator)).Trim();
+            if (PlannedBuiltInSdkNames.Contains(sdkName))
+                continue;
+            if (!properties.TryGetValue("MSBuildSDKsPath", out var sdkRoot) || string.IsNullOrWhiteSpace(sdkRoot))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because custom SDK '{sdkName}' cannot be resolved without MSBuildSDKsPath.");
+            sdkRoot = ExpandPlannedProperties(sdkRoot, properties);
+            if (sdkRoot.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because MSBuildSDKsPath '{sdkRoot}' is unresolved.");
+            var sdkDirectory = Path.Combine(ResolvePlannedPath(projectDirectory, sdkRoot), sdkName, "Sdk");
+            var propsPath = Path.Combine(sdkDirectory, "Sdk.props");
+            var targetsPath = Path.Combine(sdkDirectory, "Sdk.targets");
+            if (!File.Exists(propsPath) && !File.Exists(targetsPath))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because custom SDK '{sdkName}' was not found under MSBuildSDKsPath '{sdkRoot}'.");
+            if (File.Exists(propsPath))
+                resolvedProps.Add(propsPath);
+            if (File.Exists(targetsPath))
+                resolvedTargets.Add(targetsPath);
+        }
+        props = resolvedProps;
+        targets = resolvedTargets;
     }
 
     private static string ResolvePlannedProjectVersion(
@@ -119,6 +232,7 @@ public sealed partial class DotNetRepositoryReleaseService
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
+        ISet<string> localProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var fullPath = Path.GetFullPath(path);
@@ -138,7 +252,7 @@ public sealed partial class DotNetRepositoryReleaseService
         properties["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath);
         try
         {
-            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited, plannedProjectContentsByPath);
+            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         }
         finally
         {
@@ -160,6 +274,7 @@ public sealed partial class DotNetRepositoryReleaseService
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
+        ISet<string> localProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var projectDirectory = Path.GetDirectoryName(projectPath)!;
@@ -178,8 +293,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     var isSuppliedGlobal =
                         (propertyName.Equals("Configuration", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(properties["Configuration"])) ||
                         (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(properties["TargetFrameworkIdentifier"]));
-                    if (!isSuppliedGlobal && ConditionMatches(property.Attribute("Condition")?.Value, properties, sourceDirectory))
-                        properties[property.Name.LocalName] = ExpandPlannedProperties(property.Value.Trim(), properties);
+                    if ((!isSuppliedGlobal || localProperties.Contains(propertyName)) && ConditionMatches(property.Attribute("Condition")?.Value, properties, sourceDirectory))
+                    {
+                        var assignedValue = ExpandPlannedProperties(property.Value.Trim(), properties);
+                        properties[propertyName] = assignedValue;
+                        if (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) && localProperties.Contains(propertyName))
+                            SetDerivedTargetFrameworkProperties(properties, assignedValue);
+                    }
                 }
                 continue;
             }
@@ -215,7 +335,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             if (name.Equals("Import", StringComparison.OrdinalIgnoreCase))
             {
-                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
+                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("ImportGroup", StringComparison.OrdinalIgnoreCase))
@@ -223,7 +343,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (!ConditionMatches(element.Attribute("Condition")?.Value, properties, sourceDirectory))
                     continue;
                 foreach (var import in element.Elements().Where(child => child.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
-                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
+                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("Choose", StringComparison.OrdinalIgnoreCase))
@@ -231,7 +351,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 var selected = element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) && ConditionMatches(branch.Attribute("Condition")?.Value, properties, sourceDirectory))
                                ?? element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase));
                 if (selected is not null)
-                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
+                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
             }
         }
     }
@@ -258,6 +378,7 @@ public sealed partial class DotNetRepositoryReleaseService
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
+        ISet<string> localProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (!ConditionMatches(import.Attribute("Condition")?.Value, properties, sourceDirectory))
@@ -272,7 +393,7 @@ public sealed partial class DotNetRepositoryReleaseService
         if (importedPaths.Count == 0 && importedPath.IndexOfAny(new[] { '*', '?' }) < 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because imported project '{ResolvePlannedPath(sourceDirectory, importedPath)}' does not exist.");
         foreach (var resolvedPath in importedPaths)
-            EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+            EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
     }
 
     private static IReadOnlyList<string> ResolvePlannedImportPaths(string sourceDirectory, string importedPath)
@@ -323,7 +444,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 for (var index = 0; index < result.Count; index++)
                 {
                     if (result[index].Include is { } include && updates.Any(update => PlannedItemSpecMatches(update, include)))
-                        result[index] = result[index].WithMetadata(item.Metadata);
+                        result[index] = result[index].WithMetadata(item.Metadata, item.RemoveMetadata, item.KeepMetadata);
                 }
             }
             foreach (var include in ExpandPlannedItemIncludes(item, itemType))
@@ -403,7 +524,16 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private sealed class PlannedItem
     {
-        private PlannedItem(string itemType, string? include, string? exclude, string? update, string? remove, string baseDirectory, IReadOnlyDictionary<string, string> metadata)
+        private PlannedItem(
+            string itemType,
+            string? include,
+            string? exclude,
+            string? update,
+            string? remove,
+            string baseDirectory,
+            IReadOnlyDictionary<string, string> metadata,
+            IReadOnlyCollection<string> removeMetadata,
+            IReadOnlyCollection<string> keepMetadata)
         {
             ItemType = itemType;
             Include = include;
@@ -412,6 +542,8 @@ public sealed partial class DotNetRepositoryReleaseService
             Remove = remove;
             BaseDirectory = baseDirectory;
             Metadata = metadata;
+            RemoveMetadata = removeMetadata;
+            KeepMetadata = keepMetadata;
         }
         internal string ItemType { get; }
         internal string? Include { get; }
@@ -420,16 +552,22 @@ public sealed partial class DotNetRepositoryReleaseService
         internal string? Remove { get; }
         internal string BaseDirectory { get; }
         internal IReadOnlyDictionary<string, string> Metadata { get; }
+        internal IReadOnlyCollection<string> RemoveMetadata { get; }
+        internal IReadOnlyCollection<string> KeepMetadata { get; }
         internal string? GetMetadata(string name) => Metadata.TryGetValue(name, out var value) ? value : null;
-        internal PlannedItem WithInclude(string include) => new(ItemType, include, Exclude, null, null, BaseDirectory, Metadata);
-        internal PlannedItem WithMetadata(IReadOnlyDictionary<string, string> updates)
+        internal PlannedItem WithInclude(string include) => new(ItemType, include, Exclude, null, null, BaseDirectory, Metadata, RemoveMetadata, KeepMetadata);
+        internal PlannedItem WithMetadata(
+            IReadOnlyDictionary<string, string> updates,
+            IReadOnlyCollection<string> removeMetadata,
+            IReadOnlyCollection<string> keepMetadata)
         {
             var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in Metadata)
                 merged[entry.Key] = entry.Value;
+            ApplyMetadataSelection(merged, removeMetadata, keepMetadata);
             foreach (var entry in updates)
                 merged[entry.Key] = entry.Value;
-            return new PlannedItem(ItemType, Include, Exclude, null, null, BaseDirectory, merged);
+            return new PlannedItem(ItemType, Include, Exclude, null, null, BaseDirectory, merged, Array.Empty<string>(), Array.Empty<string>());
         }
         internal static PlannedItem Create(
             XElement element,
@@ -445,23 +583,69 @@ public sealed partial class DotNetRepositoryReleaseService
                 return string.IsNullOrWhiteSpace(value) ? null : ExpandPlannedValue(value!, properties, items);
             }
             var include = ExpandAttribute("Include");
+            var removeMetadataValue = ExpandAttribute("RemoveMetadata");
+            var keepMetadataValue = ExpandAttribute("KeepMetadata");
+            if (ContainsUnresolvedPlannedExpression(removeMetadataValue) || ContainsUnresolvedPlannedExpression(keepMetadataValue))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because item '{element.Name.LocalName}' has unresolved metadata-selection semantics.");
+            if (!string.IsNullOrWhiteSpace(ExpandAttribute("Remove")) &&
+                (element.Attribute("MatchOnMetadata") is not null || element.Attribute("MatchOnMetadataOptions") is not null))
+            {
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because item '{element.Name.LocalName}' uses unsupported metadata-based removal semantics.");
+            }
+            var removeMetadata = SplitPlannedItems(removeMetadataValue).ToArray();
+            var keepMetadata = SplitPlannedItems(keepMetadataValue).ToArray();
+            if (removeMetadata.Length > 0 && keepMetadata.Length > 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because item '{element.Name.LocalName}' declares both RemoveMetadata and KeepMetadata.");
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (include is not null && defaults is not null)
             {
                 foreach (var entry in defaults)
                     metadata[entry.Key] = entry.Value;
             }
+            ApplyMetadataSelection(metadata, removeMetadata, keepMetadata);
             foreach (var attribute in element.Attributes())
             {
                 var name = attribute.Name.LocalName;
                 if (name.Equals("Include", StringComparison.OrdinalIgnoreCase) || name.Equals("Exclude", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("Update", StringComparison.OrdinalIgnoreCase) || name.Equals("Remove", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("RemoveMetadata", StringComparison.OrdinalIgnoreCase) || name.Equals("KeepMetadata", StringComparison.OrdinalIgnoreCase) ||
+                    name.Equals("MatchOnMetadata", StringComparison.OrdinalIgnoreCase) || name.Equals("MatchOnMetadataOptions", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("Condition", StringComparison.OrdinalIgnoreCase))
                     continue;
                 metadata[name] = ExpandPlannedValue(attribute.Value.Trim(), properties, items);
             }
             ApplyPlannedMetadata(element, metadata, properties, items, conditionDirectory);
-            return new PlannedItem(element.Name.LocalName, include, ExpandAttribute("Exclude"), ExpandAttribute("Update"), ExpandAttribute("Remove"), baseDirectory, metadata);
+            return new PlannedItem(
+                element.Name.LocalName,
+                include,
+                ExpandAttribute("Exclude"),
+                ExpandAttribute("Update"),
+                ExpandAttribute("Remove"),
+                baseDirectory,
+                metadata,
+                removeMetadata,
+                keepMetadata);
+        }
+
+        private static bool ContainsUnresolvedPlannedExpression(string? value)
+            => value is not null &&
+               (value.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+                value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                value.IndexOf("%(", StringComparison.Ordinal) >= 0);
+
+        private static void ApplyMetadataSelection(
+            IDictionary<string, string> metadata,
+            IReadOnlyCollection<string> removeMetadata,
+            IReadOnlyCollection<string> keepMetadata)
+        {
+            if (keepMetadata.Count > 0)
+            {
+                var keep = new HashSet<string>(keepMetadata, StringComparer.OrdinalIgnoreCase);
+                foreach (var name in metadata.Keys.Where(name => !keep.Contains(name)).ToArray())
+                    metadata.Remove(name);
+            }
+            foreach (var name in removeMetadata)
+                metadata.Remove(name);
         }
     }
 }

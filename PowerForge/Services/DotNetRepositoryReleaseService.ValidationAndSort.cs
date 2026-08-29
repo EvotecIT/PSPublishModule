@@ -491,7 +491,20 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var normalizedInclude = include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         var candidatePattern = Path.GetFullPath(Path.Combine(baseDirectory, normalizedInclude));
-        return PlannedItemSpecMatches(candidatePattern, Path.GetFullPath(selectedProjectPath));
+        var candidate = Path.GetFullPath(selectedProjectPath);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(candidate);
+        if (candidatePattern.IndexOfAny(new[] { '*', '?' }) < 0)
+            return string.Equals(candidatePattern, candidate, comparison);
+        var normalizedPattern = NormalizePlannedItemSpec(candidatePattern);
+        var normalizedCandidate = NormalizePlannedItemSpec(candidate);
+        var regex = "^" + Regex.Escape(normalizedPattern)
+            .Replace(@"\*\*/", "(?:.*/)?")
+            .Replace(@"\*\*", ".*")
+            .Replace(@"\*", "[^/]*")
+            .Replace(@"\?", "[^/]") + "$";
+        var options = RegexOptions.CultureInvariant |
+                      (comparison == StringComparison.OrdinalIgnoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
+        return Regex.IsMatch(normalizedCandidate, regex, options);
     }
 
     private static PlannedItem? ResolvePlannedItemForCandidate(
@@ -506,7 +519,7 @@ public sealed partial class DotNetRepositoryReleaseService
             if (SplitPlannedItems(item.Remove).Any(pattern => matches(item, pattern, candidate)))
                 result = null;
             if (result is not null && SplitPlannedItems(item.Update).Any(pattern => matches(item, pattern, candidate)))
-                result = result.WithMetadata(item.Metadata);
+                result = result.WithMetadata(item.Metadata, item.RemoveMetadata, item.KeepMetadata);
             if (SplitPlannedItems(item.Include).Any(pattern => matches(item, pattern, candidate)) &&
                 !SplitPlannedItems(item.Exclude).Any(pattern => matches(item, pattern, candidate)))
             {

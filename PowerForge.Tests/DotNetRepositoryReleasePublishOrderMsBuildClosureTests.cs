@@ -84,13 +84,13 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
 """);
             var sharedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Shared"));
             File.WriteAllText(Path.Combine(sharedDirectory.FullName, "Shared.csproj"), """
-<Project Sdk="Intentionally.Missing.Sdk/999.0.0">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
 </Project>
 """);
             var appDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "App"));
             File.WriteAllText(Path.Combine(appDirectory.FullName, "App.csproj"), """
-<Project Sdk="Intentionally.Missing.Sdk/999.0.0">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
 </Project>
@@ -282,10 +282,215 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
         using var workspace = new PublishOrderWorkspace();
         var upper = workspace.AddProject("Library", packageId: "Upper.Library");
         var lower = workspace.AddProject("library", packageId: "Lower.Library");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+</Project>
+""");
+        File.WriteAllText(lower.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../App/App.csproj" /></ItemGroup>
+</Project>
+""");
 
-        var ordered = CreateService().SortProjectsForPublish([lower, upper], true, "Release");
+        var ordered = CreateService().SortProjectsForPublish([app, lower, upper], true, "Release");
 
-        Assert.Equal(["Lower.Library", "Upper.Library"], ordered.Select(project => project.PackageId).OrderBy(static value => value, StringComparer.Ordinal));
+        Assert.True(Array.IndexOf(ordered.ToArray(), upper) < Array.IndexOf(ordered.ToArray(), app));
+        Assert.True(Array.IndexOf(ordered.ToArray(), app) < Array.IndexOf(ordered.ToArray(), lower));
+    }
+
+    [Fact]
+    public void PlanningEvaluatesCustomSdkImportsFromMsBuildSdksPath()
+    {
+        const string propertyName = "MSBuildSDKsPath";
+        var previous = Environment.GetEnvironmentVariable(propertyName);
+        try
+        {
+            using var workspace = new PublishOrderWorkspace();
+            var propsShared = workspace.AddProject("PropsShared");
+            var targetsShared = workspace.AddProject("TargetsShared");
+            var app = workspace.AddProject("App");
+            var root = Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!;
+            var sdkRoot = Directory.CreateDirectory(Path.Combine(root, "sdks"));
+            var sdkDirectory = Directory.CreateDirectory(Path.Combine(sdkRoot.FullName, "PowerForge.Test.DependencySdk", "Sdk"));
+            File.WriteAllText(Path.Combine(sdkDirectory.FullName, "Sdk.props"), "<Project><ItemGroup><ProjectReference Include=\"$(MSBuildProjectDirectory)/../PropsShared/PropsShared.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(sdkDirectory.FullName, "Sdk.targets"), "<Project><ItemGroup><ProjectReference Include=\"$(MSBuildProjectDirectory)/../TargetsShared/TargetsShared.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(app.CsprojPath, "<Project Sdk=\"PowerForge.Test.DependencySdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            Environment.SetEnvironmentVariable(propertyName, sdkRoot.FullName);
+
+            var ordered = CreateService().SortProjectsForPublish([app, targetsShared, propsShared], true, "Release");
+
+            Assert.Equal(["PropsShared", "TargetsShared", "App"], ordered.Select(project => project.PackageId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(propertyName, previous);
+        }
+    }
+
+    [Fact]
+    public void PlanningFailsClosedWhenCustomSdkCannotBeResolved()
+    {
+        const string propertyName = "MSBuildSDKsPath";
+        var previous = Environment.GetEnvironmentVariable(propertyName);
+        try
+        {
+            using var workspace = new PublishOrderWorkspace();
+            var app = workspace.AddProject("App");
+            var root = Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!;
+            var missingSdkRoot = Directory.CreateDirectory(Path.Combine(root, "missing-sdks"));
+            Environment.SetEnvironmentVariable(propertyName, missingSdkRoot.FullName);
+            File.WriteAllText(app.CsprojPath, "<Project Sdk=\"PowerForge.Test.MissingSdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            var shared = workspace.AddProject("Shared");
+
+            var exception = Assert.Throws<InvalidOperationException>(() => CreateService().SortProjectsForPublish([app, shared], true, "Release"));
+
+            Assert.Contains("was not found", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(propertyName, previous);
+        }
+    }
+
+    [Fact]
+    public void PlanningHonorsDisabledDirectoryBuildTargets()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var one = workspace.AddProject("One");
+        var two = workspace.AddProject("Two");
+        workspace.WriteRootFile("Directory.Build.targets", "<Project><ItemGroup Condition=\"'$(MSBuildProjectName)' == 'One'\"><ProjectReference Include=\"$(MSBuildProjectDirectory)/../Two/Two.csproj\" /></ItemGroup></Project>");
+        File.WriteAllText(one.CsprojPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets></PropertyGroup></Project>");
+        File.WriteAllText(two.CsprojPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"../One/One.csproj\" /></ItemGroup></Project>");
+
+        var ordered = CreateService().SortProjectsForPublish([two, one], true, "Release");
+
+        Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningHonorsExplicitDirectoryBuildTargetsPath()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        var appDirectory = Path.GetDirectoryName(app.CsprojPath)!;
+        File.WriteAllText(Path.Combine(appDirectory, "custom.targets"), "<Project><ItemGroup><ProjectReference Include=\"../Shared/Shared.csproj\" /></ItemGroup></Project>");
+        File.WriteAllText(app.CsprojPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><DirectoryBuildTargetsPath>$(MSBuildProjectDirectory)/custom.targets</DirectoryBuildTargetsPath></PropertyGroup></Project>");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningHonorsDisabledDirectoryBuildPropsFromEnvironment()
+    {
+        const string propertyName = "ImportDirectoryBuildProps";
+        var previous = Environment.GetEnvironmentVariable(propertyName);
+        try
+        {
+            Environment.SetEnvironmentVariable(propertyName, "false");
+            using var workspace = new PublishOrderWorkspace();
+            var shared = workspace.AddProject("Shared");
+            var app = workspace.AddProject("App");
+            workspace.WriteRootFile("Directory.Build.props", "<Project><ItemGroup Condition=\"'$(MSBuildProjectName)' == 'App'\"><ProjectReference Include=\"$(MSBuildProjectDirectory)/../Shared/Shared.csproj\" /></ItemGroup></Project>");
+
+            var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+            Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(propertyName, previous);
+        }
+    }
+
+    [Fact]
+    public void PlanningHonorsExplicitDirectoryBuildPropsPathFromEnvironment()
+    {
+        const string propertyName = "DirectoryBuildPropsPath";
+        var previous = Environment.GetEnvironmentVariable(propertyName);
+        try
+        {
+            using var workspace = new PublishOrderWorkspace();
+            var shared = workspace.AddProject("Shared");
+            var app = workspace.AddProject("App");
+            var root = Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!;
+            var customProps = Path.Combine(root, "custom.props");
+            File.WriteAllText(customProps, "<Project><ItemGroup Condition=\"'$(MSBuildProjectName)' == 'App'\"><ProjectReference Include=\"$(MSBuildProjectDirectory)/../Shared/Shared.csproj\" /></ItemGroup></Project>");
+            Environment.SetEnvironmentVariable(propertyName, customProps);
+
+            var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+            Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(propertyName, previous);
+        }
+    }
+
+    [Theory]
+    [InlineData("RemoveMetadata=\"PrivateAssets\"")]
+    [InlineData("KeepMetadata=\"Version\"")]
+    public void PlanningAppliesMetadataSelectionToItemUpdates(string selection)
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, $"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Shared" Version="[1.0.0]" PrivateAssets="all" />
+    <PackageReference Update="Shared" {selection} />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningHonorsTreatAsLocalPropertyForConfiguration()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="Configuration">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><Configuration>Custom</Configuration></PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Custom'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningRecomputesFrameworkPropertiesForLocalTargetFramework()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="TargetFramework">
+  <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' And '$(TargetFrameworkVersion)' >= 'v9.0'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
     }
 
     [Fact]
