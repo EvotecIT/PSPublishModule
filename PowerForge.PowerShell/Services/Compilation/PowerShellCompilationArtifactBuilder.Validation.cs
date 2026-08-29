@@ -18,10 +18,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentOutOfRangeException(nameof(spec), "Certificate store location is not defined.");
         if (spec.ExpectedDependencyLock is not null && spec.AllowUnreviewedDependencyResolution)
             throw new ArgumentException("ExpectedDependencyLock and AllowUnreviewedDependencyResolution are mutually exclusive.", nameof(spec));
-        if (!string.IsNullOrWhiteSpace(spec.ExpectedPublicAbiSha256) &&
-            (spec.ExpectedPublicAbiSha256.Length != 64 || spec.ExpectedPublicAbiSha256.Any(static character => !Uri.IsHexDigit(character))))
+        var expectedPublicAbiSha256 = spec.ExpectedPublicAbiSha256;
+        if (expectedPublicAbiSha256 is not null && !string.IsNullOrWhiteSpace(expectedPublicAbiSha256) &&
+            (expectedPublicAbiSha256.Length != 64 || expectedPublicAbiSha256.Any(static character => !Uri.IsHexDigit(character))))
             throw new ArgumentException("ExpectedPublicAbiSha256 must be a 64-character hexadecimal SHA-256 value.", nameof(spec));
-        if (!string.IsNullOrWhiteSpace(spec.ExpectedPublicAbiSha256) && spec.Mode != PowerShellCompilationMode.Strict)
+        if (!string.IsNullOrWhiteSpace(expectedPublicAbiSha256) && spec.Mode != PowerShellCompilationMode.Strict)
             throw new ArgumentException("ExpectedPublicAbiSha256 is supported only for Strict compilation.", nameof(spec));
         if (spec.EmitIrSnapshots && spec.Mode == PowerShellCompilationMode.Package)
             throw new ArgumentException("IR snapshots require Hybrid or Strict compilation.", nameof(spec));
