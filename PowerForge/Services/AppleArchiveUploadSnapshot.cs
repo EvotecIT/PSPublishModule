@@ -120,7 +120,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
         var path = Path.GetFullPath(args.FullPath);
         var archiveInfoPlist = Path.Combine(ArchivePath, "Info.plist");
-        if (args.ChangeType == WatcherChangeTypes.Changed &&
+        if ((args.ChangeType == WatcherChangeTypes.Changed ||
+             args.ChangeType == WatcherChangeTypes.Created ||
+             args.ChangeType == WatcherChangeTypes.Deleted) &&
             path.Equals(
                 archiveInfoPlist,
                 Path.DirectorySeparatorChar == '\\'
@@ -128,10 +130,11 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
                     : StringComparison.Ordinal) &&
             _identity.ApprovedFiles.Contains("Info.plist"))
         {
-            // xcodebuild exportArchive emits a Changed notification while reading the
-            // approved top-level archive manifest. The complete content and physical
-            // mutation identities are revalidated after export, so a real write,
-            // replacement, or transient hard-link alias still fails closed.
+            // macOS can coalesce Xcode's reads of the approved top-level archive manifest
+            // into Changed, Created, or Deleted notifications even though the path and bytes
+            // remain unchanged. Renames stay fail-closed above. The complete content and
+            // physical mutation identities are revalidated after export, so a real write,
+            // replacement, deletion, or transient hard-link alias still fails closed.
             return true;
         }
 
