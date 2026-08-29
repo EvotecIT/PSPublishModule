@@ -428,25 +428,25 @@ The checked-in benchmark suite validates every result outside the timed operatio
 - the generated typed CLR method called inside a C# loop;
 - equivalent hand-written C#.
 
-The current Windows computation and startup reference packet used PowerShell 7.6.4, Windows x64, and an AMD64 32-logical-core machine. The optimized ReadyToRun lane pinned stable same-major .NET SDK 10.0.303. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion; startup used two warmups and 10 measured samples. Every row has zero validation failures and pins clean candidate `e04370df560903895bce89fe82db0fac6886ca94` plus generated artifact hashes.
+The current Windows computation and startup reference packet used PowerShell 7.6.4, Windows x64, and an AMD64 32-logical-core machine. The optimized ReadyToRun lane pinned stable same-major .NET SDK 10.0.303, and the startup metadata now records that SDK alongside every optimized artifact hash and size. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion; startup used two warmups and 10 measured samples. Every row has zero validation failures and pins clean candidate `009901b0bbf56285a1ab291e2a1bff760e05a4c9` plus generated artifact hashes.
 
-Windows run IDs are `20260828-230045-34cfafa0` and `20260828-230159-880855c6` (real functions), `20260828-230238-15479ba0` (synthetic loop), `20260828-230241-cbae934e` (indexed array), `20260828-230243-0856337d` (dispatch and boundary profile), `20260828-230245-d71dea17` (startup), and `20260828-230257-f0c24c26` (local calls).
+Windows run IDs are `20260829-000416-818e0b53` and `20260829-000530-2e8dee77` (real functions), `20260829-000611-1abe7ff0` (synthetic loop), `20260829-000614-2f8f557b` (indexed array), `20260829-000616-799275f9` (dispatch and boundary profile), `20260829-000618-1a782491` (startup), and `20260829-000630-abc01afb` (local calls).
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 199.87 ms | 6.70 ms | 3.65 ms | **29.8x faster** | 1.84x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 213.38 ms | 6.24 ms | 3.20 ms | **34.2x faster** | 1.95x slower |
-| Real PowerInfoBlox IPv4-to-PTR helper | 50,000 | 375.33 ms | 15.25 ms | 7.87 ms | **24.6x faster** | 1.94x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 32.54 ms | 5.08 ms | 3.92 ms | **6.4x faster** | 1.29x slower |
-| Indexed sum over 1,000-element typed array | 1,000 | 36.26 ms | 5.06 ms | 3.64 ms | **7.2x faster** | 1.39x slower |
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 203.11 ms | 6.67 ms | 3.43 ms | **30.4x faster** | 1.94x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 212.24 ms | 6.42 ms | 3.39 ms | **33.1x faster** | 1.89x slower |
+| Real PowerInfoBlox IPv4-to-PTR helper | 50,000 | 512.14 ms | 14.86 ms | 8.22 ms | **34.5x faster** | 1.81x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 37.89 ms | 4.78 ms | 3.24 ms | **7.9x faster** | 1.47x slower |
+| Indexed sum over 1,000-element typed array | 1,000 | 40.48 ms | 5.64 ms | 3.68 ms | **7.2x faster** | 1.53x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The repeatable `powershell-compilation-typed-local-calls` lane exercises one entry script and one dot-sourced helper through both `pwsh -File` and a Strict executable. The clean run used 20,000 helper calls and recorded 406.69 ms for PowerShell versus 38.72 ms for the typed executable, or **10.5x**.
+The repeatable `powershell-compilation-typed-local-calls` lane exercises one entry script and one dot-sourced helper through both `pwsh -File` and a Strict executable. The clean run used 20,000 helper calls and recorded 354.83 ms for PowerShell versus 35.45 ms for the typed executable, or **10.0x**.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 2,160.89 ms and 2,113.14 ms in the two 50,000-call threshold scenarios, versus 199.87 ms and 213.38 ms for the original functions. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 45.91 ms versus 5.16 ms, an **8.9x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 2,138.31 ms and 2,095.53 ms in the two 50,000-call threshold scenarios, versus 203.11 ms and 212.24 ms for the original functions. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 46.86 ms versus 4.81 ms, a **9.7x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 50.95 ms, `pwsh -File` took 202.98 ms, and the runtime-packaged EXE took 693.40 ms. The typed executable is **4.0x faster than `pwsh -File`** and **13.6x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 44.82 ms, `pwsh -File` took 186.41 ms, and the runtime-packaged EXE took 664.84 ms. The typed executable is **4.2x faster than `pwsh -File`** and **14.8x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
 
 The optimization and footprint matrix below was rebuilt and executed with the same clean candidate and the `win-x64` runtime identifier. ReadyToRun remains a measured experiment rather than a selectable public target.
 
@@ -458,7 +458,7 @@ The optimization and footprint matrix below was rebuilt and executed with the sa
 | Typed NativeAOT EXE | 2,880,000 | native, no .NET or PowerShell runtime required |
 | Packaged PowerShell EXE | 54,709,527 | embedded PowerShell runtime assets |
 
-The Hybrid boundary profile measured 1,750 crossings at 13,059.6 ns per crossing with a 0.9778 estimated boundary-overhead ratio; the corresponding non-boundary work share was approximately 0.0222. It correctly advised coarsening the boundary or retaining hosted execution; this is workload evidence, not a universal cutoff.
+The Hybrid boundary profile measured 1,750 crossings at 14,682.9 ns per crossing with a 0.9785 estimated boundary-overhead ratio; the corresponding non-boundary work share was approximately 0.0215. It correctly advised coarsening the boundary or retaining hosted execution; this is workload evidence, not a universal cutoff.
 
 Target-host certification separately executed the same Strict `net10.0` framework-dependent and NativeAOT workload on Windows x64 and Ubuntu 24.04 x64. Both hosts produced exact Unicode output (`Zażółć-東京|résource-Łódź-東京|10`), rejected invalid arguments with exit code 1, preserved resources, and passed executable-format, architecture, import, permission, and dependency-closure inspection. Windows cancellation used process termination and Linux cancellation produced SIGTERM exit 143. Windows PowerShell 5.1 independently revalidated the Windows artifacts. macOS remains experimental because the approved EvoMini authentication path did not establish a session; no macOS support claim is inferred from cross-publishing.
 
