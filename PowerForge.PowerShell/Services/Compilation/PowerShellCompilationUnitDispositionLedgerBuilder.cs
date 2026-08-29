@@ -17,18 +17,16 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), artifactKind))
             throw new ArgumentOutOfRangeException(nameof(artifactKind));
 
-        var methods = (emittedMethods ?? shapedCompilation?.Methods ?? Array.Empty<PowerShellCompiledMethod>())
-            .Where(static method => method.Lifecycle is null)
-            .ToArray();
+        var methods = (emittedMethods ?? shapedCompilation?.Methods ?? Array.Empty<PowerShellCompiledMethod>()).ToArray();
         var wrappedMethodKeys = GetWrappedMethodKeys(plan.Mode, artifactKind, rootSourcePath, shapedCompilation);
-        var runtimeDependencies = plan.Dependencies
-            .Where(static dependency => dependency.Disposition is
-                PowerShellCompilationDependencyDisposition.ExternalRequirement or
-                PowerShellCompilationDependencyDisposition.Missing or
-                PowerShellCompilationDependencyDisposition.PreservedScript)
-            .Select(static dependency => string.IsNullOrWhiteSpace(dependency.Note)
-                ? dependency.RelativePath
-                : dependency.RelativePath + ": " + dependency.Note)
+        var plannedSourcePaths = plan.Files
+            .Select(static file => Path.GetFullPath(file.FullPath))
+            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var moduleRuntimeDependencies = plan.Dependencies
+            .Where(IsRuntimeDependency)
+            .Where(dependency => dependency.SourcePath is null ||
+                                 !plannedSourcePaths.Contains(Path.GetFullPath(dependency.SourcePath)))
+            .Select(FormatDependencyCause)
             .Where(static cause => !string.IsNullOrWhiteSpace(cause))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static cause => cause, StringComparer.Ordinal)
@@ -46,21 +44,29 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                          .ThenBy(static item => item.Unit.Name, StringComparer.Ordinal))
             {
                 var unit = indexedUnit.Unit;
-                var method = methods.FirstOrDefault(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit));
+                var matchingMethods = methods
+                    .Where(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit))
+                    .ToArray();
+                var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is null);
+                var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle is not null);
+                var dispositionMethod = method ?? lifecycleMethod;
                 var unitKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine);
                 var emitted = method is not null ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
                               unit.Kind == PowerShellCompilationUnitKind.Script &&
                               unit.IsCompilable;
+                var emittedBinaryCmdlet = artifactKind == PowerShellCompilationArtifactKind.BinaryModule &&
+                                          (wrappedMethodKeys.Contains(unitKey) || lifecycleMethod is not null);
                 var retainedHostedSource = IsRetainedHostedSource(
                     plan.Mode,
                     artifactKind,
                     unit,
                     emitted,
-                    wrappedMethodKeys.Contains(unitKey));
-                var runtimeCommandRegions = method?.RequiresPowerShellCommandRegions == true
-                    ? Math.Max(1, method.HostedRegionSiteCount)
+                    wrappedMethodKeys.Contains(unitKey),
+                    lifecycleMethod is not null);
+                var runtimeCommandRegions = dispositionMethod?.RequiresPowerShellCommandRegions == true
+                    ? Math.Max(1, dispositionMethod.HostedRegionSiteCount)
                     : 0;
                 var runtimeRouted = retainedHostedSource || runtimeCommandRegions > 0;
                 var rejected = !emitted &&
@@ -97,16 +103,19 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     unit.StartLine,
                     unit.IsCompilable,
                     emittedClrMethod: emitted,
-                    emittedBinaryCmdlet: artifactKind == PowerShellCompilationArtifactKind.BinaryModule && wrappedMethodKeys.Contains(unitKey),
+                    emittedBinaryCmdlet,
                     retainedHostedSource,
                     runtimeCommandRegions,
-                    boundaryCrossings: (method?.HostedRegionSiteCount ?? 0) + (retainedHostedSource && emitted ? 1 : 0),
-                    shapingFallback: unit.IsCompilable && retainedHostedSource,
+                    boundaryCrossings: (dispositionMethod?.HostedRegionSiteCount ?? 0) +
+                                       (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0),
+                    shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
                     omitted,
                     rejected,
-                    method?.GeneratedName ?? string.Empty,
-                    dependencyCauses: runtimeRouted ? runtimeDependencies : Array.Empty<string>(),
-                    boundaryCauses: GetBoundaryCauses(method, retainedHostedSource),
+                    dispositionMethod?.GeneratedName ?? string.Empty,
+                    dependencyCauses: runtimeRouted
+                        ? GetUnitDependencyCauses(plan.Dependencies, file.FullPath, relativePath)
+                        : Array.Empty<string>(),
+                    boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource),
                     diagnosticChain));
             }
         }
@@ -114,6 +123,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         return new PowerShellCompilationUnitDispositionLedger(
             entries.ToArray(),
             (deliveryRuntimeCauses ?? Array.Empty<string>())
+                .Concat(moduleRuntimeDependencies)
                 .Where(static cause => !string.IsNullOrWhiteSpace(cause))
                 .Select(static cause => cause.Trim())
                 .Distinct(StringComparer.Ordinal)
@@ -174,14 +184,44 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         PowerShellCompilationArtifactKind artifactKind,
         PowerShellCompilationUnitPlan unit,
         bool emitted,
-        bool wrapped)
+        bool wrapped,
+        bool hostedLifecycle)
     {
         if (mode == PowerShellCompilationMode.Package) return true;
         if (mode != PowerShellCompilationMode.Hybrid || artifactKind == PowerShellCompilationArtifactKind.Library) return false;
+        if (hostedLifecycle) return true;
         if (unit.Kind == PowerShellCompilationUnitKind.Script) return true;
         if (artifactKind == PowerShellCompilationArtifactKind.BinaryModule) return !wrapped;
         return !emitted;
     }
+
+    private static string[] GetUnitDependencyCauses(
+        IEnumerable<PowerShellCompilationDependency> dependencies,
+        string fullPath,
+        string relativePath)
+        => dependencies
+            .Where(IsRuntimeDependency)
+            .Where(dependency => dependency.SourcePath is not null &&
+                                 (PowerShellCompilationPathSafety.PathEquals(dependency.SourcePath, fullPath) ||
+                                  NormalizePath(dependency.RelativePath).Equals(
+                                      relativePath,
+                                      PowerShellCompilationPathSafety.GetPathComparison(fullPath))))
+            .Select(FormatDependencyCause)
+            .Where(static cause => !string.IsNullOrWhiteSpace(cause))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static cause => cause, StringComparer.Ordinal)
+            .ToArray();
+
+    private static bool IsRuntimeDependency(PowerShellCompilationDependency dependency)
+        => dependency.Disposition is
+            PowerShellCompilationDependencyDisposition.ExternalRequirement or
+            PowerShellCompilationDependencyDisposition.Missing or
+            PowerShellCompilationDependencyDisposition.PreservedScript;
+
+    private static string FormatDependencyCause(PowerShellCompilationDependency dependency)
+        => string.IsNullOrWhiteSpace(dependency.Note)
+            ? dependency.RelativePath
+            : dependency.RelativePath + ": " + dependency.Note;
 
     private static bool MethodMatches(
         PowerShellCompiledMethod method,

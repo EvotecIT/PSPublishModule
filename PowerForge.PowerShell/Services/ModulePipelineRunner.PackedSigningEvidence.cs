@@ -270,6 +270,52 @@ public sealed partial class ModulePipelineRunner
     private static string[] Concat(string[]? existing, string[]? current)
         => (existing ?? Array.Empty<string>()).Concat(current ?? Array.Empty<string>()).ToArray();
 
+    internal static ModuleSigningResult? CreateDeliveredSigningResult(
+        ModuleSigningResult? signingResult,
+        string signedSourceRoot,
+        string deliveredRoot)
+    {
+        if (signingResult is null || !signingResult.Success ||
+            signingResult.VerifiedFilePaths is not { Length: > 0 })
+            return null;
+
+        var sourceRoot = Path.GetFullPath(signedSourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var sourcePrefix = sourceRoot + Path.DirectorySeparatorChar;
+        var targetRoot = Path.GetFullPath(deliveredRoot);
+        var verifiedDeliveredPaths = new List<string>();
+        foreach (var sourcePathValue in signingResult.VerifiedFilePaths
+                     .Where(static path => !string.IsNullOrWhiteSpace(path))
+                     .Distinct(PowerShellCompilationPathSafety.PathComparer))
+        {
+            var sourcePath = Path.GetFullPath(sourcePathValue);
+            if (!sourcePath.StartsWith(sourcePrefix, PowerShellCompilationPathSafety.GetPathComparison(sourcePrefix))) continue;
+            var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, sourcePath);
+            var targetPath = Path.GetFullPath(Path.Combine(targetRoot, relativePath));
+            PowerShellCompilationPathSafety.EnsureContained(
+                targetRoot,
+                targetPath,
+                $"Delivered signing evidence path '{relativePath}' escapes the installed module root.");
+            if (!File.Exists(sourcePath) || !File.Exists(targetPath)) continue;
+            if (!string.Equals(ComputeFileSha256(sourcePath), ComputeFileSha256(targetPath), StringComparison.OrdinalIgnoreCase))
+                continue;
+            verifiedDeliveredPaths.Add(targetPath);
+        }
+
+        if (verifiedDeliveredPaths.Count == 0) return null;
+        return new ModuleSigningResult
+        {
+            TotalMatched = verifiedDeliveredPaths.Count,
+            TotalAfterExclude = verifiedDeliveredPaths.Count,
+            AlreadySignedByThisCert = verifiedDeliveredPaths.Count,
+            CertificateThumbprint = signingResult.CertificateThumbprint,
+            VerifiedFilePaths = verifiedDeliveredPaths
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                .OrderBy(static path => path, StringComparer.Ordinal)
+                .ToArray()
+        };
+    }
+
     private static string? NormalizeOptionalThumbprint(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value!.Trim().Replace(" ", string.Empty);
 }

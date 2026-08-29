@@ -267,6 +267,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
         File.WriteAllText(Path.Combine(sourceRoot, "Assets", "metadata.txt"), "selected non-conventional payload");
         File.WriteAllText(Path.Combine(sourceRoot, "other.txt"), "optional payload");
         File.WriteAllText(Path.Combine(sourceRoot, "excluded.txt"), "must not ship");
+        File.WriteAllText(Path.Combine(sourceRoot, "post-copy.txt"), "unpacked finalizer payload");
 
         try
         {
@@ -367,7 +368,16 @@ public sealed class ModulePipelinePowerShellCompilationTests
                     Configuration = new ArtefactConfiguration
                     {
                         Enabled = true,
-                        Path = Path.Combine(artefactRoot, "unpacked")
+                        Path = Path.Combine(artefactRoot, "unpacked"),
+                        DestinationFilesRelative = true,
+                        FilesOutput = new[]
+                        {
+                            new ArtefactCopyMapping
+                            {
+                                Source = "post-copy.txt",
+                                Destination = Path.Combine(moduleName, "post-copy.txt")
+                            }
+                        }
                     }
                 });
             }
@@ -465,9 +475,11 @@ public sealed class ModulePipelinePowerShellCompilationTests
                         .Where(static artefact => artefact.Type == ArtefactType.Unpacked)
                         .SelectMany(static artefact => artefact.Modules),
                     static module => module.IsMainModule);
-                AssertPortableEvidence(
-                    ReadCompilationEvidence(Path.Combine(unpackedModule.Path, moduleName + ".powerforge-compilation.json")),
-                    unpackedModule.Path);
+                var unpackedEvidence = ReadCompilationEvidence(
+                    Path.Combine(unpackedModule.Path, moduleName + ".powerforge-compilation.json"));
+                AssertPortableEvidence(unpackedEvidence, unpackedModule.Path);
+                Assert.Contains(unpackedEvidence.Files, static file =>
+                    file.RelativePath == "post-copy.txt" && file.Role == "FinalizedPayload");
 
                 var originalAssembly = File.ReadAllBytes(Path.Combine(stagingRoot, moduleName + ".dll"));
                 spec.Build.ReuseStaging = true;

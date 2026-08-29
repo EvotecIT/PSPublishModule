@@ -44,10 +44,14 @@ public sealed partial class ModulePipelineRunner
                     {
                         foreach (var module in result.Modules.Where(static module => module.IsMainModule))
                         {
+                            var deliveredSigningResult = CreateDeliveredSigningResult(
+                                state.SigningResult,
+                                buildResult.StagingPath,
+                                module.Path);
                             _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
                                 module.Path,
                                 module.Name,
-                                state.SigningResult,
+                                deliveredSigningResult,
                                 plan.Signing);
                         }
                     }
@@ -109,10 +113,14 @@ public sealed partial class ModulePipelineRunner
                 state.InstallResult = pipeline.InstallFromStaging(installSpec);
                 foreach (var installedPath in state.InstallResult.InstalledPaths)
                 {
+                    var deliveredSigningResult = CreateDeliveredSigningResult(
+                        state.SigningResult,
+                        buildResult.StagingPath,
+                        installedPath);
                     _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
                         installedPath,
                         plan.ModuleName,
-                        state.SigningResult,
+                        deliveredSigningResult,
                         plan.Signing);
                 }
                 session.Done(session.InstallStep);

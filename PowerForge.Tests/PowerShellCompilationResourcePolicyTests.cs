@@ -149,6 +149,39 @@ public sealed class PowerShellCompilationResourcePolicyTests
     }
 
     [Fact]
+    public void Analyze_ExplicitAndCompleteResourceContractsRejectInaccessibleContainedDirectories()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName.Equals("root", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        using var fixture = new ResourceFixture(module: true);
+        var deniedDirectory = Path.Combine(fixture.RootPath, "Denied");
+        fixture.Write("Denied/secret.txt", "secret");
+        var resolved = fixture.ResolveModule();
+        File.SetUnixFileMode(deniedDirectory, UnixFileMode.None);
+        try
+        {
+            var complete = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationAnalyzer().Analyze(
+                resolved,
+                PowerShellCompilationMode.Hybrid,
+                resourceMode: PowerShellCompilationResourceMode.CompleteModule));
+            Assert.Contains("fail closed", complete.Message, StringComparison.OrdinalIgnoreCase);
+
+            var explicitInclude = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationAnalyzer().Analyze(
+                resolved,
+                PowerShellCompilationMode.Hybrid,
+                includeResource: new[] { "Denied/**" }));
+            Assert.Contains("fail closed", explicitInclude.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                deniedDirectory,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public void Analyze_RejectsExplicitResourceThatOverlapsOutputDirectory()
     {
         using var fixture = new ResourceFixture(module: false);

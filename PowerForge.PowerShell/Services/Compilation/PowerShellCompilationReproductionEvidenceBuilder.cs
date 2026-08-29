@@ -7,6 +7,26 @@ namespace PowerForge;
 /// <summary>Builds integrity-bound, redacted reproduction evidence from canonical compiler owners.</summary>
 internal static class PowerShellCompilationReproductionEvidenceBuilder
 {
+    internal static PowerShellCompilationDiagnostic[] MakeDiagnosticsPortable(
+        PowerShellCompilationPlan plan,
+        IEnumerable<PowerShellCompilationDiagnostic> diagnostics)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (diagnostics is null) throw new ArgumentNullException(nameof(diagnostics));
+        var sourcePaths = plan.Files.ToDictionary(
+            static file => Path.GetFullPath(file.FullPath),
+            static file => NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)),
+            PowerShellCompilationPathSafety.PathComparer);
+        return diagnostics.Select(diagnostic => new PowerShellCompilationDiagnostic(
+                diagnostic.Code,
+                diagnostic.Message,
+                GetPortableDiagnosticPath(diagnostic.FilePath, sourcePaths),
+                diagnostic.Line,
+                diagnostic.Column,
+                diagnostic.FeatureId))
+            .ToArray();
+    }
+
     internal static PowerShellCompilationReproductionEvidence Create(
         PowerShellCompilationPlan plan,
         PowerShellCompilationArtifactKind kind,
@@ -142,11 +162,24 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             {
                 diagnostic.Code,
                 diagnostic.FeatureId,
+                FilePath = NormalizePath(diagnostic.FilePath),
                 diagnostic.Line,
                 diagnostic.Column,
                 diagnostic.Message
             })
             .ToArray()));
+
+    private static string GetPortableDiagnosticPath(
+        string filePath,
+        IReadOnlyDictionary<string, string> sourcePaths)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return string.Empty;
+        if (!Path.IsPathRooted(filePath)) return NormalizePath(filePath);
+        var fullPath = Path.GetFullPath(filePath);
+        return sourcePaths.TryGetValue(fullPath, out var relativePath)
+            ? relativePath
+            : NormalizePath(Path.GetFileName(fullPath));
+    }
 
     private static string GetSourceMapSha256(IEnumerable<PowerShellCompilationArtifactFile> files)
         => files

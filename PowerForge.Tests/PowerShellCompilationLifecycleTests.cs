@@ -53,6 +53,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
+        var dispositionLedger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        var disposition = Assert.Single(dispositionLedger.Entries);
+        Assert.False(disposition.EmittedClrMethod);
+        Assert.False(disposition.Emitted);
+        Assert.True(disposition.EmittedBinaryCmdlet);
+        Assert.True(disposition.RetainedHostedSource);
+        Assert.True(disposition.RuntimeRouted);
+        Assert.True(disposition.ShapingFallback);
+        Assert.Equal(0, dispositionLedger.EmittedUnits);
+        Assert.Equal(1, dispositionLedger.RuntimeRoutedUnits);
+        Assert.Contains(disposition.BoundaryCauses, static cause =>
+            cause.Contains("hosted advanced-function lifecycle", StringComparison.OrdinalIgnoreCase));
         var lifecycle = Assert.Single(result.Manifest.Lifecycles);
         Assert.Equal(PowerShellCompilationLifecycleExecution.HostedSteppablePipeline, lifecycle.Execution);
         Assert.True(lifecycle.HasBegin && lifecycle.HasProcess && lifecycle.HasEnd && lifecycle.HasClean);

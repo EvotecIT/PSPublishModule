@@ -479,7 +479,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
                 .Select(static diagnostic => new PowerShellCompilationDiagnostic(
                     diagnostic.Code,
                     diagnostic.Message,
-                    Path.GetFileName(diagnostic.FilePath),
+                    diagnostic.FilePath.Replace('\\', '/'),
                     diagnostic.Line,
                     diagnostic.Column,
                     diagnostic.FeatureId))

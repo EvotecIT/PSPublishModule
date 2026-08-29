@@ -404,6 +404,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
                     .ToArray();
+                diagnostics = PowerShellCompilationReproductionEvidenceBuilder.MakeDiagnosticsPortable(plan, diagnostics);
                 var commandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
                     .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
                     .Select(static group => group.First())

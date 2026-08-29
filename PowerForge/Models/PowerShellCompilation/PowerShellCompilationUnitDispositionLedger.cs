@@ -118,9 +118,9 @@ public sealed class PowerShellCompilationUnitDisposition
     /// <summary>Ordered semantic and shaping diagnostic chain.</summary>
     public IReadOnlyList<PowerShellCompilationDispositionCause> DiagnosticChain { get; }
 
-    /// <summary>Whether any typed CLR implementation is present.</summary>
+    /// <summary>Whether a typed CLR implementation is present for the authored unit.</summary>
     [JsonIgnore]
-    public bool Emitted => EmittedClrMethod || EmittedBinaryCmdlet;
+    public bool Emitted => EmittedClrMethod;
 
     /// <summary>Whether the delivered unit executes any PowerShell runtime semantics.</summary>
     [JsonIgnore]

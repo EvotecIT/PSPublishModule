@@ -36,7 +36,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         var inventory = new List<ResourceCandidate>();
         if (isModuleInput)
         {
-            foreach (var file in EnumerateContainedFiles(moduleRoot))
+            var ignoreInaccessibleOptionalPayload = resourceMode != PowerShellCompilationResourceMode.CompleteModule &&
+                                                    includePatterns.Length == 0;
+            foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessibleOptionalPayload))
             {
                 var fullPath = Path.GetFullPath(file);
                 if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
@@ -64,7 +66,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             {
                 PowerShellCompilationPathSafety.EnsureContained(moduleRoot, directory, $"Included resource directory '{directory}' escapes the script root.");
                 PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, directory, $"Included resource directory '{directory}' traverses a symbolic link or junction.");
-                foreach (var file in EnumerateContainedFiles(directory))
+                foreach (var file in EnumerateContainedFiles(directory, ignoreInaccessible: false))
                 {
                     var fullPath = Path.GetFullPath(file);
                     if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
@@ -74,7 +76,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             }
             foreach (var pattern in includePatterns.Where(HasWildcards))
             {
-                foreach (var file in EnumerateContainedFiles(moduleRoot).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
+                foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessible: false).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
                 {
                     var fullPath = Path.GetFullPath(file);
                     if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
@@ -169,7 +171,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         }
     }
 
-    private static IEnumerable<string> EnumerateContainedFiles(string root)
+    private static IEnumerable<string> EnumerateContainedFiles(string root, bool ignoreInaccessible)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -185,7 +187,10 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
-                continue;
+                if (ignoreInaccessible) continue;
+                throw new InvalidOperationException(
+                    $"Resource payload directory '{current}' could not be enumerated. Explicit and CompleteModule resource contracts fail closed when contained input is inaccessible.",
+                    exception);
             }
             foreach (var file in files)
                 yield return Path.GetFullPath(file);
