@@ -1071,7 +1071,7 @@ internal static partial class WebPipelineRunner
             project.ManifestGeneratedAt = NormalizeOptionalString(project.ManifestGeneratedAt);
             project.ManifestCommit = NormalizeOptionalString(project.ManifestCommit);
             project.ManifestPath = NormalizeOptionalString(project.ManifestPath);
-            project.Version = NormalizeOptionalString(project.Version);
+            project.Version = ResolveCurrentProjectVersion(project);
             if (project.Product is not null)
             {
                 project.Kind = NormalizeProjectKind(project.Kind, "product");
@@ -1744,8 +1744,6 @@ internal static partial class WebPipelineRunner
                     lines.Add("This project is marked as dedicated-external but no `externalUrl` is configured.");
                     lines.Add(string.Empty);
                 }
-                lines.Add("This hub page exists for discovery, aliases, and navigation continuity.");
-                lines.Add(string.Empty);
                 if (!string.IsNullOrWhiteSpace(docsLink))
                     lines.Add($"- Docs: [{docsLink}]({docsLink})");
                 if (!string.IsNullOrWhiteSpace(apiLink))
@@ -1764,8 +1762,6 @@ internal static partial class WebPipelineRunner
                 var apiLink = GetProjectApiLink(project);
                 var examplesLink = GetProjectExamplesLink(project);
 
-                lines.Add("This project is hosted as part of the main hub website.");
-                lines.Add(string.Empty);
                 if (!string.IsNullOrWhiteSpace(docsLink))
                     lines.Add($"- Docs: {docsLink}");
                 if (!string.IsNullOrWhiteSpace(apiLink))
@@ -1782,6 +1778,9 @@ internal static partial class WebPipelineRunner
                 var repoUrl = $"https://github.com/{project.GitHubRepo}";
                 lines.Add($"- Source: [{project.GitHubRepo}]({repoUrl})");
             }
+
+            while (lines.Count > 0 && string.IsNullOrEmpty(lines[^1]))
+                lines.RemoveAt(lines.Count - 1);
 
             WriteMarkdown(outputPath, lines);
             written++;
@@ -1842,6 +1841,13 @@ internal static partial class WebPipelineRunner
         {
             skipped++;
         }
+    }
+
+    private static string? ResolveCurrentProjectVersion(ProjectCatalogEntry project)
+    {
+        return NormalizeOptionalString(project.Metrics?.NuGet?.Version) ??
+               NormalizeOptionalString(project.Metrics?.PowerShellGallery?.Version) ??
+               NormalizeOptionalString(project.Version);
     }
 
     private static void GenerateProjectSectionPages(
