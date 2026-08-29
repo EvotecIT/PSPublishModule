@@ -186,7 +186,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
                 var evidenceEntry = Assert.Single(archive.Entries, entry => entry.FullName.EndsWith(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
                 using var evidenceReader = new StreamReader(evidenceEntry.Open());
                 var evidenceJson = evidenceReader.ReadToEnd();
-                Assert.DoesNotContain(testRoot, evidenceJson, StringComparison.OrdinalIgnoreCase);
+                AssertPortableJson(evidenceJson, testRoot);
                 Assert.NotNull(JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(evidenceJson, CreateEvidenceJsonOptions())?.UnitDispositionLedger);
             }
             var repositoryPackage = Path.Combine(localRepository, hybridName + ".1.0.0.nupkg");
@@ -199,7 +199,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
                 var evidenceEntry = Assert.Single(package.Entries, entry => entry.FullName.Equals(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
                 using var evidenceReader = new StreamReader(evidenceEntry.Open());
                 var evidenceJson = evidenceReader.ReadToEnd();
-                Assert.DoesNotContain(testRoot, evidenceJson, StringComparison.OrdinalIgnoreCase);
+                AssertPortableJson(evidenceJson, testRoot);
                 var repositoryEvidence = JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(evidenceJson, CreateEvidenceJsonOptions());
                 Assert.NotNull(repositoryEvidence?.UnitDispositionLedger);
                 Assert.All(repositoryEvidence!.Files, static file => Assert.False(Path.IsPathRooted(file.Path), file.Path));
@@ -713,6 +713,42 @@ public sealed class ModulePipelinePowerShellCompilationTests
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         return options;
+    }
+
+    private static void AssertPortableJson(string json, string producerRoot)
+    {
+        using var document = JsonDocument.Parse(json);
+        var leaks = new List<string>();
+        CollectProducerPathLeaks(document.RootElement, "$", producerRoot, leaks);
+        Assert.True(
+            leaks.Count == 0,
+            "Portable compiler evidence retained producer paths:" + Environment.NewLine +
+            string.Join(Environment.NewLine, leaks));
+    }
+
+    private static void CollectProducerPathLeaks(
+        JsonElement element,
+        string jsonPath,
+        string producerRoot,
+        ICollection<string> leaks)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                    CollectProducerPathLeaks(property.Value, jsonPath + "." + property.Name, producerRoot, leaks);
+                break;
+            case JsonValueKind.Array:
+                var index = 0;
+                foreach (var item in element.EnumerateArray())
+                    CollectProducerPathLeaks(item, jsonPath + "[" + index++ + "]", producerRoot, leaks);
+                break;
+            case JsonValueKind.String:
+                var value = element.GetString();
+                if (value?.Contains(producerRoot, StringComparison.OrdinalIgnoreCase) == true)
+                    leaks.Add(jsonPath + " = " + value);
+                break;
+        }
     }
 
     private static void AssertPortableEvidence(PowerShellCompilationArtifactManifest manifest, string moduleRoot)

@@ -176,9 +176,20 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         while (pending.Count > 0)
         {
             var current = pending.Pop();
-            foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
+            string[] files;
+            string[] directories;
+            try
+            {
+                files = Directory.GetFiles(current, "*", SearchOption.TopDirectoryOnly);
+                directories = Directory.GetDirectories(current, "*", SearchOption.TopDirectoryOnly);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                continue;
+            }
+            foreach (var file in files)
                 yield return Path.GetFullPath(file);
-            foreach (var directory in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
+            foreach (var directory in directories)
             {
                 if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException($"Resource payload directory '{directory}' is a symbolic link or junction.");

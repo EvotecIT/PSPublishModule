@@ -25,8 +25,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var firstState = InitialSessionState.CreateDefault();
         var secondState = InitialSessionState.CreateDefault();
-        firstState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
-        secondState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+        if (OperatingSystem.IsWindows())
+        {
+            firstState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            secondState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+        }
         using var first = RunspaceFactory.CreateRunspace(firstState);
         using var second = RunspaceFactory.CreateRunspace(secondState);
         first.Open();

@@ -455,6 +455,19 @@ internal sealed class PowerShellModuleCompilationIntegrator
                 .ToArray() ?? Array.Empty<string>();
             manifest.SourcePath = portableSources.FirstOrDefault() ?? Path.GetFileName(manifest.SourcePath);
             manifest.SourceFiles = portableSources;
+            manifest.Dependencies = (manifest.Dependencies ?? Array.Empty<PowerShellCompilationDependency>())
+                .Select(static dependency => new PowerShellCompilationDependency(
+                    dependency.Name,
+                    dependency.SourcePath is null ? null : dependency.RelativePath.Replace('\\', '/'),
+                    dependency.RelativePath.Replace('\\', '/'),
+                    dependency.Kind,
+                    dependency.Discovery,
+                    dependency.Disposition,
+                    dependency.Exists,
+                    dependency.SizeBytes,
+                    dependency.Note,
+                    dependency.Selection))
+                .ToArray();
             var generatedSourcePath = manifest.GeneratedSourcePath;
             if (!string.IsNullOrWhiteSpace(generatedSourcePath))
             {

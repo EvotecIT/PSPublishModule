@@ -169,7 +169,10 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         if (OperatingSystem.IsWindows())
             return;
 
-        using var fixture = ArtifactFixture.Create("& \"$PSScriptRoot/tool.sh\"");
+        using var fixture = ArtifactFixture.Create(
+            "/usr/bin/test -x \"$PSScriptRoot/tool.sh\"; " +
+            "if ($LASTEXITCODE -ne 0) { throw 'Packaged tool is not executable.' }; " +
+            "/bin/sh \"$PSScriptRoot/tool.sh\"");
         var tool = Path.Combine(fixture.RootPath, "tool.sh");
         File.WriteAllText(tool, "#!/bin/sh\nprintf 'unix-resource-proof\\n'\n");
         File.SetUnixFileMode(
