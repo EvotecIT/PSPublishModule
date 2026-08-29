@@ -145,7 +145,7 @@ public sealed class DotNetPublishPipelineRunnerBundleProvenanceTests
             RunGit(root, "commit", "-m", "tracked bundle input");
             DotNetPublishPipelineRunner.SourceProvenance clean =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
-            Assert.False(clean.Dirty);
+            Assert.False(clean.Dirty, string.Join(Environment.NewLine, clean.DirtyReasons));
 
             File.WriteAllText(inputPath, "'bundle input mutated during build'");
             DotNetPublishPipelineRunner.SourceProvenance mutated =

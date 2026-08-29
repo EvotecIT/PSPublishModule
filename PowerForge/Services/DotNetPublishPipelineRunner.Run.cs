@@ -33,6 +33,22 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new ArgumentException("MSI reservation owner cannot be empty.", nameof(msiReservationOwner));
         cancellationToken.ThrowIfCancellationRequested();
         var previousCancellationToken = _cancellationToken.Value;
+        string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
+        string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
+        TrustedDotNetInstallationSnapshot? previousDotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
+        TrustedNativeAotPathSnapshot? previousNativeAotPathSnapshot = ActiveNativeAotPathSnapshot.Value;
+        string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
+        string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
+        bool previousNativeAotPublish = ActiveNativeAotPublish.Value;
+        bool previousStrictDotNetEnvironment = ActiveStrictDotNetEnvironment.Value;
+        bool previousToolSnapshotScope = ActiveToolSnapshotScope.Value;
+        ActiveDotNetExecutablePath.Value = null;
+        ActiveDotNetExecutableSha256.Value = null;
+        ActiveDotNetInstallationSnapshot.Value = null;
+        ActiveNativeAotPathSnapshot.Value = null;
+        ActiveGitExecutablePath.Value = null;
+        ActiveGitExecutableSha256.Value = null;
+        ActiveToolSnapshotScope.Value = true;
         _cancellationToken.Value = cancellationToken;
         progress ??= NullDotNetPublishProgressReporter.Instance;
 
@@ -55,11 +71,22 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
-                plan.ProjectRoot,
-                EnumerateTrackedGeneratedProvenancePaths(
-                    plan,
-                    Array.Empty<DotNetPublishMsiBuildResult>()));
+            ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
+            ValidateNativeAotEnvironmentVariables(plan);
+            ValidateTrackedGeneratedProvenancePaths(plan);
+            ActiveNativeAotPublish.Value = PlanUsesNativeAot(plan);
+            ActiveStrictDotNetEnvironment.Value = plan.NoBuildInPublish ||
+                (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                .Any(static target => target?.Publish?.Sign?.Enabled == true);
+            if ((plan.Steps ?? Array.Empty<DotNetPublishStep>())
+                .Any(step => step.Kind == DotNetPublishStepKind.Manifest))
+            {
+                cleanTrackedGeneratedProvenanceState = CaptureCleanTrackedGeneratedProvenanceState(
+                    plan.ProjectRoot,
+                    EnumerateTrackedGeneratedProvenancePaths(
+                        plan,
+                        Array.Empty<DotNetPublishMsiBuildResult>()));
+            }
 
             foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
             {
@@ -91,14 +118,54 @@ public sealed partial class DotNetPublishPipelineRunner
                             Build(plan, step);
                             break;
                         case DotNetPublishStepKind.Publish:
+                        {
+                            // Bind provenance to the project-reference bytes available immediately
+                            // after BeforeTargetPublish hooks and make the real no-build publish consume
+                            // private snapshots of the bytes proven by the detached rebuild.
+                            bool requiresPublishProvenance = plan.NoBuildInPublish ||
+                                (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Any(target =>
+                                    target is not null &&
+                                    target.Name.Equals(step.TargetName, StringComparison.OrdinalIgnoreCase) &&
+                                    target.Publish?.Sign?.Enabled == true);
+                            SourceProvenance? publishProvenance = requiresPublishProvenance
+                                ? ReadPortableInventorySourceProvenance(plan)
+                                : null;
+                            using PublishProvenanceLease? provenanceLease = requiresPublishProvenance
+                                ? PublishProvenanceLease.Create(PublishProvenanceLease.BuildGuardedPaths(
+                                    publishProvenance!.PublishInputFiles,
+                                    publishProvenance.NoBuildPublishInputs))
+                                : null;
+                            if (provenanceLease is not null)
+                            {
+                                SourceProvenance confirmedProvenance =
+                                    ReadPortableInventorySourceProvenance(plan);
+                                provenanceLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
+                                    confirmedProvenance.PublishInputFiles,
+                                    confirmedProvenance.NoBuildPublishInputs));
+                                provenanceLease.ValidateUnchanged();
+                                publishProvenance = confirmedProvenance;
+                            }
+                            using NoBuildPublishInputSnapshot? inputSnapshot =
+                                requiresPublishProvenance
+                                    ? CreateNoBuildPublishInputSnapshot(
+                                        plan,
+                                        step.TargetName!,
+                                        step.Framework ?? string.Empty,
+                                        step.Runtime!,
+                                        step.Style,
+                                        publishProvenance!)
+                                    : null;
                             artefacts.Add(Publish(
                                 plan,
                                 step.TargetName!,
                                 step.Framework ?? string.Empty,
                                 step.Runtime!,
                                 step.Style,
-                                msiReservationOwner));
+                                msiReservationOwner,
+                                inputSnapshot,
+                                provenanceLease));
                             break;
+                        }
                         case DotNetPublishStepKind.Bundle:
                             artefacts.Add(BuildBundle(plan, artefacts, step));
                             break;
@@ -258,8 +325,53 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             finally
             {
-                ClearMsiVersionStateWrites(msiReservationOwner);
-                _cancellationToken.Value = previousCancellationToken;
+                TrustedDotNetInstallationSnapshot? dotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
+                TrustedNativeAotPathSnapshot? nativeAotPathSnapshot = ActiveNativeAotPathSnapshot.Value;
+                try
+                {
+                    try
+                    {
+                        if (nativeAotPathSnapshot is not null)
+                        {
+                            try
+                            {
+                                nativeAotPathSnapshot.ValidateUnchanged(verifyHashes: true);
+                            }
+                            finally
+                            {
+                                nativeAotPathSnapshot.Dispose();
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        if (dotNetInstallationSnapshot is not null)
+                        {
+                            try
+                            {
+                                dotNetInstallationSnapshot.ValidateUnchanged(verifyHashes: true);
+                            }
+                            finally
+                            {
+                                dotNetInstallationSnapshot.Dispose();
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    ClearMsiVersionStateWrites(msiReservationOwner);
+                    _cancellationToken.Value = previousCancellationToken;
+                    ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
+                    ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
+                    ActiveDotNetInstallationSnapshot.Value = previousDotNetInstallationSnapshot;
+                    ActiveNativeAotPathSnapshot.Value = previousNativeAotPathSnapshot;
+                    ActiveGitExecutablePath.Value = previousGitExecutablePath;
+                    ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
+                    ActiveNativeAotPublish.Value = previousNativeAotPublish;
+                    ActiveStrictDotNetEnvironment.Value = previousStrictDotNetEnvironment;
+                    ActiveToolSnapshotScope.Value = previousToolSnapshotScope;
+                }
             }
         }
     }

@@ -27,10 +27,12 @@ public sealed partial class DotNetPublishPipelineRunner
             buildPlan,
             out string[] projectDirectories,
             out HashSet<string> buildInputs,
-            out HashSet<string> sourceInputs);
+            out HashSet<string> sourceInputs,
+            out NoBuildPublishInput[] noBuildPublishInputs);
         scope.ProjectDirectories = projectDirectories;
         scope.BuildInputs = buildInputs;
         scope.SourceInputs = sourceInputs;
+        scope.NoBuildPublishInputs = noBuildPublishInputs;
 
         foreach (string directory in projectDirectories)
             AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
@@ -163,6 +165,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal HashSet<string> SourceInputs { get; set; } = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        internal NoBuildPublishInput[] NoBuildPublishInputs { get; set; } =
+            Array.Empty<NoBuildPublishInput>();
 
         internal bool IsScoped => DirectoryPaths.Count > 0 || ProjectDirectoryPaths.Count > 0;
 
