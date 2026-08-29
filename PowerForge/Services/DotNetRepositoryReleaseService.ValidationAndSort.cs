@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
@@ -142,7 +141,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
     internal IReadOnlyList<DotNetRepositoryProjectResult> SortProjectsForPublish(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
-        bool usePlannedProjectGraph = false)
+        bool usePlannedProjectGraph = false,
+        string? configuration = null)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -158,6 +158,53 @@ public sealed partial class DotNetRepositoryReleaseService
             byPackageId.Add(packageId, project);
         }
 
+        var edges = new List<PublishDependencyEdge>();
+        foreach (var entry in byPackageId)
+        {
+            var selectedDependencies = usePlannedProjectGraph
+                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration)
+                : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
+            foreach (var dependency in selectedDependencies)
+                edges.Add(new PublishDependencyEdge(entry.Key, dependency.PackageId, dependency.Framework));
+        }
+
+        if (TryOrderProjects(byPackageId, edges, out var ordered, out var cycle))
+            return ordered;
+
+        var frameworkGroups = edges
+            .Select(edge => edge.Framework)
+            .Where(framework => !string.Equals(framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var framework in frameworkGroups)
+        {
+            var frameworkEdges = edges.Where(edge =>
+                string.Equals(edge.Framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(edge.Framework, framework, StringComparison.OrdinalIgnoreCase));
+            if (!TryOrderProjects(byPackageId, frameworkEdges, out _, out var frameworkCycle))
+                ThrowDependencyCycle(frameworkCycle);
+        }
+
+        if (frameworkGroups.Length == 0)
+            ThrowDependencyCycle(cycle);
+
+        var preferredEdges = edges.Where(edge =>
+            string.Equals(edge.Framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(edge.Framework, frameworkGroups[0], StringComparison.OrdinalIgnoreCase));
+        if (TryOrderProjects(byPackageId, preferredEdges, out ordered, out _))
+            return ordered;
+
+        ThrowDependencyCycle(cycle);
+        return Array.Empty<DotNetRepositoryProjectResult>();
+    }
+
+    private static bool TryOrderProjects(
+        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> byPackageId,
+        IEnumerable<PublishDependencyEdge> selectedEdges,
+        out IReadOnlyList<DotNetRepositoryProjectResult> orderedProjects,
+        out IReadOnlyList<string> cycle)
+    {
         var dependencies = byPackageId.Keys.ToDictionary(
             packageId => packageId,
             _ => new SortedSet<string>(StringComparer.OrdinalIgnoreCase),
@@ -166,17 +213,10 @@ public sealed partial class DotNetRepositoryReleaseService
             packageId => packageId,
             _ => new SortedSet<string>(StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in byPackageId)
+        foreach (var edge in selectedEdges)
         {
-            var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId)
-                : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
-            foreach (var dependency in selectedDependencies)
-            {
-                dependencies[entry.Key].Add(dependency);
-                dependents[dependency].Add(entry.Key);
-            }
+            dependencies[edge.Consumer].Add(edge.Dependency);
+            dependents[edge.Dependency].Add(edge.Consumer);
         }
 
         var inDegree = dependencies.ToDictionary(
@@ -202,18 +242,25 @@ public sealed partial class DotNetRepositoryReleaseService
             }
         }
 
-        if (ordered.Count != projects.Count)
+        if (ordered.Count != byPackageId.Count)
         {
-            var cycle = inDegree
+            cycle = inDegree
                 .Where(entry => entry.Value > 0)
                 .Select(entry => entry.Key)
-                .OrderBy(packageId => packageId, StringComparer.OrdinalIgnoreCase);
-            throw new InvalidOperationException(
-                $"NuGet package dependency cycle detected among selected projects: {string.Join(", ", cycle)}. Publishing stopped before any package was pushed.");
+                .OrderBy(packageId => packageId, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            orderedProjects = Array.Empty<DotNetRepositoryProjectResult>();
+            return false;
         }
 
-        return ordered;
+        cycle = Array.Empty<string>();
+        orderedProjects = ordered;
+        return true;
     }
+
+    private static void ThrowDependencyCycle(IEnumerable<string> cycle)
+        => throw new InvalidOperationException(
+            $"NuGet package dependency cycle detected among selected projects: {string.Join(", ", cycle)}. Publishing stopped before any package was pushed.");
 
     private static string GetEffectivePackageId(DotNetRepositoryProjectResult project)
     {
@@ -226,7 +273,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return packageId.Trim();
     }
 
-    private static IReadOnlyCollection<string> ReadSelectedPackageDependencies(
+    private static IReadOnlyCollection<PublishDependency> ReadSelectedPackageDependencies(
         DotNetRepositoryProjectResult project,
         string expectedPackageId,
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages)
@@ -241,7 +288,7 @@ public sealed partial class DotNetRepositoryReleaseService
         if (packagePaths.Length == 0)
             throw new InvalidOperationException($"Cannot determine a safe NuGet publish order for '{expectedPackageId}' because it has no primary package artifact.");
 
-        var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dependencies = new Dictionary<string, PublishDependency>(StringComparer.OrdinalIgnoreCase);
         foreach (var packagePath in packagePaths)
         {
             if (!File.Exists(packagePath))
@@ -269,8 +316,16 @@ public sealed partial class DotNetRepositoryReleaseService
                              element.Name.LocalName.Equals("dependency", StringComparison.OrdinalIgnoreCase)))
                 {
                     var dependencyId = dependency.Attribute("id")?.Value?.Trim();
-                    if (dependencyId is not null && dependencyId.Length > 0 && selectedPackages.ContainsKey(dependencyId))
-                        dependencies.Add(dependencyId);
+                    if (dependencyId is null || dependencyId.Length == 0 || !selectedPackages.TryGetValue(dependencyId, out var selectedPackage))
+                        continue;
+                    var versionRange = dependency.Attribute("version")?.Value?.Trim();
+                    if (!DependencyTargetsSelectedVersion(versionRange, selectedPackage, expectedPackageId))
+                        continue;
+                    var framework = dependency.Ancestors().FirstOrDefault(element =>
+                        element.Name.LocalName.Equals("group", StringComparison.OrdinalIgnoreCase))
+                        ?.Attribute("targetFramework")?.Value?.Trim();
+                    var effectiveFramework = string.IsNullOrWhiteSpace(framework) ? PublishDependency.AllFrameworks : framework!;
+                    dependencies[dependencyId + "\n" + effectiveFramework] = new PublishDependency(dependencyId, effectiveFramework);
                 }
             }
             catch (InvalidOperationException)
@@ -285,12 +340,13 @@ public sealed partial class DotNetRepositoryReleaseService
             }
         }
 
-        return dependencies;
+        return dependencies.Values.ToArray();
     }
 
-    private static IReadOnlyCollection<string> ReadPlannedProjectDependencies(
+    private static IReadOnlyCollection<PublishDependency> ReadPlannedProjectDependencies(
         DotNetRepositoryProjectResult project,
-        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages)
+        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
+        string? configuration)
     {
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
@@ -299,156 +355,260 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => Path.GetFullPath(entry.Value.CsprojPath),
             entry => entry.Key,
             StringComparer.OrdinalIgnoreCase);
-        var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var initialEvaluation = EvaluatePublishPlanningItems(project.CsprojPath, targetFramework: null);
-        AddPlannedDependencies(initialEvaluation, selectedPackages, selectedProjectPaths, dependencies);
-
-        foreach (var targetFramework in initialEvaluation.TargetFrameworks)
+        var documents = LoadPlannedDocuments(project.CsprojPath);
+        var frameworks = ReadPlannedTargetFrameworks(documents, configuration);
+        var evaluations = frameworks.Length == 0 ? new string?[] { null } : frameworks.Cast<string?>().ToArray();
+        var dependencies = new Dictionary<string, PublishDependency>(StringComparer.OrdinalIgnoreCase);
+        foreach (var targetFramework in evaluations)
         {
-            var evaluation = EvaluatePublishPlanningItems(project.CsprojPath, targetFramework);
-            AddPlannedDependencies(evaluation, selectedPackages, selectedProjectPaths, dependencies);
-        }
-
-        return dependencies;
-    }
-
-    private static void AddPlannedDependencies(
-        PublishPlanningEvaluation evaluation,
-        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
-        IReadOnlyDictionary<string, string> selectedProjectPaths,
-        ISet<string> dependencies)
-    {
-        foreach (var projectReference in evaluation.ProjectReferences)
-        {
-            if (selectedProjectPaths.TryGetValue(Path.GetFullPath(projectReference), out var packageId))
-                dependencies.Add(packageId);
-        }
-
-        foreach (var packageReference in evaluation.PackageReferences)
-        {
-            if (selectedPackages.ContainsKey(packageReference))
-                dependencies.Add(packageReference);
-        }
-    }
-
-    private static PublishPlanningEvaluation EvaluatePublishPlanningItems(string projectPath, string? targetFramework)
-    {
-        var arguments = new List<string>
-        {
-            "msbuild",
-            projectPath,
-            "-nologo",
-            "-verbosity:quiet",
-            "-getProperty:TargetFrameworks",
-            "-getProperty:TargetFramework",
-            "-getItem:ProjectReference",
-            "-getItem:PackageReference",
-            "-p:BuildProjectReferences=false"
-        };
-        if (!string.IsNullOrWhiteSpace(targetFramework))
-            arguments.Add($"-p:TargetFramework={targetFramework}");
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(projectPath))!,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
-#if NET472
-        startInfo.Arguments = BuildWindowsArgumentString(arguments);
-#else
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-#endif
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"dotnet msbuild could not be started to evaluate '{projectPath}'.");
-        var standardOutput = process.StandardOutput.ReadToEnd();
-        var standardError = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"Cannot determine a safe planned NuGet publish order because dotnet msbuild could not evaluate '{projectPath}' ({targetFramework ?? "outer build"}, exit {process.ExitCode}): {standardError.Trim()}");
-        }
-
-        var jsonStart = standardOutput.IndexOf('{');
-        var jsonEnd = standardOutput.LastIndexOf('}');
-        if (jsonStart < 0 || jsonEnd < jsonStart)
-            throw new InvalidOperationException($"dotnet msbuild returned invalid planning metadata for '{projectPath}'.");
-
-        try
-        {
-            using var document = JsonDocument.Parse(standardOutput.Substring(jsonStart, jsonEnd - jsonStart + 1));
-            var root = document.RootElement;
-            var properties = root.GetProperty("Properties");
-            var targetFrameworksValue = properties.TryGetProperty("TargetFrameworks", out var targetFrameworksProperty)
-                ? targetFrameworksProperty.GetString()
-                : null;
-            if (string.IsNullOrWhiteSpace(targetFrameworksValue) &&
-                properties.TryGetProperty("TargetFramework", out var targetFrameworkProperty))
+            var properties = ReadPlannedProperties(documents, configuration, targetFramework);
+            foreach (var reference in documents.SelectMany(document => document.Descendants()).Where(element =>
+                         element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
+                         IsPlannedItemActive(element, configuration, targetFramework) &&
+                         !IsPrivateReference(element)))
             {
-                targetFrameworksValue = targetFrameworkProperty.GetString();
+                var include = reference.Attribute("Include")?.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(include))
+                    continue;
+                include = ExpandPlannedProperties(include!, properties);
+                if (include.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                    continue;
+                var fullPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(project.CsprojPath)!, include));
+                if (selectedProjectPaths.TryGetValue(fullPath, out var packageId))
+                    AddPlannedDependency(dependencies, packageId, targetFramework);
             }
 
-            var targetFrameworks = (targetFrameworksValue ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(value => value.Trim())
-                .Where(value => value.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var projectReferences = new List<string>();
-            var packageReferences = new List<string>();
-            if (root.TryGetProperty("Items", out var items))
+            foreach (var reference in documents.SelectMany(document => document.Descendants()).Where(element =>
+                         element.Name.LocalName.Equals("PackageReference", StringComparison.OrdinalIgnoreCase) &&
+                         IsPlannedItemActive(element, configuration, targetFramework) &&
+                         !IsPrivateReference(element)))
             {
-                if (items.TryGetProperty("ProjectReference", out var references))
-                {
-                    foreach (var reference in references.EnumerateArray())
-                    {
-                        if (reference.TryGetProperty("FullPath", out var fullPath) && !string.IsNullOrWhiteSpace(fullPath.GetString()))
-                            projectReferences.Add(fullPath.GetString()!);
-                    }
-                }
-
-                if (items.TryGetProperty("PackageReference", out var packages))
-                {
-                    foreach (var package in packages.EnumerateArray())
-                    {
-                        if (package.TryGetProperty("Identity", out var identity) && !string.IsNullOrWhiteSpace(identity.GetString()))
-                            packageReferences.Add(identity.GetString()!);
-                    }
-                }
+                var packageId = (reference.Attribute("Include") ?? reference.Attribute("Update"))?.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(packageId))
+                    continue;
+                var effectivePackageId = ExpandPlannedProperties(packageId!, properties);
+                if (effectivePackageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                    continue;
+                if (!selectedPackages.TryGetValue(effectivePackageId, out var selectedPackage))
+                    continue;
+                var versionRange = ReadItemMetadata(reference, "VersionOverride") ?? ReadItemMetadata(reference, "Version");
+                if (!string.IsNullOrWhiteSpace(versionRange))
+                    versionRange = ExpandPlannedProperties(versionRange!, properties);
+                if (DependencyTargetsSelectedVersion(versionRange, selectedPackage, GetEffectivePackageId(project)))
+                    AddPlannedDependency(dependencies, effectivePackageId, targetFramework);
             }
-
-            return new PublishPlanningEvaluation(targetFrameworks, projectReferences, packageReferences);
         }
-        catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
+
+        return dependencies.Values.ToArray();
+    }
+
+    private static void AddPlannedDependency(
+        IDictionary<string, PublishDependency> dependencies,
+        string packageId,
+        string? targetFramework)
+    {
+        var framework = string.IsNullOrWhiteSpace(targetFramework) ? PublishDependency.AllFrameworks : targetFramework!;
+        dependencies[packageId + "\n" + framework] = new PublishDependency(packageId, framework);
+    }
+
+    private static string[] ReadPlannedTargetFrameworks(IEnumerable<XDocument> documents, string? configuration)
+        => documents.SelectMany(document => document.Descendants())
+            .Where(element =>
+                (element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase) ||
+                 element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase)) &&
+                ConditionMatches(element.Parent?.Attribute("Condition")?.Value, configuration, null) &&
+                ConditionMatches(element.Attribute("Condition")?.Value, configuration, null))
+            .SelectMany(element => element.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0 && value.IndexOf("$(", StringComparison.Ordinal) < 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool IsPlannedItemActive(XElement element, string? configuration, string? targetFramework)
+        => ConditionMatches(element.Parent?.Attribute("Condition")?.Value, configuration, targetFramework) &&
+           ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework);
+
+    private static IReadOnlyDictionary<string, string> ReadPlannedProperties(
+        IEnumerable<XDocument> documents,
+        string? configuration,
+        string? targetFramework)
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            throw new InvalidOperationException($"dotnet msbuild returned invalid planning metadata for '{projectPath}': {exception.Message}", exception);
+            ["Configuration"] = configuration ?? string.Empty,
+            ["TargetFramework"] = targetFramework ?? string.Empty
+        };
+        foreach (var group in documents.SelectMany(document => document.Descendants()).Where(element =>
+                     element.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                     ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework)))
+        {
+            foreach (var property in group.Elements().Where(element =>
+                         ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework)))
+            {
+                properties[property.Name.LocalName] = ExpandPlannedProperties(property.Value.Trim(), properties);
+            }
+        }
+        return properties;
+    }
+
+    private static string ExpandPlannedProperties(string value, IReadOnlyDictionary<string, string> properties)
+        => Regex.Replace(value, @"\$\((?<name>[^)]+)\)", match =>
+            properties.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
+
+    private static IReadOnlyList<XDocument> LoadPlannedDocuments(string projectPath)
+    {
+        var documents = new List<XDocument>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var directory = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(projectPath))!);
+        var directoryBuildProps = FindNearestBuildFile(directory, "Directory.Build.props");
+        var directoryBuildTargets = FindNearestBuildFile(directory, "Directory.Build.targets");
+        if (directoryBuildProps is not null)
+            LoadPlannedDocument(directoryBuildProps, documents, visited);
+        LoadPlannedDocument(Path.GetFullPath(projectPath), documents, visited);
+        if (directoryBuildTargets is not null)
+            LoadPlannedDocument(directoryBuildTargets, documents, visited);
+        return documents;
+    }
+
+    private static string? FindNearestBuildFile(DirectoryInfo directory, string fileName)
+    {
+        for (var current = directory; current is not null; current = current.Parent)
+        {
+            var candidate = Path.Combine(current.FullName, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+        return null;
+    }
+
+    private static void LoadPlannedDocument(
+        string path,
+        ICollection<XDocument> documents,
+        ISet<string> visited)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (!visited.Add(fullPath) || !File.Exists(fullPath))
+            return;
+        var document = XDocument.Load(fullPath, LoadOptions.PreserveWhitespace);
+        documents.Add(document);
+        var directory = Path.GetDirectoryName(fullPath)!;
+        foreach (var import in document.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
+        {
+            var importedPath = import.Attribute("Project")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(importedPath) || importedPath!.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                continue;
+            var candidate = Path.GetFullPath(Path.Combine(directory, importedPath!));
+            if (File.Exists(candidate))
+                LoadPlannedDocument(candidate, documents, visited);
         }
     }
 
-    private sealed class PublishPlanningEvaluation
+    private static bool ConditionMatches(string? condition, string? configuration, string? targetFramework)
     {
-        internal PublishPlanningEvaluation(
-            IReadOnlyList<string> targetFrameworks,
-            IReadOnlyList<string> projectReferences,
-            IReadOnlyList<string> packageReferences)
+        if (string.IsNullOrWhiteSpace(condition))
+            return true;
+
+        var expanded = ExpandPlannedProperties(condition!, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            TargetFrameworks = targetFrameworks;
-            ProjectReferences = projectReferences;
-            PackageReferences = packageReferences;
+            ["Configuration"] = configuration ?? string.Empty,
+            ["TargetFramework"] = targetFramework ?? string.Empty
+        });
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            return true;
+
+        var orBranches = Regex.Split(expanded, @"\s+[Oo][Rr]\s+");
+        return orBranches.Any(branch => Regex.Split(branch, @"\s+[Aa][Nn][Dd]\s+").All(EvaluateSimpleCondition));
+    }
+
+    private static bool EvaluateSimpleCondition(string condition)
+    {
+        var match = Regex.Match(
+            condition.Trim(),
+            "^\\s*\\(?\\s*['\\\"](?<left>[^'\\\"]*)['\\\"]\\s*(?<operator>==|!=)\\s*['\\\"](?<right>[^'\\\"]*)['\\\"]\\s*\\)?\\s*$");
+        if (!match.Success)
+            return true;
+        var equal = string.Equals(match.Groups["left"].Value, match.Groups["right"].Value, StringComparison.OrdinalIgnoreCase);
+        return match.Groups["operator"].Value == "==" ? equal : !equal;
+    }
+
+    private static bool IsPrivateReference(XElement element)
+    {
+        var privateAssets = ReadItemMetadata(element, "PrivateAssets");
+        return (privateAssets ?? string.Empty)
+            .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(value => string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? ReadItemMetadata(XElement element, string name)
+        => element.Attribute(name)?.Value?.Trim() ??
+           element.Elements().FirstOrDefault(child => child.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
+
+    private static bool DependencyTargetsSelectedVersion(
+        string? versionRange,
+        DotNetRepositoryProjectResult selectedPackage,
+        string consumerPackageId)
+    {
+        if (string.IsNullOrWhiteSpace(versionRange))
+            return true;
+        // Planning is deliberately process-free. If an MSBuild expression cannot be
+        // resolved from the project and its safe local imports, preserve the edge so
+        // WhatIf remains conservative rather than risking a dependency-first violation.
+        if (versionRange!.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            return true;
+        var selectedVersion = GetSelectedPackageVersion(selectedPackage);
+        if (!NuGetVersion.TryParse(selectedVersion, out var version) || !VersionRange.TryParse(versionRange!, out var range))
+            throw new InvalidOperationException($"Cannot determine a safe NuGet publish order for '{consumerPackageId}' because dependency '{GetEffectivePackageId(selectedPackage)}' has invalid version range '{versionRange}' or selected version '{selectedVersion}'.");
+        return range.Satisfies(version);
+    }
+
+    private static string GetSelectedPackageVersion(DotNetRepositoryProjectResult project)
+    {
+        if (!string.IsNullOrWhiteSpace(project.NewVersion))
+            return project.NewVersion!;
+        foreach (var packagePath in project.Packages.Where(path => path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!File.Exists(packagePath))
+                continue;
+            using var archive = ZipFile.OpenRead(packagePath);
+            var nuspec = archive.Entries.SingleOrDefault(entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
+            if (nuspec is null)
+                continue;
+            using var stream = nuspec.Open();
+            var metadata = XDocument.Load(stream).Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
+            var version = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("version", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(version))
+                return version!;
+        }
+        throw new InvalidOperationException($"Cannot determine the selected version for package '{GetEffectivePackageId(project)}'.");
+    }
+
+    private sealed class PublishDependency
+    {
+        internal const string AllFrameworks = "*";
+
+        internal PublishDependency(string packageId, string framework)
+        {
+            PackageId = packageId;
+            Framework = framework;
         }
 
-        internal IReadOnlyList<string> TargetFrameworks { get; }
+        internal string PackageId { get; }
+        internal string Framework { get; }
+    }
 
-        internal IReadOnlyList<string> ProjectReferences { get; }
+    private sealed class PublishDependencyEdge
+    {
+        internal PublishDependencyEdge(string consumer, string dependency, string framework)
+        {
+            Consumer = consumer;
+            Dependency = dependency;
+            Framework = framework;
+        }
 
-        internal IReadOnlyList<string> PackageReferences { get; }
+        internal string Consumer { get; }
+        internal string Dependency { get; }
+        internal string Framework { get; }
     }
 
 }

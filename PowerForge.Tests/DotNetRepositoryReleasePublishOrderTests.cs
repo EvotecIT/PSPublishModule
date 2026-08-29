@@ -114,6 +114,101 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         Assert.Contains("more than one selected project", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void SortProjectsForPublish_IgnoresDependencyRangesThatDoNotTargetSelectedVersion()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared", version: "2.0.0");
+        var app = workspace.AddProject("App", ["Shared"], dependencyVersion: "[1.0.0]");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app]);
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_DoesNotTreatMutuallyExclusiveFrameworkGroupsAsOneCycle()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var one = workspace.AddProject("One", dependencyGroups: new Dictionary<string, string[]> { ["net8.0"] = ["Two"] });
+        var two = workspace.AddProject("Two", dependencyGroups: new Dictionary<string, string[]> { ["net472"] = ["One"] });
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([two, one]);
+
+        Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlansFromProjectXmlWithoutRunningDotNetAndHonorsConfiguration()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="missing.props" />
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+        var service = new DotNetRepositoryReleaseService(new NullLogger());
+
+        var release = service.SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+        var debug = service.SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Debug");
+
+        Assert.Equal(["Shared", "App"], release.Select(project => project.PackageId));
+        Assert.Equal(["App", "Shared"], debug.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningExcludesPrivatePackageReferences()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Shared" Version="[1.0.0]" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningExpandsPackageIdentityAndKeepsUnresolvedVersionConservatively()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <SharedPackage>Shared</SharedPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="$(SharedPackage)" Version="$(UnresolvedSharedVersion)" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
     private sealed class PublishOrderWorkspace : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "powerforge-publish-order", Guid.NewGuid().ToString("N"));
@@ -122,9 +217,12 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
             string name,
             string[]? dependencies = null,
             string? packageId = null,
-            bool createNuspec = true)
+            bool createNuspec = true,
+            string version = "1.0.0",
+            string dependencyVersion = "[1.0.0]",
+            IReadOnlyDictionary<string, string[]>? dependencyGroups = null)
         {
-            dependencies ??= [];
+            dependencies ??= dependencyGroups?.Values.SelectMany(value => value).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [];
             packageId ??= name;
             var directory = Path.Combine(_root, name);
             Directory.CreateDirectory(directory);
@@ -136,15 +234,17 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
                 : $"  <ItemGroup>{Environment.NewLine}{references}{Environment.NewLine}  </ItemGroup>{Environment.NewLine}";
             var path = Path.Combine(directory, name + ".csproj");
             File.WriteAllText(path, $"<Project Sdk=\"Microsoft.NET.Sdk\">{Environment.NewLine}{itemGroup}</Project>");
-            var packagePath = Path.Combine(directory, packageId + ".1.0.0.nupkg");
+            var packagePath = Path.Combine(directory, packageId + "." + version + ".nupkg");
             using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
             {
                 if (createNuspec)
                 {
                     var entry = archive.CreateEntry(packageId + ".nuspec");
                     using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                    var dependencyXml = string.Join(string.Empty, dependencies.Select(dependency => $"<dependency id=\"{dependency}\" version=\"[1.0.0]\" />"));
-                    writer.Write($"<package><metadata><id>{packageId}</id><version>1.0.0</version><dependencies><group targetFramework=\"net8.0\">{dependencyXml}</group></dependencies></metadata></package>");
+                    var groups = dependencyGroups ?? new Dictionary<string, string[]> { ["net8.0"] = dependencies };
+                    var dependencyXml = string.Join(string.Empty, groups.Select(group =>
+                        $"<group targetFramework=\"{group.Key}\">{string.Join(string.Empty, group.Value.Select(dependency => $"<dependency id=\"{dependency}\" version=\"{dependencyVersion}\" />"))}</group>"));
+                    writer.Write($"<package><metadata><id>{packageId}</id><version>{version}</version><dependencies>{dependencyXml}</dependencies></metadata></package>");
                 }
             }
 
@@ -153,6 +253,7 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
                 ProjectName = name,
                 PackageId = packageId,
                 CsprojPath = path,
+                NewVersion = version,
                 Packages = [packagePath]
             };
         }
