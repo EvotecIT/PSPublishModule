@@ -14,8 +14,8 @@ public sealed partial class AppStoreConnectScreenshotSyncService
     /// </summary>
     /// <param name="client">App Store Connect client.</param>
     public AppStoreConnectScreenshotSyncService(AppStoreConnectClient client)
+        : this(client, Task.Delay)
     {
-        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     /// <summary>
@@ -229,6 +229,7 @@ public sealed partial class AppStoreConnectScreenshotSyncService
         }
 
         var results = new List<AppStoreConnectScreenshotSetSyncResult>();
+        var replacementInventories = new List<ReplacementInventoryExpectation>();
         foreach (var plannedSet in plannedSets)
         {
             var displayType = plannedSet.Preflighted.ScreenshotDisplayType;
@@ -280,32 +281,28 @@ public sealed partial class AppStoreConnectScreenshotSyncService
 
             if (request.ReplaceExisting)
             {
-                var finalScreenshots = await _client.GetScreenshotsAsync(
+                var replacementInventory = CreateReplacementInventoryExpectation(
                     set.Id,
-                    limit: 200,
-                    cancellationToken).ConfigureAwait(false);
-                var expectedChecksums = plannedSet.Preflighted.Files
-                    .Select(screenshotSnapshot.GetMd5)
-                    .ToArray();
-                var finalChecksums = finalScreenshots
-                    .Select(static screenshot => screenshot.SourceFileChecksum?.Trim() ?? string.Empty)
-                    .ToArray();
-                var expectedIds = uploaded
-                    .Select(static upload => upload.Screenshot.Id)
-                    .ToArray();
-                var finalIds = finalScreenshots
-                    .Select(static screenshot => screenshot.Id)
-                    .ToArray();
-                if (finalIds.Length != expectedIds.Length ||
-                    !finalIds.SequenceEqual(expectedIds, StringComparer.Ordinal) ||
-                    finalChecksums.Length != expectedChecksums.Length ||
-                    !finalChecksums.SequenceEqual(expectedChecksums, StringComparer.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"App Store Connect screenshot inventory for '{displayType}' changed during replacement. " +
-                        "The final remote inventory does not exactly match the approved screenshot bytes; review and run a new plan before submission.");
-                }
+                    displayType,
+                    plannedSet.ExistingScreenshots,
+                    uploaded,
+                    plannedSet.Preflighted.Files.Select(screenshotSnapshot.GetMd5).ToArray());
+                await WaitForExactReplacementInventoryAsync(
+                        replacementInventory,
+                        screenshotSnapshot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                replacementInventories.Add(replacementInventory);
             }
+        }
+
+        if (request.ReplaceExisting)
+        {
+            await ValidateExactReplacementInventoriesAsync(
+                    replacementInventories,
+                    screenshotSnapshot,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return new AppStoreConnectScreenshotSyncResult
