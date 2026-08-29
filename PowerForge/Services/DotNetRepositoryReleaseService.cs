@@ -22,10 +22,19 @@ public sealed partial class DotNetRepositoryReleaseService
         string sha256,
         out string error);
 
+    internal delegate PackagePushResult PackagePushHandler(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        bool suppressCompanionSymbols,
+        string? workingDirectory);
+
     private readonly ILogger _logger;
     private readonly NuGetPackageVersionResolver _resolver;
     private readonly PackageSigningHandler _signPackages;
     private readonly Func<string, CertificateStoreLocation, string?> _getCertificateSha256;
+    private readonly PackagePushHandler _pushPackage;
     private static readonly AsyncLocal<CancellationToken> ActiveCancellationToken = new();
     private static readonly string[] DefaultExcludeDirectories =
     {
@@ -37,19 +46,21 @@ public sealed partial class DotNetRepositoryReleaseService
     /// Creates a new repository release service.
     /// </summary>
     public DotNetRepositoryReleaseService(ILogger logger)
-        : this(logger, SignPackages, GetCertificateSha256)
+        : this(logger, SignPackages, GetCertificateSha256, PushPackage)
     {
     }
 
     internal DotNetRepositoryReleaseService(
         ILogger logger,
         PackageSigningHandler? signPackages,
-        Func<string, CertificateStoreLocation, string?>? getCertificateSha256)
+        Func<string, CertificateStoreLocation, string?>? getCertificateSha256,
+        PackagePushHandler? pushPackage = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _resolver = new NuGetPackageVersionResolver(_logger);
         _signPackages = signPackages ?? SignPackages;
         _getCertificateSha256 = getCertificateSha256 ?? GetCertificateSha256;
+        _pushPackage = pushPackage ?? PushPackage;
     }
 
 }

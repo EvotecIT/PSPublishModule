@@ -144,11 +144,26 @@ public sealed partial class DotNetRepositoryReleaseService
         bool usePlannedProjectGraph = false,
         string? configuration = null,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath = null)
+        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, plannedProjectContentsByPath).OrderedProjects;
+
+    private static PublishPlan CreatePublishPlan(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        bool usePlannedProjectGraph,
+        string? configuration,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
         if (projects.Count <= 1)
-            return projects.ToArray();
+        {
+            var dependencies = projects.Count == 0
+                ? new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [GetEffectivePackageId(projects[0])] = Array.Empty<string>()
+                };
+            return new PublishPlan(projects.ToArray(), dependencies);
+        }
 
         var byPackageId = new Dictionary<string, DotNetRepositoryProjectResult>(StringComparer.OrdinalIgnoreCase);
         foreach (var project in projects)
@@ -160,20 +175,36 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         var edges = new List<PublishDependencyEdge>();
+        var dependenciesByPackageId = byPackageId.Keys.ToDictionary(
+            packageId => packageId,
+            _ => (ISet<string>)new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
         foreach (var entry in byPackageId)
         {
             var selectedDependencies = usePlannedProjectGraph
                 ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, plannedProjectContentsByPath)
                 : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
             foreach (var dependency in selectedDependencies)
+            {
                 edges.Add(new PublishDependencyEdge(entry.Key, dependency.PackageId, dependency.Framework));
+                dependenciesByPackageId[entry.Key].Add(dependency.PackageId);
+            }
         }
 
         if (TryOrderProjects(byPackageId, edges, out var ordered, out var cycle))
-            return ordered;
+        {
+            return new PublishPlan(
+                ordered,
+                dependenciesByPackageId.ToDictionary(
+                    entry => entry.Key,
+                    entry => (IReadOnlyCollection<string>)entry.Value.ToArray(),
+                    StringComparer.OrdinalIgnoreCase));
+        }
 
         ThrowDependencyCycle(cycle);
-        return Array.Empty<DotNetRepositoryProjectResult>();
+        return new PublishPlan(
+            Array.Empty<DotNetRepositoryProjectResult>(),
+            new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool TryOrderProjects(
@@ -552,8 +583,8 @@ public sealed partial class DotNetRepositoryReleaseService
     }
 
     private static string ExpandPlannedProperties(string value, IReadOnlyDictionary<string, string> properties)
-        => Regex.Replace(value, @"\$\((?<name>[^)]+)\)", match =>
-            properties.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
+        => Regex.Replace(value, @"\$\((?<name>[A-Za-z_][A-Za-z0-9_.-]*)\)", match =>
+            properties.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : string.Empty);
 
     private static string? FindNearestBuildFile(DirectoryInfo directory, string fileName)
     {
@@ -652,6 +683,20 @@ public sealed partial class DotNetRepositoryReleaseService
         internal string Consumer { get; }
         internal string Dependency { get; }
         internal string Framework { get; }
+    }
+
+    private sealed class PublishPlan
+    {
+        internal PublishPlan(
+            IReadOnlyList<DotNetRepositoryProjectResult> orderedProjects,
+            IReadOnlyDictionary<string, IReadOnlyCollection<string>> dependenciesByPackageId)
+        {
+            OrderedProjects = orderedProjects;
+            DependenciesByPackageId = dependenciesByPackageId;
+        }
+
+        internal IReadOnlyList<DotNetRepositoryProjectResult> OrderedProjects { get; }
+        internal IReadOnlyDictionary<string, IReadOnlyCollection<string>> DependenciesByPackageId { get; }
     }
 
 }
