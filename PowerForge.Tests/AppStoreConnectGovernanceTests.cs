@@ -81,6 +81,13 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("https://api.appstoreconnect.apple.com/v2/appAvailabilities", Assert.Single(handler.RequestUris).ToString());
         using var body = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
         var territory = Assert.Single(body.RootElement.GetProperty("included").EnumerateArray());
+        const string localTerritoryId = "${territory-availability-1}";
+        Assert.Equal(localTerritoryId, territory.GetProperty("id").GetString());
+        Assert.Equal(
+            localTerritoryId,
+            Assert.Single(body.RootElement.GetProperty("data").GetProperty("relationships")
+                .GetProperty("territoryAvailabilities").GetProperty("data").EnumerateArray())
+                .GetProperty("id").GetString());
         var attributes = territory.GetProperty("attributes");
         Assert.True(attributes.GetProperty("available").GetBoolean());
         Assert.False(attributes.TryGetProperty("releaseDate", out _));
