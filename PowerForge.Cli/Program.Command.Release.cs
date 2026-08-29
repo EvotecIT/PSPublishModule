@@ -394,6 +394,8 @@ internal static partial class Program
         request.AppleResume = ResolveBooleanOverride(argv, "--apple-resume", "--no-apple-resume", request.AppleResume);
         request.AppleWaitForProcessing = ResolveBooleanOverride(argv, "--apple-wait", "--no-apple-wait", request.AppleWaitForProcessing);
         request.AppleSummaryOnly = argv.Any(a => a.Equals("--summary", StringComparison.OrdinalIgnoreCase));
+        request.AppleResolveTargetIdentities = argv.Any(a =>
+            a.Equals("--apple-resolve-target-identities", StringComparison.OrdinalIgnoreCase));
         if (TryParsePositiveInt(TryGetOptionValue(argv, "--apple-timeout-seconds"), out var appleTimeoutSeconds))
             request.AppleProcessingTimeoutSeconds = appleTimeoutSeconds;
         if (TryParsePositiveInt(TryGetOptionValue(argv, "--apple-poll-seconds"), out var applePollSeconds))

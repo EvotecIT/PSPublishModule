@@ -2,6 +2,27 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void Execute_AppleTargetResolution_RequiresValidationOnlySummary(
+        bool validateOnly,
+        bool summaryOnly)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseSpec(),
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = "powerforge.release.json",
+                    ValidateOnly = validateOnly,
+                    AppleSummaryOnly = summaryOnly,
+                    AppleResolveTargetIdentities = true
+                }));
+
+        Assert.Contains("validation-only summary", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Execute_AppleArchivePlan_AcceptsMissingXcodeGenProject()
     {
@@ -194,6 +215,273 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Assert.True(target.ResumedExistingBuild);
                 Assert.True(target.AdoptedExistingBuild);
             }
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Screenshots)]
+    [InlineData(PowerForgeAppleReleaseAction.Advance)]
+    public void Execute_IsolatedAppleTargetResolution_GeneratesMissingProjectBeforeSummarizingIdentity(
+        PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var generatedRoot = Path.Combine(root, "Generated");
+            Directory.CreateDirectory(generatedRoot);
+            File.WriteAllText(Path.Combine(generatedRoot, "project.yml"), "name: Generated");
+            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            var app = Assert.Single(spec.AppleApps.Apps);
+            app.Name = "Generated iOS";
+            app.ProjectPath = "Generated/Generated.xcodeproj";
+            app.Scheme = "Generated";
+            app.GenerateProjectIfMissing = true;
+            var generationCalls = 0;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Validation must not query App Store Connect."),
+                generateAppleProject: plan =>
+                {
+                    generationCalls++;
+                    CreateXcodeProject(
+                        Path.GetDirectoryName(plan.ProjectPath)!,
+                        Path.GetFileName(plan.ProjectPath),
+                        "2.0",
+                        "18");
+                    return true;
+                });
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    ValidateOnly = true,
+                    AppleSummaryOnly = true,
+                    AppleResolveTargetIdentities = true,
+                    AppleAction = action
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, generationCalls);
+            var target = Assert.Single(result.AppleAppPlan!.Apps);
+            Assert.Equal("2.0", target.MarketingVersion);
+            Assert.Equal("18", target.BuildNumber);
+            Assert.Null(result.AppleReceipt);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Screenshots)]
+    [InlineData(PowerForgeAppleReleaseAction.Advance)]
+    public void Execute_OrdinaryAppleValidation_DoesNotGenerateProjects(
+        PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var generatedRoot = Path.Combine(root, "Generated");
+            Directory.CreateDirectory(generatedRoot);
+            File.WriteAllText(Path.Combine(generatedRoot, "project.yml"), "name: Generated");
+            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            var app = Assert.Single(spec.AppleApps.Apps);
+            app.ProjectPath = "Generated/Generated.xcodeproj";
+            app.GenerateProjectIfMissing = true;
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Validation must not query App Store Connect."),
+                    generateAppleProject: _ => throw new InvalidOperationException("Ordinary validation must not run XcodeGen."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        ValidateOnly = true,
+                        AppleSummaryOnly = true,
+                        AppleAction = action
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.False(Directory.Exists(Path.Combine(generatedRoot, "Generated.xcodeproj")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_IsolatedAppleTargetResolution_MatchesGeneratedIncrementExistingExecutionIdentity()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var generatedRoot = Path.Combine(root, "Generated");
+            Directory.CreateDirectory(generatedRoot);
+            File.WriteAllText(Path.Combine(generatedRoot, "project.yml"), "name: Generated");
+            File.WriteAllText(Path.Combine(root, "screenshots.json"), "{}");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
+            var app = Assert.Single(spec.AppleApps.Apps);
+            app.ProjectPath = "Generated/Generated.xcodeproj";
+            app.GenerateProjectIfMissing = true;
+            app.MarketingVersion = "2.0";
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.IncrementExisting;
+            var service = CreateAppleAutomationService(
+                _ => throw new InvalidOperationException("Validation must not query App Store Connect."),
+                generateAppleProject: plan =>
+                {
+                    CreateXcodeProject(
+                        Path.GetDirectoryName(plan.ProjectPath)!,
+                        Path.GetFileName(plan.ProjectPath),
+                        "2.0",
+                        "18");
+                    return true;
+                });
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    ValidateOnly = true,
+                    AppleSummaryOnly = true,
+                    AppleResolveTargetIdentities = true,
+                    AppleAction = PowerForgeAppleReleaseAction.Screenshots
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var target = Assert.Single(result.AppleAppPlan!.Apps);
+            Assert.Equal("2.0", target.MarketingVersion);
+            Assert.Equal("19", target.BuildNumber);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_AppleScreenshots_GeneratesIdentityBeforeBindingExactMutationInputs()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var generatedRoot = Path.Combine(root, "Generated");
+            Directory.CreateDirectory(generatedRoot);
+            File.WriteAllText(Path.Combine(generatedRoot, "project.yml"), "name: Generated");
+            var screenshotRoot = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            File.WriteAllText(Path.Combine(screenshotRoot.FullName, "home.png"), "reviewed pixels");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.Name = "Generated iOS";
+            app.ProjectPath = "Generated/Generated.xcodeproj";
+            app.Scheme = "Generated";
+            app.GenerateProjectIfMissing = true;
+            spec.AppleApps.SyncScreenshots = true;
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
+            WriteScreenshotConfig(
+                root,
+                "screenshots.json",
+                app.AppStoreConnectAppId!,
+                "2.0",
+                "iOS",
+                "screenshots",
+                qualityEnabled: false);
+            var sourceCommit = CommitAppleShipSource(root);
+            var generationCalls = 0;
+            AppStoreConnectReleasePreparationRequest? observed = null;
+            var service = CreateAppleAutomationService(
+                request => CreateReleaseState(request, "VALID"),
+                generateAppleProject: plan =>
+                {
+                    generationCalls++;
+                    CreateXcodeProject(
+                        Path.GetDirectoryName(plan.ProjectPath)!,
+                        Path.GetFileName(plan.ProjectPath),
+                        "2.0",
+                        "18");
+                    return true;
+                },
+                prepareAppleDistribution: request =>
+                {
+                    observed = request;
+                    return new AppStoreConnectReleasePreparationResult();
+                });
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Screenshots,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, generationCalls);
+            Assert.NotNull(observed);
+            Assert.Equal("2.0", observed!.VersionString);
+            Assert.Equal("18", observed.BuildNumber);
+            Assert.Contains("screenshots.json", result.AppleAppPlan!.ApprovedMutationInputFilesSha256.Keys);
+            Assert.Contains("screenshots/home.png", result.AppleAppPlan.ApprovedMutationInputFilesSha256.Keys);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Archive)]
+    [InlineData(PowerForgeAppleReleaseAction.Rehearse)]
+    [InlineData(PowerForgeAppleReleaseAction.Version)]
+    public void Execute_AppleValidation_DoesNotGenerateForActionsWithoutReleaseIdentity(
+        PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "2.0", "18");
+            WriteXcodeGenVersionSource(root, "2.0", "18");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            Assert.Single(spec.AppleApps.Apps).RegenerateProject = true;
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Validation must not query App Store Connect."),
+                    generateAppleProject: _ => throw new InvalidOperationException("This validation action must not run XcodeGen."))
+                .Execute(
+                    spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                        ValidateOnly = true,
+                        AppleAction = action,
+                        AppleMarketingVersion = action == PowerForgeAppleReleaseAction.Version ? "2.1" : null
+                    });
+
+            Assert.True(result.Success, result.ErrorMessage);
         }
         finally
         {

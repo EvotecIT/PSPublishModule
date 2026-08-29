@@ -14,8 +14,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             WriteXcodeGenVersionSource(root, "1.6.0", "14");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
+            var screenshots = Directory.CreateDirectory(Path.Combine(root, "screenshots"));
+            File.WriteAllText(Path.Combine(screenshots.FullName, "home.png"), "planned pixels");
+            WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.6.0", "iOS", "screenshots", qualityEnabled: false);
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.Automation.VersionSourcePath = "project.yml";
+            spec.AppleApps.ScreenshotConfigPath = "screenshots.json";
             EnableInternalAppleShipTargets(spec);
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -181,8 +185,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             });
 
             Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(appStorePlan.Success, appStorePlan.ErrorMessage);
             Assert.Equal(PowerForgeAppleShipPhase.VersionCheckpoint, result.AppleReceipt!.ShipPhase);
             Assert.Equal(0, stateQueries);
+            Assert.DoesNotContain("screenshots.json", appStorePlan.AppleReceipt!.MutationInputFiles.Keys);
+            Assert.DoesNotContain("screenshots/home.png", appStorePlan.AppleReceipt.MutationInputFiles.Keys);
             Assert.Matches("^[0-9A-F]{64}$", result.AppleReceipt.PlanSha256!);
             Assert.NotEqual(result.AppleReceipt.PlanSha256, appStorePlan.AppleReceipt!.PlanSha256);
             var target = Assert.Single(result.AppleReceipt.Targets);

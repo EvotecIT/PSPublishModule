@@ -57,12 +57,20 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Capture provenance source commit", script, StringComparison.Ordinal);
         Assert.Contains("--apple-source-commit must match the exact consumer HEAD", evidence, StringComparison.Ordinal);
         Assert.Contains("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", script, StringComparison.Ordinal);
+        Assert.Contains("Get-AppleTargetResolutionArgumentList -Arguments $forwardedArgumentList", script, StringComparison.Ordinal);
+        Assert.Contains("Read-ResolvedAppleTargets -Path $resolutionOutput", script, StringComparison.Ordinal);
+        Assert.Contains("-CaptureStandardOutputPath $resolutionOutput", script, StringComparison.Ordinal);
+        Assert.True(
+            script.IndexOf("Read-ResolvedAppleTargets -Path $resolutionOutput", StringComparison.Ordinal) <
+            script.IndexOf("Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead", StringComparison.Ordinal));
         Assert.Contains("if ($ArgumentList[0] -ne 'apple-release' -or", evidence, StringComparison.Ordinal);
-        Assert.Contains("$argument -eq '--capture-provenance'", evidence, StringComparison.Ordinal);
+        Assert.Contains("@('--capture-provenance', '--allowed-root')", evidence, StringComparison.Ordinal);
         Assert.Contains("$forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead", script, StringComparison.Ordinal);
-        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("Screenshot approval manifests do not identify one exact retained capture root and approved inventory", evidence, StringComparison.Ordinal);
+        Assert.Contains("requires --allowed-root to bind screenshots", evidence, StringComparison.Ordinal);
         Assert.Contains("Resolve-PathFromBase -BasePath", evidence, StringComparison.Ordinal);
-        Assert.Contains("No screenshot configuration matches the selected release targets", evidence, StringComparison.Ordinal);
+        Assert.Contains("screenshot configurations match selected Apple app", evidence, StringComparison.Ordinal);
+        Assert.Contains("does not match selected Apple app", evidence, StringComparison.Ordinal);
         Assert.Contains("permissions must not grant group or other access", script, StringComparison.Ordinal);
         Assert.Contains("must not grant access through a POSIX ACL", script, StringComparison.Ordinal);
         Assert.Contains("must not have hard links", script, StringComparison.Ordinal);

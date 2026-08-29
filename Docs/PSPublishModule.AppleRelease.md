@@ -849,6 +849,11 @@ height inventory exactly. Explicit `--version`, `--source-commit`, or
 capture-metadata options may still be supplied for recovery, but they must match
 the provenance document exactly.
 
+When the pinned local helper runs `apple-release Screenshots` or a screenshot-enabled
+`apple-release Advance`, pass the retained screenshot directory as `--allowed-root`.
+The helper consumes this local-only option to bind each approved relative path to one
+explicit root; the provenance JSON may remain in its separate downloaded artifact.
+
 The capture workflow therefore requires the exact two- or three-part marketing version;
 blank or branch-relative capture evidence cannot be approved. The pinned helper
 also requires the retained provenance for every local `Screenshots` action, for
