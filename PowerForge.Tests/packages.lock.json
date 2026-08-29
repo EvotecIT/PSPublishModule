@@ -1147,6 +1147,7 @@
         "type": "Project",
         "dependencies": {
           "DBAClientX.SQLite": "[0.15.0, )",
+          "NuGet.Versioning": "[7.9.0, )",
           "PowerForge.Web": "[3.0.124, )"
         }
       },

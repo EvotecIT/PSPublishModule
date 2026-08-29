@@ -85,7 +85,7 @@ public class WebPipelineRunnerProjectCatalogTests
     }
 
     [Fact]
-    public void RunPipeline_ProjectCatalog_AllowsHubFullSurfacesWithoutExplicitLinks()
+    public void RunPipeline_ProjectCatalog_AllowsHubFullSurfacesAndUsesLatestPublishedPackageVersionAcrossFeeds()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-hub-full-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -104,6 +104,7 @@ public class WebPipelineRunnerProjectCatalogTests
                       "mode": "hub-full",
                       "hubPath": "projects\\pspublishmodule",
                       "githubRepo": "EvotecIT/PSPublishModule",
+                      "version": "2.0.0",
                       "status": "active",
                       "listed": false,
                       "surfaces": {
@@ -112,6 +113,16 @@ public class WebPipelineRunnerProjectCatalogTests
                         "apiPowerShell": true,
                         "changelog": true,
                         "releases": true
+                      },
+                      "metrics": {
+                        "nuget": {
+                          "id": "PSPublishModule",
+                          "version": "1.7.0"
+                        },
+                        "powerShellGallery": {
+                          "id": "PSPublishModule",
+                          "version": "1.8.0"
+                        }
                       }
                     }
                   ]
@@ -148,6 +159,9 @@ public class WebPipelineRunnerProjectCatalogTests
             Assert.Contains("project-catalog ok", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             var page = File.ReadAllText(Path.Combine(root, "content", "projects", "pspublishmodule.md"));
             Assert.Contains("meta.project_hub_path: \"/projects/pspublishmodule/\"", page, StringComparison.Ordinal);
+            Assert.Contains("meta.project_version: \"1.8.0\"", page, StringComparison.Ordinal);
+            Assert.Contains("- Latest known version: 1.8.0", page, StringComparison.Ordinal);
+            Assert.DoesNotContain("hosted as part of the main hub", page, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
