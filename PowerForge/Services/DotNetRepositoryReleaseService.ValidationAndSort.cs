@@ -331,10 +331,14 @@ public sealed partial class DotNetRepositoryReleaseService
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
 
+        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(project.CsprojPath))!;
+        var pathComparer = FrameworkCompatibility.GetPathStringComparison(projectDirectory) == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
         var selectedProjectPaths = selectedPackages.ToDictionary(
             entry => Path.GetFullPath(entry.Value.CsprojPath),
             entry => entry.Key,
-            StringComparer.OrdinalIgnoreCase);
+            pathComparer);
         var outerEvaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework: null, plannedProjectContentsByPath);
         var frameworks = ReadPlannedTargetFrameworks(outerEvaluation.Properties);
         var evaluations = frameworks.Length == 0 ? new string?[] { null } : frameworks.Cast<string?>().ToArray();
@@ -344,7 +348,7 @@ public sealed partial class DotNetRepositoryReleaseService
             var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework, plannedProjectContentsByPath);
             if (evaluation.Properties.TryGetValue("NuspecFile", out var nuspecFile) && !string.IsNullOrWhiteSpace(nuspecFile))
             {
-                ReadPlannedNuspecDependencies(evaluation, project, selectedPackages, dependencies);
+                ReadPlannedNuspecDependencies(evaluation, project, selectedPackages, dependencies, plannedProjectContentsByPath);
                 continue;
             }
             var suppressesDependencies =
@@ -416,7 +420,8 @@ public sealed partial class DotNetRepositoryReleaseService
         PlannedEvaluation evaluation,
         DotNetRepositoryProjectResult project,
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
-        IDictionary<string, PublishDependency> dependencies)
+        IDictionary<string, PublishDependency> dependencies,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(project.CsprojPath))!;
         var configuredPath = ExpandPlannedProperties(evaluation.Properties["NuspecFile"], evaluation.Properties);
@@ -451,7 +456,10 @@ public sealed partial class DotNetRepositoryReleaseService
             return expanded;
         }
 
-        var metadata = XDocument.Load(nuspecPath).Descendants().FirstOrDefault(element =>
+        var nuspec = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(nuspecPath, out var plannedNuspecContent)
+            ? XDocument.Parse(plannedNuspecContent, LoadOptions.PreserveWhitespace)
+            : XDocument.Load(nuspecPath);
+        var metadata = nuspec.Descendants().FirstOrDefault(element =>
             element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
         if (metadata is null)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom nuspec '{nuspecPath}' has no metadata element.");
@@ -555,6 +563,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static bool IsPackedProjectReference(PlannedItem reference)
         => !IsPrivateReference(reference) &&
+           !string.Equals(reference.GetMetadata("BuildReference"), "false", StringComparison.OrdinalIgnoreCase) &&
            !string.Equals(reference.GetMetadata("TreatAsPackageReference"), "false", StringComparison.OrdinalIgnoreCase);
 
     private static bool DependencyTargetsSelectedVersion(

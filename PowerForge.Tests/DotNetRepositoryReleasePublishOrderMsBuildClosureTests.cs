@@ -220,6 +220,75 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    public void PlanningReadsCustomNuspecDependenciesFromThePendingOverlay()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared", version: "2.0.0");
+        var app = workspace.AddProject("App", version: "2.0.0");
+        var appDirectory = Path.GetDirectoryName(app.CsprojPath)!;
+        var nuspecPath = Path.Combine(appDirectory, "App.nuspec");
+        File.WriteAllText(nuspecPath, """
+<package><metadata><id>App</id><version>1.0.0</version><dependencies><dependency id="Shared" version="[1.0.0]" /></dependencies></metadata></package>
+""");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><NuspecFile>App.nuspec</NuspecFile></PropertyGroup>
+</Project>
+""");
+        var plannedNuspec = File.ReadAllText(nuspecPath).Replace("[1.0.0]", "[2.0.0]", StringComparison.Ordinal);
+
+        var ordered = CreateService().SortProjectsForPublish(
+            [app, shared],
+            true,
+            "Release",
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Path.GetFullPath(nuspecPath)] = plannedNuspec
+            });
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningIgnoresProjectReferencesThatAreNotBuilt()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var one = workspace.AddProject("One");
+        var two = workspace.AddProject("Two");
+        File.WriteAllText(one.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Two/Two.csproj" BuildReference="false" /></ItemGroup>
+</Project>
+""");
+        File.WriteAllText(two.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../One/One.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([two, one], true, "Release");
+
+        Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningUsesFileSystemPathIdentityForSelectedProjects()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        using var workspace = new PublishOrderWorkspace();
+        var upper = workspace.AddProject("Library", packageId: "Upper.Library");
+        var lower = workspace.AddProject("library", packageId: "Lower.Library");
+
+        var ordered = CreateService().SortProjectsForPublish([lower, upper], true, "Release");
+
+        Assert.Equal(["Lower.Library", "Upper.Library"], ordered.Select(project => project.PackageId).OrderBy(static value => value, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void PlanningAppliesWildcardRemoveAndUpdateSemantics()
     {
         using var workspace = new PublishOrderWorkspace();
