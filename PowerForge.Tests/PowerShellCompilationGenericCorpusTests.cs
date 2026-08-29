@@ -31,7 +31,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal(8, result.TotalFunctions);
         Assert.Equal(8, result.EmittedFunctions);
         Assert.Equal(0, result.DroppedEligibleFunctions);
-        Assert.Equal(0, result.RuntimeFallbackUnits);
+        Assert.Equal(1, result.RuntimeFallbackUnits);
         Assert.Empty(result.FunctionFrontier);
     }
 
@@ -63,8 +63,13 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             Assert.Equal(8, result.Manifest!.CompiledMethods);
-            Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-            Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
+            Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+            Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+            var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+            var commandRegion = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-CommandText");
+            Assert.True(commandRegion.EmittedClrMethod);
+            Assert.True(commandRegion.RuntimeRouted);
+            Assert.Equal(1, commandRegion.RuntimeCommandRegions);
             const string proof =
                 "$env:POWERFORGE_COMPILER_CORPUS = 'runtime'; " +
                 "Measure-TextScore -Text Ada; Get-CountdownValue -Number 4; Get-RuntimeState -WhatIf; " +

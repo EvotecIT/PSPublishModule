@@ -60,6 +60,22 @@ public sealed class PowerShellCompilationUnitExplanation
     public string LoweringRoute { get; set; } = string.Empty;
     /// <summary>Final artifact disposition selected for the unit.</summary>
     public string ArtifactDisposition { get; set; } = string.Empty;
+    /// <summary>Whether semantic analysis accepted the unit before artifact shaping.</summary>
+    public bool SemanticEligible { get; set; }
+    /// <summary>Whether a CLR implementation is present in the delivered artifact.</summary>
+    public bool Emitted { get; set; }
+    /// <summary>Whether authored source remains in the delivered hosted payload.</summary>
+    public bool RetainedHostedSource { get; set; }
+    /// <summary>Number of hosted command regions in the emitted implementation.</summary>
+    public int RuntimeCommandRegions { get; set; }
+    /// <summary>Number of typed/hosted boundary crossings.</summary>
+    public int BoundaryCrossings { get; set; }
+    /// <summary>Whether artifact shaping retained a runtime path for an eligible unit.</summary>
+    public bool ShapingFallback { get; set; }
+    /// <summary>Whether the artifact intentionally omits this unit.</summary>
+    public bool Omitted { get; set; }
+    /// <summary>Whether the artifact rejects this unit.</summary>
+    public bool Rejected { get; set; }
     /// <summary>Ordered causal diagnostics; empty for a typed unit.</summary>
     public PowerShellCompilationExplanationDiagnostic[] Causes { get; set; } = Array.Empty<PowerShellCompilationExplanationDiagnostic>();
 }
@@ -147,6 +163,8 @@ public sealed class PowerShellCompilationReproductionEvidence
     public string SourceMapSha256 { get; set; } = string.Empty;
     /// <summary>Exact deterministic decision-trace identity.</summary>
     public string DecisionTraceSha256 { get; set; } = string.Empty;
+    /// <summary>Exact immutable final unit-disposition ledger identity.</summary>
+    public string UnitDispositionLedgerSha256 { get; set; } = string.Empty;
     /// <summary>Exact ordered diagnostic identity.</summary>
     public string DiagnosticsSha256 { get; set; } = string.Empty;
     /// <summary>Selected SDK version.</summary>

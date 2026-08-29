@@ -40,6 +40,17 @@ public sealed partial class ModulePipelineRunner
                         finalizePackedArtefact: context => plan.SignModule
                             ? FinalizeSignedPackedArtefact(plan, state, context)
                             : FinalizeUnsignedPackedArtefact(plan, state, context));
+                    if (result.Type == ArtefactType.Unpacked)
+                    {
+                        foreach (var module in result.Modules.Where(static module => module.IsMainModule))
+                        {
+                            _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+                                module.Path,
+                                module.Name,
+                                state.SigningResult,
+                                plan.Signing);
+                        }
+                    }
                     state.ArtefactResults.Add(result);
                     CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
                     session.Done(step);
@@ -96,6 +107,14 @@ public sealed partial class ModulePipelineRunner
                     PreserveVersions = plan.InstallPreserveVersions
                 };
                 state.InstallResult = pipeline.InstallFromStaging(installSpec);
+                foreach (var installedPath in state.InstallResult.InstalledPaths)
+                {
+                    _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+                        installedPath,
+                        plan.ModuleName,
+                        state.SigningResult,
+                        plan.Signing);
+                }
                 session.Done(session.InstallStep);
             }
             catch (Exception ex)

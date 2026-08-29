@@ -332,6 +332,12 @@ public sealed partial class ModulePipelineRunner
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     remotePublishAttempted: guardedRemotePublishAttempted,
                     remoteSideEffectObserved: guardedRemoteSideEffectObserved,
+                    finalizeRepositoryModule: (root, moduleName) =>
+                        PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+                            root,
+                            moduleName,
+                            state.SigningResult,
+                            plan.Signing),
                     gitHubProgress: gitHubProgress));
             session.Done(step);
         }

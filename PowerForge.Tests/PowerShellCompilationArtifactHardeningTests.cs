@@ -696,10 +696,24 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.AnalyzedUnits);
         Assert.Equal(2, result.Manifest.EmittedUnits);
-        Assert.Equal(0, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(1, result.Manifest.RuntimeRoutedUnits);
         Assert.Equal(0, result.Manifest.FallbackUnits);
-        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(1, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(100d, result.Manifest.CompilationCoveragePercentage);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        Assert.Equal(result.Manifest.AnalyzedUnits, ledger.AnalyzedUnits);
+        Assert.Equal(result.Manifest.EmittedUnits, ledger.EmittedUnits);
+        Assert.Equal(result.Manifest.RuntimeRoutedUnits, ledger.RuntimeRoutedUnits);
+        var privateHelper = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-PrivateValue");
+        Assert.True(privateHelper.EmittedClrMethod);
+        Assert.True(privateHelper.RetainedHostedSource);
+        Assert.True(privateHelper.ShapingFallback);
+        Assert.Equal("TypedArtifact+HostedSource", privateHelper.ArtifactDisposition);
+        var publicFunction = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-PublicValue");
+        Assert.True(publicFunction.EmittedClrMethod);
+        Assert.True(publicFunction.EmittedBinaryCmdlet);
+        Assert.False(publicFunction.RetainedHostedSource);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",

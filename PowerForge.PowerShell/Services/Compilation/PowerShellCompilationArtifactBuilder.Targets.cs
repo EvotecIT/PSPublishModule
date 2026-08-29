@@ -7,20 +7,19 @@ namespace PowerForge;
 public sealed partial class PowerShellCompilationArtifactBuilder
 {
     private static PowerShellCompilationBoundaryEvidence CreateBoundaryEvidence(
-        IReadOnlyCollection<PowerShellCompiledMethod> methods,
-        int fallbackUnits,
+        PowerShellCompilationUnitDispositionLedger ledger,
         PowerShellCompilationBoundaryRuntimeProfile? runtimeProfile)
     {
-        var typedEntries = methods.Count(static method => method.Lifecycle is null);
-        var hostedRegions = methods.Sum(static method => method.HostedRegionSiteCount);
-        var staticAdvisory = fallbackUnits > typedEntries
+        var typedEntries = ledger.EmittedUnits;
+        var hostedRegions = ledger.RuntimeCommandRegions;
+        var staticAdvisory = ledger.RuntimeRoutedUnits > typedEntries
             ? "Runtime fallback units exceed typed entry points; profile this Hybrid artifact before assuming compilation improves the workload."
             : string.Empty;
         return new PowerShellCompilationBoundaryEvidence
         {
             TypedEntryPoints = typedEntries,
             HostedRegionSites = hostedRegions,
-            RuntimeFallbackUnits = fallbackUnits,
+            RuntimeFallbackUnits = ledger.RuntimeRoutedUnits,
             RuntimeProfile = runtimeProfile,
             Advisory = !string.IsNullOrWhiteSpace(runtimeProfile?.Advisory)
                 ? runtimeProfile!.Advisory

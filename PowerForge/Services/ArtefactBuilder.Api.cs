@@ -60,7 +60,6 @@ public sealed partial class ArtefactBuilder
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
     /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
-    /// <param name="finalizedPayloadFiles">Optional exact authoritative payload. When provided, generic include/exclude discovery is bypassed.</param>
     /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed layout is assembled and before it is archived. Returned files are recorded as release evidence and remain owned by the callback.</param>
     public ArtefactBuildResult BuildWithFinalizer(
         ConfigurationArtefactSegment segment,
@@ -73,7 +72,36 @@ public sealed partial class ArtefactBuilder
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
         InformationConfiguration? information = null,
         DeliveryOptionsConfiguration? delivery = null,
-        bool includeScriptFolders = true,
+        bool includeScriptFolders = true)
+        => BuildWithFinalizer(
+            segment,
+            projectRoot,
+            stagingPath,
+            moduleName,
+            moduleVersion,
+            preRelease,
+            requiredModules,
+            finalizePackedArtefact,
+            information,
+            delivery,
+            includeScriptFolders,
+            finalizedPayloadFiles: null);
+
+    /// <summary>
+    /// Builds an artefact using an exact authoritative module payload.
+    /// </summary>
+    public ArtefactBuildResult BuildWithFinalizer(
+        ConfigurationArtefactSegment segment,
+        string projectRoot,
+        string stagingPath,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
         IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         if (segment is null) throw new ArgumentNullException(nameof(segment));

@@ -228,7 +228,7 @@ internal static class PowerShellHybridModuleComposer
         }
     }
 
-    private static string GetCompiledMethodKey(string sourcePath, string name, int line)
+    internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
 
     private static string JoinPowerShellNames(IEnumerable<string> names)

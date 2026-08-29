@@ -101,9 +101,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string projectPath;
             bool requiresPowerShellRuntime;
             bool usesPowerShellRuntimeFallback;
-            int compiledUnits;
             int compiledMethods;
-            int runtimeRoutedUnits;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
             var optimizationEvidence = new PowerShellCompilationOptimizationEvidence();
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
@@ -133,11 +131,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = false;
                 usesPowerShellRuntimeFallback = false;
-                compiledUnits = plan.TotalUnits;
                 compiledMethods = executable.Methods.Length;
                 compiledMethodDetails = executable.Methods;
                 optimizationEvidence = executable.Optimization;
-                runtimeRoutedUnits = plan.TotalUnits;
             }
             else if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Hybrid)
             {
@@ -153,9 +149,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 requiresPowerShellRuntime = true;
                 compiledMethodDetails = hybrid.CompiledMethods;
                 compiledMethods = hybrid.CompiledMethods.Length;
-                compiledUnits = compiledMethods;
-                runtimeRoutedUnits = compiledUnits;
-                usesPowerShellRuntimeFallback = plan.TotalUnits > compiledUnits;
+                usesPowerShellRuntimeFallback = plan.TotalUnits > compiledMethods;
                 optimizationEvidence = typed.Optimization;
             }
             else if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
@@ -214,19 +208,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
-                    runtimeRoutedUnits = exportedFunctions is null
-                        ? typed.Methods.Count(static method => method.Lifecycle is null)
-                        : exportedFunctions.Count(name => typed.Methods.Any(method =>
-                            method.Lifecycle is null &&
-                            method.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase)));
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),
                         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                }
-                else
-                {
-                    runtimeRoutedUnits = typed.Methods.Length;
                 }
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 var projectTemplate = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
@@ -243,9 +228,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
-                    (runtimeRoutedUnits != plan.TotalUnits || runtimeManifestHooks.Length > 0);
-                compiledUnits = typed.Methods.Count(static method => method.Lifecycle is null);
-                compiledMethods = compiledUnits;
+                    (typed.Methods.Count(static method => method.Lifecycle is null) != plan.TotalUnits || runtimeManifestHooks.Length > 0);
+                compiledMethods = typed.Methods.Count(static method => method.Lifecycle is null);
                 compiledMethodDetails = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && exportedFunctions is not null
                     ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
                     : typed.Methods;
@@ -287,10 +271,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = true;
                 usesPowerShellRuntimeFallback = true;
-                compiledUnits = 0;
                 compiledMethods = 0;
-                runtimeRoutedUnits = 0;
             }
+
+            var unitDispositionLedger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
+                plan,
+                spec.Kind,
+                typed,
+                spec.SourcePath,
+                runtimeManifestHooks.Select(static hook => "Manifest runtime script hook: " + hook),
+                compiledMethodDetails);
+            usesPowerShellRuntimeFallback = unitDispositionLedger.UsesPowerShellRuntimeFallback;
 
             if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime && compiledMethodDetails.Count > 0)
             {
@@ -409,19 +400,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 var generatedSourcePath = stagedGeneratedSourcePath is null
                     ? null
                     : PowerShellArtifactSetPublisher.RebasePath(stagedGeneratedSourcePath, artifactStagingDirectory, spec.OutputDirectory);
-                var analyzedUnits = plan.TotalUnits;
-                var emittedUnits = compiledUnits;
-                var fallbackUnits = plan.RuntimeFallbackUnits;
-                var shapedFallbackUnits = spec.Mode == PowerShellCompilationMode.Hybrid && usesPowerShellRuntimeFallback
-                    ? Math.Max(0, analyzedUnits - emittedUnits - fallbackUnits)
-                    : 0;
-                var runtimeRoutedFallbackUnits = usesPowerShellRuntimeFallback
-                    ? fallbackUnits + shapedFallbackUnits
-                    : 0;
-                var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library
-                    ? Math.Max(0, analyzedUnits - emittedUnits)
-                    : 0;
-                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, runtimeRoutedFallbackUnits, spec.BoundaryRuntimeProfile);
+                var boundaryEvidence = CreateBoundaryEvidence(unitDispositionLedger, spec.BoundaryRuntimeProfile);
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
                     .ToArray();
@@ -431,10 +410,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
                     .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
                     .ToArray();
-                var decisionTrace = PowerShellCompilationExplanationService.CreateFinal(plan, spec.Kind, typed);
+                var decisionTrace = PowerShellCompilationExplanationService.CreateFinal(plan, unitDispositionLedger);
                 var reproduction = PowerShellCompilationReproductionEvidenceBuilder.Create(
                     plan,
                     spec.Kind,
+                    unitDispositionLedger,
                     decisionTrace,
                     toolchain,
                     runtimeFreeContract?.SemanticProfile,
@@ -457,6 +437,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     BuildCache = buildCache,
                     IrOptimization = optimizationEvidence,
                     DecisionTrace = decisionTrace,
+                    UnitDispositionLedger = unitDispositionLedger,
                     Reproduction = reproduction,
                     Boundaries = boundaryEvidence,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
@@ -473,14 +454,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
                     Optimization = spec.Optimization,
                     CompiledMethods = compiledMethods,
-                    AnalyzedUnits = analyzedUnits,
-                    EmittedUnits = emittedUnits,
-                    RuntimeRoutedUnits = runtimeRoutedFallbackUnits,
-                    FallbackUnits = fallbackUnits,
-                    ShapedFallbackUnits = shapedFallbackUnits,
-                    RuntimeFallbackUnits = runtimeRoutedFallbackUnits,
-                    OmittedUnits = omittedUnits,
-                    CompilationCoveragePercentage = analyzedUnits == 0 ? 0 : emittedUnits * 100d / analyzedUnits,
+                    AnalyzedUnits = unitDispositionLedger.AnalyzedUnits,
+                    EmittedUnits = unitDispositionLedger.EmittedUnits,
+                    RuntimeRoutedUnits = unitDispositionLedger.RuntimeRoutedUnits,
+                    FallbackUnits = unitDispositionLedger.FallbackUnits,
+                    ShapedFallbackUnits = unitDispositionLedger.ShapedFallbackUnits,
+                    RuntimeFallbackUnits = unitDispositionLedger.RuntimeRoutedUnits,
+                    OmittedUnits = unitDispositionLedger.OmittedUnits,
+                    CompilationCoveragePercentage = unitDispositionLedger.CompilationCoveragePercentage,
                     ArtifactPath = artifactPath,
                     GeneratedSourcePath = generatedSourcePath,
                     ArtifactSha256 = ComputeSha256(stagedArtifact.PrimaryPath),

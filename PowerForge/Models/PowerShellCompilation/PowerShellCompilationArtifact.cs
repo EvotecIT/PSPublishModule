@@ -240,7 +240,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 8;
+    public int SchemaVersion { get; set; } = 9;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -277,6 +277,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Deterministic final decision trace from authored units to artifact disposition.</summary>
     public PowerShellCompilationExplanation? DecisionTrace { get; set; }
+
+    /// <summary>Immutable final authority for every authored unit after artifact shaping.</summary>
+    public PowerShellCompilationUnitDispositionLedger? UnitDispositionLedger { get; set; }
 
     /// <summary>Redacted, integrity-bound inputs needed to reproduce the compiler decision.</summary>
     public PowerShellCompilationReproductionEvidence? Reproduction { get; set; }

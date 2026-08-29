@@ -23,13 +23,25 @@ public sealed class ModuleBuildResult
     public IReadOnlyList<string> FinalizedPayloadFiles { get; internal set; }
 
     /// <summary>
-    /// Creates a new result instance.
+    /// Creates a new result instance using the original binary-compatible constructor contract.
     /// </summary>
     public ModuleBuildResult(
         string stagingPath,
         string manifestPath,
         ExportSet exports,
-        ModuleOwnerNote[]? buildNotes = null,
+        ModuleOwnerNote[]? buildNotes = null)
+        : this(stagingPath, manifestPath, exports, buildNotes, finalizedPayloadFiles: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new result instance with an authoritative finalized payload.
+    /// </summary>
+    public ModuleBuildResult(
+        string stagingPath,
+        string manifestPath,
+        ExportSet exports,
+        ModuleOwnerNote[]? buildNotes,
         IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         StagingPath = stagingPath;

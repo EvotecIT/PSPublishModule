@@ -687,6 +687,7 @@ public sealed class ModulePipelineManifestRefreshTests
             bool includeScriptFolders,
             Action? remotePublishAttempted,
             Action? remoteSideEffectObserved,
+            Action<string, string>? finalizeRepositoryModule,
             IGitHubReleaseProgressReporter? gitHubProgress)
             => throw new InvalidOperationException("Not used in this test.");
 

@@ -1474,6 +1474,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             bool includeScriptFolders,
             Action? remotePublishAttempted,
             Action? remoteSideEffectObserved,
+            Action<string, string>? finalizeRepositoryModule,
             IGitHubReleaseProgressReporter? gitHubProgress)
         {
             ModulePublishPreflightAction?.Invoke(publish, plan);

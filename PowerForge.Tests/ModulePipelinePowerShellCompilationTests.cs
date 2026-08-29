@@ -53,8 +53,8 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Assert.True(manifest.AuthenticodeSigned);
             Assert.True(manifest.AuthenticodeSignedFiles >= 2);
             Assert.Equal(thumbprint, manifest.SigningCertificateThumbprint, ignoreCase: true);
-            Assert.Equal(ComputeFileSha256(manifest.ArtifactPath), manifest.ArtifactSha256, ignoreCase: true);
-            Assert.All(manifest.Files, file => Assert.Equal(ComputeFileSha256(file.Path), file.Sha256, ignoreCase: true));
+            var stagingEvidenceRoot = Path.GetDirectoryName(manifestPath)!;
+            AssertPortableEvidence(manifest, stagingEvidenceRoot);
             Assert.Equal(64, Assert.IsType<PowerShellCompilationReproductionEvidence>(manifest.Reproduction).EvidenceSha256.Length);
 
             var zipPath = Path.Combine(artefactRoot, moduleName + ".zip");
@@ -183,7 +183,11 @@ public sealed class ModulePipelinePowerShellCompilationTests
             {
                 Assert.Contains(archive.Entries, entry => entry.FullName.EndsWith(hybridName + ".dll", StringComparison.OrdinalIgnoreCase));
                 Assert.Contains(archive.Entries, entry => entry.FullName.EndsWith("README.md", StringComparison.OrdinalIgnoreCase));
-                Assert.Contains(archive.Entries, entry => entry.FullName.EndsWith(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
+                var evidenceEntry = Assert.Single(archive.Entries, entry => entry.FullName.EndsWith(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
+                using var evidenceReader = new StreamReader(evidenceEntry.Open());
+                var evidenceJson = evidenceReader.ReadToEnd();
+                Assert.DoesNotContain(testRoot, evidenceJson, StringComparison.OrdinalIgnoreCase);
+                Assert.NotNull(JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(evidenceJson, CreateEvidenceJsonOptions())?.UnitDispositionLedger);
             }
             var repositoryPackage = Path.Combine(localRepository, hybridName + ".1.0.0.nupkg");
             Assert.True(File.Exists(repositoryPackage), repositoryPackage);
@@ -192,7 +196,13 @@ public sealed class ModulePipelinePowerShellCompilationTests
                 Assert.Contains(package.Entries, entry => entry.FullName.Equals(hybridName + ".dll", StringComparison.OrdinalIgnoreCase));
                 Assert.Contains(package.Entries, entry => entry.FullName.Equals(hybridName + ".psm1", StringComparison.OrdinalIgnoreCase));
                 Assert.Contains(package.Entries, entry => entry.FullName.Equals("README.md", StringComparison.OrdinalIgnoreCase));
-                Assert.Contains(package.Entries, entry => entry.FullName.Equals(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
+                var evidenceEntry = Assert.Single(package.Entries, entry => entry.FullName.Equals(hybridName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase));
+                using var evidenceReader = new StreamReader(evidenceEntry.Open());
+                var evidenceJson = evidenceReader.ReadToEnd();
+                Assert.DoesNotContain(testRoot, evidenceJson, StringComparison.OrdinalIgnoreCase);
+                var repositoryEvidence = JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(evidenceJson, CreateEvidenceJsonOptions());
+                Assert.NotNull(repositoryEvidence?.UnitDispositionLedger);
+                Assert.All(repositoryEvidence!.Files, static file => Assert.False(Path.IsPathRooted(file.Path), file.Path));
                 Assert.DoesNotContain(package.Entries, entry => entry.FullName.Contains("powerforge-module-compilation", StringComparison.OrdinalIgnoreCase));
             }
 
@@ -351,6 +361,15 @@ public sealed class ModulePipelinePowerShellCompilationTests
                         ArtefactName = moduleName + ".zip"
                     }
                 });
+                segments.Add(new ConfigurationArtefactSegment
+                {
+                    ArtefactType = ArtefactType.Unpacked,
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true,
+                        Path = Path.Combine(artefactRoot, "unpacked")
+                    }
+                });
             }
 
             var spec = new ModulePipelineSpec
@@ -388,6 +407,9 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-module-compilation.json")));
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.json")));
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.p7s")));
+            AssertPortableEvidence(
+                ReadCompilationEvidence(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.json")),
+                stagingRoot);
             var checkpointSignaturePath = Path.Combine(stagingRoot, moduleName + ".powerforge-module-compilation.p7s");
             Assert.True(File.Exists(checkpointSignaturePath));
             using (var checkpointJson = JsonDocument.Parse(File.ReadAllText(
@@ -435,6 +457,17 @@ public sealed class ModulePipelinePowerShellCompilationTests
                 Assert.True(File.Exists(Path.Combine(installedPath, moduleName + ".dll")));
                 Assert.True(File.Exists(Path.Combine(installedPath, "README.md")));
                 Assert.True(File.Exists(Path.Combine(installedPath, "Assets", "metadata.txt")));
+                AssertPortableEvidence(
+                    ReadCompilationEvidence(Path.Combine(installedPath, moduleName + ".powerforge-compilation.json")),
+                    installedPath);
+                var unpackedModule = Assert.Single(
+                    result.ArtefactResults
+                        .Where(static artefact => artefact.Type == ArtefactType.Unpacked)
+                        .SelectMany(static artefact => artefact.Modules),
+                    static module => module.IsMainModule);
+                AssertPortableEvidence(
+                    ReadCompilationEvidence(Path.Combine(unpackedModule.Path, moduleName + ".powerforge-compilation.json")),
+                    unpackedModule.Path);
 
                 var originalAssembly = File.ReadAllBytes(Path.Combine(stagingRoot, moduleName + ".dll"));
                 spec.Build.ReuseStaging = true;
@@ -666,5 +699,39 @@ public sealed class ModulePipelinePowerShellCompilationTests
 
     private static string ComputeFileSha256(string path)
         => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+    private static PowerShellCompilationArtifactManifest ReadCompilationEvidence(string path)
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        return JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(File.ReadAllText(path), options)
+               ?? throw new InvalidOperationException("Compilation evidence could not be read.");
+    }
+
+    private static JsonSerializerOptions CreateEvidenceJsonOptions()
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        return options;
+    }
+
+    private static void AssertPortableEvidence(PowerShellCompilationArtifactManifest manifest, string moduleRoot)
+    {
+        Assert.False(Path.IsPathRooted(manifest.ArtifactPath), manifest.ArtifactPath);
+        Assert.False(Path.IsPathRooted(manifest.SourcePath), manifest.SourcePath);
+        Assert.All(manifest.SourceFiles, static path => Assert.False(Path.IsPathRooted(path), path));
+        Assert.NotNull(manifest.UnitDispositionLedger);
+        Assert.False(string.IsNullOrWhiteSpace(manifest.Reproduction?.UnitDispositionLedgerSha256));
+        var primaryPath = Path.Combine(moduleRoot, manifest.ArtifactRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        Assert.Equal(manifest.ArtifactSha256, ComputeFileSha256(primaryPath), ignoreCase: true);
+        Assert.All(manifest.Files, file =>
+        {
+            Assert.False(Path.IsPathRooted(file.Path), file.Path);
+            Assert.False(string.IsNullOrWhiteSpace(file.RelativePath));
+            var deliveredPath = Path.Combine(moduleRoot, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(deliveredPath), deliveredPath);
+            Assert.Equal(file.Sha256, ComputeFileSha256(deliveredPath), ignoreCase: true);
+        });
+    }
 
 }

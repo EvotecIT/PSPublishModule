@@ -10,6 +10,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
     internal static PowerShellCompilationReproductionEvidence Create(
         PowerShellCompilationPlan plan,
         PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationUnitDispositionLedger unitDispositionLedger,
         PowerShellCompilationExplanation decisionTrace,
         PowerShellCompilationToolchainEvidence toolchain,
         PowerShellCompilationSemanticProfile? semanticProfile,
@@ -20,6 +21,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         IReadOnlyCollection<PowerShellCompilationCommandProviderContract> providers)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (unitDispositionLedger is null) throw new ArgumentNullException(nameof(unitDispositionLedger));
         if (decisionTrace is null) throw new ArgumentNullException(nameof(decisionTrace));
         if (toolchain is null) throw new ArgumentNullException(nameof(toolchain));
 
@@ -34,6 +36,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         var sourceMapSha256 = GetSourceMapSha256(files);
         var evidence = new PowerShellCompilationReproductionEvidence
         {
+            SchemaVersion = 2,
             Mode = plan.Mode,
             Kind = kind,
             Sources = sources,
@@ -47,6 +50,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             GeneratedSourceSha256 = generatedSourceSha256 ?? string.Empty,
             PublicAbiSha256 = publicAbi?.Sha256 ?? string.Empty,
             SourceMapSha256 = sourceMapSha256,
+            UnitDispositionLedgerSha256 = ComputeTextSha256(Serialize(unitDispositionLedger)),
             DecisionTraceSha256 = ComputeTextSha256(Serialize(decisionTrace)),
             DiagnosticsSha256 = ComputeDiagnosticsSha256(diagnostics),
             DotNetSdkVersion = toolchain.DotNetSdkVersion,
@@ -63,7 +67,9 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             ?? throw new InvalidOperationException("Canonical compilation evidence is missing its reproduction contract.");
         var decisionTrace = manifest.DecisionTrace
             ?? throw new InvalidOperationException("Canonical compilation evidence is missing its final decision trace.");
-        if (evidence.SchemaVersion != 1 ||
+        var unitDispositionLedger = manifest.UnitDispositionLedger
+            ?? throw new InvalidOperationException("Canonical compilation evidence is missing its final unit-disposition ledger.");
+        if (evidence.SchemaVersion != 2 ||
             evidence.Mode != manifest.Mode ||
             evidence.Kind != manifest.Kind ||
             !EqualsIgnoreCase(evidence.CompilerVersion, manifest.Toolchain?.CompilerVersion) ||
@@ -76,6 +82,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             !EqualsIgnoreCase(evidence.SemanticProfileVersion, manifest.SemanticProfile?.Version) ||
             !EqualsIgnoreCase(evidence.SourceMapSha256, GetSourceMapSha256(manifest.Files)) ||
             !EqualsIgnoreCase(evidence.ProviderContractsSha256, ComputeProviderContractsSha256(manifest.CommandProviders)) ||
+            !EqualsIgnoreCase(evidence.UnitDispositionLedgerSha256, ComputeTextSha256(Serialize(unitDispositionLedger))) ||
             !EqualsIgnoreCase(evidence.DecisionTraceSha256, ComputeTextSha256(Serialize(decisionTrace))) ||
             !EqualsIgnoreCase(evidence.DiagnosticsSha256, ComputeDiagnosticsSha256(manifest.Diagnostics)))
         {
@@ -117,6 +124,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             evidence.GeneratedSourceSha256,
             evidence.PublicAbiSha256,
             evidence.SourceMapSha256,
+            evidence.UnitDispositionLedgerSha256,
             evidence.DecisionTraceSha256,
             evidence.DiagnosticsSha256,
             evidence.DotNetSdkVersion,

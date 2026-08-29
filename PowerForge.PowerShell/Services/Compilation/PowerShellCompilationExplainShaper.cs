@@ -13,7 +13,12 @@ public static class PowerShellCompilationExplainShaper
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(targetFramework)) throw new ArgumentException("A target framework is required.", nameof(targetFramework));
         var shaped = Shape(input, plan, targetFramework);
-        return PowerShellCompilationExplanationService.CreateFinal(plan, input.Kind, shaped);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
+            plan,
+            input.Kind,
+            shaped,
+            input.SourcePath);
+        return PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
     }
 
     private static PowerShellTypedCompilationResult? Shape(

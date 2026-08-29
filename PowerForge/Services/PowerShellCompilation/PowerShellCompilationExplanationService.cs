@@ -17,6 +17,56 @@ public static class PowerShellCompilationExplanationService
         PowerShellTypedCompilationResult? shapedCompilation)
         => CreateCore(plan, artifactKind, shapedCompilation, finalShape: true);
 
+    /// <summary>Explains final artifact disposition exclusively from the immutable post-shaping ledger.</summary>
+    public static PowerShellCompilationExplanation CreateFinal(
+        PowerShellCompilationPlan plan,
+        PowerShellCompilationUnitDispositionLedger ledger)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (ledger is null) throw new ArgumentNullException(nameof(ledger));
+        var explanation = CreateCore(plan, artifactKind: null, shapedCompilation: null, finalShape: false);
+        var entries = ledger.Entries.ToDictionary(static entry => entry.UnitId, StringComparer.Ordinal);
+        foreach (var unit in explanation.Files.SelectMany(static file => file.Units))
+        {
+            if (!entries.TryGetValue(unit.UnitId, out var entry))
+                throw new InvalidOperationException($"Final unit disposition ledger is missing authored unit '{unit.UnitId}'.");
+            unit.SemanticEligible = entry.SemanticEligible;
+            unit.Emitted = entry.Emitted;
+            unit.RetainedHostedSource = entry.RetainedHostedSource;
+            unit.RuntimeCommandRegions = entry.RuntimeCommandRegions;
+            unit.BoundaryCrossings = entry.BoundaryCrossings;
+            unit.ShapingFallback = entry.ShapingFallback;
+            unit.Omitted = entry.Omitted;
+            unit.Rejected = entry.Rejected;
+            unit.Decision = entry.Rejected
+                ? PowerShellCompilationDecisionKind.Rejected
+                : entry.RuntimeRouted
+                    ? PowerShellCompilationDecisionKind.RuntimeFallback
+                    : PowerShellCompilationDecisionKind.Typed;
+            unit.LoweringRoute = entry.Emitted && entry.RuntimeRouted
+                ? "BoundClr+PowerShellRuntime"
+                : entry.Emitted
+                    ? "BoundClr"
+                    : entry.RuntimeRouted
+                        ? "PowerShellRuntime"
+                        : "Rejected";
+            unit.ArtifactDisposition = entry.ArtifactDisposition;
+            unit.Causes = entry.DiagnosticChain.Select(static cause => new PowerShellCompilationExplanationDiagnostic
+            {
+                Code = cause.Code,
+                FeatureId = cause.FeatureId,
+                Message = cause.Message,
+                Line = cause.Line,
+                Column = cause.Column
+            }).ToArray();
+        }
+        explanation.CanProceed = plan.CanProceed && ledger.RejectedUnits == 0;
+        explanation.TypedUnits = ledger.EmittedUnits;
+        explanation.RuntimeFallbackUnits = ledger.RuntimeRoutedUnits;
+        explanation.RejectedUnits = ledger.RejectedUnits;
+        return explanation;
+    }
+
     private static PowerShellCompilationExplanation CreateCore(
         PowerShellCompilationPlan plan,
         PowerShellCompilationArtifactKind? artifactKind,
@@ -224,7 +274,7 @@ public static class PowerShellCompilationExplanationService
             Column = diagnostic.Column
         };
 
-    private static string ComputeUnitId(string relativePath, PowerShellCompilationUnitPlan unit)
+    internal static string ComputeUnitId(string relativePath, PowerShellCompilationUnitPlan unit)
     {
         var identity = string.Join("\0", relativePath, unit.Kind, unit.Name, unit.StartLine);
         using var sha = SHA256.Create();

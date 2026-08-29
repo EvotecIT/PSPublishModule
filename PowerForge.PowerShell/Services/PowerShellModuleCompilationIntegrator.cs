@@ -213,6 +213,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
             checkpointPath,
             receiptPath,
             signingResult,
+            portablePaths: true,
             canonicalEvidenceSignaturePath: canonicalEvidenceSignaturePath);
         if (signing is null)
         {
@@ -341,7 +342,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
         PowerShellModuleCompilationConfiguration configuration,
         string assemblyPath)
     {
-        if (manifest.SchemaVersion < 7 ||
+        if (manifest.SchemaVersion < 9 ||
             manifest.Kind != PowerShellCompilationArtifactKind.BinaryModule ||
             !string.Equals(manifest.ArtifactName, moduleName, StringComparison.Ordinal) ||
             manifest.Mode != configuration.Mode ||
@@ -364,8 +365,12 @@ internal sealed class PowerShellModuleCompilationIntegrator
                 "Reusable compiled staging dependency evidence does not match the reviewed dependency lock.");
         }
 
+        var stagingPath = Path.GetDirectoryName(assemblyPath)
+                          ?? throw new InvalidOperationException("Reusable compiled staging assembly has no parent directory.");
         var assemblyEvidence = (manifest.Files ?? Array.Empty<PowerShellCompilationArtifactFile>())
-            .SingleOrDefault(file => PowerShellCompilationPathSafety.PathEquals(file.Path, assemblyPath));
+            .SingleOrDefault(file => PowerShellCompilationPathSafety.PathEquals(
+                ResolveEvidencePath(stagingPath, file),
+                assemblyPath));
         if (assemblyEvidence is null ||
             !File.Exists(assemblyPath) ||
             !string.Equals(assemblyEvidence.Sha256, ComputeSha256(assemblyPath), StringComparison.OrdinalIgnoreCase))
@@ -373,6 +378,18 @@ internal sealed class PowerShellModuleCompilationIntegrator
             throw new InvalidOperationException(
                 "Reusable compiled staging assembly does not match its canonical compilation evidence.");
         }
+    }
+
+    private static string ResolveEvidencePath(
+        string stagingPath,
+        PowerShellCompilationArtifactFile evidence)
+    {
+        if (Path.IsPathRooted(evidence.Path)) return evidence.Path;
+
+        var relativePath = string.IsNullOrWhiteSpace(evidence.RelativePath)
+            ? evidence.Path
+            : evidence.RelativePath;
+        return Path.GetFullPath(Path.Combine(stagingPath, relativePath));
     }
 
     private static PowerShellCompilationArtifactManifest FinalizeCanonicalManifest(
@@ -393,18 +410,18 @@ internal sealed class PowerShellModuleCompilationIntegrator
                            File.ReadAllText(compilationManifestPath),
                            CreateCompilationManifestJsonOptions())
                        ?? throw new InvalidOperationException("Canonical PowerShell compilation evidence is unreadable.");
-        var previousRoot = string.IsNullOrWhiteSpace(manifest.ArtifactPath)
+        var previousRoot = string.IsNullOrWhiteSpace(manifest.ArtifactPath) || !Path.IsPathRooted(manifest.ArtifactPath)
             ? null
             : Path.GetDirectoryName(Path.GetFullPath(manifest.ArtifactPath));
         var roles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(previousRoot))
+        foreach (var file in manifest.Files ?? Array.Empty<PowerShellCompilationArtifactFile>())
         {
-            foreach (var file in manifest.Files ?? Array.Empty<PowerShellCompilationArtifactFile>())
-            {
-                if (string.IsNullOrWhiteSpace(file.Path)) continue;
-                var relative = FrameworkCompatibility.GetRelativePath(previousRoot!, Path.GetFullPath(file.Path)).Replace('\\', '/');
-                roles[relative] = file.Role;
-            }
+            var relative = !string.IsNullOrWhiteSpace(file.RelativePath)
+                ? file.RelativePath.Replace('\\', '/')
+                : !string.IsNullOrWhiteSpace(previousRoot) && Path.IsPathRooted(file.Path)
+                    ? FrameworkCompatibility.GetRelativePath(previousRoot!, Path.GetFullPath(file.Path)).Replace('\\', '/')
+                    : file.Path.Replace('\\', '/');
+            if (!string.IsNullOrWhiteSpace(relative)) roles[relative] = file.Role;
         }
 
         var payloadFiles = EnumeratePayloadFiles(
@@ -413,7 +430,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
             checkpointPath,
             receiptPath,
             canonicalEvidenceSignaturePath ?? string.Empty);
-        manifest.SchemaVersion = Math.Max(manifest.SchemaVersion, 8);
+        manifest.SchemaVersion = Math.Max(manifest.SchemaVersion, 9);
         manifest.Files = payloadFiles.Select(path =>
         {
             var relative = FrameworkCompatibility.GetRelativePath(stagingPath, path).Replace('\\', '/');
@@ -430,6 +447,30 @@ internal sealed class PowerShellModuleCompilationIntegrator
             ? FrameworkCompatibility.GetRelativePath(stagingPath, moduleManifestPath).Replace('\\', '/')
             : moduleManifestPath;
         manifest.ArtifactRelativePath = FrameworkCompatibility.GetRelativePath(stagingPath, moduleManifestPath).Replace('\\', '/');
+        if (portablePaths)
+        {
+            var portableSources = manifest.Reproduction?.Sources
+                .Select(static source => source.RelativePath.Replace('\\', '/'))
+                .Where(static source => !string.IsNullOrWhiteSpace(source))
+                .ToArray() ?? Array.Empty<string>();
+            manifest.SourcePath = portableSources.FirstOrDefault() ?? Path.GetFileName(manifest.SourcePath);
+            manifest.SourceFiles = portableSources;
+            if (!string.IsNullOrWhiteSpace(manifest.GeneratedSourcePath))
+            {
+                manifest.GeneratedSourcePath = Path.IsPathRooted(manifest.GeneratedSourcePath) && !string.IsNullOrWhiteSpace(previousRoot)
+                    ? FrameworkCompatibility.GetRelativePath(previousRoot!, manifest.GeneratedSourcePath).Replace('\\', '/')
+                    : manifest.GeneratedSourcePath.Replace('\\', '/');
+            }
+            manifest.Diagnostics = (manifest.Diagnostics ?? Array.Empty<PowerShellCompilationDiagnostic>())
+                .Select(static diagnostic => new PowerShellCompilationDiagnostic(
+                    diagnostic.Code,
+                    diagnostic.Message,
+                    Path.GetFileName(diagnostic.FilePath),
+                    diagnostic.Line,
+                    diagnostic.Column,
+                    diagnostic.FeatureId))
+                .ToArray();
+        }
         manifest.ArtifactSha256 = ComputeSha256(moduleManifestPath);
         manifest.ArtifactSizeBytes = new FileInfo(moduleManifestPath).Length;
         manifest.AuthenticodeSigned = signingResult is not null && signingResult.Success && signingResult.VerifiedFilePaths.Length > 0;

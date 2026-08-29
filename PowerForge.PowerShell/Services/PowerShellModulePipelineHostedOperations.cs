@@ -102,6 +102,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         bool includeScriptFolders,
         Action? remotePublishAttempted,
         Action? remoteSideEffectObserved,
+        Action<string, string>? finalizeRepositoryModule,
         IGitHubReleaseProgressReporter? gitHubProgress)
         => new ModulePublisher(_logger, _runner).Publish(
             publish,
@@ -111,6 +112,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             includeScriptFolders,
             remotePublishAttempted,
             remoteSideEffectObserved,
+            finalizeRepositoryModule: finalizeRepositoryModule,
             gitHubProgress: gitHubProgress);
 
     public ModulePublishVersionPreflightResult ValidateModulePublishVersion(
