@@ -515,8 +515,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
-        string dotNetPath = ResolveDotNetChildExecutable("dotnet");
-        var result = RunCancellableProcess(dotNetPath, workingDir, args, environmentVariables);
+        var result = RunCancellableProcess("dotnet", workingDir, args, environmentVariables);
         if (result.ExitCode != 0)
         {
             var stderr = (result.StdErr ?? string.Empty).TrimEnd();
@@ -530,7 +529,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             throw new DotNetPublishCommandException(
                 message: msg,
-                fileName: dotNetPath,
+                fileName: ActiveDotNetExecutablePath.Value ?? "dotnet",
                 workingDirectory: string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                 args: args,
                 exitCode: result.ExitCode,
@@ -552,7 +551,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string?>? environmentVariables,
         bool useDotNetEnvironment = true)
     {
-        fileName = ResolveDotNetChildExecutable(fileName);
+        fileName = ResolveDotNetChildExecutable(fileName, workingDir);
         IEnumerable<string> inheritedVariableNames = Environment.GetEnvironmentVariables().Keys
             .Cast<object?>()
             .Select(key => key?.ToString())
@@ -577,6 +576,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 _cancellationToken.Value)
             .GetAwaiter()
             .GetResult();
+        ValidateActiveDotNetInstallationSnapshot(fileName, verifyHashes: false);
         _cancellationToken.Value.ThrowIfCancellationRequested();
         return (result.ExitCode, result.StdOut, result.StdErr);
     }
@@ -618,7 +618,9 @@ public sealed partial class DotNetPublishPipelineRunner
         return dotNetPath;
     }
 
-    internal static string ResolveDotNetChildExecutable(string fileName)
+    internal static string ResolveDotNetChildExecutable(
+        string fileName,
+        string? workingDirectory = null)
     {
         if (!fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
             return fileName;
@@ -639,7 +641,35 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         string resolvedPath = path!;
         ValidateDotNetExecutableSnapshot(resolvedPath, expectedSha256);
+        if (ActiveToolSnapshotScope.Value && ActiveStrictDotNetEnvironment.Value)
+        {
+            string effectiveWorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory)
+                ? Environment.CurrentDirectory
+                : workingDirectory!;
+            TrustedDotNetInstallationSnapshot snapshot = ActiveDotNetInstallationSnapshot.Value ??=
+                TrustedDotNetInstallationSnapshot.Create(
+                    resolvedPath,
+                    effectiveWorkingDirectory);
+            snapshot.EnsureSelection(
+                resolvedPath,
+                effectiveWorkingDirectory);
+            snapshot.ValidateUnchanged(verifyHashes: false);
+        }
         return resolvedPath;
+    }
+
+    private static void ValidateActiveDotNetInstallationSnapshot(string fileName, bool verifyHashes)
+    {
+        string? activePath = ActiveDotNetExecutablePath.Value;
+        if (string.IsNullOrWhiteSpace(activePath) ||
+            !string.Equals(
+                Path.GetFullPath(fileName),
+                Path.GetFullPath(activePath),
+                IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            return;
+        }
+        ActiveDotNetInstallationSnapshot.Value?.ValidateUnchanged(verifyHashes);
     }
 
     internal static string ResolveRunGitExecutablePath()

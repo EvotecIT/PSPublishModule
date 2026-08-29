@@ -169,11 +169,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot snapshot =
                 DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([input], null);
-            string snapshotPath = XDocument.Load(snapshot.TargetsPath)
-                .Descendants("ResolvedFileToPublish")
-                .Single(element => element.Attribute("Include") is not null)
-                .Attribute("Include")!
-                .Value;
+            string snapshotPath = Assert.Single(Directory.GetFiles(
+                Path.Combine(Path.GetDirectoryName(snapshot.TargetsPath)!, "inputs"),
+                "*",
+                SearchOption.AllDirectories));
 
             Assert.Equal(expectedMode, File.GetUnixFileMode(snapshotPath));
         }

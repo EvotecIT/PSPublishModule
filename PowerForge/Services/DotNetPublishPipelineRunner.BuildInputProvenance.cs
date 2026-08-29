@@ -1237,9 +1237,10 @@ public sealed partial class DotNetPublishPipelineRunner
             fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
         {
             if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrWhiteSpace(ActiveDotNetExecutablePath.Value))
+                (ActiveToolSnapshotScope.Value ||
+                 !string.IsNullOrWhiteSpace(ActiveDotNetExecutablePath.Value)))
             {
-                effectiveFileName = ResolveDotNetChildExecutable("dotnet");
+                effectiveFileName = ResolveDotNetChildExecutable("dotnet", workingDirectory);
             }
             else if (fileName.Equals("git", StringComparison.OrdinalIgnoreCase) &&
                      !string.IsNullOrWhiteSpace(ActiveGitExecutablePath.Value))
@@ -1270,12 +1271,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledGitConfiguration,
                 controlledGitIndexFile);
         }
-        return RunProcessCore(
+        (int ExitCode, string StdOut, string StdErr, bool TimedOut) result = RunProcessCore(
             effectiveFileName,
             workingDirectory,
             effectiveArguments,
             timeout,
             environmentVariables);
+        if (fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            ValidateActiveDotNetInstallationSnapshot(effectiveFileName, verifyHashes: false);
+        return result;
     }
 
 }

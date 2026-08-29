@@ -260,6 +260,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             if (!TryMapControlledResolutionItems(
                     items,
+                    controlledOutputRoot,
                     controlledSourceRoot,
                     originalGitRoot!,
                     controlledIntermediateRoot,
@@ -312,6 +313,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryMapControlledResolutionItems(
         JsonElement items,
+        string controlledOutputRoot,
         string controlledSourceRoot,
         string originalGitRoot,
         string controlledIntermediateRoot,
@@ -337,15 +339,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         if (item.ValueKind != JsonValueKind.Object)
                             return false;
-                        writer.WriteStartObject();
+                        var mappedStrings = new Dictionary<string, string>(StringComparer.Ordinal);
+                        bool proofOnlyItem = false;
                         foreach (JsonProperty metadata in item.EnumerateObject())
                         {
-                            writer.WritePropertyName(metadata.Name);
                             if (metadata.Value.ValueKind != JsonValueKind.String)
-                            {
-                                metadata.Value.WriteTo(writer);
                                 continue;
-                            }
                             string value = metadata.Value.GetString() ?? string.Empty;
                             if (!TryMapControlledResolutionValue(
                                     value,
@@ -359,7 +358,27 @@ public sealed partial class DotNetPublishPipelineRunner
                             {
                                 return false;
                             }
-                            writer.WriteStringValue(mappedValue);
+                            mappedStrings[metadata.Name] = mappedValue;
+                            if ((metadata.Name.Equals("Identity", StringComparison.OrdinalIgnoreCase) ||
+                                 metadata.Name.Equals("FullPath", StringComparison.OrdinalIgnoreCase)) &&
+                                ContainsControlledResolutionPath(mappedValue, controlledOutputRoot))
+                            {
+                                proofOnlyItem = true;
+                            }
+                        }
+                        if (proofOnlyItem)
+                            continue;
+
+                        writer.WriteStartObject();
+                        foreach (JsonProperty metadata in item.EnumerateObject())
+                        {
+                            writer.WritePropertyName(metadata.Name);
+                            if (metadata.Value.ValueKind != JsonValueKind.String)
+                            {
+                                metadata.Value.WriteTo(writer);
+                                continue;
+                            }
+                            writer.WriteStringValue(mappedStrings[metadata.Name]);
                         }
                         writer.WriteEndObject();
                     }
@@ -373,6 +392,39 @@ public sealed partial class DotNetPublishPipelineRunner
         catch
         {
             mappedItemsJson = string.Empty;
+            return false;
+        }
+    }
+
+    internal static bool TryMapControlledResolutionItemsForTest(
+        JsonElement items,
+        string controlledOutputRoot,
+        string controlledSourceRoot,
+        string originalGitRoot,
+        string controlledIntermediateRoot,
+        string? originalIntermediateRoot,
+        string controlledPackageRoot,
+        out string mappedItemsJson)
+        => TryMapControlledResolutionItems(
+            items,
+            controlledOutputRoot,
+            controlledSourceRoot,
+            originalGitRoot,
+            controlledIntermediateRoot,
+            originalIntermediateRoot,
+            controlledPackageRoot,
+            verifiedPackages: null,
+            out mappedItemsJson);
+
+    private static bool ContainsControlledResolutionPath(string value, string controlledOutputRoot)
+    {
+        try
+        {
+            return Path.IsPathRooted(value) &&
+                   IsSameOrBelowBuildInputPath(value, controlledOutputRoot);
+        }
+        catch
+        {
             return false;
         }
     }

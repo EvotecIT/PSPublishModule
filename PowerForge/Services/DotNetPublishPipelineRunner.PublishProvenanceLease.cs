@@ -7,7 +7,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal sealed class PublishProvenanceLease : IDisposable
     {
         private readonly HashSet<string> _guardedPaths;
-        private readonly Dictionary<string, string> _expectedHashes;
+        private readonly HashSet<string> _absentDirectoryAncestors;
+        private readonly Dictionary<string, string?> _expectedHashes;
         private readonly List<FileStream> _leases = new();
         private readonly List<FileSystemWatcher> _watchers = new();
         private int _changed;
@@ -21,7 +22,17 @@ public sealed partial class DotNetPublishPipelineRunner
             _guardedPaths = new HashSet<string>(
                 paths.Select(Path.GetFullPath),
                 comparer);
-            _expectedHashes = new Dictionary<string, string>(comparer);
+            _expectedHashes = new Dictionary<string, string?>(comparer);
+            _absentDirectoryAncestors = new HashSet<string>(comparer);
+            foreach (string path in _guardedPaths)
+            {
+                string? directory = Path.GetDirectoryName(path);
+                while (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+                {
+                    _absentDirectoryAncestors.Add(directory);
+                    directory = Path.GetDirectoryName(directory);
+                }
+            }
         }
 
         internal static PublishProvenanceLease Create(IEnumerable<string> paths)
@@ -34,8 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     if (!File.Exists(path))
                     {
-                        throw new InvalidOperationException(
-                            $"A proven publish input disappeared before it could be leased: {path}.");
+                        lease._expectedHashes[path] = null;
+                        continue;
                     }
 
                     var stream = new FileStream(
@@ -78,12 +89,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 throw new InvalidOperationException(
                     "A proven project or import input changed while publish was running.");
             }
-            foreach (KeyValuePair<string, string> entry in _expectedHashes)
+            if (_absentDirectoryAncestors.Any(Directory.Exists))
             {
+                throw new InvalidOperationException(
+                    "A previously absent build-control directory appeared while publish was running.");
+            }
+            foreach (KeyValuePair<string, string?> entry in _expectedHashes)
+            {
+                if (entry.Value is null)
+                {
+                    if (File.Exists(entry.Key))
+                    {
+                        throw new InvalidOperationException(
+                            $"A previously absent build-control input appeared while publish was running: {entry.Key}.");
+                    }
+                    continue;
+                }
                 if (!File.Exists(entry.Key) ||
                     !string.Equals(
                         ComputeSha256Hex(File.ReadAllBytes(entry.Key)),
-                        entry.Value,
+                        entry.Value!,
                         StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
@@ -114,7 +139,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private void StartWatchers()
         {
             foreach (string directory in _guardedPaths
-                         .Select(path => Path.GetDirectoryName(path)!)
+                         .Select(FindNearestExistingDirectory)
                          .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
             {
                 var watcher = new FileSystemWatcher(directory)
@@ -152,17 +177,39 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private void MarkChanged(object sender, FileSystemEventArgs args)
         {
-            if (_guardedPaths.Contains(Path.GetFullPath(args.FullPath)))
+            if (AffectsGuardedPath(args.FullPath))
                 Interlocked.Exchange(ref _changed, 1);
         }
 
         private void MarkChanged(object sender, RenamedEventArgs args)
         {
-            if (_guardedPaths.Contains(Path.GetFullPath(args.FullPath)) ||
-                _guardedPaths.Contains(Path.GetFullPath(args.OldFullPath)))
+            if (AffectsGuardedPath(args.FullPath) || AffectsGuardedPath(args.OldFullPath))
             {
                 Interlocked.Exchange(ref _changed, 1);
             }
+        }
+
+        private bool AffectsGuardedPath(string changedPath)
+        {
+            string fullChangedPath = Path.GetFullPath(changedPath);
+            return _guardedPaths.Contains(fullChangedPath) ||
+                   _absentDirectoryAncestors.Contains(fullChangedPath);
+        }
+
+        internal bool AffectsGuardedPathForTest(string changedPath)
+            => AffectsGuardedPath(changedPath);
+
+        private static string FindNearestExistingDirectory(string path)
+        {
+            string? directory = Path.GetDirectoryName(path);
+            while (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+                directory = Path.GetDirectoryName(directory);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                throw new InvalidOperationException(
+                    $"A provenance input has no observable existing directory ancestor: {path}.");
+            }
+            return directory!;
         }
 
         private static string ComputeStreamSha256(Stream stream)

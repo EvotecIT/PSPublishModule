@@ -35,6 +35,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var previousCancellationToken = _cancellationToken.Value;
         string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
         string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
+        TrustedDotNetInstallationSnapshot? previousDotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
         string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
         string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
         bool previousNativeAotPublish = ActiveNativeAotPublish.Value;
@@ -42,6 +43,7 @@ public sealed partial class DotNetPublishPipelineRunner
         bool previousToolSnapshotScope = ActiveToolSnapshotScope.Value;
         ActiveDotNetExecutablePath.Value = null;
         ActiveDotNetExecutableSha256.Value = null;
+        ActiveDotNetInstallationSnapshot.Value = null;
         ActiveGitExecutablePath.Value = null;
         ActiveGitExecutableSha256.Value = null;
         ActiveToolSnapshotScope.Value = true;
@@ -321,15 +323,34 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             finally
             {
-                ClearMsiVersionStateWrites(msiReservationOwner);
-                _cancellationToken.Value = previousCancellationToken;
-                ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
-                ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
-                ActiveGitExecutablePath.Value = previousGitExecutablePath;
-                ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
-                ActiveNativeAotPublish.Value = previousNativeAotPublish;
-                ActiveStrictDotNetEnvironment.Value = previousStrictDotNetEnvironment;
-                ActiveToolSnapshotScope.Value = previousToolSnapshotScope;
+                TrustedDotNetInstallationSnapshot? dotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
+                try
+                {
+                    if (dotNetInstallationSnapshot is not null)
+                    {
+                        try
+                        {
+                            dotNetInstallationSnapshot.ValidateUnchanged(verifyHashes: true);
+                        }
+                        finally
+                        {
+                            dotNetInstallationSnapshot.Dispose();
+                        }
+                    }
+                }
+                finally
+                {
+                    ClearMsiVersionStateWrites(msiReservationOwner);
+                    _cancellationToken.Value = previousCancellationToken;
+                    ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
+                    ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
+                    ActiveDotNetInstallationSnapshot.Value = previousDotNetInstallationSnapshot;
+                    ActiveGitExecutablePath.Value = previousGitExecutablePath;
+                    ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
+                    ActiveNativeAotPublish.Value = previousNativeAotPublish;
+                    ActiveStrictDotNetEnvironment.Value = previousStrictDotNetEnvironment;
+                    ActiveToolSnapshotScope.Value = previousToolSnapshotScope;
+                }
             }
         }
     }

@@ -4,6 +4,10 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string[]>
+        ExternalTargetNameCache = new(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private static bool TryCreateReachableControlledBuildDocuments(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
@@ -20,6 +24,12 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 effectiveTargets[target.Attribute("Name")!.Value.Trim()] = target;
             }
+        }
+        if (!TryReadExternalSdkTargetNames(evaluatedProperties, out HashSet<string> externalTargets))
+        {
+            reachableDocument = new XDocument();
+            reachableDocuments = Array.Empty<XDocument>();
+            return false;
         }
 
         var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -62,7 +72,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 bool hooksReachable = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
                     .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
                     .Any(reachable.Contains);
-                if (!reachable.Contains(entry.Key) && (unresolvedHook || hooksReachable))
+                bool hooksExternalTarget = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
+                    .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
+                    .Any(externalTargets.Contains);
+                if (!reachable.Contains(entry.Key) &&
+                    (unresolvedHook || hooksReachable || hooksExternalTarget))
                     changed |= reachable.Add(entry.Key);
             }
 
@@ -132,5 +146,52 @@ public sealed partial class DotNetPublishPipelineRunner
             ? reachableDocuments[sourceIndex]
             : new XDocument(document);
         return true;
+    }
+
+    private static bool TryReadExternalSdkTargetNames(
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        out HashSet<string> names)
+    {
+        names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string propertyName in new[] { "MSBuildSDKsPath", "MSBuildToolsPath" })
+        {
+            if (!evaluatedProperties.TryGetValue(propertyName, out string? root) ||
+                string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+            try
+            {
+                string fullRoot = Path.GetFullPath(root);
+                if (!Path.IsPathRooted(root) || !Directory.Exists(fullRoot))
+                    return false;
+                names.UnionWith(ExternalTargetNameCache.GetOrAdd(fullRoot, ReadExternalTargetNames));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static string[] ReadExternalTargetNames(string root)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        IEnumerable<string> projectFiles = Directory
+            .EnumerateFiles(root, "*.targets", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(root, "*.props", SearchOption.AllDirectories));
+        foreach (string path in projectFiles)
+        {
+            XDocument sdkDocument = XDocument.Load(path, LoadOptions.None);
+            foreach (XElement target in sdkDocument.Descendants().Where(element =>
+                         element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
+            {
+                string? name = target.Attribute("Name")?.Value?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    names.Add(name!);
+            }
+        }
+        return names.ToArray();
     }
 }

@@ -113,41 +113,12 @@ public sealed partial class DotNetPublishPipelineRunner
         HashSet<string> sourceInputs)
     {
         string projectDirectory = Path.GetDirectoryName(projectPath)!;
-        string? gitRoot = ReadGitText(projectDirectory, "rev-parse --show-toplevel");
-        string boundary = Path.GetFullPath(string.IsNullOrWhiteSpace(gitRoot) ? projectDirectory : gitRoot!);
-        string[] names =
-        [
-            "Directory.Build.props",
-            "Directory.Build.targets",
-            "Directory.Packages.props",
-            "global.json",
-            "NuGet.Config",
-            "nuget.config",
-            "packages.lock.json",
-            "Directory.Build.rsp",
-            "MSBuild.rsp"
-        ];
-
-        string current = Path.GetFullPath(projectDirectory);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        while (true)
-        {
-            foreach (string name in names)
-                AddBuildControlCandidate(
-                    Path.Combine(current, name),
-                    inputs,
-                    sourceInputs,
-                    new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
-
-            if (string.Equals(current, boundary, comparison))
-                break;
-            string? parent = Path.GetDirectoryName(current);
-            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
-                break;
-            current = parent;
-        }
+        foreach (string candidate in EnumerateAncestorBuildControlCandidatePaths(projectPath))
+            AddBuildControlCandidate(
+                candidate,
+                inputs,
+                sourceInputs,
+                new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
 
         string? evaluatedLockFile = ReadEvaluatedPath(
             properties,
@@ -167,6 +138,36 @@ public sealed partial class DotNetPublishPipelineRunner
                 inputs,
                 sourceInputs,
                 new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+    }
+
+    internal static IEnumerable<string> EnumerateAncestorBuildControlCandidatePaths(string projectPath)
+    {
+        string[] names =
+        [
+            "Directory.Build.props",
+            "Directory.Build.targets",
+            "Directory.Packages.props",
+            "global.json",
+            "NuGet.Config",
+            "nuget.config",
+            "packages.lock.json",
+            "Directory.Build.rsp",
+            "MSBuild.rsp"
+        ];
+        string current = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        while (true)
+        {
+            foreach (string name in names)
+                yield return Path.Combine(current, name);
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                yield break;
+            current = parent;
+        }
     }
 
     private static void AddBuildControlCandidate(

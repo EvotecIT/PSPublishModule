@@ -141,20 +141,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "*",
                 SearchOption.AllDirectories);
             XDocument targets = XDocument.Load(snapshot.TargetsPath);
-            XElement[] replacements = targets.Descendants("ResolvedFileToPublish")
-                .Where(element => element.Attribute("Include") is not null)
-                .ToArray();
-
             Assert.Single(snapshotFiles);
-            Assert.Equal(2, replacements.Length);
-            Assert.All(replacements, replacement =>
-                Assert.Equal(snapshotFiles[0], replacement.Attribute("Include")?.Value));
-            Assert.Equal(
-                new[] { "first/Library.dll", "second/Library.dll" },
-                replacements.Select(replacement => replacement.Element("RelativePath")?.Value).ToArray());
-            Assert.Single(
-                targets.Descendants("ResolvedFileToPublish"),
-                element => element.Attribute("Remove") is not null);
+            Assert.Empty(targets.Descendants("ResolvedFileToPublish"));
+            Assert.Contains(
+                targets.Descendants("Error"),
+                element => element.Attribute("Text")?.Value.Contains(
+                    first.FullPath,
+                    StringComparison.OrdinalIgnoreCase) == true);
         }
         finally
         {

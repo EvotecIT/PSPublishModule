@@ -350,7 +350,7 @@ public sealed partial class DotNetPublishPipelineRunner
                extension.Equals(".proj", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ContainsUncontrolledControlledBuildTask(
+    internal static bool ContainsUncontrolledControlledBuildTask(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedProperties = null)

@@ -1,6 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
-using System.Xml;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -91,27 +89,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal sealed class NoBuildPublishInputSnapshot : IDisposable
     {
-        private static readonly HashSet<string> IntrinsicMetadataNames = new(
-            new[]
-            {
-                "Identity",
-                "FullPath",
-                "RootDir",
-                "Filename",
-                "Extension",
-                "RelativeDir",
-                "Directory",
-                "RecursiveDir",
-                "ModifiedTime",
-                "CreatedTime",
-                "AccessedTime",
-                "DefiningProjectFullPath",
-                "DefiningProjectDirectory",
-                "DefiningProjectName",
-                "DefiningProjectExtension"
-            },
-            StringComparer.OrdinalIgnoreCase);
-
         private readonly string _root;
         private readonly List<FileStream> _leases;
         private readonly IReadOnlyDictionary<string, string> _expectedHashes;
@@ -358,9 +335,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     "Name",
                     "_PowerForgeBindNoBuildPublishInputs_" + Guid.NewGuid().ToString("N")),
                 new XAttribute("BeforeTargets", "_ComputeResolvedFilesToPublishTypes"));
-            var itemGroup = new XElement("ItemGroup");
-            int index = 0;
-            foreach ((NoBuildPublishInput[] inputs, string snapshotPath) in mappedInputs)
+                int index = 0;
+            foreach ((NoBuildPublishInput[] inputs, _) in mappedInputs)
             {
                 NoBuildPublishInput input = inputs[0];
                 string itemName = "_PowerForgeProvenNoBuildInput" +
@@ -381,46 +357,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         "Text",
                         "A proven no-build publish input was not present in ResolvedFileToPublish: " +
                         input.FullPath)));
-                itemGroup.Add(new XElement(
-                    "ResolvedFileToPublish",
-                    new XAttribute("Remove", "@(ResolvedFileToPublish)"),
-                    new XAttribute(
-                        "Condition",
-                        $"'%(ResolvedFileToPublish.FullPath)' == '{originalPath}'")));
-                foreach (NoBuildPublishInput replacementInput in inputs)
-                {
-                    var replacement = new XElement(
-                        "ResolvedFileToPublish",
-                        new XAttribute("Include", snapshotPath));
-                    foreach (KeyValuePair<string, string> metadata in replacementInput.Metadata)
-                    {
-                        if (IntrinsicMetadataNames.Contains(metadata.Key) ||
-                            !TryVerifyXmlName(metadata.Key))
-                        {
-                            continue;
-                        }
-                        replacement.Add(new XElement(metadata.Key, metadata.Value ?? string.Empty));
-                    }
-                    replacement.SetElementValue("RelativePath", replacementInput.RelativePath);
-                    itemGroup.Add(replacement);
-                }
             }
-            target.Add(itemGroup);
             project.Add(target);
             new XDocument(project).Save(targetsPath, SaveOptions.DisableFormatting);
-        }
-
-        private static bool TryVerifyXmlName(string name)
-        {
-            try
-            {
-                _ = XmlConvert.VerifyName(name);
-                return !name.Contains(':');
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private static string EscapeMsBuildConditionLiteral(string value)

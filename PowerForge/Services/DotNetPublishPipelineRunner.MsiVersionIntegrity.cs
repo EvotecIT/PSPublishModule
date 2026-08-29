@@ -270,7 +270,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     ? path
                     : Path.Combine(projectRoot, path)))
                 .Where(File.Exists))
-            .Where(File.Exists)
             .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();

@@ -212,7 +212,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "BeforeTargets=\"_ComputeResolvedFilesToPublishTypes\"",
                 targets,
                 StringComparison.Ordinal);
-            Assert.Contains(snapshotPath, targets, StringComparison.Ordinal);
+            Assert.DoesNotContain(snapshotPath, targets, StringComparison.Ordinal);
+            Assert.DoesNotContain("ResolvedFileToPublish Remove", targets, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -347,10 +348,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             DotNetPublishResult result = runner.Run(plan, progress: null);
 
             Assert.False(result.Succeeded);
-            Assert.Contains(
-                "cannot access the file",
-                result.ErrorMessage ?? string.Empty,
-                StringComparison.OrdinalIgnoreCase);
+            string errorMessage = result.ErrorMessage ?? string.Empty;
+            Assert.True(
+                errorMessage.Contains(
+                    "Release source changed after planning",
+                    StringComparison.OrdinalIgnoreCase) ||
+                errorMessage.Contains(
+                    "cannot access the file",
+                    StringComparison.OrdinalIgnoreCase),
+                errorMessage);
             Assert.Equal(provenBytes, File.ReadAllBytes(libraryOutput));
         }
         finally
