@@ -574,10 +574,17 @@ public sealed partial class DotNetRepositoryReleaseService
         var value = properties.TryGetValue("TargetFrameworks", out var frameworks) && !string.IsNullOrWhiteSpace(frameworks)
             ? frameworks
             : properties.TryGetValue("TargetFramework", out var framework) ? framework : string.Empty;
-        return ExpandPlannedProperties(value, properties)
+        var expanded = ExpandPlannedProperties(value, properties);
+        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
+        {
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because target frameworks '{expanded}' contain an unsupported MSBuild expression.");
+        }
+        return expanded
             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(value => value.Trim())
-            .Where(value => value.Length > 0 && value.IndexOf("$(", StringComparison.Ordinal) < 0)
+            .Where(value => value.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

@@ -34,6 +34,7 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var fullProjectPath = Path.GetFullPath(projectPath);
         var projectDirectory = Path.GetDirectoryName(fullProjectPath)!;
+        var projectFile = Path.GetFileName(fullProjectPath);
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (System.Collections.DictionaryEntry environmentProperty in Environment.GetEnvironmentVariables())
         {
@@ -54,8 +55,11 @@ public sealed partial class DotNetRepositoryReleaseService
             ["TargetPlatformIdentifier"] = string.Empty,
             ["TargetPlatformVersion"] = string.Empty,
             ["MSBuildProjectDirectory"] = projectDirectory,
+            ["MSBuildProjectDirectoryNoRoot"] = GetPlannedPathWithoutRoot(projectDirectory),
+            ["MSBuildProjectFile"] = projectFile,
+            ["MSBuildProjectExtension"] = Path.GetExtension(projectFile),
             ["MSBuildProjectFullPath"] = fullProjectPath,
-            ["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(fullProjectPath)
+            ["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(projectFile)
         })
         {
             properties[globalProperty.Key] = globalProperty.Value;
@@ -245,9 +249,20 @@ public sealed partial class DotNetRepositoryReleaseService
             return;
 
         var directory = Path.GetDirectoryName(fullPath)!;
-        var scopedNames = new[] { "MSBuildThisFileDirectory", "MSBuildThisFileFullPath", "MSBuildThisFileName" };
+        var scopedNames = new[]
+        {
+            "MSBuildThisFile",
+            "MSBuildThisFileDirectory",
+            "MSBuildThisFileDirectoryNoRoot",
+            "MSBuildThisFileExtension",
+            "MSBuildThisFileFullPath",
+            "MSBuildThisFileName"
+        };
         var previous = scopedNames.ToDictionary(name => name, name => properties.TryGetValue(name, out var value) ? value : null, StringComparer.OrdinalIgnoreCase);
+        properties["MSBuildThisFile"] = Path.GetFileName(fullPath);
         properties["MSBuildThisFileDirectory"] = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        properties["MSBuildThisFileDirectoryNoRoot"] = GetPlannedPathWithoutRoot(directory, includeTrailingSeparator: true);
+        properties["MSBuildThisFileExtension"] = Path.GetExtension(fullPath);
         properties["MSBuildThisFileFullPath"] = fullPath;
         properties["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath);
         try
@@ -509,6 +524,16 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var normalized = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         return Path.GetFullPath(Path.Combine(directory, normalized));
+    }
+
+    private static string GetPlannedPathWithoutRoot(string path, bool includeTrailingSeparator = false)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath) ?? string.Empty;
+        var withoutRoot = fullPath.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (includeTrailingSeparator && withoutRoot.Length > 0)
+            withoutRoot = withoutRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return withoutRoot;
     }
 
     private sealed class PlannedEvaluation
