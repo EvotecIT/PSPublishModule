@@ -779,8 +779,8 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 10. Complete advanced-function lifecycle | Complete | Canonical lifecycle IR preserves raw records, guarantees cleanup, and enforces PowerShell 5.1/7/7.3+ behavior explicitly |
 | 11. Complete value and object flows | Complete / bounded contract | Known object and collection shapes compile while arbitrary ETS identity remains an explicit fallback boundary |
 | 12. Expand bounded runtime state | Complete / bounded contract | Read-only invocation state propagates through IR and call graphs; mutable dynamic scope remains runtime-backed |
-| 13. Run generic coverage waves | Complete / current wave | Product-neutral corpus and exact-pinned census prove the new semantic families without product branches |
-| 14. Productize managed, Hybrid, and native delivery | Complete / bounded supported profiles | Exact target contracts, evidence, verified caching, Hybrid EXE, native closure inspection, and target-host execution support Strict `net10.0` framework-dependent and NativeAOT EXEs on `win-x64` and `linux-x64`; all other named profiles remain experimental |
+| 13. Run generic coverage waves | Complete / current wave | The product-neutral corpus and caller-supplied replaceable census inputs prove semantic families without repository or module branches |
+| 14. Productize managed, Hybrid, and native delivery | Complete / bounded supported profiles | `Build-Module` can convert arbitrary staged script modules into measured Hybrid or Strict binary modules; exact target contracts, evidence, verified caching, Hybrid EXE, native closure inspection, and target-host execution support Strict `net10.0` framework-dependent and NativeAOT EXEs on `win-x64` and `linux-x64`; all other named profiles remain experimental |
 | 15. Optimize proven IR | Complete | Three immutable IR rewrites plus five backend-lowering/source-evidence optimization families, authored source/PDB mapping, measured boundary cost, and clean-candidate benchmark evidence preserve the differential and artifact contracts |
 | 16. Productize the provider SDK and trust model | Planned | Versioned external providers are discoverable, validated, isolated, and conformance-tested without executing source during analysis |
 | 17. Add compiler explainability and reproducible diagnostics | Partial / decision trace foundation | Human and versioned JSON explain output now reports relocation-safe per-unit typed/fallback/rejected decisions and causal blockers; full semantic traces, repro bundles, and failure mapping remain open |
@@ -958,8 +958,8 @@ Integrated evidence from the final 2026-08-29 closure candidate:
 - the portable generic Hybrid corpus emits 8/8 functions (100%) with zero fallback or eligible-function loss and now covers bounded environment, PSCustomObject, `Add-Member`, and `ArrayList` flows;
 - the final seven-suite Windows benchmark packet records clean exact head `009901b0bbf56285a1ab291e2a1bff760e05a4c9`, zero validation failures, explicit ReadyToRun SDK 10.0.303 metadata, generated artifact hashes/sizes, and refreshed computation, startup, local-call, dispatch-amortization, and boundary-overhead results;
 - the single independent full closure review identified five blocking and two documentation findings; all were remediated at their owners, and the permitted targeted confirmation reported no P0-P3 findings or direct regressions;
-- the refreshed exact-pinned six-product lane reports 122/1,235 emitted functions (9.88%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors;
-- per-product emitted/total coverage is PowerInfoBlox 3/57, PSSharedGoods 12/281, PSWriteHTML 31/238, O365Essentials 61/282, ADEssentials 12/247, and PSWriteWord 3/130; the one-function reduction from the prior snapshot is an intentional correction after per-command provider parameter contracts stopped accepting an invalid stream-command shape;
+- a replaceable external-source census snapshot reports 122/1,235 emitted functions (9.88%), 21 analyzer-eligible functions routed to fallback, 1,263 authored files, 1,353 units, and zero parse errors; those caller-supplied inputs are scale evidence, not committed compiler configuration;
+- all compiler behavior and prioritization remain keyed to generic syntax, semantic IR, dependency, host, target, resource, and artifact contracts; repository and module identities never select behavior;
 - semantic lowering is the eligibility authority; structural diagnostics are mapped from canonical semantic features and cannot independently veto a successfully lowered unit;
 - semantic IR collections take immutable snapshots, document identities are relocation-stable and filesystem-case-aware, loop variables retain PowerShell function scope, and generated literals cover control characters plus non-finite floating-point values;
 - typed targets reject native-process effects before emission, while strict dependency verification rejects managed `System.Diagnostics.Process.Start` references before runtime-free certification;
@@ -1143,7 +1143,7 @@ Function percentage is not the only metric. Track:
 - runtime differential pass rate;
 - artifact size and performance for meaningful workloads.
 
-Completion here means the current ten bounded waves went through the generic semantic pipeline and their unsupported variants remain explicit diagnostics. It does not mean arbitrary PowerShell syntax, ETS, dynamic scope, commands, or interop are compiled. The current product-neutral corpus is 8/8 emitted functions with zero fallback; the exact-pinned replaceable six-product lane is 122/1,235 emitted functions with zero parse errors. Future coverage gains continue through the same census-driven process without reopening this ownership gate.
+Completion here means the current ten bounded waves went through the generic semantic pipeline and their unsupported variants remain explicit diagnostics. It does not mean arbitrary PowerShell syntax, ETS, dynamic scope, commands, or interop are compiled. The current product-neutral corpus is 8/8 emitted functions with zero fallback; one replaceable caller-supplied external-source snapshot is 122/1,235 emitted functions with zero parse errors. Future coverage gains continue through the same census-driven process without reopening this ownership gate.
 
 ## Milestone 14 — Productize managed, Hybrid, and native delivery
 
@@ -1160,6 +1160,7 @@ Milestone 14 closes the bounded artifact-delivery contract independently of Mile
 - [x] Run Strict managed and NativeAOT artifacts on every named supported RID rather than treating cross-publish success as execution proof; the supported set is `win-x64` and `linux-x64` for Strict `net10.0` framework-dependent and NativeAOT delivery.
 - [x] Verify Windows and Unix exit codes, stdout/stderr encoding, signals/cancellation, file permissions, resources, executable architecture/imports, and native dependencies on those target hosts.
 - [x] Preserve signing and atomic publication in PowerForge’s shared packaging owner.
+- [x] Integrate script-to-binary module conversion into `Build-Module` after staged manifest/format preparation, with generic Hybrid/Strict configuration, source-tree isolation, payload preservation, normal downstream signing/testing/packaging, and structured coverage results.
 - [x] Document the current supported versus experimental TFM/RID boundary and installed runtime requirements for every implemented artifact profile below.
 - [x] Keep native shared-library export deferred until a concrete embedding consumer defines its ABI; no unsupported export surface was added to close this milestone.
 

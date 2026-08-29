@@ -34464,6 +34464,18 @@ as separate decisions because many teams want one without the other.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="Compile">
+          <maml:name>CompilePowerShell</maml:name>
+          <maml:description>
+            <maml:para>Compile the staged PowerShell module into a generated binary module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>DeleteTargetModuleBeforeBuild</maml:name>
           <maml:description>
@@ -35031,6 +35043,135 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationAllowUnreviewedDependencies</maml:name>
+          <maml:description>
+            <maml:para>Explicitly allow dependency resolution without a separately reviewed lock.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationBuildCacheDirectory</maml:name>
+          <maml:description>
+            <maml:para>Optional machine-local root for generated-build cache entries.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationDependencyLock</maml:name>
+          <maml:description>
+            <maml:para>Reviewed dependency graph that the compilation build must reproduce exactly.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationDependencyGraph</command:parameterValue>
+          <dev:type>
+            <maml:name>PowerShellCompilationDependencyGraph</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationExcludeResource</maml:name>
+          <maml:description>
+            <maml:para>Contained module-root resource paths or glob patterns to exclude.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationIncludeResource</maml:name>
+          <maml:description>
+            <maml:para>Contained module-root resource paths or glob patterns to include.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationMode</maml:name>
+          <maml:description>
+            <maml:para>Choose Hybrid fallback or require complete Strict compilation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Hybrid</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Strict</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PowerShellCompilationMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationResourceMode</maml:name>
+          <maml:description>
+            <maml:para>Policy used to select non-code payload for the generated module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PowerShellCompilationResourceMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Declared</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">CompleteModule</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PowerShellCompilationResourceMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationTargetFramework</maml:name>
+          <maml:description>
+            <maml:para>Target framework for the generated binary module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationTimeoutSeconds</maml:name>
+          <maml:description>
+            <maml:para>Maximum seconds allowed for restore and compilation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>PowerShellCompilationUseBuildCache</maml:name>
+          <maml:description>
+            <maml:para>Enable or disable the content-addressed generated-build cache.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RefreshPSD1Only</maml:name>
           <maml:description>
             <maml:para>Only regenerate the manifest (PSD1) without rebuilding/merging other artefacts.</maml:para>
@@ -35319,6 +35460,18 @@ reporting hint and does not change the manifest or install anything by itself.</
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="Compile">
+        <maml:name>CompilePowerShell</maml:name>
+        <maml:description>
+          <maml:para>Compile the staged PowerShell module into a generated binary module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -35890,6 +36043,135 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationAllowUnreviewedDependencies</maml:name>
+        <maml:description>
+          <maml:para>Explicitly allow dependency resolution without a separately reviewed lock.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationBuildCacheDirectory</maml:name>
+        <maml:description>
+          <maml:para>Optional machine-local root for generated-build cache entries.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationDependencyLock</maml:name>
+        <maml:description>
+          <maml:para>Reviewed dependency graph that the compilation build must reproduce exactly.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationDependencyGraph</command:parameterValue>
+        <dev:type>
+          <maml:name>PowerShellCompilationDependencyGraph</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationExcludeResource</maml:name>
+        <maml:description>
+          <maml:para>Contained module-root resource paths or glob patterns to exclude.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationIncludeResource</maml:name>
+        <maml:description>
+          <maml:para>Contained module-root resource paths or glob patterns to include.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationMode</maml:name>
+        <maml:description>
+          <maml:para>Choose Hybrid fallback or require complete Strict compilation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Hybrid</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Strict</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PowerShellCompilationMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationResourceMode</maml:name>
+        <maml:description>
+          <maml:para>Policy used to select non-code payload for the generated module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PowerShellCompilationResourceMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Declared</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">CompleteModule</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PowerShellCompilationResourceMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationTargetFramework</maml:name>
+        <maml:description>
+          <maml:para>Target framework for the generated binary module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Maximum seconds allowed for restore and compilation.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>PowerShellCompilationUseBuildCache</maml:name>
+        <maml:description>
+          <maml:para>Enable or disable the content-addressed generated-build cache.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RefreshPSD1Only</maml:name>
         <maml:description>
           <maml:para>Only regenerate the manifest (PSD1) without rebuilding/merging other artefacts.</maml:para>
@@ -36167,6 +36449,13 @@ reporting hint and does not change the manifest or install anything by itself.</
         <dev:code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'MyPrivateFeed' -InstallMissingModulesCredentialUserName 'build' -InstallMissingModulesCredentialSecretFilePath '.secrets\feed-token.txt'</dev:code>
         <dev:remarks>
           <maml:para>Use the credential parameters only when the repository requires authentication.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Convert the staged script module into a Hybrid binary module</maml:title>
+        <dev:code>New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Hybrid -PowerShellCompilationAllowUnreviewedDependencies</dev:code>
+        <dev:remarks>
+          <maml:para>Hybrid preserves explicit script fallback. Supply PowerShellCompilationDependencyLock instead of the development opt-out for a reviewed release build.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

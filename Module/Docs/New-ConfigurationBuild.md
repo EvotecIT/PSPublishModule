@@ -11,7 +11,7 @@ Allows configuring the build process for a module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETAssemblyLoadContext] [-NETDevelopmentBinaries] [-NETDevelopmentBinariesMode <ModuleDevelopmentBinaryMode>] [-NETDevelopmentBinariesPath <string>] [-NETDevelopmentBinariesEnvironmentVariable <string>] [-NETDevelopmentConfigurationEnvironmentVariable <string>] [-NETDevelopmentSourceBootstrapperMode <ModuleDevelopmentSourceBootstrapperMode>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETAssemblyLoadContext] [-NETDevelopmentBinaries] [-NETDevelopmentBinariesMode <ModuleDevelopmentBinaryMode>] [-NETDevelopmentBinariesPath <string>] [-NETDevelopmentBinariesEnvironmentVariable <string>] [-NETDevelopmentConfigurationEnvironmentVariable <string>] [-NETDevelopmentSourceBootstrapperMode <ModuleDevelopmentSourceBootstrapperMode>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-CompilePowerShell] [-PowerShellCompilationMode <PowerShellCompilationMode>] [-PowerShellCompilationTargetFramework <string>] [-PowerShellCompilationResourceMode <PowerShellCompilationResourceMode>] [-PowerShellCompilationIncludeResource <string[]>] [-PowerShellCompilationExcludeResource <string[]>] [-PowerShellCompilationUseBuildCache] [-PowerShellCompilationBuildCacheDirectory <string>] [-PowerShellCompilationDependencyLock <PowerShellCompilationDependencyGraph>] [-PowerShellCompilationAllowUnreviewedDependencies] [-PowerShellCompilationTimeoutSeconds <int>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -62,6 +62,13 @@ New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepo
 ```
 
 Use the credential parameters only when the repository requires authentication.
+
+### EXAMPLE 6
+```powershell
+New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Hybrid -PowerShellCompilationAllowUnreviewedDependencies
+```
+
+Hybrid preserves explicit script fallback. Supply PowerShellCompilationDependencyLock instead of the development opt-out for a reviewed release build.
 
 ## PARAMETERS
 
@@ -136,6 +143,22 @@ Thumbprint of a code-signing certificate from the local cert store.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CompilePowerShell
+Compile the staged PowerShell module into a generated binary module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: Compile
 Possible values:
 
 Required: False
@@ -861,6 +884,166 @@ Search class (legacy option).
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationAllowUnreviewedDependencies
+Explicitly allow dependency resolution without a separately reviewed lock.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationBuildCacheDirectory
+Optional machine-local root for generated-build cache entries.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationDependencyLock
+Reviewed dependency graph that the compilation build must reproduce exactly.
+
+```yaml
+Type: PowerShellCompilationDependencyGraph
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationExcludeResource
+Contained module-root resource paths or glob patterns to exclude.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationIncludeResource
+Contained module-root resource paths or glob patterns to include.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationMode
+Choose Hybrid fallback or require complete Strict compilation.
+
+```yaml
+Type: PowerShellCompilationMode
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Hybrid, Strict
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationResourceMode
+Policy used to select non-code payload for the generated module.
+
+```yaml
+Type: PowerShellCompilationResourceMode
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Declared, CompleteModule, None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationTargetFramework
+Target framework for the generated binary module.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationTimeoutSeconds
+Maximum seconds allowed for restore and compilation.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PowerShellCompilationUseBuildCache
+Enable or disable the content-addressed generated-build cache.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

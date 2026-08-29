@@ -16,6 +16,7 @@ public sealed partial class ModulePipelineRunner
         public ModuleDependencyInstallResult[] DependencyInstallResults { get; set; } = Array.Empty<ModuleDependencyInstallResult>();
         public ModuleBuildPipeline.StagingResult? Staged { get; set; }
         public ModuleBuildResult? BuildResult { get; set; }
+        public PowerShellModuleCompilationResult? PowerShellCompilationResult { get; set; }
         public MergeExecutionResult MergeExecution { get; set; } = MergeExecutionResult.None;
         public DocumentationBuildResult? DocumentationResult { get; set; }
         public FormatterResult[] FormattingStagingResults { get; set; } = Array.Empty<FormatterResult>();
@@ -54,9 +55,10 @@ public sealed partial class ModulePipelineRunner
         public string? ProjectManifestSyncMessage { get; set; }
         public string? AuthorizedProjectManifestSha256 { get; set; }
         public string? AuthorizedStagingManifestSha256 { get; set; }
-        public bool PackageWithoutScriptFolders =>
-            MergeExecution.MergedModule ||
-            (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
+        public bool PackageWithoutScriptFolders => PowerShellCompilationResult is not null
+            ? !PowerShellCompilationResult.UsesPowerShellRuntimeFallback
+            : MergeExecution.MergedModule ||
+              (MergeExecution.UsedExistingPsm1 && !MergeExecution.HasScriptSources);
 
         public ModuleBuildResult RequireBuildResult()
             => BuildResult ?? throw new InvalidOperationException("Build result is not available for the current pipeline state.");

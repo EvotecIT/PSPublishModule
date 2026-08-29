@@ -62,6 +62,7 @@ public sealed partial class ModulePipelineRunner
         bool doNotAttemptToFixRelativePaths = false;
         bool refreshPsd1Only = false;
         SigningOptionsConfiguration? signing = null;
+        PowerShellModuleCompilationConfiguration? powerShellCompilationFromSegments = null;
 
         string? dotnetConfigFromSegments = null;
         string[]? dotnetFrameworksFromSegments = null;
@@ -240,6 +241,8 @@ public sealed partial class ModulePipelineRunner
                     }
                     if (!string.IsNullOrWhiteSpace(b.ResolveBinaryConflicts?.ProjectName))
                         resolveBinaryConflictsProjectName = b.ResolveBinaryConflicts!.ProjectName;
+                    if (b.PowerShellCompilation is not null)
+                        powerShellCompilationFromSegments = b.PowerShellCompilation;
                     break;
                 }
                 case ConfigurationBuildLibrariesSegment buildLibraries:
@@ -766,8 +769,12 @@ public sealed partial class ModulePipelineRunner
             AnalyzeInstalledBinaryConflictsDuringBuild = spec.Build.AnalyzeInstalledBinaryConflictsDuringBuild,
             IgnoreLibraryOnLoad = NormalizeStringArray(ignoreLibraryOnLoadFromSegments ?? spec.Build.IgnoreLibraryOnLoad),
             KeepStaging = spec.Build.KeepStaging,
-            RefreshManifestOnly = refreshPsd1Only
+            RefreshManifestOnly = refreshPsd1Only,
+            PowerShellCompilation = ClonePowerShellCompilationConfiguration(
+                powerShellCompilationFromSegments ?? spec.Build.PowerShellCompilation)
         };
+
+        ValidatePowerShellModuleCompilation(buildSpec);
 
         var stagingWasGenerated = string.IsNullOrWhiteSpace(spec.Build.StagingPath);
         var deleteAfter = stagingWasGenerated && !spec.Build.KeepStaging;

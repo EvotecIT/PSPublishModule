@@ -204,4 +204,9 @@ public sealed class ModuleBuildSpec
     /// When true, only refreshes the manifest (PSD1) and skips binary publish/merge operations.
     /// </summary>
     public bool RefreshManifestOnly { get; set; }
+
+    /// <summary>
+    /// Optional script-to-binary module compilation performed after the normal module staging and manifest phases.
+    /// </summary>
+    public PowerShellModuleCompilationConfiguration? PowerShellCompilation { get; set; }
 }

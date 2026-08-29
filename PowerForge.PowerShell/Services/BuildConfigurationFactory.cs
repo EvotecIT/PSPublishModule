@@ -87,6 +87,12 @@ internal sealed class BuildConfigurationFactory
         if (request.KillLockersForceSpecified) { EnsureBuildModule(); buildModule!.KillLockersForce = request.KillLockersForce; }
         if (request.AutoSwitchExactOnPublishSpecified) { EnsureBuildModule(); buildModule!.AutoSwitchExactOnPublish = request.AutoSwitchExactOnPublish; }
 
+        if (HasPowerShellCompilationSettings(request))
+        {
+            EnsureBuildModule();
+            buildModule!.PowerShellCompilation = CreatePowerShellCompilationConfiguration(request);
+        }
+
         if (request.NETResolveBinaryConflictsNameSpecified)
         {
             EnsureBuildModule();
@@ -99,6 +105,53 @@ internal sealed class BuildConfigurationFactory
         }
 
         return buildModule is null ? null : new ConfigurationBuildSegment { BuildModule = buildModule };
+    }
+
+    private static bool HasPowerShellCompilationSettings(BuildConfigurationRequest request)
+        => request.CompilePowerShellSpecified ||
+           request.PowerShellCompilationModeSpecified ||
+           request.PowerShellCompilationTargetFrameworkSpecified ||
+           request.PowerShellCompilationResourceModeSpecified ||
+           request.PowerShellCompilationIncludeResourceSpecified ||
+           request.PowerShellCompilationExcludeResourceSpecified ||
+           request.PowerShellCompilationUseBuildCacheSpecified ||
+           request.PowerShellCompilationBuildCacheDirectorySpecified ||
+           request.PowerShellCompilationDependencyLockSpecified ||
+           request.PowerShellCompilationAllowUnreviewedDependenciesSpecified ||
+           request.PowerShellCompilationTimeoutSecondsSpecified;
+
+    private static PowerShellModuleCompilationConfiguration CreatePowerShellCompilationConfiguration(BuildConfigurationRequest request)
+    {
+        if (!request.CompilePowerShellSpecified)
+            throw new ArgumentException("PowerShell compilation options require the explicit CompilePowerShell switch.", nameof(request));
+        var mode = request.PowerShellCompilationMode ?? PowerShellCompilationMode.Hybrid;
+        if (mode is not PowerShellCompilationMode.Hybrid and not PowerShellCompilationMode.Strict)
+            throw new ArgumentException("Build-Module PowerShell compilation supports Hybrid or Strict mode. Use Build-PowerShellArtifact for packaged executables.", nameof(request));
+        if (request.PowerShellCompilationTimeoutSecondsSpecified && request.PowerShellCompilationTimeoutSeconds < 1)
+            throw new ArgumentOutOfRangeException(nameof(request), "PowerShellCompilationTimeoutSeconds must be at least 1.");
+        if (request.PowerShellCompilationDependencyLockSpecified && request.PowerShellCompilationAllowUnreviewedDependencies)
+            throw new ArgumentException("PowerShellCompilationDependencyLock and PowerShellCompilationAllowUnreviewedDependencies are mutually exclusive.", nameof(request));
+
+        return new PowerShellModuleCompilationConfiguration
+        {
+            Enabled = request.CompilePowerShellSpecified ? request.CompilePowerShell : true,
+            Mode = mode,
+            TargetFramework = string.IsNullOrWhiteSpace(request.PowerShellCompilationTargetFramework)
+                ? "net8.0"
+                : request.PowerShellCompilationTargetFramework!.Trim(),
+            ResourceMode = request.PowerShellCompilationResourceMode ?? PowerShellCompilationResourceMode.Declared,
+            IncludeResource = request.PowerShellCompilationIncludeResource ?? Array.Empty<string>(),
+            ExcludeResource = request.PowerShellCompilationExcludeResource ?? Array.Empty<string>(),
+            UseBuildCache = request.PowerShellCompilationUseBuildCacheSpecified
+                ? request.PowerShellCompilationUseBuildCache
+                : true,
+            BuildCacheDirectory = request.PowerShellCompilationBuildCacheDirectory,
+            DependencyLock = request.PowerShellCompilationDependencyLock,
+            AllowUnreviewedDependencies = request.PowerShellCompilationAllowUnreviewedDependencies,
+            TimeoutSeconds = request.PowerShellCompilationTimeoutSecondsSpecified
+                ? request.PowerShellCompilationTimeoutSeconds
+                : 300
+        };
     }
 
     private static ConfigurationOptionsSegment? CreateSigningSegment(BuildConfigurationRequest request)

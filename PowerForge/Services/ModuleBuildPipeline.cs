@@ -179,6 +179,16 @@ public sealed class ModuleBuildPipeline
         var staging = Path.GetFullPath(stagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
+        if (spec.ReuseStaging && spec.PowerShellCompilation?.Enabled == true)
+        {
+            var compiledManifest = Path.Combine(staging, $"{spec.Name}.psd1");
+            if (!File.Exists(compiledManifest))
+                throw new FileNotFoundException($"Reusable compiled staging manifest was not found: {compiledManifest}", compiledManifest);
+            var compiledExports = ModuleManifestExportReader.ReadExports(compiledManifest);
+            _logger.Info($"Preserving checkpointed compiled module '{spec.Name}' in reusable staging.");
+            return new ModuleBuildResult(staging, compiledManifest, compiledExports, Array.Empty<ModuleOwnerNote>());
+        }
+
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
         var assemblyTypeAcceleratorMode = AssemblyTypeAcceleratorOptions.ResolveMode(
             spec.AssemblyTypeAcceleratorMode,
@@ -244,7 +254,7 @@ public sealed class ModuleBuildPipeline
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
-        if (!spec.RefreshManifestOnly)
+        if (!spec.RefreshManifestOnly && !(spec.ReuseStaging && spec.PowerShellCompilation?.Enabled == true))
         {
             ModuleBootstrapperGenerator.Generate(
                 staging,
@@ -263,7 +273,9 @@ public sealed class ModuleBuildPipeline
         }
         else
         {
-            _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
+            _logger.Info(spec.RefreshManifestOnly
+                ? "RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration."
+                : "ReuseStaging enabled for a compiled module: preserving the checkpointed binary entry point.");
         }
 
         var buildNotes = spec.AnalyzeInstalledBinaryConflictsDuringBuild

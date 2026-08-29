@@ -54,8 +54,11 @@ public sealed partial class ModulePipelineRunner
             staged = pipeline.StageToStaging(plan.BuildSpec);
             state.Staged = staged;
             state.StagingPathForCleanup = staged.StagingPath;
-            ExecuteExternalAssets(plan, session, state);
-            SyncExternalAssetsToStaging(plan, state);
+            if (!IsReusingCompiledPowerShellModule(plan))
+            {
+                ExecuteExternalAssets(plan, session, state);
+                SyncExternalAssetsToStaging(plan, state);
+            }
             session.Done(session.StageStep);
         }
         catch (Exception ex)
@@ -82,19 +85,23 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterBuild, plan, session, state);
 
-        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly ? MergeExecutionResult.None : ApplyMerge(plan, buildResult);
-        if (!plan.BuildSpec.RefreshManifestOnly)
+        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly || IsReusingCompiledPowerShellModule(plan)
+            ? MergeExecutionResult.None
+            : ApplyMerge(plan, buildResult);
+        if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
             ApplyPlaceholders(plan, buildResult);
 
-        EmbedModuleDependencies(plan, buildResult);
+        if (!IsReusingCompiledPowerShellModule(plan))
+            EmbedModuleDependencies(plan, buildResult);
 
         ExecuteActions(ModulePipelineActionStage.BeforeManifest, plan, session, state);
         session.Start(session.ManifestStep);
         try
         {
-            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (!IsReusingCompiledPowerShellModule(plan))
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
 
-            if (plan.Delivery is not null && plan.Delivery.Enable)
+            if (!IsReusingCompiledPowerShellModule(plan) && plan.Delivery is not null && plan.Delivery.Enable)
             {
                 ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
@@ -102,11 +109,13 @@ public sealed partial class ModulePipelineRunner
                     UpdateManifestForGeneratedDeliveryCommands(plan, buildResult, state.PackageWithoutScriptFolders);
             }
 
-            if (state.MergeExecution.MergedModule) {
+            if (!IsReusingCompiledPowerShellModule(plan) && state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
 
-            if (!state.PackageWithoutScriptFolders && !plan.BuildSpec.RefreshManifestOnly)
+            if (!state.PackageWithoutScriptFolders &&
+                !plan.BuildSpec.RefreshManifestOnly &&
+                !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateBootstrapperFromManifest(
                     buildResult,
                     plan.ModuleName,
@@ -114,7 +123,7 @@ public sealed partial class ModulePipelineRunner
                     plan.BuildSpec.HandleRuntimes,
                     plan);
 
-            if (!plan.BuildSpec.RefreshManifestOnly)
+            if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
                 TryRegenerateSourceDevelopmentBootstrapperFromManifest(buildResult, plan);
 
             session.Done(session.ManifestStep);
@@ -216,7 +225,7 @@ public sealed partial class ModulePipelineRunner
         var buildResult = state.RequireBuildResult();
 
         ExecuteActions(ModulePipelineActionStage.BeforeFormatting, plan, session, state);
-        if (plan.Formatting is not null)
+        if (plan.Formatting is not null && !IsReusingCompiledPowerShellModule(plan))
         {
             var formattingPipeline = new FormattingPipeline(_logger);
 
@@ -280,7 +289,8 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
+            if (!IsReusingCompiledPowerShellModule(plan))
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
             if (state.MergeExecution.MergedModule) {
                 SynchronizeMergedPsm1ExportsFromManifest(buildResult, plan);
             }
@@ -290,6 +300,9 @@ public sealed partial class ModulePipelineRunner
             _logger.Warn($"Post-format manifest patch failed. {ex.Message}");
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
+
+        ApplyPowerShellModuleCompilation(plan, state);
+        buildResult = state.RequireBuildResult();
 
         ExecuteActions(ModulePipelineActionStage.BeforeSigning, plan, session, state);
         if (plan.SignModule)
@@ -314,6 +327,9 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterSigning, plan, session, state);
     }
+
+    private static bool IsReusingCompiledPowerShellModule(ModulePipelinePlan plan)
+        => plan.BuildSpec.ReuseStaging && plan.BuildSpec.PowerShellCompilation?.Enabled == true;
 
     private void ExecuteValidationPhases(
         ModulePipelinePlan plan,

@@ -151,6 +151,11 @@ public sealed class ModulePipelineResult
     public ModuleTypeAcceleratorSurfaceReport? TypeAcceleratorSurfaceReport { get; internal set; }
 
     /// <summary>
+    /// Script-to-binary compilation summary when <c>Build-Module</c> compilation was enabled; otherwise null.
+    /// </summary>
+    public PowerShellModuleCompilationResult? PowerShellCompilationResult { get; internal set; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModulePipelineResult(

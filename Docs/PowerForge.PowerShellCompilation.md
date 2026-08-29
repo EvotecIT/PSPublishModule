@@ -273,6 +273,26 @@ Build-PowerShellArtifact `
 
 It supports `-WhatIf`, returns `PowerShellCompilationBuildResult`, and uses the same discovery, defaults, overrides, and manifests as the CLI. `-Kind`, `-Mode`, `-Name`, and `-OutputDirectory` remain available when the inferred values are not the desired artifact.
 
+### Convert a module during `Build-Module`
+
+`Build-Module` can compile any staged script module into its delivered binary-module shape. The source tree remains script-first; compilation happens after merge, manifest, formatting, and resource preparation, then the normal signing, documentation, validation, test, package, publish, and install phases consume the generated module.
+
+```powershell
+Build-Module -ModuleName 'Any.Module' -Path $repositoryRoot -Settings {
+    New-ConfigurationBuild `
+        -Enable `
+        -CompilePowerShell `
+        -PowerShellCompilationMode Hybrid `
+        -PowerShellCompilationAllowUnreviewedDependencies
+}
+```
+
+`Hybrid` is the migration default: eligible functions become binary cmdlets and unsupported behavior remains explicit script fallback. `Strict` fails unless every executable unit can be emitted without fallback. `ModulePipelineResult.PowerShellCompilationResult` reports total, compiled, and fallback units plus the exact coverage percentage and staged assembly path.
+
+Release builds should pass a separately reviewed dependency graph through `-PowerShellCompilationDependencyLock`. `-PowerShellCompilationAllowUnreviewedDependencies` is the explicit local/development opt-out shown above. Resource inclusion remains declarative through `-PowerShellCompilationResourceMode`, `-PowerShellCompilationIncludeResource`, and `-PowerShellCompilationExcludeResource`; no module name or folder convention changes compiler behavior.
+
+`Build-Module` produces a module, so this opt-in deliberately produces a DLL-backed binary module. A standalone application has a different entrypoint and deployment contract; use `Build-PowerShellArtifact -Kind Executable` (or the equivalent CLI command) with an explicit `.ps1` entry point when several scripts participate.
+
 ## Modes
 
 `Analyze` parses source and reports one decision per top-level script body or function. It produces no artifact.
@@ -436,7 +456,7 @@ Windows run IDs are `20260829-000416-818e0b53` and `20260829-000530-2e8dee77` (r
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 203.11 ms | 6.67 ms | 3.43 ms | **30.4x faster** | 1.94x slower |
 | Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 212.24 ms | 6.42 ms | 3.39 ms | **33.1x faster** | 1.89x slower |
-| Real PowerInfoBlox IPv4-to-PTR helper | 50,000 | 512.14 ms | 14.86 ms | 8.22 ms | **34.5x faster** | 1.81x slower |
+| IPv4-to-PTR conversion helper | 50,000 | 512.14 ms | 14.86 ms | 8.22 ms | **34.5x faster** | 1.81x slower |
 | Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 37.89 ms | 4.78 ms | 3.24 ms | **7.9x faster** | 1.47x slower |
 | Indexed sum over 1,000-element typed array | 1,000 | 40.48 ms | 5.64 ms | 3.68 ms | **7.2x faster** | 1.53x slower |
 
@@ -488,78 +508,24 @@ powerforge powershell census `
 
 See [the corpus README](../Benchmarks/PowerShellCompilation/Corpus/README.md) for the contract split. External repositories can be added, replaced, or removed as scale workloads without changing the compiler design.
 
-## Real-source eligibility
+## Arbitrary-source eligibility
 
-The wider example census uses exact committed source from six replaceable PowerShell-first products. It scans only authored module trees (`Public`, `Private`, and PSSharedGoods `Enums`), not dirty working-tree changes, generated modules, examples, tests, build scripts, or website assets. The pinned inputs are PowerInfoBlox `9de3730afbfd61ed6bec59bc78e9e7a8d91b6233`, PSSharedGoods `12e9c2520d347df2988286ea1ba3e81e011ef0de`, PSWriteHTML `fa88b1bbecc539b59c9a82cd4b95efc6cc951244`, O365Essentials `fad82882ff116c262ffd3c2c3fdb2781a8ddf0f3`, ADEssentials `b2b1f760853becb773841f744bea196d02aa6c2b`, and PSWriteWord `1fdee837c3fcbc1fdb5c67a9843526bd532c2728`.
+The committed acceptance surface is the product-neutral corpus under `Benchmarks/PowerShellCompilation/Corpus`. It contains generic module, multi-file, resource, lifecycle, command-provider, and executable contracts. Compiler behavior is derived from PowerShell syntax, semantic IR, dependency graphs, target contracts, and explicit resource policy—never from a repository name, module name, neighboring checkout, or conventional product-specific path.
 
-The current six-product lane contains 1,263 authored files and 1,353 whole script/function units with no parse-error files. The PowerInfoBlox helper is also built and invoked as a strict generated binary cmdlet with mandatory parameter metadata, while PSSharedGoods `ConvertFrom-OperationType` is differentially checked for known, case-insensitive, and missing dictionary keys. O365 enum-name overload binding was verified against the original private function.
-
-The CLI now makes this a repeatable regression gate rather than a one-off research script. It records per-product discovery, typed/fallback coverage, parse errors, analyzer duration, dependency summaries, stable missing-feature impact, and frequent co-blocker pairs. `--write-baseline` creates a JSON baseline; `--baseline` returns a failing exit code when a product disappears, typed coverage decreases, fallback increases, or parse errors increase:
+The census command accepts any caller-supplied script, manifest, or module roots. Inputs may be added, replaced, randomized, or removed without changing compiler behavior:
 
 ```powershell
-$root = if ($env:EVOTEC_GITHUB_ROOT) { $env:EVOTEC_GITHUB_ROOT } else { 'C:\Support\GitHub' }
-
 powerforge powershell census `
-    (Join-Path $root 'PowerInfoBlox\PowerInfoBlox.psd1') `
-    --path (Join-Path $root 'PSSharedGoods\PSSharedGoods.psd1') `
-    --path (Join-Path $root 'PSWriteHTML\PSWriteHTML.psd1') `
-    --path (Join-Path $root 'O365Essentials\O365Essentials.psd1') `
-    --path (Join-Path $root 'ADEssentials\ADEssentials.psd1') `
-    --path (Join-Path $root 'PSWriteWord\PSWriteWord.psd1') `
+    .\path\to\first-module `
+    --path .\path\to\another-script.ps1 `
     --framework net10.0 `
     --write-baseline .\artifacts\powershell-compilation-census.json `
     --output json
 ```
 
-The 2026-08-27 all-IR refresh reports 1,263 authored files and 1,353 whole script/function units with zero parse errors. Its post-emission view separates 1,235 authored functions from 118 top-level script or module-initialization units: the compatibility analyzer-eligible cohort contains 143 functions, 122 survive semantic binding, fixed-point analysis, lowering, graph shaping, and binary-cmdlet shaping as typed CLR methods, and 21 are routed back to fallback. Semantic lowering is the eligibility authority; the structural analyzer contributes stable public diagnostic classification but no longer vetoes a successfully lowered unit. Post-emission function coverage is therefore 9.88%. The per-root emitted/total function split is PowerInfoBlox 3/57, PSSharedGoods 12/281, PSWriteHTML 31/238, O365Essentials 61/282, ADEssentials 12/247, and PSWriteWord 3/130. The one-function reduction from the prior snapshot is an intentional correctness reclassification after stream providers acquired their real command-specific parameter contracts; it is not hidden as a coverage gain.
+The census records discovery, typed/fallback coverage, parse errors, analyzer duration, dependency summaries, stable missing-feature impact, and frequent co-blocker pairs. A baseline fails when an input disappears, typed coverage decreases, fallback increases, parse errors increase, or normalized source identity changes. External source trees are private, replaceable regression workloads; they are not committed compiler configuration and cannot authorize a special-case intrinsic.
 
-The former 139/1,235 (11.26%) figure—PowerInfoBlox 2, PSSharedGoods 20, PSWriteHTML 18, O365Essentials 82, ADEssentials 10, and PSWriteWord 7—was the last snapshot produced by the deleted direct AST emitter. It remains useful historical migration evidence but is not current coverage. The lower all-IR total is reported openly and forms the new architecture baseline; future gains resume with the semantic families in Milestone 8 and later. These repositories are replaceable regression workloads, not compiler design targets; PowerForge support remains based on generic language, binding, type-system, host, and artifact contracts.
-
-Low initial coverage is not hidden by Hybrid mode. It is written to the manifest, and every fallback has a diagnostic explaining what needs compiler support. Diagnostics are deliberately blocker-masked to avoid cascades, so accepting one outer construct can reveal deeper runtime semantics without increasing coverage. Roadmap priority therefore comes from repeated full-corpus passes and executable differential proof, not raw syntax-occurrence counts. Census baselines also carry a portable SHA-256 fingerprint over relative source paths and normalized authored text; CRLF, LF, and CR line endings hash identically, while malformed or legacy-encoded byte identity is preserved so a source change cannot silently pass merely because its aggregate counts stayed equal.
-
-The machine-readable `functionFrontier` separates four questions that raw occurrence counts mix together and excludes module-initialization units that cannot become emitted CLR methods. The compatibility `frontier` remains available for callers that need the older whole-unit view:
-
-- `occurrences`: visible diagnostics assigned to the stable feature ID;
-- `affectedUnits`: distinct fallback functions or script bodies reporting it;
-- `visibleSoleBlockerUnits`: units where it is the only feature blocker visible in this pass;
-- `candidateCompleteProductsUnlocked`: entire census roots with no other currently visible fallback feature.
-
-`candidateCoveragePercentage` adds only visible sole-blocker units to current typed coverage. It is a counterfactual planning signal, not a promise: accepting an outer AST construct can reveal a deeper blocker that was deliberately masked. `coBlockers` shows which features commonly need to land together. Features are ranked lexically by complete-product candidates, visible sole-blocker units, affected units, occurrences, and stable ID; PowerForge does not invent an effort score.
-
-The current six-root run produces this leading emitted-function planning frontier:
-
-| Feature ID | Occurrences | Affected units | Visible sole-blocker units | Products | Candidate coverage |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `syntax.unsupported` | 1,309 | 572 | 159 | 6 | 22.75% |
-| `syntax.memberexpression` | 337 | 186 | 62 | 6 | 14.90% |
-| `syntax.pipeline` | 265 | 186 | 56 | 6 | 14.41% |
-| `syntax.invokememberexpression` | 147 | 97 | 33 | 6 | 12.55% |
-| `runtime.scope` | 378 | 198 | 26 | 6 | 11.98% |
-| `binary-module.cmdlet-shape` | 25 | 25 | 21 | 5 | 11.58% |
-| `command.new-htmltab` | 22 | 22 | 19 | 1 | 11.42% |
-| `assignment.target` | 264 | 97 | 15 | 6 | 11.09% |
-| `syntax.foreachstatement` | 72 | 59 | 10 | 6 | 10.69% |
-| `command.write-verbose` | 166 | 77 | 9 | 6 | 10.61% |
-
-This changes feature planning materially. `Register-ArgumentCompleter` leads the compatibility whole-unit frontier because it appears in many module-initialization bodies, but it disappears from the emitted-function frontier and must not be treated as 78 potential CLR methods. Likewise, a sample-specific command identifier such as `command.new-htmltab` is evidence for a generic command-boundary shape, not authorization for a product-specific compiler intrinsic. Recommendations must distinguish generic typed IR, a contract-driven PowerShell-backed command region, an authoring change, and behavior that should remain Package/Hybrid-only.
-
-### Real product rebuild matrix
-
-The module rebuilder proof used `git archive` snapshots at the exact commits above, not the maintainers' working trees. Its generated modules imported successfully, preserved the complete exported command-name and alias surface, and produced independently rebuildable emitted C# projects. Every emitted project rebuilt with zero compiler warnings and zero errors.
-
-| Product | Source files | Units | Typed / fallback | Coverage | Exported commands before / after | Complete module set | Generated C# |
-| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
-| PowerInfoBlox `9de3730` | 58 | 58 | 2 / 56 | 3.45% | 51 / 51 | 203,956 bytes | 2 files, 61 lines, 2 mapped methods |
-| PSSharedGoods `12e9c25` | 283 | 285 | 16 / 269 | 5.61% | 226 / 226 | 1,338,876 bytes | 2 files, 381 lines, 16 mapped methods |
-| PSWriteHTML `fa88b1b` | 242 | 323 | 5 / 318 | 1.55% | 291 / 291 | 1,431,543 bytes | 2 files, 159 lines, 5 mapped methods |
-| O365Essentials `fad8288` | 284 | 286 | 76 / 210 | 26.57% | 214 / 214 | 783,806 bytes | 2 files, 2,159 lines, 76 mapped methods |
-| ADEssentials `b2b1f76` | 265 | 270 | 4 / 266 | 1.48% | 157 / 157 | 1,890,077 bytes | 2 files, 151 lines, 4 mapped methods |
-
-The function/cmdlet split is intentional: eligible functions become real cmdlets while Hybrid fallback functions keep their script definitions. Differential execution matched for PowerInfoBlox `Convert-IpAddressToPtrString`, PSSharedGoods `ConvertFrom-OperationType`, PSWriteHTML `New-HTMLCarouselStyle`, and O365Essentials `Get-ProcessEnvironmentValue`. The newly eligible private PowerInfoBlox `ConvertTo-InfobloxMicrosoftDHCPServer` also changed from a script function to a generated cmdlet while preserving its `PSCustomObject` type and `_struct`/`ipv4addr` property values.
-
-The resource-policy acceptance build selected `Resources/**` for PSWriteHTML and preserved 239 files totaling 19,582,067 bytes: 59 CSS files, 174 JavaScript files, and six other resources. A net472 PSWriteWord build selected the arbitrary `Lib/**` path and preserved three files totaling 342,224 bytes, including two managed vendor DLLs. Both builds used explicit patterns rather than folder-name behavior, and all 625 temporary proof files (27,790,013 bytes including generated artifacts) were removed after measurement.
-
-A small seven-sample, 10,000-call dispatch probe measured rebuilt/original medians of 204.30/251.44 ms for PowerInfoBlox (1.23x), 143.90/160.04 ms for PSSharedGoods (1.11x), and 215.20/224.98 ms for PSWriteHTML (1.05x). These are intentionally modest: they measure repeated PowerShell command dispatch, not direct CLR execution. The clean direct-CLR PowerInfoBlox benchmark remains 16.2x faster than its PowerShell function. A 2026-08-24 quick smoke run completed all seven shared benchmark suites with zero validation failures. It measured a coarse generated command at 2.71 ms versus 10.81 ms for equivalent fine-grained binary-cmdlet dispatch (**3.99x**), and a multi-file typed local-call EXE at 39.23 ms versus 259.36 ms for `pwsh -File` (**6.61x**). Runs `20260824-134510-7959872a` and `20260824-134535-c549415e` used three samples on a changing worktree, so they are directional evidence rather than clean release baselines.
+Low coverage is not hidden by Hybrid mode. Every fallback is reported with a diagnostic. The machine-readable `functionFrontier` separates occurrences, affected units, visible sole blockers, and complete-input candidates so roadmap priority comes from repeated generic semantic shapes rather than a named module. Strict mode remains the proof boundary for a module with no authored runtime fallback.
 
 ## Security and distribution limits
 

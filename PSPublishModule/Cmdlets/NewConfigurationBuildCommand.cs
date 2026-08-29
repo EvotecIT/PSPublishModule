@@ -50,6 +50,11 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationBuild -Enable -InstallMissingModules -InstallMissingModulesRepository 'MyPrivateFeed' -InstallMissingModulesCredentialUserName 'build' -InstallMissingModulesCredentialSecretFilePath '.secrets\feed-token.txt'</code>
 /// <para>Use the credential parameters only when the repository requires authentication.</para>
 /// </example>
+/// <example>
+/// <summary>Convert the staged script module into a Hybrid binary module</summary>
+/// <code>New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Hybrid -PowerShellCompilationAllowUnreviewedDependencies</code>
+/// <para>Hybrid preserves explicit script fallback. Supply PowerShellCompilationDependencyLock instead of the development opt-out for a reviewed release build.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationBuild")]
 public sealed class NewConfigurationBuildCommand : PSCmdlet
 {
@@ -310,6 +315,52 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Alias("AssemblyTypeAcceleratorAssemblies")]
     public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
 
+    /// <summary>Compile the staged PowerShell module into a generated binary module.</summary>
+    [Parameter]
+    [Alias("Compile")]
+    public SwitchParameter CompilePowerShell { get; set; }
+
+    /// <summary>Choose Hybrid fallback or require complete Strict compilation.</summary>
+    [Parameter]
+    [ValidateSet(nameof(global::PowerForge.PowerShellCompilationMode.Hybrid), nameof(global::PowerForge.PowerShellCompilationMode.Strict))]
+    public PowerShellCompilationMode? PowerShellCompilationMode { get; set; }
+
+    /// <summary>Target framework for the generated binary module.</summary>
+    [Parameter]
+    public string? PowerShellCompilationTargetFramework { get; set; }
+
+    /// <summary>Policy used to select non-code payload for the generated module.</summary>
+    [Parameter]
+    public PowerShellCompilationResourceMode? PowerShellCompilationResourceMode { get; set; }
+
+    /// <summary>Contained module-root resource paths or glob patterns to include.</summary>
+    [Parameter]
+    public string[]? PowerShellCompilationIncludeResource { get; set; }
+
+    /// <summary>Contained module-root resource paths or glob patterns to exclude.</summary>
+    [Parameter]
+    public string[]? PowerShellCompilationExcludeResource { get; set; }
+
+    /// <summary>Enable or disable the content-addressed generated-build cache.</summary>
+    [Parameter]
+    public SwitchParameter PowerShellCompilationUseBuildCache { get; set; }
+
+    /// <summary>Optional machine-local root for generated-build cache entries.</summary>
+    [Parameter]
+    public string? PowerShellCompilationBuildCacheDirectory { get; set; }
+
+    /// <summary>Reviewed dependency graph that the compilation build must reproduce exactly.</summary>
+    [Parameter]
+    public PowerShellCompilationDependencyGraph? PowerShellCompilationDependencyLock { get; set; }
+
+    /// <summary>Explicitly allow dependency resolution without a separately reviewed lock.</summary>
+    [Parameter]
+    public SwitchParameter PowerShellCompilationAllowUnreviewedDependencies { get; set; }
+
+    /// <summary>Maximum seconds allowed for restore and compilation.</summary>
+    [Parameter]
+    public int PowerShellCompilationTimeoutSeconds { get; set; }
+
     /// <summary>Kill locking processes before install.</summary>
     [Parameter] public SwitchParameter KillLockersBeforeInstall { get; set; }
 
@@ -443,6 +494,28 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETAssemblyTypeAccelerators = NETAssemblyTypeAccelerators,
             NETAssemblyTypeAcceleratorAssembliesSpecified = bound.ContainsKey(nameof(NETAssemblyTypeAcceleratorAssemblies)),
             NETAssemblyTypeAcceleratorAssemblies = NETAssemblyTypeAcceleratorAssemblies,
+            CompilePowerShellSpecified = bound.ContainsKey(nameof(CompilePowerShell)),
+            CompilePowerShell = CompilePowerShell.IsPresent,
+            PowerShellCompilationModeSpecified = bound.ContainsKey(nameof(PowerShellCompilationMode)),
+            PowerShellCompilationMode = PowerShellCompilationMode,
+            PowerShellCompilationTargetFrameworkSpecified = bound.ContainsKey(nameof(PowerShellCompilationTargetFramework)),
+            PowerShellCompilationTargetFramework = PowerShellCompilationTargetFramework,
+            PowerShellCompilationResourceModeSpecified = bound.ContainsKey(nameof(PowerShellCompilationResourceMode)),
+            PowerShellCompilationResourceMode = PowerShellCompilationResourceMode,
+            PowerShellCompilationIncludeResourceSpecified = bound.ContainsKey(nameof(PowerShellCompilationIncludeResource)),
+            PowerShellCompilationIncludeResource = PowerShellCompilationIncludeResource,
+            PowerShellCompilationExcludeResourceSpecified = bound.ContainsKey(nameof(PowerShellCompilationExcludeResource)),
+            PowerShellCompilationExcludeResource = PowerShellCompilationExcludeResource,
+            PowerShellCompilationUseBuildCacheSpecified = bound.ContainsKey(nameof(PowerShellCompilationUseBuildCache)),
+            PowerShellCompilationUseBuildCache = PowerShellCompilationUseBuildCache.IsPresent,
+            PowerShellCompilationBuildCacheDirectorySpecified = bound.ContainsKey(nameof(PowerShellCompilationBuildCacheDirectory)),
+            PowerShellCompilationBuildCacheDirectory = PowerShellCompilationBuildCacheDirectory,
+            PowerShellCompilationDependencyLockSpecified = bound.ContainsKey(nameof(PowerShellCompilationDependencyLock)),
+            PowerShellCompilationDependencyLock = PowerShellCompilationDependencyLock,
+            PowerShellCompilationAllowUnreviewedDependenciesSpecified = bound.ContainsKey(nameof(PowerShellCompilationAllowUnreviewedDependencies)),
+            PowerShellCompilationAllowUnreviewedDependencies = PowerShellCompilationAllowUnreviewedDependencies.IsPresent,
+            PowerShellCompilationTimeoutSecondsSpecified = bound.ContainsKey(nameof(PowerShellCompilationTimeoutSeconds)),
+            PowerShellCompilationTimeoutSeconds = PowerShellCompilationTimeoutSeconds,
             KillLockersBeforeInstallSpecified = bound.ContainsKey(nameof(KillLockersBeforeInstall)),
             KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent,
             KillLockersForceSpecified = bound.ContainsKey(nameof(KillLockersForce)),

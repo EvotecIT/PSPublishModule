@@ -338,8 +338,8 @@ New-BenchmarkSuite 'powershell-compilation-real-function' -OutputRoot $outputRoo
     Add-BenchmarkComparison -Dimension Engine -Baseline HandWrittenCSharp -Metric MedianMs -TieTolerance 0.05
 }
 
-New-BenchmarkSuite 'powershell-compilation-powerinfoblox-ptr' -OutputRoot $outputRoot {
-    Add-BenchmarkMetadata Workload 'PowerInfoBlox IPv4-to-PTR helper'
+New-BenchmarkSuite 'powershell-compilation-ipv4-ptr' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'IPv4-to-PTR conversion helper'
     Add-BenchmarkMetadata TypedArtifactSha256 $typedHash
     Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
     Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order GroupedRotated -OutlierMode ExcludeMinMax

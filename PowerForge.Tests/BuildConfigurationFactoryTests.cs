@@ -108,6 +108,65 @@ public sealed class BuildConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_emits_generic_powershell_module_compilation_options()
+    {
+        var factory = new BuildConfigurationFactory();
+
+        var segments = factory.Create(new BuildConfigurationRequest
+        {
+            CompilePowerShellSpecified = true,
+            CompilePowerShell = true,
+            PowerShellCompilationModeSpecified = true,
+            PowerShellCompilationMode = PowerShellCompilationMode.Strict,
+            PowerShellCompilationTargetFrameworkSpecified = true,
+            PowerShellCompilationTargetFramework = "net10.0",
+            PowerShellCompilationIncludeResourceSpecified = true,
+            PowerShellCompilationIncludeResource = new[] { "assets/**" },
+            PowerShellCompilationAllowUnreviewedDependenciesSpecified = true,
+            PowerShellCompilationAllowUnreviewedDependencies = true
+        });
+
+        var build = Assert.IsType<ConfigurationBuildSegment>(Assert.Single(segments));
+        var compilation = Assert.IsType<PowerShellModuleCompilationConfiguration>(build.BuildModule.PowerShellCompilation);
+        Assert.True(compilation.Enabled);
+        Assert.Equal(PowerShellCompilationMode.Strict, compilation.Mode);
+        Assert.Equal("net10.0", compilation.TargetFramework);
+        Assert.Equal(new[] { "assets/**" }, compilation.IncludeResource);
+        Assert.True(compilation.AllowUnreviewedDependencies);
+        Assert.True(compilation.UseBuildCache);
+    }
+
+    [Fact]
+    public void Create_rejects_executable_mode_for_build_module_compilation()
+    {
+        var factory = new BuildConfigurationFactory();
+
+        var error = Assert.Throws<ArgumentException>(() => factory.Create(new BuildConfigurationRequest
+        {
+            CompilePowerShellSpecified = true,
+            CompilePowerShell = true,
+            PowerShellCompilationModeSpecified = true,
+            PowerShellCompilationMode = PowerShellCompilationMode.Package
+        }));
+
+        Assert.Contains("Build-PowerShellArtifact", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Create_rejects_compilation_options_without_explicit_opt_in()
+    {
+        var request = new BuildConfigurationRequest
+        {
+            PowerShellCompilationModeSpecified = true,
+            PowerShellCompilationMode = PowerShellCompilationMode.Hybrid
+        };
+
+        var error = Assert.Throws<ArgumentException>(() => new BuildConfigurationFactory().Create(request));
+
+        Assert.Contains("explicit CompilePowerShell", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Create_reads_missing_module_secret_from_file()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
