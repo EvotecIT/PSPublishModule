@@ -85,7 +85,7 @@ public class WebPipelineRunnerProjectCatalogTests
     }
 
     [Fact]
-    public void RunPipeline_ProjectCatalog_AllowsHubFullSurfacesWithoutExplicitLinks()
+    public void RunPipeline_ProjectCatalog_AllowsHubFullSurfacesAndUsesLatestPublishedPackageVersionAcrossFeeds()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-catalog-hub-full-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -104,7 +104,7 @@ public class WebPipelineRunnerProjectCatalogTests
                       "mode": "hub-full",
                       "hubPath": "projects\\pspublishmodule",
                       "githubRepo": "EvotecIT/PSPublishModule",
-                      "version": "1.4.0",
+                      "version": "2.0.0",
                       "status": "active",
                       "listed": false,
                       "surfaces": {

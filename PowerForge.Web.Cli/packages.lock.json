@@ -14,6 +14,12 @@
           "SQLitePCLRaw.core": "3.0.5"
         }
       },
+      "NuGet.Versioning": {
+        "type": "Direct",
+        "requested": "[7.9.0, )",
+        "resolved": "7.9.0",
+        "contentHash": "r4sZuVpVqwSBLe4qYDrnpScqdyctlRXg0HSF5OoCGkeBc8b+o8BBYHuI/u1RoWYX78PbieijU13TBt71/Xf3lw=="
+      },
       "Acornima": {
         "type": "Transitive",
         "resolved": "1.6.2",
@@ -209,11 +215,6 @@
           "NuGet.Versioning": "7.9.0",
           "System.Security.Cryptography.Pkcs": "8.0.1"
         }
-      },
-      "NuGet.Versioning": {
-        "type": "Transitive",
-        "resolved": "7.9.0",
-        "contentHash": "r4sZuVpVqwSBLe4qYDrnpScqdyctlRXg0HSF5OoCGkeBc8b+o8BBYHuI/u1RoWYX78PbieijU13TBt71/Xf3lw=="
       },
       "NUglify": {
         "type": "Transitive",

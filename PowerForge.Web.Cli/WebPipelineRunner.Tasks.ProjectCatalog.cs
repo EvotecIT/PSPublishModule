@@ -1849,8 +1849,7 @@ internal static partial class WebPipelineRunner
         var candidates = new[]
         {
             NormalizeOptionalString(project.Metrics?.NuGet?.Version),
-            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.Version),
-            NormalizeOptionalString(project.Version)
+            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.Version)
         };
 
         string? latestText = null;
@@ -1867,7 +1866,7 @@ internal static partial class WebPipelineRunner
             }
         }
 
-        return latestText ?? candidates.FirstOrDefault(static candidate => candidate is not null);
+        return latestText ?? NormalizeOptionalString(project.Version);
     }
 
     private static void GenerateProjectSectionPages(
