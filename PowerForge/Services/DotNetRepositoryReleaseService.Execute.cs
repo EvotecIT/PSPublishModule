@@ -79,12 +79,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     var dupPaths = string.Join("; ", group.Select(g => g.Path));
                     foreach (var item in group)
                     {
+                        var isPackable = IsPackable(item.Path, spec);
                         projects.Add(new DotNetRepositoryProjectResult
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
-                            PackageId = ResolvePackageId(item.Path, item.Name, spec),
-                            IsPackable = IsPackable(item.Path, spec),
+                            PackageId = isPackable ? ResolvePackageId(item.Path, item.Name, spec) : item.Name,
+                            IsPackable = isPackable,
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
                     }
@@ -94,12 +95,13 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 var entry = group.First();
+                var entryIsPackable = IsPackable(entry.Path, spec);
                 projects.Add(new DotNetRepositoryProjectResult
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
-                    PackageId = ResolvePackageId(entry.Path, entry.Name, spec),
-                    IsPackable = IsPackable(entry.Path, spec)
+                    PackageId = entryIsPackable ? ResolvePackageId(entry.Path, entry.Name, spec) : entry.Name,
+                    IsPackable = entryIsPackable
                 });
             }
 

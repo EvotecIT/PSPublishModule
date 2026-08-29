@@ -189,7 +189,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private static void ResolvePlannedSdkImports(
         XElement projectRoot,
         string projectDirectory,
-        IReadOnlyDictionary<string, string> properties,
+        Dictionary<string, string> properties,
         out IReadOnlyList<string> props,
         out IReadOnlyList<string> targets)
     {
@@ -214,7 +214,10 @@ public sealed partial class DotNetRepositoryReleaseService
             var separator = expanded.IndexOf('/');
             var sdkName = (separator < 0 ? expanded : expanded.Substring(0, separator)).Trim();
             if (PlannedBuiltInSdkNames.Contains(sdkName))
+            {
+                ApplyPlannedBuiltInSdkProperties(sdkName, properties);
                 continue;
+            }
             if (!properties.TryGetValue("MSBuildSDKsPath", out var sdkRoot) || string.IsNullOrWhiteSpace(sdkRoot))
                 throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because custom SDK '{sdkName}' cannot be resolved without MSBuildSDKsPath.");
             sdkRoot = ExpandPlannedProperties(sdkRoot, properties);
@@ -232,6 +235,33 @@ public sealed partial class DotNetRepositoryReleaseService
         }
         props = resolvedProps;
         targets = resolvedTargets;
+    }
+
+    private static void ApplyPlannedBuiltInSdkProperties(string sdkName, IDictionary<string, string> properties)
+    {
+        if (sdkName.StartsWith("Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase))
+        {
+            properties["UsingMicrosoftNETSdk"] = "true";
+            properties["UsingNETSdkDefaults"] = "true";
+        }
+        if (sdkName.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkWeb"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.Razor", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkRazor"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.StaticWebAssets", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkStaticWebAssets"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.Publish", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkPublish"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.BlazorWebAssembly", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkBlazorWebAssembly"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.WebAssembly", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkWebAssembly"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.Web.ProjectSystem", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkWebProjectSystem"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.Worker", StringComparison.OrdinalIgnoreCase))
+            properties["UsingMicrosoftNETSdkWorker"] = "true";
+        if (sdkName.Equals("Microsoft.NET.Sdk.WindowsDesktop", StringComparison.OrdinalIgnoreCase))
+            properties["_MicrosoftWindowsDesktopSdkImported"] = "true";
     }
 
     private static string ResolvePlannedProjectVersion(
@@ -402,7 +432,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     if (!ConditionMatches(item.Attribute("Condition")?.Value, properties, sourceDirectory))
                         continue;
                     definitions.TryGetValue(item.Name.LocalName, out var defaults);
-                    items.Add(PlannedItem.Create(item, projectDirectory, properties, items, defaults, sourceDirectory));
+                    foreach (var plannedItem in PlannedItem.CreateMany(item, projectDirectory, properties, items, defaults, sourceDirectory))
+                        items.Add(plannedItem);
                 }
                 continue;
             }
@@ -434,13 +465,38 @@ public sealed partial class DotNetRepositoryReleaseService
         IDictionary<string, string> metadata,
         IReadOnlyDictionary<string, string> properties,
         IEnumerable<PlannedItem> items,
-        string conditionDirectory)
+        string conditionDirectory,
+        string? itemType = null,
+        string? itemIdentity = null)
     {
         foreach (var child in source.Elements())
         {
-            if (ConditionMatches(child.Attribute("Condition")?.Value, properties, conditionDirectory))
+            if (PlannedMetadataConditionMatches(child.Attribute("Condition")?.Value, itemType, itemIdentity, metadata, properties, conditionDirectory))
                 metadata[child.Name.LocalName] = ExpandPlannedValue(child.Value.Trim(), properties, items);
         }
+    }
+
+    private static bool PlannedMetadataConditionMatches(
+        string? condition,
+        string? itemType,
+        string? itemIdentity,
+        IDictionary<string, string> metadata,
+        IReadOnlyDictionary<string, string> properties,
+        string conditionDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(condition))
+            return true;
+        var expanded = Regex.Replace(condition!, @"%\((?:(?<item>[A-Za-z_][A-Za-z0-9_.-]*)\.)?(?<name>[A-Za-z_][A-Za-z0-9_.-]*)\)", match =>
+        {
+            var qualifiedItem = match.Groups["item"].Value;
+            if (!string.IsNullOrWhiteSpace(qualifiedItem) && !string.Equals(qualifiedItem, itemType, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because metadata condition '{condition}' batches across unsupported item type '{qualifiedItem}'.");
+            var name = match.Groups["name"].Value;
+            if (name.Equals("Identity", StringComparison.OrdinalIgnoreCase))
+                return itemIdentity ?? throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because metadata condition '{condition}' has no current item identity.");
+            return metadata.TryGetValue(name, out var value) ? value : string.Empty;
+        });
+        return ConditionMatches(expanded, properties, conditionDirectory);
     }
 
     private static void EvaluatePlannedImport(
@@ -652,7 +708,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 merged[entry.Key] = entry.Value;
             return new PlannedItem(ItemType, Include, Exclude, null, null, BaseDirectory, merged, Array.Empty<string>(), Array.Empty<string>());
         }
-        internal static PlannedItem Create(
+        internal static IReadOnlyList<PlannedItem> CreateMany(
             XElement element,
             string baseDirectory,
             IReadOnlyDictionary<string, string> properties,
@@ -660,12 +716,38 @@ public sealed partial class DotNetRepositoryReleaseService
             IReadOnlyDictionary<string, string>? defaults,
             string conditionDirectory)
         {
+            var rawInclude = element.Attribute("Include")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(rawInclude))
+            {
+                var propertyExpandedInclude = ExpandPlannedProperties(rawInclude!, properties);
+                var directItemList = Regex.Match(propertyExpandedInclude, @"^@\((?<name>[A-Za-z_][A-Za-z0-9_.-]*)\)$");
+                if (directItemList.Success)
+                {
+                    return ApplyPlannedItemOperations(items, directItemList.Groups["name"].Value)
+                        .Where(sourceItem => !string.IsNullOrWhiteSpace(sourceItem.Include))
+                        .Select(sourceItem => Create(element, baseDirectory, properties, items, defaults, conditionDirectory, sourceItem.Include, sourceItem.Metadata))
+                        .ToArray();
+                }
+            }
+            return new[] { Create(element, baseDirectory, properties, items, defaults, conditionDirectory, null, null) };
+        }
+
+        private static PlannedItem Create(
+            XElement element,
+            string baseDirectory,
+            IReadOnlyDictionary<string, string> properties,
+            IEnumerable<PlannedItem> items,
+            IReadOnlyDictionary<string, string>? defaults,
+            string conditionDirectory,
+            string? includeOverride,
+            IReadOnlyDictionary<string, string>? inheritedMetadata)
+        {
             string? ExpandAttribute(string name)
             {
                 var value = element.Attribute(name)?.Value?.Trim();
                 return string.IsNullOrWhiteSpace(value) ? null : ExpandPlannedValue(value!, properties, items);
             }
-            var include = ExpandAttribute("Include");
+            var include = includeOverride ?? ExpandAttribute("Include");
             var removeMetadataValue = ExpandAttribute("RemoveMetadata");
             var keepMetadataValue = ExpandAttribute("KeepMetadata");
             if (ContainsUnresolvedPlannedExpression(removeMetadataValue) || ContainsUnresolvedPlannedExpression(keepMetadataValue))
@@ -685,6 +767,11 @@ public sealed partial class DotNetRepositoryReleaseService
                 foreach (var entry in defaults)
                     metadata[entry.Key] = entry.Value;
             }
+            if (include is not null && inheritedMetadata is not null)
+            {
+                foreach (var entry in inheritedMetadata)
+                    metadata[entry.Key] = entry.Value;
+            }
             ApplyMetadataSelection(metadata, removeMetadata, keepMetadata);
             foreach (var attribute in element.Attributes())
             {
@@ -697,7 +784,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     continue;
                 metadata[name] = ExpandPlannedValue(attribute.Value.Trim(), properties, items);
             }
-            ApplyPlannedMetadata(element, metadata, properties, items, conditionDirectory);
+            ApplyPlannedMetadata(element, metadata, properties, items, conditionDirectory, element.Name.LocalName, include);
             return new PlannedItem(
                 element.Name.LocalName,
                 include,
