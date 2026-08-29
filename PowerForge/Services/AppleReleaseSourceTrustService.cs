@@ -50,10 +50,13 @@ internal sealed partial class AppleReleaseSourceTrustService
     internal string ResolveExactCommit(string repositoryRoot, string configPath)
         => Capture(repositoryRoot, configPath).SourceCommit;
 
+    internal AppleReleaseSourceTrustSnapshot Capture(string repositoryRoot, string configPath)
+        => Capture(repositoryRoot, configPath, AppleReleaseSourceTrustValidationScope.BuildExecution);
+
     internal AppleReleaseSourceTrustSnapshot Capture(
         string repositoryRoot,
         string configPath,
-        AppleReleaseSourceTrustValidationScope validationScope = AppleReleaseSourceTrustValidationScope.BuildExecution)
+        AppleReleaseSourceTrustValidationScope validationScope)
     {
         lock (_validationGate)
         {
