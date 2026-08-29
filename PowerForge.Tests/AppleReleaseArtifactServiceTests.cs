@@ -3,6 +3,56 @@ namespace PowerForge.Tests;
 public sealed class AppleReleaseArtifactServiceTests
 {
     [Fact]
+    public void ResolveOwningDriveRoot_PrefersDeepestMountedVolume()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.AppleVolume", Guid.NewGuid().ToString("N"));
+        var mountedVolume = Path.Combine(root, "external-volume");
+        var projectRoot = Path.Combine(mountedVolume, "repo");
+        Directory.CreateDirectory(projectRoot);
+        try
+        {
+            var resolved = AppleReleaseArtifactService.ResolveOwningDriveRoot(
+                projectRoot,
+                [Path.GetPathRoot(root)!, root, mountedVolume]);
+
+            Assert.Equal(AppleReleaseArtifactService.ResolvePhysicalPath(mountedVolume), resolved);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveOwningDriveRoot_FollowsLinkedProjectAncestor()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var container = Path.Combine(Path.GetTempPath(), "PowerForge.AppleVolume", Guid.NewGuid().ToString("N"));
+        var physicalVolume = Path.Combine(container, "physical-volume");
+        var physicalProject = Path.Combine(physicalVolume, "repo");
+        var linkedVolume = Path.Combine(container, "linked-volume");
+        var linkedProject = Path.Combine(linkedVolume, "repo");
+        Directory.CreateDirectory(physicalProject);
+        Directory.CreateSymbolicLink(linkedVolume, physicalVolume);
+        try
+        {
+            var resolved = AppleReleaseArtifactService.ResolveOwningDriveRoot(
+                linkedProject,
+                [Path.GetPathRoot(container)!, physicalVolume]);
+
+            Assert.Equal(AppleReleaseArtifactService.ResolvePhysicalPath(physicalVolume), resolved);
+        }
+        finally
+        {
+            Directory.Delete(linkedVolume);
+            Directory.Delete(container, true);
+        }
+    }
+
+    [Fact]
     public void RemoveCurrentArtifacts_RefusesPathsOutsideConfiguredProjectRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.AppleCleanup", Guid.NewGuid().ToString("N"));
