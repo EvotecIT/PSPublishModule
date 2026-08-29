@@ -46,6 +46,27 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
         Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
     }
 
+    [Theory]
+    [InlineData("true Or ('x' == )")]
+    [InlineData("false And ('x' == )")]
+    public void PlanningValidatesMalformedBranchesEvenWhenBooleanResultIsAlreadyKnown(string condition)
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, $"""
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="{condition}"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            CreateService().SortProjectsForPublish([app, shared], true, "Release"));
+
+        Assert.Contains("unsupported MSBuild evaluation", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void WhatIfUsesImportedPackageIdentityAndVersionWithoutRequiringSdkEvaluation()
     {

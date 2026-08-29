@@ -20,7 +20,26 @@ public sealed partial class DotNetRepositoryReleaseService
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' contains an unresolved property.");
 
+        ValidateConditionExpression(expanded);
         return EvaluateConditionExpression(expanded, conditionDirectory);
+    }
+
+    private static void ValidateConditionExpression(string condition)
+    {
+        var trimmed = TrimEnclosingConditionParentheses(condition.Trim());
+        var branches = SplitTopLevelCondition(trimmed, "Or");
+        if (branches.Count == 1)
+            branches = SplitTopLevelCondition(trimmed, "And");
+        if (branches.Count > 1)
+        {
+            foreach (var branch in branches)
+                ValidateConditionExpression(branch);
+            return;
+        }
+
+        if (MatchExistsCondition(trimmed).Success || bool.TryParse(trimmed, out _) || MatchComparisonCondition(trimmed).Success)
+            return;
+        throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' requires unsupported MSBuild evaluation.");
     }
 
     private static bool EvaluateConditionExpression(string condition, string conditionDirectory)
@@ -156,7 +175,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static bool EvaluateSimpleCondition(string condition, string conditionDirectory)
     {
-        var exists = Regex.Match(condition, "^(?<not>!)?\\s*Exists\\(\\s*(?<quote>['\\\"])(?<path>.*?)\\k<quote>\\s*\\)$", RegexOptions.IgnoreCase);
+        var exists = MatchExistsCondition(condition);
         if (exists.Success)
         {
             var path = ResolvePlannedPath(conditionDirectory, exists.Groups["path"].Value);
@@ -166,9 +185,7 @@ public sealed partial class DotNetRepositoryReleaseService
         if (bool.TryParse(condition, out var boolean))
             return boolean;
 
-        var match = Regex.Match(
-            condition,
-            "^\\s*(?<left>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*(?<operator>==|!=|>=|<=|>|<)\\s*(?<right>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*$");
+        var match = MatchComparisonCondition(condition);
         if (!match.Success)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' requires unsupported MSBuild evaluation.");
         var left = UnquoteConditionOperand(match.Groups["left"].Value.Trim());
@@ -185,6 +202,14 @@ public sealed partial class DotNetRepositoryReleaseService
             comparisonOperator == ">=" ? comparison >= 0 :
             comparisonOperator == "<" ? comparison < 0 : comparison <= 0;
     }
+
+    private static Match MatchExistsCondition(string condition)
+        => Regex.Match(condition, "^(?<not>!)?\\s*Exists\\(\\s*(?<quote>['\\\"])(?<path>.*?)\\k<quote>\\s*\\)$", RegexOptions.IgnoreCase);
+
+    private static Match MatchComparisonCondition(string condition)
+        => Regex.Match(
+            condition,
+            "^\\s*(?<left>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*(?<operator>==|!=|>=|<=|>|<)\\s*(?<right>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*$");
 
     private static string UnquoteConditionOperand(string operand)
         => operand.Length >= 2 && ((operand[0] == '\'' && operand[operand.Length - 1] == '\'') || (operand[0] == '"' && operand[operand.Length - 1] == '"'))
