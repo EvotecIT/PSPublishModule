@@ -240,7 +240,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 6;
+    public int SchemaVersion { get; set; } = 8;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -274,6 +274,12 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Bound-IR optimization evidence for generated typed methods.</summary>
     public PowerShellCompilationOptimizationEvidence? IrOptimization { get; set; }
+
+    /// <summary>Deterministic final decision trace from authored units to artifact disposition.</summary>
+    public PowerShellCompilationExplanation? DecisionTrace { get; set; }
+
+    /// <summary>Redacted, integrity-bound inputs needed to reproduce the compiler decision.</summary>
+    public PowerShellCompilationReproductionEvidence? Reproduction { get; set; }
 
     /// <summary>Static typed/hosted transition evidence for the artifact plan.</summary>
     public PowerShellCompilationBoundaryEvidence? Boundaries { get; set; }
@@ -329,6 +335,21 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Number of genuinely typed methods in the artifact.</summary>
     public int CompiledMethods { get; set; }
 
+    /// <summary>Number of authored executable units analyzed by the canonical compiler.</summary>
+    public int AnalyzedUnits { get; set; }
+
+    /// <summary>Number of analyzed units emitted into the final typed artifact surface.</summary>
+    public int EmittedUnits { get; set; }
+
+    /// <summary>Number of units routed through the PowerShell runtime in the delivered artifact.</summary>
+    public int RuntimeRoutedUnits { get; set; }
+
+    /// <summary>Number of analyzed units rejected by semantic compilation and routed to fallback.</summary>
+    public int FallbackUnits { get; set; }
+
+    /// <summary>Number of semantically eligible units routed to fallback during artifact shaping.</summary>
+    public int ShapedFallbackUnits { get; set; }
+
     /// <summary>Number of executable units left on the PowerShell runtime path.</summary>
     public int RuntimeFallbackUnits { get; set; }
 
@@ -338,8 +359,11 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Typed compilation coverage among analyzed units.</summary>
     public double CompilationCoveragePercentage { get; set; }
 
-    /// <summary>Exact artifact file path.</summary>
+    /// <summary>Exact durable artifact path, or the portable relative artifact path when evidence is embedded in a package.</summary>
     public string ArtifactPath { get; set; } = string.Empty;
+
+    /// <summary>Portable artifact path relative to the compilation evidence file.</summary>
+    public string ArtifactRelativePath { get; set; } = string.Empty;
 
     /// <summary>Durable generated source project path when source emission was requested.</summary>
     public string? GeneratedSourcePath { get; set; }
@@ -474,8 +498,11 @@ public sealed class PowerShellCompilationNativeExecutableEvidence
 /// </summary>
 public sealed class PowerShellCompilationArtifactFile
 {
-    /// <summary>Full durable path.</summary>
+    /// <summary>Full durable path, or the portable relative path when evidence is embedded in a package.</summary>
     public string Path { get; set; } = string.Empty;
+
+    /// <summary>Portable file path relative to the compilation evidence file.</summary>
+    public string RelativePath { get; set; } = string.Empty;
 
     /// <summary>Purpose of the file, such as Primary, TypedAssembly, or ScriptFallback.</summary>
     public string Role { get; set; } = string.Empty;

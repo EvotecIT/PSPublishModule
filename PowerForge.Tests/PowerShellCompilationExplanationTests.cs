@@ -4,6 +4,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationExplanationTests
 {
     [Fact]
@@ -86,5 +87,44 @@ public sealed class PowerShellCompilationExplanationTests
             try { Directory.Delete(firstRoot, recursive: true); } catch { }
             try { Directory.Delete(secondRoot, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void FinalExplanationRecordsTypesLoweringArtifactAndDependencyDecisions()
+    {
+        var unit = new PowerShellCompilationUnitPlan(
+            "Get-RandomValue",
+            PowerShellCompilationUnitKind.Function,
+            4,
+            typeof(int).FullName!,
+            new[] { new PowerShellCompilationParameter("Count", typeof(int).FullName!, hasDefaultValue: true) },
+            Array.Empty<PowerShellCompilationDiagnostic>());
+        var file = new PowerShellCompilationFilePlan(
+            Path.Combine(Path.GetTempPath(), "PowerForge", "Random.psm1"),
+            "Random.psm1",
+            new[] { unit },
+            Array.Empty<PowerShellCompilationDiagnostic>());
+        var dependency = new PowerShellCompilationDependency(
+            "data.json",
+            sourcePath: null,
+            "Assets/data.json",
+            PowerShellCompilationDependencyKind.Content,
+            PowerShellCompilationDependencyDiscovery.ExplicitResourceInclude,
+            PowerShellCompilationDependencyDisposition.Embedded,
+            exists: true,
+            sizeBytes: 12,
+            "Selected by policy.");
+        var explanation = PowerShellCompilationExplanationService.CreateFinal(
+            new PowerShellCompilationPlan(PowerShellCompilationMode.Strict, new[] { file }, "net8.0", new[] { dependency }),
+            PowerShellCompilationArtifactKind.Executable,
+            shapedCompilation: null);
+
+        var tracedUnit = Assert.Single(Assert.Single(explanation.Files).Units);
+        Assert.Equal(typeof(int).FullName, tracedUnit.ReturnType);
+        Assert.Equal(typeof(int).FullName, Assert.Single(tracedUnit.Parameters).TypeName);
+        Assert.Equal(PowerShellCompilationDecisionKind.Typed, tracedUnit.Decision);
+        Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
+        Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
+        Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
     }
 }

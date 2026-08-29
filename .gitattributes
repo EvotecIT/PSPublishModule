@@ -10,6 +10,7 @@ Module/Docs/New-ConfigurationDotNetTarget.md -text whitespace=cr-at-eol
 Module/Docs/New-ConfigurationDotNetSign.md -text whitespace=cr-at-eol
 Module/Docs/New-AppleAppArchive.md -text whitespace=cr-at-eol
 Module/Docs/New-ConfigurationAppleApp.md -text whitespace=cr-at-eol
+Module/Docs/New-ConfigurationBuild.md -text whitespace=cr-at-eol
 Module/Docs/Sync-AppStoreConnectScreenshots.md -text whitespace=cr-at-eol
 Module/Docs/Test-AppStoreConnectScreenshotSyncConfig.md -text whitespace=cr-at-eol
 Module/Docs/Update-BenchmarkEvidenceCatalog.md -text whitespace=cr-at-eol

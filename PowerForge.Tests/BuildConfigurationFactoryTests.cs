@@ -108,6 +108,7 @@ public sealed class BuildConfigurationFactoryTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
     public void Create_emits_generic_powershell_module_compilation_options()
     {
         var factory = new BuildConfigurationFactory();
@@ -137,6 +138,7 @@ public sealed class BuildConfigurationFactoryTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
     public void Create_rejects_executable_mode_for_build_module_compilation()
     {
         var factory = new BuildConfigurationFactory();
@@ -153,6 +155,7 @@ public sealed class BuildConfigurationFactoryTests
     }
 
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
     public void Create_rejects_compilation_options_without_explicit_opt_in()
     {
         var request = new BuildConfigurationRequest

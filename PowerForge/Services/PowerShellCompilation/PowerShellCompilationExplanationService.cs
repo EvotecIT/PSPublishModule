@@ -47,7 +47,27 @@ public static class PowerShellCompilationExplanationService
                 .ThenBy(static dependency => dependency.Name, StringComparer.Ordinal)
                 .Select(dependency => CreateDependencyExplanation(dependency, redact))
                 .ToArray(),
+            Dependencies = plan.Dependencies
+                .OrderBy(static dependency => NormalizePath(dependency.RelativePath), StringComparer.Ordinal)
+                .ThenBy(static dependency => dependency.Name, StringComparer.Ordinal)
+                .Select(dependency => CreateDependencyTrace(dependency, redact))
+                .ToArray(),
             Files = files
+        };
+    }
+
+    private static PowerShellCompilationDependencyTrace CreateDependencyTrace(
+        PowerShellCompilationDependency dependency,
+        Func<string, string> redact)
+    {
+        var name = redact(dependency.Name);
+        return new PowerShellCompilationDependencyTrace
+        {
+            Name = name,
+            RelativePath = NormalizeRelativePath(redact(dependency.RelativePath), name),
+            Kind = dependency.Kind,
+            Discovery = dependency.Discovery,
+            Disposition = dependency.Disposition
         };
     }
 
@@ -116,7 +136,27 @@ public static class PowerShellCompilationExplanationService
             Name = unit.Name,
             Kind = unit.Kind,
             StartLine = unit.StartLine,
+            ReturnType = unit.ReturnType,
+            Parameters = unit.Parameters.Select(static parameter => new PowerShellCompilationExplanationParameter
+            {
+                Name = parameter.Name,
+                TypeName = parameter.TypeName,
+                AllowNull = parameter.AllowNull,
+                HasDefaultValue = parameter.HasDefaultValue
+            }).ToArray(),
             Decision = decision,
+            LoweringRoute = decision switch
+            {
+                PowerShellCompilationDecisionKind.Typed => "BoundClr",
+                PowerShellCompilationDecisionKind.RuntimeFallback => "PowerShellRuntime",
+                _ => "Rejected"
+            },
+            ArtifactDisposition = decision switch
+            {
+                PowerShellCompilationDecisionKind.Typed => "TypedArtifact",
+                PowerShellCompilationDecisionKind.RuntimeFallback => "HostedSource",
+                _ => "Absent"
+            },
             Causes = unit.Diagnostics.Concat(shapedDiagnostics)
                 .GroupBy(static diagnostic => diagnostic.Code + "\0" + diagnostic.FeatureId + "\0" + diagnostic.Line + "\0" + diagnostic.Column + "\0" + diagnostic.Message, StringComparer.Ordinal)
                 .Select(static group => group.First())
@@ -151,10 +191,12 @@ public static class PowerShellCompilationExplanationService
                     ? PowerShellCompilationDecisionKind.Rejected
                     : PowerShellCompilationDecisionKind.RuntimeFallback
                 : PowerShellCompilationDecisionKind.Rejected;
-        if (mode == PowerShellCompilationMode.Analyze)
-            return PowerShellCompilationDecisionKind.Typed;
         if (mode == PowerShellCompilationMode.Package)
             return PowerShellCompilationDecisionKind.RuntimeFallback;
+        if (mode == PowerShellCompilationMode.Analyze)
+            return PowerShellCompilationDecisionKind.Typed;
+        if (mode == PowerShellCompilationMode.Strict && shapedCompilation is null)
+            return PowerShellCompilationDecisionKind.Typed;
 
         var emitted = shapedCompilation?.Methods.Any(method =>
             method.Lifecycle is null &&

@@ -5,6 +5,27 @@ namespace PowerForge.Tests;
 public sealed class PublishConfigurationFactoryTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
+    public void Create_allows_managed_local_repository_without_fake_publish_secret()
+    {
+        var repositoryPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var segment = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiFromFile",
+            Type = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.ManagedModule,
+            RepositoryName = "LocalAcceptance",
+            RepositoryUri = repositoryPath,
+            Enabled = true
+        });
+
+        Assert.True(segment.Configuration.Enabled);
+        Assert.Equal(PublishTool.ManagedModule, segment.Configuration.Tool);
+        Assert.Equal(repositoryPath, segment.Configuration.Repository?.Uri);
+        Assert.True(string.IsNullOrEmpty(segment.Configuration.ApiKey));
+    }
+
+    [Fact]
     public void Create_requires_explicit_release_reuse_before_asset_replacement()
     {
         var factory = new PublishConfigurationFactory();

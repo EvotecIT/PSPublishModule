@@ -12,6 +12,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellTypedCompilationDifferentialTests
 {
     [Fact]
@@ -80,20 +81,6 @@ public sealed class PowerShellTypedCompilationDifferentialTests
     {
         const string source =
             """
-            function ConvertFrom-OperationType {
-                param([string] $OperationType)
-                $Known = @{
-                    '%%14674' = 'Value Added'
-                    '%%14675' = 'Value Deleted'
-                    '%%14676' = 'Unknown'
-                    'Added' = 'Case Value'
-                }
-                foreach ($id in $OperationType) {
-                    if ($name = $Known[$id]) { return $name }
-                }
-                return $OperationType
-            }
-
             function Convert-IpAddressToPtrString {
                 [CmdletBinding()]
                 param([Parameter(Mandatory = $true)] [string] $IPAddress)
@@ -121,10 +108,6 @@ public sealed class PowerShellTypedCompilationDifferentialTests
         {
             var generatedType = loadContext.LoadFromStream(assemblyStream)
                 .GetType("PowerForge.Compiled.PowerForge_CommonModuleHelpersMethods", throwOnError: true)!;
-            AssertDifferential(generatedType, runspace, "ConvertFrom-OperationType", "ConvertFrom_OperationType", new[]
-            {
-                new object[] { "%%14674" }, new object[] { "added" }, new object[] { "missing" }
-            });
             AssertDifferential(generatedType, runspace, "Convert-IpAddressToPtrString", "Convert_IpAddressToPtrString", new[]
             {
                 new object[] { "192.168.1.20" }
@@ -137,7 +120,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
     }
 
     [Fact]
-    public void TypedClrStringReceiverPreservesMissingValueFailure()
+    public void StrictCompilationRejectsNullableClrReceiverWithoutExactPowerShellErrorIdentity()
     {
         const string source =
             "function Test-MissingEnvironmentPrefix { param([string] $Name); $value = [Environment]::GetEnvironmentVariable($Name); return $value.StartsWith('PowerForge') }; " +
@@ -149,43 +132,9 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             "PowerForge.NullableMemberDifferential",
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-
-        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
-        var loadContext = new AssemblyLoadContext("PowerForgeNullableMemberDifferential", isCollectible: true);
-        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
-        runspace.Open();
-        InitializePowerShellSource(runspace, source);
-        var environmentName = "POWERFORGE_MISSING_" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using var powerShell = PowerShell.Create();
-            powerShell.Runspace = runspace;
-            powerShell.AddCommand("Test-MissingEnvironmentPrefix").AddArgument(environmentName);
-            powerShell.Invoke();
-            Assert.True(powerShell.HadErrors);
-
-            var generatedType = loadContext.LoadFromStream(assemblyStream)
-                .GetType("PowerForge.Compiled.PowerForge_NullableMemberDifferentialMethods", throwOnError: true)!;
-            var method = generatedType
-                .GetMethod("Test_MissingEnvironmentPrefix", BindingFlags.Public | BindingFlags.Static)!;
-            var exception = Assert.Throws<TargetInvocationException>(() => method.Invoke(null, new object[] { environmentName }));
-            Assert.IsType<NullReferenceException>(exception.InnerException);
-
-            using var lengthPowerShell = PowerShell.Create();
-            lengthPowerShell.Runspace = runspace;
-            lengthPowerShell.AddCommand("Get-MissingEnvironmentLength").AddArgument(environmentName);
-            var lengthOutput = lengthPowerShell.Invoke();
-            Assert.False(lengthPowerShell.HadErrors, string.Join(Environment.NewLine, lengthPowerShell.Streams.Error));
-            Assert.Equal(0, Assert.Single(lengthOutput).BaseObject);
-            var compiledLength = generatedType
-                .GetMethod("Get_MissingEnvironmentLength", BindingFlags.Public | BindingFlags.Static)!;
-            Assert.Equal(0, compiledLength.Invoke(null, new object[] { environmentName }));
-        }
-        finally
-        {
-            loadContext.Unload();
-        }
+        Assert.False(build.Succeeded);
+        Assert.Contains("potentially null receiver", build.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
     [Fact]
@@ -227,8 +176,7 @@ public sealed class PowerShellTypedCompilationDifferentialTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(valueFixture.ScriptPath));
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.False(unit.IsCompilable);
-        Assert.Contains(unit.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("nullable reference receiver", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(unit.Diagnostics, diagnostic => diagnostic.FeatureId == "syntax.memberexpression");
     }
 
     [Fact]

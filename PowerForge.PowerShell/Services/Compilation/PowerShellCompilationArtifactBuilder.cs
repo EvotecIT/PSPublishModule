@@ -409,15 +409,40 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 var generatedSourcePath = stagedGeneratedSourcePath is null
                     ? null
                     : PowerShellArtifactSetPublisher.RebasePath(stagedGeneratedSourcePath, artifactStagingDirectory, spec.OutputDirectory);
-                var nonCompiledUnits = Math.Max(0, plan.TotalUnits - compiledUnits);
-                var fallbackUnits = usesPowerShellRuntimeFallback
-                    ? Math.Max(0, plan.TotalUnits - runtimeRoutedUnits) + runtimeManifestHooks.Length
+                var analyzedUnits = plan.TotalUnits;
+                var emittedUnits = compiledUnits;
+                var fallbackUnits = plan.RuntimeFallbackUnits;
+                var shapedFallbackUnits = spec.Mode == PowerShellCompilationMode.Hybrid && usesPowerShellRuntimeFallback
+                    ? Math.Max(0, analyzedUnits - emittedUnits - fallbackUnits)
                     : 0;
-                var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library ? nonCompiledUnits : 0;
-                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, fallbackUnits, spec.BoundaryRuntimeProfile);
+                var runtimeRoutedFallbackUnits = usesPowerShellRuntimeFallback
+                    ? fallbackUnits + shapedFallbackUnits
+                    : 0;
+                var omittedUnits = spec.Kind == PowerShellCompilationArtifactKind.Library
+                    ? Math.Max(0, analyzedUnits - emittedUnits)
+                    : 0;
+                var boundaryEvidence = CreateBoundaryEvidence(compiledMethodDetails, runtimeRoutedFallbackUnits, spec.BoundaryRuntimeProfile);
                 var diagnostics = typed?.Diagnostics ?? plan.Files
                     .SelectMany(static file => file.Diagnostics.Concat(file.Units.SelectMany(static unit => unit.Diagnostics)))
                     .ToArray();
+                var commandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
+                    .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
+                    .Select(static group => group.First())
+                    .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+                    .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
+                    .ToArray();
+                var decisionTrace = PowerShellCompilationExplanationService.CreateFinal(plan, spec.Kind, typed);
+                var reproduction = PowerShellCompilationReproductionEvidenceBuilder.Create(
+                    plan,
+                    spec.Kind,
+                    decisionTrace,
+                    toolchain,
+                    runtimeFreeContract?.SemanticProfile,
+                    runtimeFreeContract?.PublicAbi,
+                    runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty,
+                    stagedArtifact.Files,
+                    diagnostics,
+                    commandProviders);
                 var manifest = new PowerShellCompilationArtifactManifest
                 {
                     ArtifactName = artifactName,
@@ -431,6 +456,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Toolchain = toolchain,
                     BuildCache = buildCache,
                     IrOptimization = optimizationEvidence,
+                    DecisionTrace = decisionTrace,
+                    Reproduction = reproduction,
                     Boundaries = boundaryEvidence,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
                     UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
@@ -446,9 +473,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     SingleFile = spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile,
                     Optimization = spec.Optimization,
                     CompiledMethods = compiledMethods,
-                    RuntimeFallbackUnits = fallbackUnits,
+                    AnalyzedUnits = analyzedUnits,
+                    EmittedUnits = emittedUnits,
+                    RuntimeRoutedUnits = runtimeRoutedFallbackUnits,
+                    FallbackUnits = fallbackUnits,
+                    ShapedFallbackUnits = shapedFallbackUnits,
+                    RuntimeFallbackUnits = runtimeRoutedFallbackUnits,
                     OmittedUnits = omittedUnits,
-                    CompilationCoveragePercentage = plan.TotalUnits == 0 ? 0 : compiledUnits * 100d / plan.TotalUnits,
+                    CompilationCoveragePercentage = analyzedUnits == 0 ? 0 : emittedUnits * 100d / analyzedUnits,
                     ArtifactPath = artifactPath,
                     GeneratedSourcePath = generatedSourcePath,
                     ArtifactSha256 = ComputeSha256(stagedArtifact.PrimaryPath),
@@ -460,12 +492,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Dependencies = dependencyPlan,
                     DependencyGraph = dependencyGraph,
                     DependencyLockReviewed = spec.ExpectedDependencyLock is not null,
-                    CommandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
-                        .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
-                        .Select(static group => group.First())
-                        .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
-                        .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
-                        .ToArray(),
+                    CommandProviders = commandProviders,
                     Lifecycles = compiledMethodDetails.Where(static method => method.Lifecycle is not null)
                         .Select(static method => method.Lifecycle!)
                         .OrderBy(static lifecycle => lifecycle.SourceSha256, StringComparer.Ordinal)

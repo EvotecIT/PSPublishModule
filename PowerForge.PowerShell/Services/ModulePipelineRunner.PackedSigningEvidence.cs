@@ -96,52 +96,54 @@ public sealed partial class ModulePipelineRunner
             signingResult = AggregateSigningResults(signingResult, loadedContentResult);
         }
 
-        if (!File.Exists(sourceAttestationPath))
+        var externalEvidence = new List<string>();
+        if (File.Exists(sourceAttestationPath))
         {
-            state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
-            return Array.Empty<string>();
-        }
+            PowerForgeModuleSourceAttestationWriter.BindSigningInventory(
+                context.ManifestPath,
+                context.RootPath,
+                signingResult);
+            SigningOptionsConfiguration attestationSigning = CloneSigningOptions(signing)
+                ?? throw new InvalidOperationException("Signing options could not be cloned.");
+            attestationSigning.OverwriteSigned = true;
+            ModuleSigningResult attestationSigningResult = _hostedOperations.SignModuleOutput(
+                context.ModuleName,
+                context.RootPath,
+                new[] { sourceAttestationPath },
+                new[] { "*.psd1" },
+                Array.Empty<string>(),
+                attestationSigning);
+            string normalizedAttestation = Path.GetFullPath(sourceAttestationPath);
+            if (attestationSigningResult.Failed > 0 ||
+                !(attestationSigningResult.VerifiedFilePaths ?? Array.Empty<string>())
+                    .Select(Path.GetFullPath)
+                    .Contains(normalizedAttestation, StringComparer.OrdinalIgnoreCase) ||
+                !string.Equals(
+                    NormalizeOptionalThumbprint(signingResult.CertificateThumbprint),
+                    NormalizeOptionalThumbprint(attestationSigningResult.CertificateThumbprint),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The signed module source attestation could not be rebound to the packed signing inventory.");
+            }
 
-        PowerForgeModuleSourceAttestationWriter.BindSigningInventory(
-            context.ManifestPath,
-            context.RootPath,
-            signingResult);
-        SigningOptionsConfiguration attestationSigning = CloneSigningOptions(signing)
-            ?? throw new InvalidOperationException("Signing options could not be cloned.");
-        attestationSigning.OverwriteSigned = true;
-        ModuleSigningResult attestationSigningResult = _hostedOperations.SignModuleOutput(
-            context.ModuleName,
-            context.RootPath,
-            new[] { sourceAttestationPath },
-            new[] { "*.psd1" },
-            Array.Empty<string>(),
-            attestationSigning);
-        string normalizedAttestation = Path.GetFullPath(sourceAttestationPath);
-        if (attestationSigningResult.Failed > 0 ||
-            !(attestationSigningResult.VerifiedFilePaths ?? Array.Empty<string>())
-                .Select(Path.GetFullPath)
-                .Contains(normalizedAttestation, StringComparer.OrdinalIgnoreCase) ||
-            !string.Equals(
-                NormalizeOptionalThumbprint(signingResult.CertificateThumbprint),
-                NormalizeOptionalThumbprint(attestationSigningResult.CertificateThumbprint),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "The signed module source attestation could not be rebound to the packed signing inventory.");
-        }
-        state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
-
-        string evidencePath = context.OutputPath + ".signing.json";
-        return new[]
-        {
-            PowerForgeModuleSigningEvidenceWriter.WriteFromSignedSourceAttestation(
+            string evidencePath = context.OutputPath + ".signing.json";
+            externalEvidence.Add(PowerForgeModuleSigningEvidenceWriter.WriteFromSignedSourceAttestation(
                 evidencePath,
                 context.RootPath,
                 context.ModuleName,
                 context.Version,
                 context.ManifestPath,
-                signingResult)
-        };
+                signingResult));
+        }
+
+        _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+            context.MainModulePath,
+            context.ModuleName,
+            signingResult,
+            signing);
+        state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
+        return externalEvidence;
     }
 
     private static void CaptureAuthorizedProjectManifest(
@@ -179,6 +181,11 @@ public sealed partial class ModulePipelineRunner
         PackedArtefactFinalizationContext context)
     {
         PreparePackedReleaseProtection(plan, state, context);
+        _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
+            context.MainModulePath,
+            context.ModuleName,
+            signingResult: null,
+            signing: plan.Signing);
         return Array.Empty<string>();
     }
 

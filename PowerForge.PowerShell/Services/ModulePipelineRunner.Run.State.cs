@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
         public ModuleBuildPipeline.StagingResult? Staged { get; set; }
         public ModuleBuildResult? BuildResult { get; set; }
         public PowerShellModuleCompilationResult? PowerShellCompilationResult { get; set; }
+        public PowerShellModuleCompilationReleaseContract? PowerShellCompilationReleaseContract { get; set; }
         public MergeExecutionResult MergeExecution { get; set; } = MergeExecutionResult.None;
         public DocumentationBuildResult? DocumentationResult { get; set; }
         public FormatterResult[] FormattingStagingResults { get; set; } = Array.Empty<FormatterResult>();
@@ -36,6 +37,7 @@ public sealed partial class ModulePipelineRunner
         public BuildDiagnostic[] AutomaticBinaryConflictDiagnostics { get; set; } = Array.Empty<BuildDiagnostic>();
         public List<ArtefactBuildResult> ArtefactResults { get; } = new();
         public Dictionary<string, string> FinalizedPackedArtefactHashes { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> FinalizedModulePayloadHashes { get; } = new(PowerShellCompilationPathSafety.PathComparer);
         public List<ModulePublishResult> PublishResults { get; } = new();
         public List<ProjectBuildHostExecutionResult> ProjectBuildResults { get; } = new();
         public Dictionary<object, ProjectBuildHostExecutionResult> PackageBuildResultsBySegment { get; } = new();

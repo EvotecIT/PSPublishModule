@@ -4,6 +4,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerForgeCliPowerShellCompilationTests
 {
     [Theory]

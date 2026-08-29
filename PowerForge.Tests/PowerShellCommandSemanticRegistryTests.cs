@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCommandSemanticRegistryTests
 {
     [Theory]

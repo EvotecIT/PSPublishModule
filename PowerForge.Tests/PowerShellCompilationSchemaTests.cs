@@ -5,6 +5,7 @@ using Json.Schema;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationSchemaTests
 {
     [Fact]

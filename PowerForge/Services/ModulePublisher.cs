@@ -424,7 +424,8 @@ public sealed partial class ModulePublisher
                 moduleName: plan.ModuleName,
                 information: plan.Information,
                 delivery: plan.Delivery,
-                includeScriptFolders: includeScriptFolders);
+                includeScriptFolders: includeScriptFolders,
+                finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
 
             if (tool != PublishTool.ManagedModule && repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
@@ -559,7 +560,8 @@ public sealed partial class ModulePublisher
         string moduleName,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders)
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         if (string.IsNullOrWhiteSpace(stagingPath))
             throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
@@ -578,7 +580,8 @@ public sealed partial class ModulePublisher
             destinationModuleRoot: publishPath,
             information: information,
             delivery: delivery,
-            includeScriptFolders: includeScriptFolders);
+            includeScriptFolders: includeScriptFolders,
+            finalizedPayloadFiles: finalizedPayloadFiles);
 
         return publishPath;
     }

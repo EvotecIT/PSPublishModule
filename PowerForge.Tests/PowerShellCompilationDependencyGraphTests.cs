@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationDependencyGraphTests
 {
     [Fact]
@@ -104,7 +105,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(6, result.Manifest!.SchemaVersion);
+        Assert.Equal(8, result.Manifest!.SchemaVersion);
         Assert.True(result.Manifest.DependencyLockReviewed);
         Assert.NotNull(result.Manifest.DependencyGraph);
         Assert.Equal(expected.LockSha256, result.Manifest.DependencyGraph!.LockSha256);

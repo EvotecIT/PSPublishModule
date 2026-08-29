@@ -26,6 +26,19 @@ public sealed class PowerShellCompilationExplanationDiagnostic
     public int Column { get; set; }
 }
 
+/// <summary>Relocation-safe parameter type information captured in a compiler decision trace.</summary>
+public sealed class PowerShellCompilationExplanationParameter
+{
+    /// <summary>Authored parameter name.</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Resolved CLR type name.</summary>
+    public string TypeName { get; set; } = string.Empty;
+    /// <summary>Whether the authored contract permits null.</summary>
+    public bool AllowNull { get; set; }
+    /// <summary>Whether a default value is present.</summary>
+    public bool HasDefaultValue { get; set; }
+}
+
 /// <summary>Deterministic decision trace for one script or function.</summary>
 public sealed class PowerShellCompilationUnitExplanation
 {
@@ -37,8 +50,16 @@ public sealed class PowerShellCompilationUnitExplanation
     public PowerShellCompilationUnitKind Kind { get; set; }
     /// <summary>One-based declaration line.</summary>
     public int StartLine { get; set; }
+    /// <summary>Resolved CLR return type for the analyzed unit.</summary>
+    public string ReturnType { get; set; } = string.Empty;
+    /// <summary>Resolved parameter types and nullability in authored order.</summary>
+    public PowerShellCompilationExplanationParameter[] Parameters { get; set; } = Array.Empty<PowerShellCompilationExplanationParameter>();
     /// <summary>Final compiler decision for the selected mode.</summary>
     public PowerShellCompilationDecisionKind Decision { get; set; }
+    /// <summary>Stable lowering route selected for the final artifact.</summary>
+    public string LoweringRoute { get; set; } = string.Empty;
+    /// <summary>Final artifact disposition selected for the unit.</summary>
+    public string ArtifactDisposition { get; set; } = string.Empty;
     /// <summary>Ordered causal diagnostics; empty for a typed unit.</summary>
     public PowerShellCompilationExplanationDiagnostic[] Causes { get; set; } = Array.Empty<PowerShellCompilationExplanationDiagnostic>();
 }
@@ -69,6 +90,73 @@ public sealed class PowerShellCompilationDependencyExplanation
     public string Message { get; set; } = string.Empty;
 }
 
+/// <summary>Relocation-safe dependency decision included in a compiler trace.</summary>
+public sealed class PowerShellCompilationDependencyTrace
+{
+    /// <summary>Dependency identity without a machine-specific source path.</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Normalized module-relative path or external identity.</summary>
+    public string RelativePath { get; set; } = string.Empty;
+    /// <summary>Dependency content kind.</summary>
+    public PowerShellCompilationDependencyKind Kind { get; set; }
+    /// <summary>How the dependency was discovered.</summary>
+    public PowerShellCompilationDependencyDiscovery Discovery { get; set; }
+    /// <summary>Final dependency disposition consumed by artifact planning.</summary>
+    public PowerShellCompilationDependencyDisposition Disposition { get; set; }
+}
+
+/// <summary>One authored input identity retained without copying source content or absolute paths.</summary>
+public sealed class PowerShellCompilationReproductionSource
+{
+    /// <summary>Relocation-safe source path.</summary>
+    public string RelativePath { get; set; } = string.Empty;
+    /// <summary>SHA-256 of the exact authored source bytes.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+}
+
+/// <summary>Bounded, redacted evidence needed to reproduce a compiler decision.</summary>
+public sealed class PowerShellCompilationReproductionEvidence
+{
+    /// <summary>Reproduction evidence schema version.</summary>
+    public int SchemaVersion { get; set; } = 1;
+    /// <summary>Selected compilation mode.</summary>
+    public PowerShellCompilationMode Mode { get; set; }
+    /// <summary>Selected artifact kind.</summary>
+    public PowerShellCompilationArtifactKind Kind { get; set; }
+    /// <summary>Exact authored inputs represented only by relative path and content hash.</summary>
+    public PowerShellCompilationReproductionSource[] Sources { get; set; } = Array.Empty<PowerShellCompilationReproductionSource>();
+    /// <summary>Compiler version that produced the decision.</summary>
+    public string CompilerVersion { get; set; } = string.Empty;
+    /// <summary>Exact compiler assembly identity.</summary>
+    public string CompilerSha256 { get; set; } = string.Empty;
+    /// <summary>Runtime-free semantic profile name, when applicable.</summary>
+    public string SemanticProfileName { get; set; } = string.Empty;
+    /// <summary>Runtime-free semantic profile version, when applicable.</summary>
+    public string SemanticProfileVersion { get; set; } = string.Empty;
+    /// <summary>Exact target contract identity.</summary>
+    public string TargetContractSha256 { get; set; } = string.Empty;
+    /// <summary>Exact provider-contract set identity.</summary>
+    public string ProviderContractsSha256 { get; set; } = string.Empty;
+    /// <summary>Exact reviewed dependency-lock identity.</summary>
+    public string DependencyLockSha256 { get; set; } = string.Empty;
+    /// <summary>Exact generated-source identity.</summary>
+    public string GeneratedSourceSha256 { get; set; } = string.Empty;
+    /// <summary>Exact public ABI identity.</summary>
+    public string PublicAbiSha256 { get; set; } = string.Empty;
+    /// <summary>Exact generated source-map identity.</summary>
+    public string SourceMapSha256 { get; set; } = string.Empty;
+    /// <summary>Exact deterministic decision-trace identity.</summary>
+    public string DecisionTraceSha256 { get; set; } = string.Empty;
+    /// <summary>Exact ordered diagnostic identity.</summary>
+    public string DiagnosticsSha256 { get; set; } = string.Empty;
+    /// <summary>Selected SDK version.</summary>
+    public string DotNetSdkVersion { get; set; } = string.Empty;
+    /// <summary>Exact selected SDK identity.</summary>
+    public string DotNetSdkSha256 { get; set; } = string.Empty;
+    /// <summary>Canonical identity over every field in this evidence record except itself.</summary>
+    public string EvidenceSha256 { get; set; } = string.Empty;
+}
+
 /// <summary>Human- and machine-readable explanation of a compilation plan.</summary>
 public sealed class PowerShellCompilationExplanation
 {
@@ -88,6 +176,8 @@ public sealed class PowerShellCompilationExplanation
     public int RejectedUnits { get; set; }
     /// <summary>Missing dependency causes that block the plan independently of unit eligibility.</summary>
     public PowerShellCompilationDependencyExplanation[] DependencyCauses { get; set; } = Array.Empty<PowerShellCompilationDependencyExplanation>();
+    /// <summary>All dependency decisions that shaped the selected artifact.</summary>
+    public PowerShellCompilationDependencyTrace[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationDependencyTrace>();
     /// <summary>Relocation-safe per-file decision traces.</summary>
     public PowerShellCompilationFileExplanation[] Files { get; set; } = Array.Empty<PowerShellCompilationFileExplanation>();
 }

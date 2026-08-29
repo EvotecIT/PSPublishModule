@@ -17,17 +17,25 @@ public sealed class ModuleBuildResult
     internal ModuleOwnerNote[] BuildNotes { get; }
 
     /// <summary>
+    /// Exact finalized module payload selected by an authoritative build producer.
+    /// An empty collection means downstream packaging should apply the normal module include policy.
+    /// </summary>
+    public IReadOnlyList<string> FinalizedPayloadFiles { get; internal set; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
     public ModuleBuildResult(
         string stagingPath,
         string manifestPath,
         ExportSet exports,
-        ModuleOwnerNote[]? buildNotes = null)
+        ModuleOwnerNote[]? buildNotes = null,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         StagingPath = stagingPath;
         ManifestPath = manifestPath;
         Exports = exports;
         BuildNotes = buildNotes ?? System.Array.Empty<ModuleOwnerNote>();
+        FinalizedPayloadFiles = finalizedPayloadFiles ?? System.Array.Empty<string>();
     }
 }

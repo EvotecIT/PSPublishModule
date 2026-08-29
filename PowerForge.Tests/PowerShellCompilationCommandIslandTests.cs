@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationCommandIslandTests
 {
     [Fact]

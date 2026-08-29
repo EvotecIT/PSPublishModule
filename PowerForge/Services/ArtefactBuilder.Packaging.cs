@@ -65,8 +65,12 @@ public sealed partial class ArtefactBuilder
         string stagingRoot,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders = true)
+        bool includeScriptFolders = true,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
+        if (finalizedPayloadFiles is { Count: > 0 })
+            return ValidateFinalizedPayloadFiles(stagingRoot, finalizedPayloadFiles);
+
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
         return EnumerateModulePackageFiles(stagingRoot, include);
     }
@@ -106,22 +110,78 @@ public sealed partial class ArtefactBuilder
             : $"{moduleName}.zip";
     }
 
-    private static void CopyModulePackage(string stagingRoot, string destinationModuleRoot, PackagingInformation include)
+    private static void CopyModulePackage(
+        string stagingRoot,
+        string destinationModuleRoot,
+        PackagingInformation include,
+        IReadOnlyList<string>? finalizedPayloadFiles = null)
     {
         var src = Path.GetFullPath(stagingRoot);
 
         if (Directory.Exists(destinationModuleRoot))
             Directory.Delete(destinationModuleRoot, recursive: true);
         Directory.CreateDirectory(destinationModuleRoot);
-        CreatePackageDirectoryStructure(src, destinationModuleRoot, include);
+        var sourceFiles = finalizedPayloadFiles is { Count: > 0 }
+            ? ValidateFinalizedPayloadFiles(src, finalizedPayloadFiles)
+            : EnumerateModulePackageFiles(src, include);
+        if (finalizedPayloadFiles is not { Count: > 0 })
+            CreatePackageDirectoryStructure(src, destinationModuleRoot, include);
 
-        foreach (var file in EnumerateModulePackageFiles(src, include))
+        foreach (var file in sourceFiles)
         {
             var relativePath = ComputeRelativePath(src, file);
             var destinationPath = Path.Combine(destinationModuleRoot, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             File.Copy(file, destinationPath, overwrite: true);
         }
+    }
+
+    private static string[] ValidateFinalizedPayloadFiles(
+        string stagingRoot,
+        IReadOnlyList<string> finalizedPayloadFiles)
+    {
+        var root = Path.GetFullPath(stagingRoot);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Staging directory not found: {root}");
+
+        var comparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var seen = new HashSet<string>(CreateCurrentFileSystemPathComparer());
+        var validated = new List<string>();
+        foreach (var candidate in finalizedPayloadFiles)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                throw new InvalidOperationException("The finalized module payload contains an empty path.");
+            var fullPath = Path.GetFullPath(candidate);
+            if (!fullPath.StartsWith(rootPrefix, comparison) || !File.Exists(fullPath))
+                throw new InvalidOperationException($"Finalized module payload file is missing or outside staging: '{fullPath}'.");
+            EnsureNoReparsePoints(root, fullPath);
+            if (seen.Add(fullPath))
+                validated.Add(fullPath);
+        }
+
+        return validated
+            .OrderBy(path => ComputeRelativePath(root, path), StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static void EnsureNoReparsePoints(string stagingRoot, string filePath)
+    {
+        var current = new FileInfo(filePath).Directory;
+        while (current is not null)
+        {
+            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Finalized module payload does not permit symbolic links or junctions: '{filePath}'.");
+            if (Path.GetFullPath(current.FullName).Equals(
+                    Path.GetFullPath(stagingRoot),
+                    Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                break;
+            current = current.Parent;
+        }
+        if ((File.GetAttributes(filePath) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"Finalized module payload does not permit symbolic links or junctions: '{filePath}'.");
     }
 
     private static void CreatePackageDirectoryStructure(

@@ -1,5 +1,6 @@
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Fact]

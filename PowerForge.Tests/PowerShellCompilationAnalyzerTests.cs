@@ -6,6 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationAnalyzerTests
 {
     [Theory]

@@ -24,8 +24,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest!.AnalyzedUnits);
+        Assert.Equal(1, result.Manifest.EmittedUnits);
+        Assert.Equal(1, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(1, result.Manifest.FallbackUnits);
+        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(50d, result.Manifest.CompilationCoveragePercentage);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
@@ -264,8 +268,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(3, result.Manifest!.AnalyzedUnits);
+        Assert.Equal(1, result.Manifest.EmittedUnits);
+        Assert.Equal(2, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(2, result.Manifest.FallbackUnits);
+        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(100d / 3d, result.Manifest.CompilationCoveragePercentage, precision: 8);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",

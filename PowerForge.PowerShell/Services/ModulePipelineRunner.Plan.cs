@@ -304,7 +304,7 @@ public sealed partial class ModulePipelineRunner
                 case ConfigurationModuleSegment moduleSeg:
                 {
                     var md = moduleSeg.Configuration;
-                    if (string.IsNullOrWhiteSpace(md.ModuleName)) break;        
+                    if (string.IsNullOrWhiteSpace(md.ModuleName)) break;
                     var name = md.ModuleName.Trim();
 
                     if (moduleSeg.Kind == ModuleDependencyKind.ApprovedModule)
@@ -381,7 +381,7 @@ public sealed partial class ModulePipelineRunner
                 case ConfigurationOptionsSegment optionsSegment:
                 {
                     var opts = optionsSegment.Options ?? new ConfigurationOptions();
-                    if (opts.Delivery is not null && opts.Delivery.Enable)      
+                    if (opts.Delivery is not null && opts.Delivery.Enable)
                         delivery = opts.Delivery;
                     if (opts.Signing is not null)
                         signing = opts.Signing;
@@ -460,7 +460,7 @@ public sealed partial class ModulePipelineRunner
                 }
                 case ConfigurationFileConsistencySegment fileConsistency:
                 {
-                    fileConsistencySettings = fileConsistency.Settings;   
+                    fileConsistencySettings = fileConsistency.Settings;
                     break;
                 }
                 case ConfigurationFormattingSegment formattingSegment:
@@ -867,106 +867,37 @@ public sealed partial class ModulePipelineRunner
             dependencyVersionSourceRepository);
         embeddedModules = OrderRequiredModulesByDependenciesFirst(embeddedModules);
 
-        if (delivery?.Sign == true)
+        var executionSurface = FinalizePlanExecutionSurface(new ModulePlanExecutionSurface
         {
-            signing = ApplyDeliverySigningPreference(signing, delivery);
-
-            if (!signModule)
-            {
-                signModule = true;
-                _logger.Info("Delivery signing requested; enabling signing so bundled internals are also signed.");
-            }
-        }
-
-        ModuleSkipConfiguration? moduleSkip = null;
-        if (moduleSkipForce || moduleSkipFailOnMissingCommands || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
-        {
-            moduleSkip = new ModuleSkipConfiguration
-            {
-                Force = moduleSkipForce,
-                FailOnMissingCommands = moduleSkipFailOnMissingCommands,
-                IgnoreModuleName = ignoredModules,
-                IgnoreFunctionName = moduleSkipIgnoreFunctions
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(s => s.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-            };
-        }
-
-        var enabledArtefacts = artefacts
-            .Where(a => a is not null && a.Configuration?.Enabled == true)      
-            .ToArray();
-        var enabledExternalAssets = externalAssets
-            .Where(static asset => asset is not null && asset.Configuration?.Enabled != false)
-            .ToArray();
-
-        if (formatting is not null &&
-            formatting.Options is not null &&
-            !formatting.Options.UpdateProjectRoot &&
-            ModulePipelinePlanningHelpers.HasStandardFormattingConfiguration(formatting))
-        {
-            formatting.Options.UpdateProjectRoot = true;
-            _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
-        }
-
-        if (refreshPsd1Only)
-        {
-            if (signModule)
-                _logger.Info("RefreshPSD1Only enabled: disabling signing for this run.");
-
-            signModule = false;
-            installEnabled = false;
-            installMissingModules = false;
-            installMissingModulesForce = false;
-            installMissingModulesPrerelease = false;
-            documentation = null;
-            documentationBuild = null;
-            compatibilitySettings = null;
-            fileConsistencySettings = null;
-            validationSettings = null;
-            importModules = null;
-            testsAfterMerge.Clear();
-            enabledExternalAssets = Array.Empty<ConfigurationExternalAssetSegment>();
-            enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
-            enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
-            projectBuilds.Clear();
-            packageBuilds.Clear();
-            release = null;
-        }
-
-        if (gateMode == ConfigurationGateMode.Documentation)
-        {
-            if (signModule)
-                _logger.Info("Gate mode Documentation enabled: disabling signing for this run.");
-
-            syncNETProjectVersion = false;
-            signModule = false;
-            installEnabled = false;
-            formatting = null;
-            compatibilitySettings = null;
-            fileConsistencySettings = null;
-            validationSettings = null;
-            importModules = null;
-            testsAfterMerge.Clear();
-            enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
-            enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
-            delivery = null;
-            projectBuilds = projectBuilds
-                .Where(static build => build?.Configuration?.BuildBeforeModule == true)
-                .ToList();
-            packageBuilds = packageBuilds
-                .Where(static build => build?.Configuration?.BuildBeforeModule == true)
-                .ToList();
-            appleApps.Clear();
-            xcodeProjectVersions.Clear();
-            release = null;
-            actions = actions
-                .Where(static action => action?.Configuration is not null &&
-                                        action.Configuration.Enabled &&
-                                        IsDocumentationGateActionStage(action.Configuration.At))
-                .ToList();
-        }
+            Delivery = delivery, Signing = signing, SignModule = signModule,
+            ModuleSkipForce = moduleSkipForce, ModuleSkipFailOnMissingCommands = moduleSkipFailOnMissingCommands,
+            IgnoredModules = ignoredModules, IgnoredFunctions = moduleSkipIgnoreFunctions,
+            Formatting = formatting, RefreshManifestOnly = refreshPsd1Only, GateMode = gateMode,
+            InstallEnabled = installEnabled, InstallMissingModules = installMissingModules,
+            InstallMissingModulesForce = installMissingModulesForce,
+            InstallMissingModulesPrerelease = installMissingModulesPrerelease,
+            Documentation = documentation, DocumentationBuild = documentationBuild,
+            CompatibilitySettings = compatibilitySettings, FileConsistencySettings = fileConsistencySettings,
+            ValidationSettings = validationSettings, ImportModules = importModules,
+            EnabledExternalAssets = externalAssets.Where(static asset => asset?.Configuration?.Enabled != false).ToArray(),
+            EnabledArtefacts = artefacts.Where(static artefact => artefact?.Configuration?.Enabled == true).ToArray(),
+            EnabledPublishes = enabledPublishes, Release = release,
+            TestsAfterMerge = testsAfterMerge, ProjectBuilds = projectBuilds, PackageBuilds = packageBuilds,
+            AppleApps = appleApps, XcodeProjectVersions = xcodeProjectVersions, Actions = actions
+        });
+        delivery = executionSurface.Delivery; signing = executionSurface.Signing; signModule = executionSurface.SignModule;
+        var moduleSkip = executionSurface.ModuleSkip; formatting = executionSurface.Formatting;
+        installEnabled = executionSurface.InstallEnabled; installMissingModules = executionSurface.InstallMissingModules;
+        installMissingModulesForce = executionSurface.InstallMissingModulesForce;
+        installMissingModulesPrerelease = executionSurface.InstallMissingModulesPrerelease;
+        documentation = executionSurface.Documentation; documentationBuild = executionSurface.DocumentationBuild;
+        compatibilitySettings = executionSurface.CompatibilitySettings;
+        fileConsistencySettings = executionSurface.FileConsistencySettings;
+        validationSettings = executionSurface.ValidationSettings; importModules = executionSurface.ImportModules;
+        var enabledExternalAssets = executionSurface.EnabledExternalAssets;
+        var enabledArtefacts = executionSurface.EnabledArtefacts; enabledPublishes = executionSurface.EnabledPublishes;
+        release = executionSurface.Release;
+        if (gateMode == ConfigurationGateMode.Documentation) syncNETProjectVersion = false;
 
         // Run delivery validation after refresh-only pruning so artefact overlap checks reflect
         // the operations that will actually execute for this plan.
@@ -979,20 +910,8 @@ public sealed partial class ModulePipelineRunner
             delivery,
             enabledArtefacts);
 
-        var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in commandDependencies)
-        {
-            var cmds = kvp.Value
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Select(c => c.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            commandDeps[kvp.Key] = cmds;
-        }
-
-        var placeHolderEntries = placeHolders
-            .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
-            .ToArray();
+        var commandDeps = NormalizeCommandDependencies(commandDependencies);
+        var placeHolderEntries = NormalizePlaceHolders(placeHolders);
 
         var plan = new ModulePipelinePlan(
             moduleName: moduleName,
@@ -1070,525 +989,7 @@ public sealed partial class ModulePipelineRunner
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter,
             embeddedModules: embeddedModules);
-        plan.UseLocalVersioning = localVersioning;
-        bool provenanceEnabledForRun = releaseProtection?.GenerateProvenance == true &&
-                                       gateMode is not ConfigurationGateMode.Manifest and
-                                           not ConfigurationGateMode.Documentation and
-                                           not ConfigurationGateMode.Build;
-        plan.GenerateReleaseProvenance = provenanceEnabledForRun;
-        plan.RequireReleaseSourceUnchanged = plan.GenerateReleaseProvenance ||
-                                             releaseProtection?.RequireSourceUnchanged == true;
-        plan.RequireCleanReleaseSource = plan.RequireReleaseSourceUnchanged ||
-                                         releaseProtection?.RequireCleanSource == true;
-        bool hasGitHubRelease = spec.UnifiedGitHubRelease ||
-                                plan.Publishes.Any(static publish =>
-                                    publish?.Configuration?.Destination == PublishDestination.GitHub);
-        if (plan.GenerateReleaseProvenance &&
-            (!plan.SignModule || plan.Artefacts.Length == 0 || !hasGitHubRelease))
-        {
-            throw new InvalidOperationException(
-                "GenerateProvenance requires module signing, at least one artefact, and a GitHub release destination.");
-        }
-        if (plan.RequireCleanReleaseSource)
-        {
-            string[] generatedProvenancePaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot);
-            string[] lifecycleActionInputs = CollectReleaseActionInputPaths(plan.ProjectRoot, plan.Actions);
-            string[] artefactMappingInputs = CollectReleaseArtefactInputPaths(
-                plan.ProjectRoot,
-                plan.ModuleName,
-                plan.ResolvedVersion,
-                plan.PreRelease,
-                plan.Artefacts);
-            string[] artefactMappingRoots = CollectReleaseArtefactInputRootPaths(
-                plan.ProjectRoot,
-                plan.ModuleName,
-                plan.ResolvedVersion,
-                plan.PreRelease,
-                plan.Artefacts);
-            plan.SourceRootPaths = new[] { plan.BuildSpec.SourcePath }
-                .Concat(artefactMappingRoots)
-                .Distinct(Path.DirectorySeparatorChar == '\\'
-                    ? StringComparer.OrdinalIgnoreCase
-                    : StringComparer.Ordinal)
-                .ToArray();
-            plan.SourceInputPaths = CollectReleaseSourceInputPaths(
-                plan.BuildSpec,
-                (spec.SourceInputPaths ?? Array.Empty<string>())
-                    .Concat(lifecycleActionInputs)
-                    .Concat(artefactMappingInputs),
-                generatedProvenancePaths);
-            DotNetPublishPipelineRunner.SourceProvenance provenance =
-                DotNetPublishPipelineRunner.ReadSourceProvenance(
-                    plan.ProjectRoot,
-                    generatedPaths: generatedProvenancePaths,
-                    explicitInputPaths: plan.SourceInputPaths,
-                    buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
-                        ? Array.Empty<string>()
-                        : new[] { plan.BuildSpec.CsprojPath! },
-                    buildConfiguration: plan.BuildSpec.Configuration,
-                    sourceRootPaths: plan.SourceRootPaths);
-            if (string.IsNullOrWhiteSpace(provenance.Revision) || provenance.Dirty is not false)
-            {
-                throw new InvalidOperationException(
-                    "Release source protection requires a resolved Git revision with clean release inputs before packaging." +
-                    FormatDirtySourcePaths(provenance));
-            }
-
-            plan.SourceRevision = DotNetPublishReleaseArtifactVerifier.RequireFullGitObjectId(
-                provenance.Revision,
-                "module source revision");
-            plan.SourceDirty = false;
-            if (plan.GenerateReleaseProvenance)
-                plan.SourceRepositoryUrl = ResolveGitHubModuleRepositoryUrl(plan);
-        }
+        ApplyReleaseSourceProtection(spec, plan, localVersioning, releaseProtection, gateMode);
         return plan;
-    }
-
-    private static string[] GetGeneratedReleaseProvenancePaths(string projectRoot) =>
-        new[]
-        {
-            Path.Combine(projectRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName),
-            Path.Combine(projectRoot, PowerForgeModuleSourceAttestationWriter.FileName)
-        };
-
-    private static string FormatDirtySourcePaths(DotNetPublishPipelineRunner.SourceProvenance provenance)
-    {
-        string paths = provenance.DirtyPaths.Length == 0
-            ? string.Empty
-            : " Blocking source input(s): " + string.Join(", ", provenance.DirtyPaths) + ".";
-        string reasons = provenance.DirtyReasons.Length == 0
-            ? string.Empty
-            : " Blocking condition(s): " + string.Join("; ", provenance.DirtyReasons) + ".";
-        return paths + reasons;
-    }
-
-    private static string[] CollectReleaseSourceInputPaths(
-        ModuleBuildSpec build,
-        IEnumerable<string>? configuredInputs,
-        IEnumerable<string>? generatedPaths)
-    {
-        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var generated = new HashSet<string>(
-            (generatedPaths ?? Array.Empty<string>()).Select(Path.GetFullPath),
-            comparer);
-        var inputs = new HashSet<string>(
-            (configuredInputs ?? Array.Empty<string>())
-                .Where(static path => !string.IsNullOrWhiteSpace(path))
-                .Select(Path.GetFullPath),
-            comparer);
-        if (!string.IsNullOrWhiteSpace(build.CsprojPath))
-            inputs.Add(Path.GetFullPath(build.CsprojPath!));
-
-        var excludedDirectories = new HashSet<string>(
-            (build.ExcludeDirectories ?? Array.Empty<string>())
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .Select(static name => name.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-        var excludedFiles = new HashSet<string>(
-            (build.ExcludeFiles ?? Array.Empty<string>())
-                .Where(static name => !string.IsNullOrWhiteSpace(name))
-                .Select(static name => name.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-        var pending = new Stack<string>();
-        pending.Push(Path.GetFullPath(build.SourcePath));
-        while (pending.Count > 0)
-        {
-            string directory = pending.Pop();
-            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Signed GitHub module release source directory '{directory}' cannot be a reparse point.");
-            }
-            foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
-            {
-                if (!excludedFiles.Contains(Path.GetFileName(file)))
-                {
-                    string fullPath = Path.GetFullPath(file);
-                    if (!generated.Contains(fullPath))
-                        inputs.Add(fullPath);
-                }
-            }
-            foreach (string child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
-            {
-                if (!excludedDirectories.Contains(Path.GetFileName(child)))
-                {
-                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
-                    {
-                        throw new InvalidOperationException(
-                            $"Signed GitHub module release source directory '{child}' cannot be a reparse point.");
-                    }
-                    pending.Push(child);
-                }
-            }
-        }
-        return inputs.OrderBy(static path => path, comparer).ToArray();
-    }
-
-    private static string[] CollectReleaseActionInputPaths(
-        string projectRoot,
-        IEnumerable<ConfigurationActionSegment>? actions)
-    {
-        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        return (actions ?? Array.Empty<ConfigurationActionSegment>())
-            .Where(static action =>
-                action?.Configuration is { Enabled: true } configuration &&
-                !string.IsNullOrWhiteSpace(configuration.FilePath))
-            .Select(action => ResolvePath(projectRoot, action.Configuration.FilePath!))
-            .Distinct(comparer)
-            .OrderBy(static path => path, comparer)
-            .ToArray();
-    }
-
-    private static string[] CollectReleaseArtefactInputPaths(
-        string projectRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease,
-        IEnumerable<ConfigurationArtefactSegment>? artefacts)
-    {
-        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var inputs = new HashSet<string>(comparer);
-        foreach (ConfigurationArtefactSegment artefact in artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
-        {
-            ArtefactConfiguration? configuration = artefact?.Configuration;
-            if (configuration?.Enabled != true)
-                continue;
-
-            foreach (ArtefactCopyMapping mapping in configuration.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
-            {
-                if (mapping is null)
-                    continue;
-                inputs.Add(ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease));
-            }
-
-            foreach (ArtefactCopyMapping mapping in configuration.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
-            {
-                if (mapping is null)
-                    continue;
-                string source = ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease);
-                if (!Directory.Exists(source))
-                    throw new DirectoryNotFoundException($"Directory not found: {source}");
-
-                var pending = new Stack<string>();
-                pending.Push(source);
-                while (pending.Count > 0)
-                {
-                    string directory = pending.Pop();
-                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
-                    {
-                        throw new InvalidOperationException(
-                            $"Signed GitHub module release artefact source directory '{directory}' cannot be a reparse point.");
-                    }
-                    foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
-                        inputs.Add(Path.GetFullPath(file));
-                    foreach (string child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
-                        pending.Push(child);
-                }
-            }
-        }
-
-        return inputs.OrderBy(static path => path, comparer).ToArray();
-    }
-
-    private static string[] CollectReleaseArtefactInputRootPaths(
-        string projectRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease,
-        IEnumerable<ConfigurationArtefactSegment>? artefacts)
-    {
-        var comparer = Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        return (artefacts ?? Array.Empty<ConfigurationArtefactSegment>())
-            .Where(static artefact => artefact?.Configuration?.Enabled == true)
-            .SelectMany(static artefact => artefact.Configuration.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
-            .Where(static mapping => mapping is not null)
-            .Select(mapping => ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease))
-            .Distinct(comparer)
-            .OrderBy(static path => path, comparer)
-            .ToArray();
-    }
-
-    private static string ResolveArtefactInputPath(
-        string value,
-        string projectRoot,
-        string moduleName,
-        string moduleVersion,
-        string? preRelease)
-    {
-        string raw = ModulePathTokenFormatter.ReplacePathTokens(
-                value ?? string.Empty,
-                moduleName,
-                moduleVersion,
-                preRelease)
-            .Trim()
-            .Trim('"');
-        if (string.IsNullOrWhiteSpace(raw))
-            throw new ArgumentException("Copy mapping source path is empty.", nameof(value));
-        return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(projectRoot, raw));
-    }
-
-    private static void ValidateReleaseSourceUnchanged(
-        ModulePipelinePlan plan,
-        IEnumerable<string>? generatedOutputPaths,
-        IEnumerable<string>? trackedGeneratedOutputPaths)
-    {
-        string[] generatedPaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot)
-            .Concat(generatedOutputPaths ?? Array.Empty<string>())
-            .Distinct(Path.DirectorySeparatorChar == '\\'
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal)
-            .ToArray();
-        string[] currentInputs = CollectReleaseSourceInputPaths(
-            plan.BuildSpec,
-            plan.SourceInputPaths.Concat(CollectReleaseArtefactInputPaths(
-                plan.ProjectRoot,
-                plan.ModuleName,
-                plan.ResolvedVersion,
-                plan.PreRelease,
-                plan.Artefacts)),
-            generatedPaths);
-        DotNetPublishPipelineRunner.SourceProvenance current =
-            DotNetPublishPipelineRunner.ReadSourceProvenance(
-                plan.ProjectRoot,
-                generatedPaths: generatedPaths,
-                explicitInputPaths: currentInputs,
-                trackedGeneratedPaths: trackedGeneratedOutputPaths,
-                buildProjectPaths: string.IsNullOrWhiteSpace(plan.BuildSpec.CsprojPath)
-                    ? Array.Empty<string>()
-                    : new[] { plan.BuildSpec.CsprojPath! },
-                buildConfiguration: plan.BuildSpec.Configuration,
-                sourceRootPaths: plan.SourceRootPaths);
-        if (string.IsNullOrWhiteSpace(current.Revision) ||
-            !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
-            current.Dirty is not false)
-        {
-            throw new InvalidOperationException(
-                "Module release source changed after planning; packaging or publication is blocked before remote mutation.");
-        }
-    }
-
-    private static void ValidatePackageReleaseSourceUnchanged(
-        ModulePipelinePlan plan,
-        DotNetRepositoryReleaseSpec spec)
-    {
-        string[] projectPaths = DotNetRepositoryReleaseService.ResolveSelectedProjectPaths(spec);
-        string[] generatedPaths = GetGeneratedReleaseProvenancePaths(plan.ProjectRoot)
-            .Concat(new[] { spec.OutputPath, spec.ReleaseZipOutputPath })
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Select(static path => Path.GetFullPath(path!))
-            .Distinct(Path.DirectorySeparatorChar == '\\'
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal)
-            .ToArray();
-        string[] currentArtefactInputs = CollectReleaseArtefactInputPaths(
-            plan.ProjectRoot,
-            plan.ModuleName,
-            plan.ResolvedVersion,
-            plan.PreRelease,
-            plan.Artefacts);
-        DotNetPublishPipelineRunner.SourceProvenance current =
-            DotNetPublishPipelineRunner.ReadSourceProvenance(
-                plan.ProjectRoot,
-                generatedPaths: generatedPaths,
-                explicitInputPaths: (plan.SourceInputPaths ?? Array.Empty<string>())
-                    .Concat(currentArtefactInputs)
-                    .Concat(projectPaths),
-                buildProjectPaths: projectPaths,
-                buildConfiguration: spec.Configuration,
-                sourceRootPaths: plan.SourceRootPaths);
-        if (string.IsNullOrWhiteSpace(current.Revision) ||
-            !string.Equals(current.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase) ||
-            current.Dirty is not false)
-        {
-            throw new InvalidOperationException(
-                "Signed GitHub module release package source changed after planning; publication is blocked before remote mutation.");
-        }
-    }
-
-    private static string ResolveGitHubModuleRepositoryUrl(ModulePipelinePlan plan)
-    {
-        PublishConfiguration? publish = plan.Publishes
-            .Select(static segment => segment.Configuration)
-            .FirstOrDefault(static configuration => configuration.Destination == PublishDestination.GitHub);
-        if (publish is null)
-        {
-            GitCommandResult remote = new GitClient(defaultTimeout: TimeSpan.FromSeconds(15))
-                .GetRemoteUrlAsync(plan.ProjectRoot)
-                .GetAwaiter()
-                .GetResult();
-            if (!remote.Succeeded || string.IsNullOrWhiteSpace(remote.StdOut))
-            {
-                throw new InvalidOperationException(
-                    "Unified GitHub module release provenance requires a resolved source repository URL.");
-            }
-
-            return remote.StdOut.Trim();
-        }
-        if (string.IsNullOrWhiteSpace(publish.UserName))
-            throw new InvalidOperationException("UserName is required for GitHub publishing.");
-
-        string repository = string.IsNullOrWhiteSpace(publish.RepositoryName)
-            ? plan.ModuleName
-            : publish.RepositoryName!.Trim();
-        return $"https://github.com/{publish.UserName!.Trim()}/{repository}";
-    }
-
-    private void ApplyGateModeToPlanInputs(
-        ConfigurationGateMode? gateMode,
-        ref bool refreshPsd1Only)
-    {
-        if (gateMode is null)
-            return;
-
-        switch (gateMode.Value)
-        {
-            case ConfigurationGateMode.Manifest:
-                if (!refreshPsd1Only)
-                    _logger.Info("Gate mode Manifest enabled: forcing RefreshPSD1Only for this run.");
-                refreshPsd1Only = true;
-                break;
-            case ConfigurationGateMode.Documentation:
-            case ConfigurationGateMode.Build:
-            case ConfigurationGateMode.Publish:
-                if (refreshPsd1Only)
-                    _logger.Info($"Gate mode {gateMode.Value} enabled: disabling RefreshPSD1Only for this run.");
-                refreshPsd1Only = false;
-                break;
-        }
-    }
-
-    private static bool IsVersionPattern(string? value)
-        => !string.IsNullOrWhiteSpace(value) &&
-           value!.IndexOf("X", StringComparison.OrdinalIgnoreCase) >= 0;
-
-    private static ModuleDevelopmentBinaryMode ResolveDevelopmentBinariesMode(
-        bool? enabledFromSegments,
-        ModuleDevelopmentBinaryMode? modeFromSegments,
-        ModuleDevelopmentBinaryMode modeFromSpec)
-    {
-        if (enabledFromSegments.HasValue)
-        {
-            if (!enabledFromSegments.Value)
-                return ModuleDevelopmentBinaryMode.Off;
-
-            return modeFromSegments ?? ModuleDevelopmentBinaryMode.Environment;
-        }
-
-        return modeFromSegments ?? modeFromSpec;
-    }
-
-    private static ConfigurationPublishSegment[] ResolveGateFilteredPublishes(
-        ConfigurationGateMode? gateMode,
-        IEnumerable<ConfigurationPublishSegment> publishes)
-        => gateMode switch
-        {
-            ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation or ConfigurationGateMode.Build => Array.Empty<ConfigurationPublishSegment>(),
-            ConfigurationGateMode.Publish => publishes
-                .Where(static publish => publish?.Configuration is not null)
-                .Select(static publish => NormalizePublishGateSegment(publish))
-                .ToArray(),
-            _ => publishes
-                .Where(static publish => publish?.Configuration?.Enabled == true)
-                .ToArray()
-        };
-
-    private static ConfigurationPublishSegment[] ResolveDependencyVersionSourcePublishes(
-        ConfigurationGateMode? gateMode,
-        IEnumerable<ConfigurationPublishSegment> publishes)
-        => gateMode switch
-        {
-            ConfigurationGateMode.Manifest => publishes
-                .Where(static publish => publish?.Configuration?.Enabled == true)
-                .ToArray(),
-            ConfigurationGateMode.Documentation or ConfigurationGateMode.Build or ConfigurationGateMode.Publish => publishes
-                .Where(static publish => publish?.Configuration is not null)
-                .ToArray(),
-            _ => publishes
-                .Where(static publish => publish?.Configuration?.Enabled == true)
-                .ToArray()
-        };
-
-    private static ConfigurationPublishSegment NormalizePublishGateSegment(ConfigurationPublishSegment publish)
-    {
-        publish.Configuration.Enabled = true;
-        return publish;
-    }
-
-    private static bool IsGateEnabledProjectBuild(
-        ConfigurationGateMode? gateMode,
-        ConfigurationProjectBuildSegment? segment)
-        => segment?.Configuration is not null &&
-           gateMode is not ConfigurationGateMode.Manifest &&
-           (gateMode != ConfigurationGateMode.Documentation ||
-            (segment.Configuration.Enabled && segment.Configuration.BuildBeforeModule)) &&
-           (gateMode.HasValue || segment.Configuration.Enabled);
-
-    private static bool IsGateEnabledPackageBuild(
-        ConfigurationGateMode? gateMode,
-        ConfigurationPackageBuildSegment? segment)
-        => segment?.Configuration is not null &&
-           gateMode is not ConfigurationGateMode.Manifest &&
-           (gateMode != ConfigurationGateMode.Documentation ||
-            (segment.Configuration.Enabled && segment.Configuration.BuildBeforeModule)) &&
-           (gateMode.HasValue || segment.Configuration.Enabled);
-
-    private static bool IsDocumentationGateActionStage(ModulePipelineActionStage stage)
-        => stage is ModulePipelineActionStage.BeforeDependencies
-            or ModulePipelineActionStage.AfterDependencies
-            or ModulePipelineActionStage.BeforeVersioning
-            or ModulePipelineActionStage.AfterVersioning
-            or ModulePipelineActionStage.BeforeStaging
-            or ModulePipelineActionStage.AfterStaging
-            or ModulePipelineActionStage.BeforeBuild
-            or ModulePipelineActionStage.AfterBuild
-            or ModulePipelineActionStage.BeforeManifest
-            or ModulePipelineActionStage.AfterManifest
-            or ModulePipelineActionStage.BeforeDocumentation
-            or ModulePipelineActionStage.AfterDocumentation;
-
-    private DependencyVersionSourceRepository? ResolvePublishDependencyVersionSource(ConfigurationPublishSegment[] enabledPublishes)
-    {
-        var candidates = (enabledPublishes ?? Array.Empty<ConfigurationPublishSegment>())
-            .Select(static publish => publish.Configuration)
-            .Where(static publish => publish.UseAsDependencyVersionSource)
-            .ToArray();
-
-        if (candidates.Length == 0)
-            return null;
-
-        if (candidates.Length > 1)
-            throw new InvalidOperationException("Only one effective New-ConfigurationPublish segment can use -UseAsDependencyVersionSource.");
-
-        var publish = candidates[0];
-        if (publish.Destination != PublishDestination.PowerShellGallery)
-            throw new InvalidOperationException("-UseAsDependencyVersionSource can only be used with PowerShell repository publish destinations.");
-
-        var repository = publish.Repository?.Name ?? publish.RepositoryName;
-        if (string.IsNullOrWhiteSpace(repository))
-            repository = "PSGallery";
-
-        _logger.Info($"Dependency version source: resolving Auto/Latest module dependencies from repository '{repository}'.");
-        return new DependencyVersionSourceRepository(
-            repository,
-            publish.Repository?.Credential,
-            preferOnlineMetadata: true,
-            allowOnlineLookup: true);
-    }
-
-    private bool TryAddExternalModuleDependency(
-        string moduleName,
-        HashSet<string> externalIndex,
-        List<string> externalModules)
-    {
-        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(moduleName))
-        {
-            _logger.Info($"Skipping built-in PowerShell module '{moduleName}' from manifest dependency output.");
-            return false;
-        }
-
-        if (externalIndex.Add(moduleName))
-            externalModules.Add(moduleName);
-
-        return true;
     }
 }

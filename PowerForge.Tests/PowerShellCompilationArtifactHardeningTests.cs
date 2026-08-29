@@ -5,6 +5,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Theory]
@@ -266,7 +267,12 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.UsesPowerShellRuntimeFallback);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(1, result.Manifest.AnalyzedUnits);
+        Assert.Equal(1, result.Manifest.EmittedUnits);
+        Assert.Equal(0, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(0, result.Manifest.FallbackUnits);
+        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(100d, result.Manifest.CompilationCoveragePercentage);
         Assert.Contains(result.Manifest.Files, file => file.Path.EndsWith("initialize.ps1", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -688,8 +694,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(2, result.Manifest!.AnalyzedUnits);
+        Assert.Equal(2, result.Manifest.EmittedUnits);
+        Assert.Equal(0, result.Manifest.RuntimeRoutedUnits);
+        Assert.Equal(0, result.Manifest.FallbackUnits);
+        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(

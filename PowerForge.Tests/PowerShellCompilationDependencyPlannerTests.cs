@@ -3,6 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationDependencyPlannerTests
 {
     [Fact]
@@ -37,7 +38,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
             dependency.Discovery == PowerShellCompilationDependencyDiscovery.FileList &&
             dependency.Selection == PowerShellCompilationDependencySelection.Required);
         Assert.Contains(dependencies, dependency =>
-            dependency.Name == "PSSharedGoods" &&
+            dependency.Name == "Random.External.Dependency" &&
             !dependency.Exists &&
             dependency.Disposition == PowerShellCompilationDependencyDisposition.ExternalRequirement);
     }
@@ -191,7 +192,7 @@ public sealed class PowerShellCompilationDependencyPlannerTests
                 "function Get-TypedValue { return 1 }; function Get-FallbackValue { & { return 2 } }");
             Write(
                 "Demo.psd1",
-                "@{ RootModule = 'Demo.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @(); AliasesToExport = @(); VariablesToExport = @(); RequiredModules = @('PSSharedGoods'); FileList = @('Assets/data.txt') }");
+                "@{ RootModule = 'Demo.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @(); AliasesToExport = @(); VariablesToExport = @(); RequiredModules = @('Random.External.Dependency'); FileList = @('Assets/data.txt') }");
             Write(Path.Combine("Resources", "site.css"), "body{}");
             Write(Path.Combine("Resources", "app.js"), "console.log('demo');");
             Write(Path.Combine("Assets", "data.txt"), "payload");

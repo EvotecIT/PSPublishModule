@@ -45,11 +45,13 @@ internal sealed class PublishConfigurationFactory
         var canUseRepositoryCredentialOnly =
             repositorySecretSourceSpecified &&
             IsPrivateRepositoryCredentialPublishTarget(request, destination, hasJFrogShortcut);
+        var canUseManagedLocalRepositoryWithoutSecret = IsManagedLocalRepositoryRequest(request, destination);
 
         if (request.Enabled &&
             string.Equals(request.ParameterSetName, "ApiFromFile", StringComparison.Ordinal) &&
             string.IsNullOrWhiteSpace(apiKeyFilePathToUse) &&
-            !canUseRepositoryCredentialOnly)
+            !canUseRepositoryCredentialOnly &&
+            !canUseManagedLocalRepositoryWithoutSecret)
         {
             throw new ArgumentException("FilePath is required when enabling file-based publish configuration.", nameof(request));
         }
@@ -57,7 +59,8 @@ internal sealed class PublishConfigurationFactory
         if (request.Enabled &&
             string.Equals(request.ParameterSetName, "ApiKey", StringComparison.Ordinal) &&
             string.IsNullOrWhiteSpace(request.ApiKey) &&
-            !canUseRepositoryCredentialOnly)
+            !canUseRepositoryCredentialOnly &&
+            !canUseManagedLocalRepositoryWithoutSecret)
         {
             throw new ArgumentException("ApiKey is required when enabling inline-key publish configuration.", nameof(request));
         }
@@ -273,6 +276,22 @@ internal sealed class PublishConfigurationFactory
                 Verbose = request.Verbose
             }
         };
+    }
+
+    private static bool IsManagedLocalRepositoryRequest(
+        PublishConfigurationRequest request,
+        PublishDestination destination)
+    {
+        if (destination != PublishDestination.PowerShellGallery || request.Tool != PublishTool.ManagedModule)
+            return false;
+
+        var source = new[] { request.RepositoryPublishUri, request.RepositoryUri, request.RepositorySourceUri }
+            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+        if (Uri.TryCreate(source, UriKind.Absolute, out var uri))
+            return uri.IsFile;
+        return true;
     }
 
     private static string ResolveSecret(

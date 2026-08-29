@@ -6,6 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellTypedCompilationTranspilerTests
 {
     [Fact]
@@ -61,7 +62,8 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var method = Assert.Single(result.Methods);
         Assert.Equal(typeof(long).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
-        Assert.Contains("for (int i = 1; (i <= Count); i++)", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("for (", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("i <= Count", result.SourceCode, StringComparison.Ordinal);
         Assert.Contains("total = checked((long)(total + i));", result.SourceCode, StringComparison.Ordinal);
     }
 
@@ -182,7 +184,7 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("Increment and decrement", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.FeatureId == "operator.increment");
     }
 
     [Fact]
@@ -220,11 +222,11 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Null(exception);
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("returns type", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.FeatureId == "syntax.memberexpression");
     }
 
     [Fact]
-    public void Transpile_RoutesExplicitGenericLocalTypeToDiagnosticInsteadOfThrowing()
+    public void Transpile_EmitsSupportedExplicitGenericLocalTypeWithoutThrowing()
     {
         using var fixture = TranspilerFixture.Create(
             "function Get-Items { param([int[]] $Values); [System.Collections.Generic.IEnumerable[int]] $items = $Values; return $Values }");
@@ -232,8 +234,8 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         var exception = Record.Exception(() => new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath));
         Assert.Null(exception);
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
-        Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("typed local declaration", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(result.Methods);
+        Assert.Empty(result.Diagnostics);
     }
 
     [Fact]

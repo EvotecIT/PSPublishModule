@@ -6,6 +6,7 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    [Trait("Category", "PowerShellCompilation")]
     public void Deserialize_reads_build_module_powershell_compilation()
     {
         const string json = """

@@ -9,6 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "PowerShellCompilation")]
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
@@ -47,6 +48,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.All(result.Manifest.Files, file => Assert.Equal(new FileInfo(file.Path).Length, file.SizeBytes));
         Assert.Equal(64, result.Manifest.ArtifactSha256.Length);
         Assert.Contains(result.Manifest.Files, file => file.Role == "DebugSymbols" && file.Path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase));
+        var trace = Assert.IsType<PowerShellCompilationExplanation>(result.Manifest.DecisionTrace);
+        var tracedUnit = Assert.Single(Assert.Single(trace.Files).Units);
+        Assert.Equal(PowerShellCompilationDecisionKind.Typed, tracedUnit.Decision);
+        Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
+        Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
+        Assert.Equal(typeof(double).FullName, tracedUnit.ReturnType);
+        Assert.Equal(3, tracedUnit.Parameters.Length);
+        var reproduction = Assert.IsType<PowerShellCompilationReproductionEvidence>(result.Manifest.Reproduction);
+        Assert.Single(reproduction.Sources);
+        Assert.Equal(64, reproduction.Sources[0].Sha256.Length);
+        Assert.Equal(64, reproduction.DecisionTraceSha256.Length);
+        Assert.Equal(64, reproduction.DiagnosticsSha256.Length);
+        Assert.Equal(64, reproduction.EvidenceSha256.Length);
+        Assert.DoesNotContain(fixture.RootPath, reproduction.Sources[0].RelativePath, StringComparison.OrdinalIgnoreCase);
+        PowerShellCompilationReproductionEvidenceBuilder.Validate(result.Manifest);
+        var evidenceSha256 = reproduction.EvidenceSha256;
+        reproduction.EvidenceSha256 = new string('0', 64);
+        Assert.Throws<InvalidOperationException>(() => PowerShellCompilationReproductionEvidenceBuilder.Validate(result.Manifest));
+        reproduction.EvidenceSha256 = evidenceSha256;
 
         using var assemblyStream = File.OpenRead(result.ArtifactPath);
         var loadContext = new AssemblyLoadContext("PowerForgeCompilationProof", isCollectible: true);
