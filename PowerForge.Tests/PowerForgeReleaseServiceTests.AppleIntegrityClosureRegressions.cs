@@ -335,6 +335,58 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
+    [Fact]
+    public async Task Execute_AppleUpload_allows_delayed_xcode_sandbox_scratch_cleanup_after_process_exit() {
+        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        var root = CreateSandbox();
+        Task? cleanup = null;
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Automation.WaitForProcessing = false;
+
+            var result = CreateAppleAutomationService(
+                    request => CreateReleaseState(request, processingState: null),
+                    archiveAppleApp: request => {
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "Info.plist"), "approved bytes");
+                        return CreateSuccessfulArchive(request);
+                    },
+                    uploadAppleApp: request => {
+                        var scratch = Path.Combine(
+                            request.ArchivePath!,
+                            "Info.plist.sb-2f65fadd-rg00hz");
+                        File.WriteAllText(scratch, "xcode scratch bytes");
+                        cleanup = Task.Run(() => {
+                            // Exceed the legacy 250 ms watcher drain so this proves the bounded
+                            // post-exit scratch-settling contract rather than the old behavior.
+                            Thread.Sleep(750);
+                            File.Delete(scratch);
+                        });
+                        return CreateSuccessfulUpload(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Upload,
+                    AppleSourceCommit = sourceCommit
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(Assert.Single(result.AppleApps).Upload?.Succeeded);
+        } finally {
+            try {
+                if (cleanup is not null)
+                    await cleanup;
+            } finally {
+                TryDelete(root);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(WatcherChangeTypes.Changed)]
     [InlineData(WatcherChangeTypes.Created)]
@@ -377,6 +429,30 @@ public sealed partial class PowerForgeReleaseServiceTests {
             var exception = Assert.Throws<InvalidOperationException>(
                 () => snapshot.ValidateUnchanged(expectedSha256));
             Assert.Contains("file identity changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void AppleArchiveUploadSnapshot_rejects_persistent_xcode_scratch_after_bounded_settle() {
+        var root = CreateSandbox();
+        try {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
+            File.WriteAllText(Path.Combine(archive.FullName, "Info.plist"), "approved bytes");
+            var expectedSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+
+            using var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
+            File.WriteAllText(
+                Path.Combine(snapshot.ArchivePath, "Info.plist.sb-2f65fadd-rg00hz"),
+                "persistent scratch bytes");
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => {
+                    snapshot.WaitForExpectedXcodeExportScratchPathsToSettle(TimeSpan.FromMilliseconds(250));
+                    snapshot.ValidateUnchanged(expectedSha256);
+                });
+            Assert.Contains("snapshot changed", exception.Message, StringComparison.OrdinalIgnoreCase);
         } finally {
             TryDelete(root);
         }

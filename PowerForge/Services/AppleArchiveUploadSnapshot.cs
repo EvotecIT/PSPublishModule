@@ -84,6 +84,34 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         }
     }
 
+    internal void WaitForExpectedXcodeExportScratchPathsToSettle(TimeSpan? timeout = null)
+    {
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(2);
+        if (effectiveTimeout < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+
+        // xcodebuild can exit while its sandbox cleanup still owns a short-lived top-level
+        // Info.plist.sb-* file. Requiring several consecutive absent observations avoids
+        // racing that cleanup, while the bounded deadline and complete identity validation
+        // below keep persistent scratch files and every real archive mutation fail-closed.
+        const int requiredStablePasses = 5;
+        var stablePasses = 0;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            var hasExpectedScratch = Directory.Exists(ArchivePath) &&
+                                     Directory.EnumerateFiles(ArchivePath, "*", SearchOption.TopDirectoryOnly)
+                                         .Any(IsExpectedXcodeExportScratchPath);
+            stablePasses = hasExpectedScratch ? 0 : stablePasses + 1;
+            if (stablePasses >= requiredStablePasses)
+                return;
+            if (stopwatch.Elapsed >= effectiveTimeout)
+                return;
+            Thread.Sleep(50);
+        }
+        while (true);
+    }
+
     internal static SnapshotIdentity CaptureCompleteIdentity(
         string archivePath,
         string description = "private Apple upload archive snapshot")

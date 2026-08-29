@@ -3,6 +3,32 @@ namespace PowerForge.Tests;
 public sealed class AppleReleaseSourceMutationMonitorTests
 {
     [Fact]
+    public void ValidateNoChanges_keeps_monitoring_during_final_identity_validation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var monitor = new AppleReleaseSourceMutationMonitor(root);
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                monitor.ValidateNoChanges(() =>
+                {
+                    var transientPath = Path.Combine(root, "unapproved-transient");
+                    File.WriteAllText(transientPath, "unapproved bytes");
+                    File.Delete(transientPath);
+                }));
+
+            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CaptureExpectedProducerOutput_arms_monitor_only_at_completion_boundary()
     {
         var root = Directory.CreateDirectory(Path.Combine(
