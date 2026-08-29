@@ -309,6 +309,128 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
     }
 
+    [Fact]
+    public void SortProjectsForPublish_PlanningNormalizesMsBuildProjectReferenceSeparators()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\Shared\Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningEvaluatesImportsInline()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "shared.props"),
+            "<Project><PropertyGroup><UseShared>true</UseShared></PropertyGroup></Project>");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="shared.props" />
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><UseShared>false</UseShared></PropertyGroup>
+  <ItemGroup Condition="'$(UseShared)' == 'true'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningUsesCentralPackageVersions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared", version: "2.0.0");
+        var app = workspace.AddProject("App");
+        workspace.WriteRootFile("Directory.Packages.props", """
+<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup><PackageVersion Include="Shared" Version="[1.0.0]" /></ItemGroup>
+</Project>
+""");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="Shared" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_AcceptsNestedNuspecContentWhenRootManifestIsUnique()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App", ["Shared"]);
+        workspace.AddArchiveText(app.Packages[0], "tools/example.nuspec", "<package />");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared]);
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningIgnoresItemsInsideTargets()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <Target Name="AfterClean" AfterTargets="Clean">
+    <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+  </Target>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningHonorsImportGroupConditions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "debug.props"),
+            "<Project><ItemGroup><ProjectReference Include=\"../Shared/Shared.csproj\" /></ItemGroup></Project>");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ImportGroup Condition="'$(Configuration)' == 'Debug'"><Import Project="debug.props" /></ImportGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
     private sealed class PublishOrderWorkspace : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "powerforge-publish-order", Guid.NewGuid().ToString("N"));
@@ -356,6 +478,20 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
                 NewVersion = version,
                 Packages = [packagePath]
             };
+        }
+
+        internal void WriteRootFile(string relativePath, string content)
+        {
+            Directory.CreateDirectory(_root);
+            File.WriteAllText(Path.Combine(_root, relativePath), content);
+        }
+
+        internal void AddArchiveText(string archivePath, string entryPath, string content)
+        {
+            using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
+            var entry = archive.CreateEntry(entryPath);
+            using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            writer.Write(content);
         }
 
         public void Dispose()
