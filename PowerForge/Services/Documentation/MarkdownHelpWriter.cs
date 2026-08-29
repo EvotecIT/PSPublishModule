@@ -218,7 +218,7 @@ internal sealed class MarkdownHelpWriter
                 $"Aliases: {FormatAliases(p)}",
                 $"Possible values: {FormatPossibleValues(p)}",
                 string.Empty,
-                $"Required: {Bool(p.Required)}",
+                $"Required: {Bool(DocumentationParameterRequiredResolver.IsAlwaysRequired(p))}",
                 $"Position: {p.Position}",
                 $"Default value: {DefaultValue(p.DefaultValue)}",
                 $"Accept pipeline input: {PipelineInput(p.PipelineInput)}",
