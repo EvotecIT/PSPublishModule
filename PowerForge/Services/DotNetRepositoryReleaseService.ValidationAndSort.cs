@@ -527,14 +527,15 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static bool PlannedProjectReferenceMatches(string baseDirectory, string include, string selectedProjectPath)
     {
+        include = UnescapePlannedItemSpec(include);
         var normalizedInclude = include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         var candidatePattern = Path.GetFullPath(Path.Combine(baseDirectory, normalizedInclude));
         var candidate = Path.GetFullPath(selectedProjectPath);
         var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(candidate);
         if (candidatePattern.IndexOfAny(new[] { '*', '?' }) < 0)
             return string.Equals(candidatePattern, candidate, comparison);
-        var normalizedPattern = NormalizePlannedItemSpec(candidatePattern);
-        var normalizedCandidate = NormalizePlannedItemSpec(candidate);
+        var normalizedPattern = candidatePattern.Trim().Replace('\\', '/');
+        var normalizedCandidate = candidate.Trim().Replace('\\', '/');
         var regex = "^" + Regex.Escape(normalizedPattern)
             .Replace(@"\*\*/", "(?:.*/)?")
             .Replace(@"\*\*", ".*")

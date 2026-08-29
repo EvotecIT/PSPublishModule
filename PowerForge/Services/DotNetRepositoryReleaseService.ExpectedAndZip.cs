@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -61,7 +62,11 @@ public sealed partial class DotNetRepositoryReleaseService {
                 ResolvePlannedConfiguration(spec),
                 targetFramework: null,
                 spec.PlannedProjectContentsByPath);
-            var plannedPackageId = ResolvePlannedPackageIdentity(evaluation.Properties, fallbackProjectName);
+            var plannedPackageId = ResolvePlannedPackageIdentity(
+                evaluation,
+                csprojPath,
+                fallbackProjectName,
+                spec.PlannedProjectContentsByPath);
             if (plannedPackageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
                 throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{plannedPackageId}' contains an unresolved MSBuild property.");
             return plannedPackageId;
@@ -135,14 +140,57 @@ public sealed partial class DotNetRepositoryReleaseService {
     }
 
     private static string ResolvePlannedPackageIdentity(
-        IReadOnlyDictionary<string, string> properties,
-        string fallbackProjectName) {
+        PlannedEvaluation evaluation,
+        string csprojPath,
+        string fallbackProjectName,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath) {
+        var properties = evaluation.Properties;
+        var projectIdentity = fallbackProjectName;
         foreach (var propertyName in new[] { "PackageId", "AssemblyName", "MSBuildProjectName" }) {
             if (!properties.TryGetValue(propertyName, out var value) || string.IsNullOrWhiteSpace(value))
                 continue;
-            return ExpandPlannedProperties(value, properties).Trim();
+            projectIdentity = ExpandPlannedProperties(value, properties).Trim();
+            break;
         }
-        return fallbackProjectName;
+        if (!properties.TryGetValue("NuspecFile", out var nuspecFile) || string.IsNullOrWhiteSpace(nuspecFile))
+            return projectIdentity;
+
+        var configuredPath = ExpandPlannedProperties(nuspecFile, properties);
+        if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because NuspecFile '{configuredPath}' is unresolved.");
+        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
+        var nuspecPath = ResolvePlannedPath(projectDirectory, configuredPath);
+        if (!File.Exists(nuspecPath) && (plannedProjectContentsByPath is null || !plannedProjectContentsByPath.ContainsKey(nuspecPath)))
+            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec '{nuspecPath}' does not exist.");
+
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in properties)
+            tokens[property.Key] = property.Value;
+        tokens["id"] = projectIdentity;
+        if (properties.TryGetValue("NuspecProperties", out var nuspecProperties))
+        {
+            foreach (var entry in SplitPlannedItems(ExpandPlannedProperties(nuspecProperties, properties)))
+            {
+                var separator = entry.IndexOf('=');
+                if (separator <= 0)
+                    throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because NuspecProperties entry '{entry}' is invalid.");
+                tokens[entry.Substring(0, separator).Trim()] = entry.Substring(separator + 1).Trim();
+            }
+        }
+
+        var nuspec = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(nuspecPath, out var plannedNuspecContent)
+            ? XDocument.Parse(plannedNuspecContent, LoadOptions.PreserveWhitespace)
+            : XDocument.Load(nuspecPath);
+        var id = nuspec.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase))?
+            .Elements().FirstOrDefault(element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))?
+            .Value.Trim();
+        if (string.IsNullOrWhiteSpace(id))
+            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec '{nuspecPath}' has no package id.");
+        var expandedId = Regex.Replace(id!, @"\$(?<name>[^$]+)\$", match =>
+            tokens.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
+        if (expandedId.IndexOf('$') >= 0)
+            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec id '{id}' contains an unresolved token.");
+        return expandedId.Trim();
     }
 
     private static string ResolvePlannedConfiguration(DotNetRepositoryReleaseSpec spec)

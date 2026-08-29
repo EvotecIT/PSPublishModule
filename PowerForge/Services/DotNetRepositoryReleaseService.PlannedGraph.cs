@@ -472,8 +472,34 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var child in source.Elements())
         {
             if (PlannedMetadataConditionMatches(child.Attribute("Condition")?.Value, itemType, itemIdentity, metadata, properties, conditionDirectory))
-                metadata[child.Name.LocalName] = ExpandPlannedValue(child.Value.Trim(), properties, items);
+            {
+                var value = ExpandPlannedValue(child.Value.Trim(), properties, items);
+                metadata[child.Name.LocalName] = itemIdentity is null
+                    ? value
+                    : ExpandPlannedCurrentItemMetadata(value, itemType!, itemIdentity, metadata);
+            }
         }
+    }
+
+    private static string ExpandPlannedCurrentItemMetadata(
+        string value,
+        string itemType,
+        string itemIdentity,
+        IDictionary<string, string> metadata)
+    {
+        var expanded = Regex.Replace(value, @"%\((?:(?<item>[A-Za-z_][A-Za-z0-9_.-]*)\.)?(?<name>[A-Za-z_][A-Za-z0-9_.-]*)\)", match =>
+        {
+            var qualifiedItem = match.Groups["item"].Value;
+            if (!string.IsNullOrWhiteSpace(qualifiedItem) && !string.Equals(qualifiedItem, itemType, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because metadata value '{value}' batches across unsupported item type '{qualifiedItem}'.");
+            var name = match.Groups["name"].Value;
+            if (name.Equals("Identity", StringComparison.OrdinalIgnoreCase))
+                return itemIdentity;
+            return metadata.TryGetValue(name, out var replacement) ? replacement : string.Empty;
+        });
+        if (expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because metadata value '{value}' contains an unsupported metadata expression.");
+        return expanded;
     }
 
     private static bool PlannedMetadataConditionMatches(
@@ -538,6 +564,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static IReadOnlyList<string> ResolvePlannedWildcardPaths(string baseDirectory, string pattern)
     {
+        pattern = UnescapePlannedItemSpec(pattern);
         var normalized = pattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         var combinedPattern = Path.IsPathRooted(normalized) ? normalized : Path.Combine(baseDirectory, normalized);
         var wildcardIndex = combinedPattern.IndexOfAny(new[] { '*', '?' });
@@ -616,7 +643,19 @@ public sealed partial class DotNetRepositoryReleaseService
         return Regex.IsMatch(normalizedValue, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    private static string NormalizePlannedItemSpec(string value) => value.Trim().Replace('\\', '/');
+    private static string NormalizePlannedItemSpec(string value) => UnescapePlannedItemSpec(value).Trim().Replace('\\', '/');
+
+    private static string UnescapePlannedItemSpec(string value)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(value);
+        }
+        catch (UriFormatException ex)
+        {
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because item specification '{value}' contains invalid MSBuild escaping.", ex);
+        }
+    }
 
     private static IEnumerable<string> SplitPlannedItems(string? value)
         => (value ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(item => item.Trim()).Where(item => item.Length > 0);
@@ -705,7 +744,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 merged[entry.Key] = entry.Value;
             ApplyMetadataSelection(merged, removeMetadata, keepMetadata);
             foreach (var entry in updates)
-                merged[entry.Key] = entry.Value;
+                merged[entry.Key] = ExpandPlannedCurrentItemMetadata(entry.Value, ItemType, Include ?? string.Empty, merged);
             return new PlannedItem(ItemType, Include, Exclude, null, null, BaseDirectory, merged, Array.Empty<string>(), Array.Empty<string>());
         }
         internal static IReadOnlyList<PlannedItem> CreateMany(
@@ -782,7 +821,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     name.Equals("MatchOnMetadata", StringComparison.OrdinalIgnoreCase) || name.Equals("MatchOnMetadataOptions", StringComparison.OrdinalIgnoreCase) ||
                     name.Equals("Condition", StringComparison.OrdinalIgnoreCase))
                     continue;
-                metadata[name] = ExpandPlannedValue(attribute.Value.Trim(), properties, items);
+                var value = ExpandPlannedValue(attribute.Value.Trim(), properties, items);
+                metadata[name] = include is null ? value : ExpandPlannedCurrentItemMetadata(value, element.Name.LocalName, include, metadata);
             }
             ApplyPlannedMetadata(element, metadata, properties, items, conditionDirectory, element.Name.LocalName, include);
             return new PlannedItem(
