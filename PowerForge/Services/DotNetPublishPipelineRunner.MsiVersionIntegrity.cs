@@ -130,6 +130,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 string.IsNullOrWhiteSpace(revision) ? null : revision,
                 null);
         }
+        var replacementRefs = ReadGitRawText(
+            gitRoot!,
+            "for-each-ref --format=\"%(refname)\" refs/replace");
+        bool replacementRefQueryFailed = replacementRefs is null;
+        bool hasReplacementRefs = !string.IsNullOrWhiteSpace(replacementRefs);
 
         var trackedStatus = ReadGitRawText(gitRoot!, "status --porcelain=v1 -z --untracked-files=no");
         var hasWriterContext = cleanTrackedGeneratedProvenanceState is not null
@@ -171,18 +176,37 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths,
             buildConfiguration,
             buildPlan);
+        var postEvaluationTrackedStatus = ReadGitRawText(
+            gitRoot!,
+            "status --porcelain=v1 -z --untracked-files=no");
+        var postEvaluationUntrackedOutput = ReadGitText(
+            gitRoot!,
+            "ls-files --others --exclude-standard -z");
+        var postEvaluationRevision = ReadGitText(projectRoot, "rev-parse HEAD");
+        bool revisionChangedDuringVerification =
+            string.IsNullOrWhiteSpace(gitRevision) ||
+            string.IsNullOrWhiteSpace(postEvaluationRevision) ||
+            !string.Equals(gitRevision, postEvaluationRevision, StringComparison.OrdinalIgnoreCase);
+        bool evaluationStatusChanged =
+            !string.Equals(finalTrackedStatus, postEvaluationTrackedStatus, StringComparison.Ordinal) ||
+            !string.Equals(untrackedOutput, postEvaluationUntrackedOutput, StringComparison.Ordinal);
         string[]? trackedSourceChanges = FindTrackedSourceChanges(
             projectRoot,
             gitRoot!,
-            finalTrackedStatus,
+            postEvaluationTrackedStatus,
             trackedGeneratedPaths,
             dirtyScope);
         string[] untrackedSourceFiles = FindUntrackedSourceFiles(
             projectRoot,
             gitRoot!,
-            untrackedOutput,
+            postEvaluationUntrackedOutput,
             allGeneratedPaths,
             dirtyScope);
+        statusChangedDuringVerification = statusChangedDuringVerification ||
+            (evaluationStatusChanged &&
+             (trackedSourceChanges is null ||
+              trackedSourceChanges.Length > 0 ||
+              untrackedSourceFiles.Length > 0));
         bool generatedOutputOverlapsInput = HasGeneratedOutputInputOverlap(
             projectRoot,
             allGeneratedPaths,
@@ -199,12 +223,18 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyScope);
         bool untrustedIgnoredBuildInput = untrustedBuildInputs.Length > 0;
         var dirtyReasons = new List<string>();
-        if (trackedStatus is null)
+        if (trackedStatus is null || postEvaluationTrackedStatus is null)
             dirtyReasons.Add("tracked Git status query failed");
-        if (untrackedOutput is null)
+        if (replacementRefQueryFailed)
+            dirtyReasons.Add("Git replacement-ref query failed");
+        if (hasReplacementRefs)
+            dirtyReasons.Add("Git replacement refs are active");
+        if (untrackedOutput is null || postEvaluationUntrackedOutput is null)
             dirtyReasons.Add("untracked Git status query failed");
         if (statusChangedDuringVerification)
             dirtyReasons.Add("Git status changed during provenance verification");
+        if (revisionChangedDuringVerification)
+            dirtyReasons.Add("Git HEAD changed during provenance verification");
         if (generatedOutputOverlapsInput)
             dirtyReasons.Add("a generated output overlaps a release input");
         if (trackedSourceChanges is null)
@@ -219,7 +249,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 summary += $" (+{untrustedBuildInputs.Length - maximumReportedBuildInputs} more)";
             dirtyReasons.Add("untrusted evaluated build input(s): " + summary);
         }
-        bool? dirty = trackedStatus is null || untrackedOutput is null
+        bool? dirty = trackedStatus is null || untrackedOutput is null ||
+                      replacementRefQueryFailed ||
+                      postEvaluationTrackedStatus is null || postEvaluationUntrackedOutput is null
             ? null
             : statusChangedDuringVerification
               || generatedOutputOverlapsInput
@@ -227,7 +259,20 @@ public sealed partial class DotNetPublishPipelineRunner
               || trackedSourceChanges.Length > 0
               || untrackedSourceFiles.Length > 0
               || untrustedExplicitInput
-              || untrustedIgnoredBuildInput;
+              || untrustedIgnoredBuildInput
+              || hasReplacementRefs
+              || revisionChangedDuringVerification;
+        string[] publishInputFiles = dirtyScope.BuildInputs
+            .Concat(dirtyScope.SourceInputs)
+            .Concat(allExplicitInputPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path)))
+                .Where(File.Exists))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
         return new SourceProvenance(
             string.IsNullOrWhiteSpace(revision) ? null : revision,
             dirty,
@@ -236,7 +281,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray(),
-            dirtyReasons.ToArray());
+            dirtyReasons.ToArray(),
+            dirtyScope.NoBuildPublishInputs,
+            publishInputFiles);
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -344,99 +391,17 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return untrustedSourceInputs;
         }
-        string[] gitRelativeBuildInputs = buildInputs
-            .Where(File.Exists)
-            .Select(path => ToGitRelativeExclusion(projectRoot, gitRoot, path))
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => path!.Replace('\\', '/').TrimStart('/'))
-            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-            .ToArray();
-        string? ignoredOutput = ReadIgnoredGitPaths(gitRoot, gitRelativeBuildInputs);
-        if (ignoredOutput is null)
+        string[]? ignoredPaths = ReadIgnoredBuildInputPaths(
+            gitRoot,
+            buildInputs.Where(path =>
+                File.Exists(path) &&
+                ToGitRelativeExclusion(projectRoot, gitRoot, path) is not null));
+        if (ignoredPaths is null)
             return new[] { "Git ignored-input query failed" };
-        string[] ignoredPaths = ignoredOutput.Split(
-                new[] { '\0' },
-                StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => path.Replace('\\', '/').TrimStart('/'))
-            .ToArray();
         return ignoredPaths
             .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .OrderBy(path => path, IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
             .ToArray();
-    }
-
-    private static string? ReadIgnoredGitPaths(string gitRoot, IReadOnlyCollection<string> paths)
-    {
-        if (paths.Count == 0)
-            return string.Empty;
-
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = "check-ignore -z --stdin",
-                    WorkingDirectory = gitRoot,
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-            if (!process.Start())
-                return null;
-
-            Task<string> output = process.StandardOutput.ReadToEndAsync();
-            Task<string> error = process.StandardError.ReadToEndAsync();
-            Task input = process.StandardInput.WriteAsync(string.Join("\0", paths) + '\0');
-            Task inputClosed = input.ContinueWith(
-                _ => process.StandardInput.Close(),
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-            if (!process.WaitForExit(5000))
-            {
-                try
-                {
-#if NET472
-                    process.Kill();
-#else
-                    process.Kill(entireProcessTree: true);
-#endif
-                }
-                catch
-                {
-                    // A failed or already-exited Git process still makes the query untrusted.
-                }
-                try
-                {
-                    inputClosed.Wait(1000);
-                }
-                catch
-                {
-                    // The process was terminated before it could consume the full request.
-                }
-                return null;
-            }
-
-            input.GetAwaiter().GetResult();
-            inputClosed.GetAwaiter().GetResult();
-            _ = error.GetAwaiter().GetResult();
-            string ignored = output.GetAwaiter().GetResult();
-            return process.ExitCode switch
-            {
-                0 => ignored,
-                1 => string.Empty,
-                _ => null
-            };
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static bool IsBuildProjectDirectoryAdmitted(
@@ -600,6 +565,22 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach (var msiBuild in msiBuilds)
             yield return msiBuild.VersionStatePath ?? string.Empty;
+    }
+
+    private static void ValidateTrackedGeneratedProvenancePaths(DotNetPublishPlan plan)
+    {
+        foreach (var candidate in EnumerateTrackedGeneratedProvenancePaths(
+                     plan,
+                     Array.Empty<DotNetPublishMsiBuildResult>()))
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            _ = Path.GetFullPath(
+                Path.IsPathRooted(candidate)
+                    ? candidate
+                    : Path.Combine(plan.ProjectRoot, candidate));
+        }
     }
 
     internal static IEnumerable<string> EnumeratePlannedMsiVersionStatePaths(DotNetPublishPlan plan)
@@ -940,12 +921,13 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         try
         {
+            string gitPath = ResolveGitChildExecutable("git");
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "git",
-                    Arguments = arguments,
+                    FileName = gitPath,
+                    Arguments = "--no-replace-objects " + arguments,
                     WorkingDirectory = projectRoot,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -953,6 +935,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     CreateNoWindow = true
                 }
             };
+            foreach (KeyValuePair<string, string?> variable in CreateTrustedGitEnvironment())
+            {
+                if (variable.Value is null)
+                    process.StartInfo.EnvironmentVariables.Remove(variable.Key);
+                else
+                    process.StartInfo.EnvironmentVariables[variable.Key] = variable.Value;
+            }
             if (!process.Start()) return null;
             var output = process.StandardOutput.ReadToEnd();
             if (!process.WaitForExit(5000) || process.ExitCode != 0) return null;
@@ -976,12 +965,16 @@ public sealed partial class DotNetPublishPipelineRunner
             string? revision,
             bool? dirty,
             string[]? dirtyPaths = null,
-            string[]? dirtyReasons = null)
+            string[]? dirtyReasons = null,
+            NoBuildPublishInput[]? noBuildPublishInputs = null,
+            string[]? publishInputFiles = null)
         {
             Revision = revision;
             Dirty = dirty;
             DirtyPaths = dirtyPaths ?? Array.Empty<string>();
             DirtyReasons = dirtyReasons ?? Array.Empty<string>();
+            NoBuildPublishInputs = noBuildPublishInputs ?? Array.Empty<NoBuildPublishInput>();
+            PublishInputFiles = publishInputFiles ?? Array.Empty<string>();
         }
 
         public string? Revision { get; }
@@ -991,6 +984,10 @@ public sealed partial class DotNetPublishPipelineRunner
         public string[] DirtyPaths { get; }
 
         public string[] DirtyReasons { get; }
+
+        internal NoBuildPublishInput[] NoBuildPublishInputs { get; }
+
+        internal string[] PublishInputFiles { get; }
     }
 
     private sealed class MsiVersionStateWrite

@@ -9,6 +9,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    internal static bool ShouldRefreshLockedRestoreOutputs(DotNetPublishPlan? plan)
+        => plan?.NoRestoreInPublish != true;
+
     private static bool TryRefreshLockedRestoreOutputs(ProjectEvaluationRequest request)
     {
         string projectDirectory = Path.GetDirectoryName(request.ProjectPath)!;
@@ -22,15 +25,19 @@ public sealed partial class DotNetPublishPipelineRunner
             "--force-evaluate",
             "--no-cache",
             "--nologo",
-            "-p:Configuration=" + request.Configuration,
             "-p:RestorePackagesWithLockFile=true",
             "-p:RestoreLockedMode=false",
             "-p:NuGetLockFilePath=" + temporaryLockFile
         };
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework) &&
-            !ProjectDeclaresTargetFramework(request.ProjectPath))
+        if (request.Configuration is not null)
+            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+        string? requestedFramework = request.TargetFramework;
+        if (!string.IsNullOrEmpty(requestedFramework) &&
+            !ProjectDeclaresRequestedTargetFrameworkUnconditionally(
+                request.ProjectPath,
+                requestedFramework!))
         {
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
+            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(requestedFramework!));
         }
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
@@ -43,7 +50,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
+            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
 
         try
@@ -74,6 +81,31 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    private static bool ProjectDeclaresRequestedTargetFrameworkUnconditionally(
+        string projectPath,
+        string requestedFramework)
+    {
+        try
+        {
+            XDocument project = XDocument.Load(projectPath, LoadOptions.None);
+            return project.Descendants().Where(element =>
+                (element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                 element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase)) &&
+                !string.IsNullOrWhiteSpace(element.Value) &&
+                !element.AncestorsAndSelf().Any(candidate => candidate.Attributes().Any(attribute =>
+                    attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(attribute.Value))))
+                .SelectMany(element => element.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                .Any(framework => framework.Trim().Equals(
+                    requestedFramework,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void AddEffectiveBuildControlInputs(
         string projectPath,
         JsonElement properties,
@@ -81,41 +113,12 @@ public sealed partial class DotNetPublishPipelineRunner
         HashSet<string> sourceInputs)
     {
         string projectDirectory = Path.GetDirectoryName(projectPath)!;
-        string? gitRoot = ReadGitText(projectDirectory, "rev-parse --show-toplevel");
-        string boundary = Path.GetFullPath(string.IsNullOrWhiteSpace(gitRoot) ? projectDirectory : gitRoot!);
-        string[] names =
-        [
-            "Directory.Build.props",
-            "Directory.Build.targets",
-            "Directory.Packages.props",
-            "global.json",
-            "NuGet.Config",
-            "nuget.config",
-            "packages.lock.json",
-            "Directory.Build.rsp",
-            "MSBuild.rsp"
-        ];
-
-        string current = Path.GetFullPath(projectDirectory);
-        StringComparison comparison = IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        while (true)
-        {
-            foreach (string name in names)
-                AddBuildControlCandidate(
-                    Path.Combine(current, name),
-                    inputs,
-                    sourceInputs,
-                    new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
-
-            if (string.Equals(current, boundary, comparison))
-                break;
-            string? parent = Path.GetDirectoryName(current);
-            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
-                break;
-            current = parent;
-        }
+        foreach (string candidate in EnumerateAncestorBuildControlCandidatePaths(projectPath))
+            AddBuildControlCandidate(
+                candidate,
+                inputs,
+                sourceInputs,
+                new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
 
         string? evaluatedLockFile = ReadEvaluatedPath(
             properties,
@@ -135,6 +138,36 @@ public sealed partial class DotNetPublishPipelineRunner
                 inputs,
                 sourceInputs,
                 new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+    }
+
+    internal static IEnumerable<string> EnumerateAncestorBuildControlCandidatePaths(string projectPath)
+    {
+        string[] names =
+        [
+            "Directory.Build.props",
+            "Directory.Build.targets",
+            "Directory.Packages.props",
+            "global.json",
+            "NuGet.Config",
+            "nuget.config",
+            "packages.lock.json",
+            "Directory.Build.rsp",
+            "MSBuild.rsp"
+        ];
+        string current = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        while (true)
+        {
+            foreach (string name in names)
+                yield return Path.Combine(current, name);
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                yield break;
+            current = parent;
+        }
     }
 
     private static void AddBuildControlCandidate(
@@ -330,104 +363,22 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static bool TryReadPreprocessedProjectImports(
-        ProjectEvaluationRequest request,
-        out string[] imports)
-    {
-        imports = Array.Empty<string>();
-        string outputPath = Path.Combine(
-            Path.GetTempPath(),
-            "powerforge-msbuild-imports-" + Guid.NewGuid().ToString("N") + ".xml");
-        var arguments = new List<string>
-        {
-            "msbuild",
-            request.ProjectPath,
-            "-nologo",
-            "-verbosity:quiet",
-            "-preprocess:" + outputPath,
-            "-p:Configuration=" + request.Configuration
-        };
-        if (!string.IsNullOrWhiteSpace(request.TargetFramework))
-            arguments.Add("-p:TargetFramework=" + request.TargetFramework);
-        foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
-                     entry => entry.Key,
-                     StringComparer.OrdinalIgnoreCase))
-        {
-            if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
-                property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            arguments.Add("-p:" + property.Key + "=" + property.Value);
-        }
-
-        try
-        {
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
-                Path.GetDirectoryName(request.ProjectPath)!,
-                arguments,
-                request.EnvironmentVariables,
-                TimeSpan.FromMinutes(2));
-            if (process.ExitCode != 0 || process.TimedOut || !File.Exists(outputPath))
-                return false;
-
-            var resolved = new HashSet<string>(
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            bool inComment = false;
-            bool describesImport = false;
-            foreach (string line in File.ReadLines(outputPath))
-            {
-                if (line.Contains("<!--", StringComparison.Ordinal))
-                {
-                    inComment = true;
-                    describesImport = false;
-                }
-                if (inComment && line.Contains("<Import", StringComparison.Ordinal))
-                    describesImport = true;
-                if (inComment && describesImport)
-                {
-                    string candidate = line.Trim();
-                    if (Path.IsPathRooted(candidate) && File.Exists(candidate))
-                        resolved.Add(Path.GetFullPath(candidate));
-                }
-                if (line.Contains("-->", StringComparison.Ordinal))
-                {
-                    inComment = false;
-                    describesImport = false;
-                }
-            }
-            imports = resolved.ToArray();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(outputPath))
-                    File.Delete(outputPath);
-            }
-            catch
-            {
-                // The provenance result already fails closed if preprocessing did not complete.
-            }
-        }
-    }
-
-    private sealed class VerifiedPackageInputCatalog
+    private sealed partial class VerifiedPackageInputCatalog
     {
         private readonly string[] _packageRoots;
         private readonly IReadOnlyDictionary<string, string> _lockedPackageHashes;
         private readonly VerifiedPackageArchiveCache _archives;
+        private readonly IReadOnlyDictionary<string, string> _archivePathsByPackageKey;
+        private readonly HashSet<string> _sdkManagedArchivePaths;
+        private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
+            IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
-            VerifiedPackageArchiveCache archives)
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string> archivePathsByPackageKey,
+            IEnumerable<string> sdkManagedPackageKeys)
         {
             _packageRoots = packageRoots
                 .Select(Path.GetFullPath)
@@ -435,14 +386,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             _lockedPackageHashes = lockedPackageHashes;
             _archives = archives;
+            _archivePathsByPackageKey = archivePathsByPackageKey;
+            _sdkManagedArchivePaths = new HashSet<string>(
+                sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
+                    .Select(packageKey => archivePathsByPackageKey[packageKey]),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal static VerifiedPackageInputCatalog? TryCreate(
+        internal static bool TryCreate(
             string projectPath,
             JsonElement properties,
             IEnumerable<string> packageRoots,
-            VerifiedPackageArchiveCache archives)
+            VerifiedPackageArchiveCache archives,
+            out VerifiedPackageInputCatalog? catalog)
         {
+            catalog = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
             string lockFilePath = ReadEvaluatedPath(properties, "NuGetLockFilePath", projectDirectory)
                 ?? Path.Combine(projectDirectory, "packages.lock.json");
@@ -463,12 +421,37 @@ public sealed partial class DotNetPublishPipelineRunner
                     allRoots.Add(Path.GetFullPath(defaultPackages));
             }
 
-            TryReadLockedPackageHashes(lockFilePath, out Dictionary<string, string> hashes);
-            AddSdkManagedPackageHashes(properties, projectDirectory, allRoots, hashes);
+            bool hasCommittedLock = TryReadLockedPackageHashes(
+                lockFilePath,
+                out Dictionary<string, string> hashes);
+            var committedPackageHashes = new Dictionary<string, string>(
+                hashes,
+                StringComparer.OrdinalIgnoreCase);
+            var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddSdkManagedPackageHashes(
+                properties,
+                projectDirectory,
+                allRoots,
+                committedPackageHashes,
+                hashes,
+                sdkManagedPackageKeys);
             if (allRoots.Count == 0)
-                return null;
-
-            return new VerifiedPackageInputCatalog(allRoots, hashes, archives);
+                return !hasCommittedLock && hashes.Count == 0;
+            if (!TryPrimeLockedPackageArchives(
+                    allRoots,
+                    committedPackageHashes,
+                    archives,
+                    out Dictionary<string, string> archivePathsByPackageKey))
+            {
+                return false;
+            }
+            catalog = new VerifiedPackageInputCatalog(
+                allRoots,
+                hashes,
+                archives,
+                archivePathsByPackageKey,
+                sdkManagedPackageKeys);
+            return true;
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -485,6 +468,41 @@ public sealed partial class DotNetPublishPipelineRunner
 
             isPackageInput = false;
             return false;
+        }
+
+        internal bool TryMapControlledPackageInput(
+            string controlledPath,
+            string controlledPackageRoot,
+            out string mappedPath)
+        {
+            mappedPath = string.Empty;
+            try
+            {
+                string fullControlledPath = Path.GetFullPath(controlledPath);
+                if (!IsSameOrBelowBuildInputPath(fullControlledPath, controlledPackageRoot))
+                    return false;
+                string relative = FrameworkCompatibility.GetRelativePath(
+                    controlledPackageRoot,
+                    fullControlledPath);
+                foreach (string packageRoot in _packageRoots)
+                {
+                    string candidate = Path.GetFullPath(Path.Combine(packageRoot, relative));
+                    if (!IsSameOrBelowBuildInputPath(candidate, packageRoot) ||
+                        (!File.Exists(candidate) && !Directory.Exists(candidate)) ||
+                        !TryVerifyBelowRoot(candidate, packageRoot))
+                    {
+                        continue;
+                    }
+                    mappedPath = candidate;
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                mappedPath = string.Empty;
+                return false;
+            }
         }
 
         private bool TryVerifyBelowRoot(string path, string root)
@@ -510,20 +528,19 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
-                string packageDirectory = Path.Combine(root, packageId, packageVersion);
-                string expectedName = packageId + "." + packageVersion + ".nupkg";
-                string? archivePath = Directory.EnumerateFiles(packageDirectory, "*.nupkg", SearchOption.TopDirectoryOnly)
-                    .FirstOrDefault(candidate => Path.GetFileName(candidate).Equals(
-                        expectedName,
-                        StringComparison.OrdinalIgnoreCase));
-                if (string.IsNullOrWhiteSpace(archivePath))
+                if (!_archivePathsByPackageKey.TryGetValue(packageKey, out string? archivePath) ||
+                    string.IsNullOrWhiteSpace(archivePath))
+                {
                     return false;
+                }
                 VerifiedPackageArchive? archive = _archives.TryGetOrOpen(archivePath!, expectedHash);
                 if (archive is null)
                     return false;
 
                 string packageRelativePath = string.Join("/", segments.Skip(2));
-                return archive.VerifyExtractedFile(packageRelativePath, path);
+                return Directory.Exists(path)
+                    ? archive.VerifyExtractedDirectory(packageRelativePath, path)
+                    : archive.VerifyExtractedFile(packageRelativePath, path);
             }
             catch
             {
@@ -596,7 +613,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageArchiveCache : IDisposable
+    private sealed partial class VerifiedPackageArchiveCache : IDisposable
     {
         private readonly Dictionary<string, CacheEntry> _archives = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -613,7 +630,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(fullPath, expectedContentHash);
             if (archive is not null)
-                _archives.Add(fullPath, new CacheEntry(expectedContentHash, archive));
+                _archives.Add(fullPath, new CacheEntry(fullPath, expectedContentHash, archive));
             return archive;
         }
 
@@ -626,11 +643,17 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private sealed class CacheEntry
         {
-            internal CacheEntry(string expectedContentHash, VerifiedPackageArchive archive)
+            internal CacheEntry(
+                string sourcePath,
+                string expectedContentHash,
+                VerifiedPackageArchive archive)
             {
+                SourcePath = sourcePath;
                 ExpectedContentHash = expectedContentHash;
                 Archive = archive;
             }
+
+            internal string SourcePath { get; }
 
             internal string ExpectedContentHash { get; }
 
@@ -638,7 +661,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private sealed class VerifiedPackageArchive : IDisposable
+    private sealed partial class VerifiedPackageArchive : IDisposable
     {
         private readonly FileStream _stream;
         private readonly ZipArchive _archive;
@@ -666,7 +689,27 @@ public sealed partial class DotNetPublishPipelineRunner
             ZipArchive? archive = null;
             try
             {
-                using (var packageReader = new PackageArchiveReader(path))
+                string snapshotPath = Path.Combine(
+                    Path.GetTempPath(),
+                    "powerforge-package-" + Guid.NewGuid().ToString("N") + ".nupkg");
+                stream = new FileStream(
+                    snapshotPath,
+                    FileMode.CreateNew,
+                    FileAccess.ReadWrite,
+                    FileShare.Read,
+                    81920,
+                    FileOptions.DeleteOnClose | FileOptions.SequentialScan);
+                using (FileStream source = File.Open(
+                           path,
+                           FileMode.Open,
+                           FileAccess.Read,
+                           FileShare.ReadWrite | FileShare.Delete))
+                {
+                    source.CopyTo(stream);
+                }
+                stream.Flush(flushToDisk: true);
+                stream.Position = 0;
+                using (var packageReader = new PackageArchiveReader(stream, leaveStreamOpen: true))
                 {
                     PrimarySignature? signature = packageReader
                         .GetPrimarySignatureAsync(CancellationToken.None)
@@ -681,10 +724,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     }
                     string actualHash = packageReader.GetContentHash(CancellationToken.None);
                     if (!string.Equals(actualHash, expectedContentHash, StringComparison.Ordinal))
+                    {
+                        stream.Dispose();
+                        stream = null;
                         return null;
+                    }
                 }
 
-                stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                stream.Position = 0;
                 archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
                 var entries = new Dictionary<string, ZipArchiveEntry>(
                     IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -744,6 +791,52 @@ public sealed partial class DotNetPublishPipelineRunner
 
             _extractedFileHashes.Remove(fullExtractedPath);
             return false;
+        }
+
+        internal bool VerifyExtractedDirectory(string relativePath, string extractedPath)
+        {
+            try
+            {
+                string normalizedPrefix = relativePath.Replace('\\', '/').Trim('/');
+                if (normalizedPrefix.Length > 0)
+                    normalizedPrefix += "/";
+                string[] expectedEntries = _entries.Keys
+                    .Where(name => name.StartsWith(
+                        normalizedPrefix,
+                        IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    .ToArray();
+                if (expectedEntries.Length == 0 || !Directory.Exists(extractedPath))
+                    return false;
+
+                string fullDirectory = Path.GetFullPath(extractedPath);
+                string[] actualFiles = Directory.GetFiles(
+                    fullDirectory,
+                    "*",
+                    SearchOption.AllDirectories);
+                if (actualFiles.Length != expectedEntries.Length)
+                    return false;
+
+                var expected = new HashSet<string>(
+                    expectedEntries,
+                    IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                foreach (string actualFile in actualFiles)
+                {
+                    string entryName = normalizedPrefix + FrameworkCompatibility.GetRelativePath(
+                            fullDirectory,
+                            actualFile)
+                        .Replace('\\', '/');
+                    if (!expected.Contains(entryName) ||
+                        !VerifyExtractedFile(entryName, actualFile))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private byte[] GetEntryHash(string relativePath, ZipArchiveEntry entry)

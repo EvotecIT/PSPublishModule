@@ -529,7 +529,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             throw new DotNetPublishCommandException(
                 message: msg,
-                fileName: "dotnet",
+                fileName: ActiveDotNetExecutablePath.Value ?? "dotnet",
                 workingDirectory: string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                 args: args,
                 exitCode: result.ExitCode,
@@ -548,21 +548,366 @@ public sealed partial class DotNetPublishPipelineRunner
         string fileName,
         string workingDir,
         IReadOnlyList<string> args,
-        IReadOnlyDictionary<string, string?>? environmentVariables)
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        bool useDotNetEnvironment = true)
     {
+        fileName = ResolveDotNetChildExecutable(fileName, workingDir);
+        IEnumerable<string> inheritedVariableNames = Environment.GetEnvironmentVariables().Keys
+            .Cast<object?>()
+            .Select(key => key?.ToString())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!);
+        IReadOnlyDictionary<string, string?> safeEnvironment = useDotNetEnvironment
+            ? CreateSafeDotNetChildEnvironment(
+                environmentVariables,
+                inheritedVariableNames,
+                removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value)
+            : CreateSafeMsBuildChildEnvironment(
+                environmentVariables,
+                inheritedVariableNames,
+                removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value);
         var result = _processRunner.RunAsync(
                 new ProcessRunRequest(
                     fileName,
                     string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                     args,
                     Timeout.InfiniteTimeSpan,
-                    environmentVariables),
+                    safeEnvironment),
                 _cancellationToken.Value)
             .GetAwaiter()
             .GetResult();
+        ValidateActiveDotNetInstallationSnapshot(fileName, verifyHashes: false);
+        ActiveNativeAotPathSnapshot.Value?.ValidateUnchanged(verifyHashes: false);
         _cancellationToken.Value.ThrowIfCancellationRequested();
         return (result.ExitCode, result.StdOut, result.StdErr);
     }
+
+    internal static string ResolveRunDotNetExecutablePath()
+    {
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_DOTNET_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(configuredPath.Trim().Trim('"'));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "POWERFORGE_DOTNET_PATH must identify a rooted trusted dotnet executable.",
+                    exception);
+            }
+            if (!Path.IsPathRooted(configuredPath.Trim().Trim('"')) ||
+                !TryResolveTrustedBuildTool("dotnet", out string configuredTool) ||
+                !string.Equals(
+                    candidate,
+                    configuredTool,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"POWERFORGE_DOTNET_PATH does not identify a trusted dotnet installation: {configuredPath}.");
+            }
+            return configuredTool;
+        }
+
+        if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
+        {
+            throw new InvalidOperationException(
+                "A trusted dotnet executable could not be resolved for the publish run.");
+        }
+        return dotNetPath;
+    }
+
+    internal static string ResolveDotNetChildExecutable(
+        string fileName,
+        string? workingDirectory = null)
+    {
+        if (!fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            return fileName;
+
+        string? path = ActiveDotNetExecutablePath.Value;
+        string? expectedSha256 = ActiveDotNetExecutableSha256.Value;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = ResolveRunDotNetExecutablePath();
+            string sha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+            ValidateDotNetExecutableSnapshot(path, sha256);
+            expectedSha256 = sha256;
+            if (ActiveToolSnapshotScope.Value)
+            {
+                ActiveDotNetExecutablePath.Value = path;
+                ActiveDotNetExecutableSha256.Value = sha256;
+            }
+        }
+        string resolvedPath = path!;
+        ValidateDotNetExecutableSnapshot(resolvedPath, expectedSha256);
+        if (ActiveToolSnapshotScope.Value && ActiveStrictDotNetEnvironment.Value)
+        {
+            string effectiveWorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory)
+                ? Environment.CurrentDirectory
+                : workingDirectory!;
+            TrustedDotNetInstallationSnapshot snapshot = ActiveDotNetInstallationSnapshot.Value ??=
+                TrustedDotNetInstallationSnapshot.Create(
+                    resolvedPath,
+                    effectiveWorkingDirectory);
+            snapshot.EnsureSelection(
+                resolvedPath,
+                effectiveWorkingDirectory);
+            snapshot.ValidateUnchanged(verifyHashes: false);
+        }
+        return resolvedPath;
+    }
+
+    private static void ValidateActiveDotNetInstallationSnapshot(string fileName, bool verifyHashes)
+    {
+        string? activePath = ActiveDotNetExecutablePath.Value;
+        if (string.IsNullOrWhiteSpace(activePath) ||
+            !string.Equals(
+                Path.GetFullPath(fileName),
+                Path.GetFullPath(activePath),
+                IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            return;
+        }
+        ActiveDotNetInstallationSnapshot.Value?.ValidateUnchanged(verifyHashes);
+    }
+
+    internal static string ResolveRunGitExecutablePath()
+    {
+        string? configuredPath = Environment.GetEnvironmentVariable("POWERFORGE_GIT_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(configuredPath.Trim().Trim('"'));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    "POWERFORGE_GIT_PATH must identify a rooted trusted Git executable.",
+                    exception);
+            }
+            if (!Path.IsPathRooted(configuredPath.Trim().Trim('"')) ||
+                !TryResolveTrustedBuildTool("git", out string configuredTool) ||
+                !string.Equals(
+                    candidate,
+                    configuredTool,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"POWERFORGE_GIT_PATH does not identify a trusted Git executable: {configuredPath}.");
+            }
+            return configuredTool;
+        }
+
+        if (!TryResolveTrustedBuildTool("git", out string gitPath))
+            throw new InvalidOperationException("A trusted Git executable could not be resolved for the publish run.");
+        return gitPath;
+    }
+
+    internal static string ResolveGitChildExecutable(string fileName)
+    {
+        if (!fileName.Equals("git", StringComparison.OrdinalIgnoreCase))
+            return fileName;
+
+        string? path = ActiveGitExecutablePath.Value;
+        string? expectedSha256 = ActiveGitExecutableSha256.Value;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = ResolveRunGitExecutablePath();
+            string sha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+            ValidateGitExecutableSnapshot(path, sha256);
+            expectedSha256 = sha256;
+            if (ActiveToolSnapshotScope.Value)
+            {
+                ActiveGitExecutablePath.Value = path;
+                ActiveGitExecutableSha256.Value = sha256;
+            }
+        }
+        string resolvedPath = path!;
+        ValidateGitExecutableSnapshot(resolvedPath, expectedSha256);
+        return resolvedPath;
+    }
+
+    internal static void ValidateGitExecutableSnapshot(string path, string? expectedSha256)
+    {
+        if (!IsIndependentlyTrustedGitExecutable(path))
+            throw new InvalidOperationException($"The selected Git executable is not independently trusted: {path}.");
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+
+        string actualSha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"The selected Git executable changed after admission: {path}.");
+    }
+
+    internal static void ValidateDotNetExecutableSnapshot(string path, string? expectedSha256)
+    {
+        if (!IsIndependentlyTrustedDotNetExecutable(path))
+        {
+            throw new InvalidOperationException(
+                $"The selected dotnet executable is not independently trusted: {path}.");
+        }
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+            return;
+
+        string actualSha256 = ComputeSha256Hex(File.ReadAllBytes(path));
+        if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The selected dotnet executable changed after admission: {path}.");
+        }
+    }
+
+    private static void ValidateExplicitDotNetEnvironmentVariables(
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        foreach (KeyValuePair<string, string?> variable in
+                 environmentVariables ?? new Dictionary<string, string?>())
+        {
+            if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key) &&
+                !string.IsNullOrEmpty(variable.Value))
+            {
+                throw new InvalidOperationException(
+                    $"Dotnet environment variable '{variable.Key}' is not allowed because it can inject executable runtime or build behavior.");
+            }
+        }
+    }
+
+    internal static void ValidateNativeAotEnvironmentVariables(DotNetPublishPlan plan)
+    {
+        bool hasNativeAot = PlanUsesNativeAot(plan);
+        if (hasNativeAot &&
+            plan.EnvironmentVariables.TryGetValue("PATH", out string? path) &&
+            !string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                "An explicit PATH is not allowed for NativeAOT publish because it can replace native compiler or linker tools.");
+        }
+    }
+
+    private static bool PlanUsesNativeAot(DotNetPublishPlan plan)
+        => (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .Any(combination => combination.Style == DotNetPublishStyle.AotSpeed ||
+                                combination.Style == DotNetPublishStyle.AotSize);
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+        => CreateSafeDotNetChildEnvironment(
+            environmentVariables,
+            Environment.GetEnvironmentVariables().Keys
+                .Cast<object?>()
+                .Select(key => key?.ToString())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!));
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames)
+        => CreateSafeDotNetChildEnvironment(
+            environmentVariables,
+            inheritedVariableNames,
+            removeUnapprovedAmbient: true);
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames,
+        bool removeUnapprovedAmbient)
+        => CreateSafeBuildChildEnvironment(
+            environmentVariables,
+            inheritedVariableNames,
+            removeUnapprovedAmbient,
+            configureDotNetRuntime: true);
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeMsBuildChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames,
+        bool removeUnapprovedAmbient)
+        => CreateSafeBuildChildEnvironment(
+            environmentVariables,
+            inheritedVariableNames,
+            removeUnapprovedAmbient,
+            configureDotNetRuntime: false);
+
+    private static IReadOnlyDictionary<string, string?> CreateSafeBuildChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        IEnumerable<string> inheritedVariableNames,
+        bool removeUnapprovedAmbient,
+        bool configureDotNetRuntime)
+    {
+        ValidateExplicitDotNetEnvironmentVariables(environmentVariables);
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string?> variable in
+                 environmentVariables ?? new Dictionary<string, string?>())
+        {
+            values[variable.Key] = variable.Value;
+        }
+        foreach (string name in inheritedVariableNames)
+        {
+            if (!string.IsNullOrWhiteSpace(name) &&
+                !values.ContainsKey(name) &&
+                (IsUncontrolledRuntimeInjectionEnvironmentVariable(name) ||
+                 (removeUnapprovedAmbient &&
+                 !IsApprovedDotNetChildAmbientEnvironmentVariable(name))))
+                values[name] = null;
+        }
+        values["DOTNET_ROOT"] = configureDotNetRuntime
+            ? Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"))
+            : null;
+        values["DOTNET_ROOT(x86)"] = null;
+        values["DOTNET_MULTILEVEL_LOOKUP"] = configureDotNetRuntime ? "0" : null;
+        foreach (string name in DisabledUserMsBuildImportEnvironmentVariables)
+            values[name] = "false";
+        if (configureDotNetRuntime && ActiveNativeAotPublish.Value)
+        {
+            string dotNetPath = ResolveDotNetChildExecutable("dotnet");
+            string trustedNativeAotPath = BuildTrustedNativeAotPath(
+                dotNetPath,
+                Environment.GetEnvironmentVariable("PATH"));
+            if (ActiveToolSnapshotScope.Value)
+            {
+                TrustedNativeAotPathSnapshot snapshot = ActiveNativeAotPathSnapshot.Value ??=
+                    TrustedNativeAotPathSnapshot.Create(trustedNativeAotPath);
+                snapshot.EnsurePath(trustedNativeAotPath);
+                snapshot.ValidateUnchanged(verifyHashes: false);
+            }
+            values["PATH"] = trustedNativeAotPath;
+        }
+        return values;
+    }
+
+    private static readonly string[] DisabledUserMsBuildImportEnvironmentVariables =
+    {
+        "ImportUserLocationsByWildcardBeforeMicrosoftCommonProps",
+        "ImportUserLocationsByWildcardAfterMicrosoftCommonProps",
+        "ImportUserLocationsByWildcardBeforeMicrosoftCommonTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftCommonTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftCSharpTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftCSharpTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftVisualBasicTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftVisualBasicTargets",
+        "ImportUserLocationsByWildcardBeforeMicrosoftNetFrameworkProps",
+        "ImportUserLocationsByWildcardAfterMicrosoftNetFrameworkProps",
+        "ImportUserLocationsByWildcardBeforeMicrosoftNetFrameworkTargets",
+        "ImportUserLocationsByWildcardAfterMicrosoftNetFrameworkTargets"
+    };
+
+    private static bool IsApprovedDotNetChildAmbientEnvironmentVariable(string name)
+        => IsApprovedControlledBuildEnvironmentVariable(name) ||
+           name.Equals("APPDATA", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("LOCALAPPDATA", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("NUMBER_OF_PROCESSORS", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("OS", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PATH", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("SYSTEMDRIVE", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TEMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMP", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("TMPDIR", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("USERPROFILE", StringComparison.OrdinalIgnoreCase);
 
     private static (int ExitCode, string StdOut, string StdErr) RunProcess(
         string fileName,
@@ -597,6 +942,7 @@ public sealed partial class DotNetPublishPipelineRunner
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        fileName = ResolveGitChildExecutable(fileName);
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -634,43 +980,25 @@ public sealed partial class DotNetPublishPipelineRunner
             p);
         if (timeout.HasValue && timeout.Value > TimeSpan.Zero && timeout.Value != Timeout.InfiniteTimeSpan)
         {
-            var stdoutBuilder = new StringBuilder();
-            var stderrBuilder = new StringBuilder();
-            using var stdoutDone = new ManualResetEventSlim(false);
-            using var stderrDone = new ManualResetEventSlim(false);
-            p.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stdoutDone.Set();
-                else
-                    stdoutBuilder.AppendLine(e.Data);
-            };
-            p.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data is null)
-                    stderrDone.Set();
-                else
-                    stderrBuilder.AppendLine(e.Data);
-            };
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
+            var stdoutCapture = new RedirectedOutputCapture();
+            var stderrCapture = new RedirectedOutputCapture();
+            Task stdoutRead = ReadRedirectedOutputAsync(p.StandardOutput, stdoutCapture);
+            Task stderrRead = ReadRedirectedOutputAsync(p.StandardError, stderrCapture);
 
             var timeoutMs = ToTimeoutMilliseconds(timeout.Value);
-            if (!p.WaitForExit(timeoutMs))
-            {
+            bool exited = p.WaitForExit(timeoutMs);
+            if (!exited)
                 TryKillProcessTree(p);
-                var timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.Value.TotalSeconds)} second(s).";
-                if (stderrBuilder.Length > 0)
-                    stderrBuilder.AppendLine();
-                stderrBuilder.Append(timeoutMessage);
-                return (-1, stdoutBuilder.ToString(), stderrBuilder.ToString(), true);
-            }
 
-            p.WaitForExit();
-            stdoutDone.Wait(TimeSpan.FromSeconds(5));
-            stderrDone.Wait(TimeSpan.FromSeconds(5));
+            DrainRedirectedOutputReads(p, stdoutRead, stderrRead, TimeSpan.FromMilliseconds(500));
+            string timedStdout = stdoutCapture.Snapshot();
+            string timedStderr = stderrCapture.Snapshot();
+            if (!exited)
+                timedStderr = AppendProcessTimeoutMessage(timedStderr, timeout.Value);
             cancellationToken.ThrowIfCancellationRequested();
-            return (p.ExitCode, stdoutBuilder.ToString(), stderrBuilder.ToString(), false);
+            return exited
+                ? (p.ExitCode, timedStdout, timedStderr, false)
+                : (-1, timedStdout, timedStderr, true);
         }
 
         var stdout = p.StandardOutput.ReadToEnd();
@@ -678,6 +1006,14 @@ public sealed partial class DotNetPublishPipelineRunner
         p.WaitForExit();
         cancellationToken.ThrowIfCancellationRequested();
         return (p.ExitCode, stdout, stderr, false);
+    }
+
+    private static string AppendProcessTimeoutMessage(string stderr, TimeSpan timeout)
+    {
+        string timeoutMessage = $"Process timed out after {Math.Ceiling(timeout.TotalSeconds)} second(s).";
+        return string.IsNullOrEmpty(stderr)
+            ? timeoutMessage
+            : stderr.TrimEnd() + Environment.NewLine + timeoutMessage;
     }
 
     private static int ToTimeoutMilliseconds(TimeSpan timeout)

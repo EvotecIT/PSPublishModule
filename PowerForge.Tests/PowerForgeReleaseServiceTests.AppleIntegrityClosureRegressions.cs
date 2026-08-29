@@ -335,8 +335,12 @@ public sealed partial class PowerForgeReleaseServiceTests {
         }
     }
 
-    [Fact]
-    public void AppleArchiveUploadSnapshot_allows_xcode_changed_signal_for_unchanged_archive_info_plist() {
+    [Theory]
+    [InlineData(WatcherChangeTypes.Changed)]
+    [InlineData(WatcherChangeTypes.Created)]
+    [InlineData(WatcherChangeTypes.Deleted)]
+    public void AppleArchiveUploadSnapshot_allows_xcode_manifest_signal_for_unchanged_archive_info_plist(
+        WatcherChangeTypes changeType) {
         var root = CreateSandbox();
         try {
             var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
@@ -347,8 +351,32 @@ public sealed partial class PowerForgeReleaseServiceTests {
             using var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
 
             Assert.True(snapshot.IsExpectedXcodeExportMutation(
-                new FileSystemEventArgs(WatcherChangeTypes.Changed, snapshot.ArchivePath, "Info.plist")));
+                new FileSystemEventArgs(changeType, snapshot.ArchivePath, "Info.plist")));
             snapshot.ValidateUnchanged(expectedSha256);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void AppleArchiveUploadSnapshot_rejects_real_manifest_replacement_after_an_accepted_signal() {
+        var root = CreateSandbox();
+        try {
+            var archive = Directory.CreateDirectory(Path.Combine(root, "approved.xcarchive"));
+            var infoPlist = Path.Combine(archive.FullName, "Info.plist");
+            File.WriteAllText(infoPlist, "approved bytes");
+            var expectedSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName);
+
+            using var snapshot = AppleArchiveUploadSnapshot.Create(archive.FullName, expectedSha256);
+
+            Assert.True(snapshot.IsExpectedXcodeExportMutation(
+                new FileSystemEventArgs(WatcherChangeTypes.Created, snapshot.ArchivePath, "Info.plist")));
+            File.Delete(Path.Combine(snapshot.ArchivePath, "Info.plist"));
+            File.WriteAllText(Path.Combine(snapshot.ArchivePath, "Info.plist"), "approved bytes");
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => snapshot.ValidateUnchanged(expectedSha256));
+            Assert.Contains("file identity changed", exception.Message, StringComparison.OrdinalIgnoreCase);
         } finally {
             TryDelete(root);
         }

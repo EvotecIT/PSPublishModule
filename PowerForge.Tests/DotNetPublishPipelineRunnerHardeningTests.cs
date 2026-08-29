@@ -505,7 +505,100 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
         stopwatch.Stop();
         Assert.IsAssignableFrom<OperationCanceledException>(exception.InnerException);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2), stopwatch.Elapsed.ToString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RunProcessWithTimeout_PreservesUnterminatedOutputWithInheritedHandles(bool useStandardError)
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var stopwatch = Stopwatch.StartNew();
+
+        var raw = method!.Invoke(
+            null,
+            new object[]
+            {
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    "PowerShell",
+                    "7",
+                    "pwsh.exe"),
+                Environment.CurrentDirectory,
+                new[]
+                {
+                    "-NoProfile",
+                    "-Command",
+                    "Start-Process -FilePath $env:ComSpec -ArgumentList '/d','/c','ping 127.0.0.1 -n 11 >nul' -NoNewWindow; " +
+                    (useStandardError
+                        ? "[Console]::Error.Write('parent-complete')"
+                        : "[Console]::Out.Write('parent-complete')")
+                },
+                TimeSpan.FromSeconds(2),
+                CancellationToken.None
+            });
+
+        stopwatch.Stop();
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stdout = (string)resultType.GetField("Item2")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+        var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
+
+        Assert.False(timedOut);
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            "parent-complete",
+            useStandardError ? stderr : stdout,
+            StringComparison.Ordinal);
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5), stopwatch.Elapsed.ToString());
+    }
+
+    [Fact]
+    public void RunProcessWithTimeout_SafelyCapturesNoisyTimedOutProcess()
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            return;
+
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcessWithTimeout",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        for (int iteration = 0; iteration < 3; iteration++)
+        {
+            var raw = method!.Invoke(
+                null,
+                new object[]
+                {
+                    Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                    Environment.CurrentDirectory,
+                    new[]
+                    {
+                        "/d",
+                        "/s",
+                        "/c",
+                        "for /L %i in (1,1,10000) do @echo output-%i & @echo error-%i 1>&2 & ping 127.0.0.1 -n 11 >nul"
+                    },
+                    TimeSpan.FromMilliseconds(100),
+                    CancellationToken.None
+                });
+
+            Assert.NotNull(raw);
+            var resultType = raw!.GetType();
+            var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+            var timedOut = (bool)resultType.GetField("Item4")!.GetValue(raw)!;
+            Assert.True(timedOut);
+            Assert.Contains("timed out", stderr, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
