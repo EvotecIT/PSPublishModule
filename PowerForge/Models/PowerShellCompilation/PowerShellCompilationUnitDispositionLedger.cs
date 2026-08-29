@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -56,9 +57,9 @@ public sealed class PowerShellCompilationUnitDisposition
         bool omitted,
         bool rejected,
         string generatedMemberName,
-        string[]? dependencyCauses,
-        string[]? boundaryCauses,
-        PowerShellCompilationDispositionCause[]? diagnosticChain)
+        IReadOnlyList<string>? dependencyCauses,
+        IReadOnlyList<string>? boundaryCauses,
+        IReadOnlyList<PowerShellCompilationDispositionCause>? diagnosticChain)
     {
         UnitId = unitId ?? string.Empty;
         RelativePath = relativePath ?? string.Empty;
@@ -75,9 +76,9 @@ public sealed class PowerShellCompilationUnitDisposition
         Omitted = omitted;
         Rejected = rejected;
         GeneratedMemberName = generatedMemberName ?? string.Empty;
-        DependencyCauses = dependencyCauses ?? Array.Empty<string>();
-        BoundaryCauses = boundaryCauses ?? Array.Empty<string>();
-        DiagnosticChain = diagnosticChain ?? Array.Empty<PowerShellCompilationDispositionCause>();
+        DependencyCauses = Array.AsReadOnly((dependencyCauses ?? Array.Empty<string>()).ToArray());
+        BoundaryCauses = Array.AsReadOnly((boundaryCauses ?? Array.Empty<string>()).ToArray());
+        DiagnosticChain = Array.AsReadOnly((diagnosticChain ?? Array.Empty<PowerShellCompilationDispositionCause>()).ToArray());
     }
 
     /// <summary>Stable relocation-safe authored-unit identity.</summary>
@@ -111,11 +112,11 @@ public sealed class PowerShellCompilationUnitDisposition
     /// <summary>Generated CLR member identity, when emitted.</summary>
     public string GeneratedMemberName { get; }
     /// <summary>Dependency causes known to affect this unit.</summary>
-    public string[] DependencyCauses { get; }
+    public IReadOnlyList<string> DependencyCauses { get; }
     /// <summary>Boundary causes known to affect this unit.</summary>
-    public string[] BoundaryCauses { get; }
+    public IReadOnlyList<string> BoundaryCauses { get; }
     /// <summary>Ordered semantic and shaping diagnostic chain.</summary>
-    public PowerShellCompilationDispositionCause[] DiagnosticChain { get; }
+    public IReadOnlyList<PowerShellCompilationDispositionCause> DiagnosticChain { get; }
 
     /// <summary>Whether any typed CLR implementation is present.</summary>
     [JsonIgnore]
@@ -146,21 +147,21 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     /// <summary>Creates a final ledger.</summary>
     [JsonConstructor]
     public PowerShellCompilationUnitDispositionLedger(
-        PowerShellCompilationUnitDisposition[]? entries,
-        string[]? deliveryRuntimeCauses = null)
+        IReadOnlyList<PowerShellCompilationUnitDisposition>? entries,
+        IReadOnlyList<string>? deliveryRuntimeCauses = null)
     {
-        Entries = entries ?? Array.Empty<PowerShellCompilationUnitDisposition>();
-        DeliveryRuntimeCauses = deliveryRuntimeCauses ?? Array.Empty<string>();
+        Entries = Array.AsReadOnly((entries ?? Array.Empty<PowerShellCompilationUnitDisposition>()).ToArray());
+        DeliveryRuntimeCauses = Array.AsReadOnly((deliveryRuntimeCauses ?? Array.Empty<string>()).ToArray());
     }
 
     /// <summary>Ledger schema version.</summary>
     public int SchemaVersion => 1;
     /// <summary>Deterministically ordered authored-unit dispositions.</summary>
-    public PowerShellCompilationUnitDisposition[] Entries { get; }
+    public IReadOnlyList<PowerShellCompilationUnitDisposition> Entries { get; }
     /// <summary>Runtime delivery causes outside an authored compilation unit, such as manifest hooks.</summary>
-    public string[] DeliveryRuntimeCauses { get; }
+    public IReadOnlyList<string> DeliveryRuntimeCauses { get; }
     /// <summary>Authored units represented by the ledger.</summary>
-    public int AnalyzedUnits => Entries.Length;
+    public int AnalyzedUnits => Entries.Count;
     /// <summary>Units with a delivered CLR implementation.</summary>
     public int EmittedUnits => Entries.Count(static entry => entry.Emitted);
     /// <summary>Units that execute retained source or hosted command regions.</summary>
@@ -178,7 +179,8 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     /// <summary>Total statically identified typed/hosted crossings.</summary>
     public int BoundaryCrossings => Entries.Sum(static entry => entry.BoundaryCrossings);
     /// <summary>Whether the delivered artifact retains any PowerShell runtime execution path.</summary>
-    public bool UsesPowerShellRuntimeFallback => RuntimeRoutedUnits > 0 || DeliveryRuntimeCauses.Length > 0;
+    public bool UsesPowerShellRuntimeFallback =>
+        Entries.Any(static entry => entry.RetainedHostedSource) || DeliveryRuntimeCauses.Count > 0;
     /// <summary>Typed emission coverage among authored units.</summary>
     public double CompilationCoveragePercentage => AnalyzedUnits == 0 ? 0 : EmittedUnits * 100d / AnalyzedUnits;
 }

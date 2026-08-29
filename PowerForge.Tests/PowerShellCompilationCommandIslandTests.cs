@@ -56,7 +56,7 @@ public sealed class PowerShellCompilationCommandIslandTests
             });
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             Assert.Equal(2, result.Manifest!.CompiledMethods);
-            Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
+            Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
 
             var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
             var invocation = $"$DebugPreference='Continue'; Import-Module -Name '{escapedPath}' -Force; Get-IslandValue -Name Ada -Verbose; Get-PipelineIsland -Name Ada";

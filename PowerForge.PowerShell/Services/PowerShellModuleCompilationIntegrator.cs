@@ -455,11 +455,12 @@ internal sealed class PowerShellModuleCompilationIntegrator
                 .ToArray() ?? Array.Empty<string>();
             manifest.SourcePath = portableSources.FirstOrDefault() ?? Path.GetFileName(manifest.SourcePath);
             manifest.SourceFiles = portableSources;
-            if (!string.IsNullOrWhiteSpace(manifest.GeneratedSourcePath))
+            var generatedSourcePath = manifest.GeneratedSourcePath;
+            if (!string.IsNullOrWhiteSpace(generatedSourcePath))
             {
-                manifest.GeneratedSourcePath = Path.IsPathRooted(manifest.GeneratedSourcePath) && !string.IsNullOrWhiteSpace(previousRoot)
-                    ? FrameworkCompatibility.GetRelativePath(previousRoot!, manifest.GeneratedSourcePath).Replace('\\', '/')
-                    : manifest.GeneratedSourcePath.Replace('\\', '/');
+                manifest.GeneratedSourcePath = Path.IsPathRooted(generatedSourcePath!) && !string.IsNullOrWhiteSpace(previousRoot)
+                    ? FrameworkCompatibility.GetRelativePath(previousRoot!, generatedSourcePath!).Replace('\\', '/')
+                    : generatedSourcePath!.Replace('\\', '/');
             }
             manifest.Diagnostics = (manifest.Diagnostics ?? Array.Empty<PowerShellCompilationDiagnostic>())
                 .Select(static diagnostic => new PowerShellCompilationDiagnostic(

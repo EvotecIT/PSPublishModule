@@ -48,7 +48,11 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var unit = indexedUnit.Unit;
                 var method = methods.FirstOrDefault(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit));
                 var unitKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine);
-                var emitted = method is not null;
+                var emitted = method is not null ||
+                              plan.Mode == PowerShellCompilationMode.Strict &&
+                              artifactKind == PowerShellCompilationArtifactKind.Executable &&
+                              unit.Kind == PowerShellCompilationUnitKind.Script &&
+                              unit.IsCompilable;
                 var retainedHostedSource = IsRetainedHostedSource(
                     plan.Mode,
                     artifactKind,
@@ -97,7 +101,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     retainedHostedSource,
                     runtimeCommandRegions,
                     boundaryCrossings: (method?.HostedRegionSiteCount ?? 0) + (retainedHostedSource && emitted ? 1 : 0),
-                    shapingFallback: unit.IsCompilable && runtimeRouted,
+                    shapingFallback: unit.IsCompilable && retainedHostedSource,
                     omitted,
                     rejected,
                     method?.GeneratedName ?? string.Empty,
@@ -188,8 +192,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         var methodPath = string.IsNullOrWhiteSpace(method.SourcePath)
             ? shapedCompilation?.SourcePath ?? string.Empty
             : method.SourcePath;
-        return unit.Kind == PowerShellCompilationUnitKind.Function &&
-               PowerShellCompilationPathSafety.PathEquals(methodPath, fullPath) &&
+        return PowerShellCompilationPathSafety.PathEquals(methodPath, fullPath) &&
                method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
                method.SourceLine == unit.StartLine;
     }
