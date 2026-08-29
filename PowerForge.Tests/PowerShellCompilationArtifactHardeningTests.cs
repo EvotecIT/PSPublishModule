@@ -155,9 +155,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var packaged = Run(result.ArtifactPath!);
         Assert.Equal(0, packaged.ExitCode);
+        static string WithoutAnsi(string value) =>
+            System.Text.RegularExpressions.Regex.Replace(value, "\\x1B\\[[0-?]*[ -/]*[@-~]", string.Empty);
         static string[] Lines(string value) => value
             .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(static line => line.TrimEnd())
+            .Select(static line => WithoutAnsi(line).TrimEnd())
             .ToArray();
         Assert.Equal(Lines(original.StandardOutput), Lines(packaged.StandardOutput));
         Assert.DoesNotContain("@{Name=Ada", packaged.StandardOutput, StringComparison.OrdinalIgnoreCase);
