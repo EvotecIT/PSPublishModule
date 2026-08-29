@@ -36,7 +36,7 @@ public sealed class PowerShellCompilationOptimizationTests
         Assert.Equal(1, result.Optimization.DeadBranchesRemoved);
         var selectedReturn = Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
         Assert.Equal(88, Assert.IsType<PowerShellBoundLiteralExpression>(selectedReturn.Expression).Value);
-        Assert.DoesNotContain("99", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("return 99;", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
 
     [Fact]

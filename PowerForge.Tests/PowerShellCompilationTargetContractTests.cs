@@ -144,14 +144,20 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             {
                 "constant-folding",
                 "dead-branch-elimination",
+                "identity-conversion-elimination"
+            },
+            result.Manifest.IrOptimization!.Passes);
+        Assert.Equal(
+            new[]
+            {
                 "allocation-reduction",
                 "pipeline-stage-fusion",
                 "command-region-coalescing",
                 "specialized-collection-loops",
-                "cached-conversion-plans",
-                "authored-source-sequence-mapping"
+                "cached-conversion-plans"
             },
-            result.Manifest.IrOptimization!.Passes);
+            result.Manifest.IrOptimization.BackendOptimizations);
+        Assert.Equal(new[] { "authored-source-sequence-mapping" }, result.Manifest.IrOptimization.Instrumentation);
         Assert.NotNull(result.Manifest.Boundaries);
         Assert.Equal(1, result.Manifest.Boundaries!.TypedEntryPoints);
         Assert.Equal(0, result.Manifest.Boundaries.RuntimeFallbackUnits);
@@ -182,7 +188,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             singleFile: true,
             PowerShellCompilationExecutableOptimization.NativeAot,
             explicitContract: true);
-        target.TargetFramework = "net9.0";
+        target.SingleFile = false;
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             PowerShellCompilationTargetContractService.Normalize(target));
@@ -256,7 +262,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void TargetContractNormalizationRejectsCallerAssertedRidPromotion()
+    public void TargetContractNormalizationRecomputesCallerAssertedRidPromotion()
     {
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.Executable,
@@ -270,11 +276,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         target.SupportLevel = "Supported";
         target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            PowerShellCompilationTargetContractService.Normalize(target));
+        var normalized = PowerShellCompilationTargetContractService.Normalize(target);
 
-        Assert.Contains("support level", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("Supported", target.SupportLevel);
+        Assert.Equal("Experimental", normalized.SupportLevel);
+        Assert.Equal(normalized.ContractSha256, PowerShellCompilationTargetContractService.ComputeSha256(normalized));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void TargetContractNormalizationMigratesPreviouslyExperimentalCertifiedTuple(int schemaVersion)
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            "win-x64",
+            selfContained: false,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: false);
+        target.SchemaVersion = schemaVersion;
+        target.SupportLevel = "Experimental";
+        target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
+
+        var normalized = PowerShellCompilationTargetContractService.Normalize(target);
+
+        Assert.Equal(2, normalized.SchemaVersion);
+        Assert.Equal("Supported", normalized.SupportLevel);
+        Assert.True(normalized.Explicit);
+        Assert.Equal(normalized.ContractSha256, PowerShellCompilationTargetContractService.ComputeSha256(normalized));
     }
 
     [Theory]

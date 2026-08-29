@@ -95,6 +95,97 @@ function Invoke-ContractProcess {
     finally { $process.Dispose() }
 }
 
+function Get-ArtifactContainerIdentity {
+    param([string] $Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $reader = [System.IO.BinaryReader]::new($stream)
+    try {
+        $prefix = $reader.ReadBytes(4)
+        if ($prefix.Length -ne 4) { throw "Executable is too short to contain a supported header: $Path" }
+        if ($prefix[0] -eq 0x4d -and $prefix[1] -eq 0x5a) {
+            $stream.Position = 0x3c
+            $peOffset = $reader.ReadUInt32()
+            $stream.Position = $peOffset
+            if ($reader.ReadUInt32() -ne 0x00004550) { throw "PE signature is invalid: $Path" }
+            $machine = $reader.ReadUInt16()
+            $architecture = switch ($machine) {
+                0x8664 { 'x64' }
+                0xaa64 { 'arm64' }
+                0x014c { 'x86' }
+                default { throw "Unsupported PE machine 0x$($machine.ToString('x4')): $Path" }
+            }
+            return [pscustomobject]@{ Format = 'PE'; Architecture = $architecture }
+        }
+        if ($prefix[0] -eq 0x7f -and $prefix[1] -eq 0x45 -and $prefix[2] -eq 0x4c -and $prefix[3] -eq 0x46) {
+            $stream.Position = 5
+            if ($reader.ReadByte() -ne 1) { throw "Only little-endian ELF executables are supported by this harness: $Path" }
+            $stream.Position = 18
+            $machine = $reader.ReadUInt16()
+            $architecture = switch ($machine) {
+                62 { 'x64' }
+                183 { 'arm64' }
+                default { throw "Unsupported ELF machine $machine`: $Path" }
+            }
+            return [pscustomobject]@{ Format = 'ELF'; Architecture = $architecture }
+        }
+        throw "Unsupported executable container header: $Path"
+    } finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Assert-ExistingArtifactEvidence {
+    param(
+        [string] $Path,
+        $Manifest,
+        [string] $RuntimeIdentifier,
+        [ValidateSet('None', 'NativeAot')]
+        [string] $ExpectedOptimization
+    )
+
+    $actualHash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $actualBytes = (Get-Item -LiteralPath $Path).Length
+    if ($actualHash -ne ([string] $Manifest.ArtifactSha256).ToLowerInvariant() -or $actualBytes -ne [long] $Manifest.ArtifactSizeBytes) {
+        throw "Existing artifact bytes do not match their adjacent manifest: $Path"
+    }
+    if ($Manifest.Kind -ne 'Executable' -or $Manifest.Mode -ne 'Strict' -or
+        $Manifest.TargetFramework -ne $TargetFramework -or $Manifest.RuntimeIdentifier -ne $RuntimeIdentifier) {
+        throw "Existing artifact manifest does not describe the requested Strict $TargetFramework/$RuntimeIdentifier executable: $Path"
+    }
+    if (-not $Manifest.DependencyClosureVerified -or -not $Manifest.DependencyClosure.Verified -or
+        $Manifest.DependencyClosure.TargetFramework -ne $TargetFramework -or
+        $Manifest.DependencyClosure.RuntimeIdentifier -ne $RuntimeIdentifier) {
+        throw "Existing artifact manifest does not carry verified target-bound dependency closure: $Path"
+    }
+    if ($Manifest.TargetContract.ArtifactKind -ne 'Executable' -or $Manifest.TargetContract.Mode -ne 'Strict' -or
+        $Manifest.TargetContract.TargetFramework -ne $TargetFramework -or
+        $Manifest.TargetContract.RuntimeIdentifier -ne $RuntimeIdentifier -or
+        $Manifest.TargetContract.SupportLevel -ne 'Supported') {
+        throw "Existing artifact target contract is not the supported Strict target being exercised: $Path"
+    }
+    $expectedDeployment = if ($ExpectedOptimization -eq 'NativeAot') { 'NativeAot' } else { 'FrameworkDependent' }
+    if ($Manifest.Optimization -ne $ExpectedOptimization -or $Manifest.TargetContract.Deployment -ne $expectedDeployment) {
+        throw "Existing artifact is not the requested $ExpectedOptimization/$expectedDeployment target profile: $Path"
+    }
+    $container = Get-ArtifactContainerIdentity -Path $Path
+    $expectedArchitecture = ($RuntimeIdentifier -split '-')[-1]
+    if ($container.Architecture -ne $expectedArchitecture) {
+        throw "Existing artifact architecture '$($container.Architecture)' does not match '$RuntimeIdentifier': $Path"
+    }
+    if ($null -ne $Manifest.DependencyClosure.NativeExecutable) {
+        if ($Manifest.DependencyClosure.NativeExecutable.Sha256.ToLowerInvariant() -ne $actualHash -or
+            $Manifest.DependencyClosure.NativeExecutable.Format -ne $container.Format -or
+            $Manifest.DependencyClosure.NativeExecutable.Architecture -ne $container.Architecture) {
+            throw "Existing native-executable inspection evidence does not match the supplied bytes: $Path"
+        }
+    }
+    if ($ExpectedOptimization -eq 'NativeAot' -and $null -eq $Manifest.DependencyClosure.NativeExecutable) {
+        throw "Existing NativeAOT artifact has no native-executable inspection evidence: $Path"
+    }
+}
+
 function New-ReviewedArtifact {
     param(
         [string] $Name,
@@ -216,6 +307,8 @@ if ($useExistingArtifacts) {
         ArtifactPath = $nativePath
         Manifest = (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($nativeManifestPath)))
     }
+    Assert-ExistingArtifactEvidence -Path $managedPath -Manifest $managed.Manifest -RuntimeIdentifier $runtimeIdentifier -ExpectedOptimization None
+    Assert-ExistingArtifactEvidence -Path $nativePath -Manifest $native.Manifest -RuntimeIdentifier $runtimeIdentifier -ExpectedOptimization NativeAot
 } else {
     Import-Module -Name $ModuleAssemblyPath -Force
     $managed = New-ReviewedArtifact -Name "PowerForge.TargetHost.Managed.$runtimeIdentifier" `

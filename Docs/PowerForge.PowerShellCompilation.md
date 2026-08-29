@@ -1,6 +1,6 @@
 # PowerShell Compilation
 
-Last updated: 2026-08-27
+Last updated: 2026-08-29
 
 PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory into three different artifact shapes:
 
@@ -42,6 +42,8 @@ The target framework and publication profile determine what must already exist o
 | CLR library | `net472`, `net8.0`, or `net10.0` | None | A consuming process on the matching CLR family |
 
 Framework-dependent executables are the smallest normal build, but require the matching .NET runtime. Self-contained builds carry that runtime and are therefore larger and platform-specific. Single-file publication still targets one runtime identifier such as `win-x64` or `linux-x64`; it does not make one binary portable across operating systems. NativeAOT removes both the PowerShell and installed-.NET requirements, but is available only to Strict typed executables and must be built for each target platform and architecture.
+
+Target support is narrower than build availability. PowerForge currently marks only Strict `net10.0` framework-dependent and NativeAOT executables for `win-x64` and `linux-x64` as `Supported`, after executing both profiles on their target hosts. Portable managed artifacts retain the `PortableManaged` support level. Named-RID `net8.0`, self-contained, trimmed, Package/Hybrid, macOS, and Arm64 profiles remain `Experimental` until that exact framework, deployment model, RID, and host behavior pass the same closure and execution gate. ReadyToRun is benchmark-only and cannot be selected as a public target.
 
 PowerShell 5.1 compatibility currently means a `net472` generated binary module loaded by Windows PowerShell. PowerForge does not currently produce a Windows PowerShell 5.1 packaged EXE. A Strict EXE is also not a hidden choice between PowerShell 5.1, 7.4, and 7.6: no PowerShell engine runs after a successful Strict compilation.
 
@@ -256,7 +258,7 @@ powerforge powershell build .\Calculations.psm1 `
 
 Add `--output json` to either `analyze` or `build` for a stable machine-readable envelope. Analyzer diagnostics include a stable `featureId`, while `dependencies` explains what the selected artifact shape will compile, preserve, copy, embed, leave external, or reject.
 
-Every build consumes one normalized target contract. Compatibility options such as `--framework`, `--rid`, `--self-contained`, `--optimization`, and `--no-single-file` construct it; `--target-contract .\target.json` instead supplies an explicit integrity-checked contract. Schema-v1 contracts remain accepted under their original hash rules and are migrated to schema v2, where request provenance is no longer part of target identity. Successful artifacts emit target-contract, toolchain, dependency-lock, SBOM/provenance, and file-hash evidence. The CLI and cmdlet use a verified content-addressed build cache by default; use `--cache-directory <path>` / `-BuildCacheDirectory` to select its owner or `--no-build-cache` / `-UseBuildCache:$false` for a deliberately uncached build. Cache keys include the normalized restore graph, actual resolved package bytes, selected SDK/reference-pack bytes, target, reviewed graph lock, compiler identity, build host, and generated inputs. Restore verifies a copied payload before atomic promotion; unsafe reparse-point roots/ancestors and malformed or changed entries are misses, never trusted hits.
+Analyze, explain, and build consume the same normalized target contract. Compatibility options such as `--framework`, `--rid`, `--self-contained`, `--optimization`, and `--no-single-file` construct it; `--target-contract .\target.json` instead supplies an explicit integrity-checked contract to all three commands. A stored schema-v1 or schema-v2 contract is first verified against its declared support level and original hash rules, then migrated to schema v2, reclassified against the current support policy, and rehashed; a support-policy promotion or demotion therefore does not make an otherwise authentic stored request unreadable. NativeAOT planning resolves the runtime-pack version owned by the selected SDK and rejects a missing exact pack instead of silently choosing a newer ambient same-major pack. Successful artifacts emit target-contract, toolchain, dependency-lock, SBOM/provenance, and file-hash evidence. The CLI and cmdlet use a verified content-addressed build cache by default; use `--cache-directory <path>` / `-BuildCacheDirectory` to select its owner or `--no-build-cache` / `-UseBuildCache:$false` for a deliberately uncached build. Cache keys include the normalized restore graph, actual resolved package bytes, selected SDK/reference-pack bytes, target, reviewed graph lock, compiler identity, build host, and generated inputs. Restore verifies a copied payload before atomic promotion; unsafe reparse-point roots/ancestors and malformed or changed entries are misses, never trusted hits.
 
 ## Use the PSPublishModule cmdlet
 
@@ -349,7 +351,7 @@ That means an arbitrary existing automation script is unlikely to qualify for St
 
 PowerForge does not aim to reimplement the complete PowerShell language and runtime. Dynamic scope, providers, remoting, arbitrary command discovery, ETS adaptation, host interaction, and every coercion rule would effectively require another PowerShell engine. The useful goal is a well-specified typed subset that grows according to real-product impact, while unsupported behavior remains explicit and correct.
 
-A managed Hybrid executable is now implemented as that bridge: it packages the hosted runtime/source closure, registers eligible local functions as generated cmdlets from the typed assembly, and routes the retained entry script through the same package host. Its manifest records that runtime evaluation is allowed, identifies embedded source and dependency closure, and exposes static boundary counts. Runtime invocation-cost profiling, NativeAOT-hosted Hybrid delivery, and named-RID/cross-platform promotion remain open; the artifact must never be presented as Strict compilation.
+A managed Hybrid executable is now implemented as that bridge: it packages the hosted runtime/source closure, registers eligible local functions as generated cmdlets from the typed assembly, and routes the retained entry script through the same package host. Its manifest records that runtime evaluation is allowed, identifies embedded source and dependency closure, and exposes static boundary counts. The benchmark profiler measures actual typed/hosted crossings, reports nanoseconds per crossing and the estimated share of fine-boundary runtime attributable to crossing overhead, and emits a coarsening advisory. NativeAOT-hosted Hybrid delivery and named-RID promotion remain open; the artifact must never be presented as Strict compilation.
 
 ## Compiler architecture and feature growth
 
@@ -375,7 +377,7 @@ Every bound node carries:
 
 With that boundary, a feature is bound once and backends consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The former direct AST-to-C# emitter and its partial implementations were deleted after the existing behavior migrated; there is no compatibility switch that can silently bypass the IR.
 
-Canonical command and pipeline semantics are complete within their bounded provider contract. Active work is Milestone 14 target-host productization, measured Milestone 15 optimization, and Milestone 17 explainability. New command families still add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
+Canonical command and pipeline semantics are complete within their bounded provider contract. Milestones 14 and 15 are complete for the explicitly supported target profiles and measured optimization contract; Milestone 17 explainability and the Milestone 16 external provider SDK remain open. New command families still add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
 
 Every newly eligible language feature should satisfy the same acceptance packet:
 
@@ -426,39 +428,39 @@ The checked-in benchmark suite validates every result outside the timed operatio
 - the generated typed CLR method called inside a C# loop;
 - equivalent hand-written C#.
 
-The current Windows computation and startup reference run used PowerShell 7.6.4 on .NET 10.0.11, Windows x64, and an AMD64 32-logical-core machine. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion. The startup benchmark used two warmups and 10 measured samples. All rows have zero validation failures and pin clean candidate `dba44037` plus generated artifact hashes.
+The current Windows computation and startup reference packet used PowerShell 7.6.4, Windows x64, and an AMD64 32-logical-core machine. The optimized ReadyToRun lane pinned stable same-major .NET SDK 10.0.303. Duration rows are medians after three warmups, 12 measured samples, and minimum/maximum exclusion; startup used two warmups and 10 measured samples. Every row has zero validation failures and pins clean candidate `e04370df560903895bce89fe82db0fac6886ca94` plus generated artifact hashes.
 
-Windows run IDs are `20260823-155934-e6880101` (real function), `20260823-160044-e1a26fa0` (synthetic loop), `20260823-160046-152c8198` (indexed array), `20260823-160049-aab08ba9` (binary dispatch), and `20260823-160051-940517f3` (startup).
+Windows run IDs are `20260828-230045-34cfafa0` and `20260828-230159-880855c6` (real functions), `20260828-230238-15479ba0` (synthetic loop), `20260828-230241-cbae934e` (indexed array), `20260828-230243-0856337d` (dispatch and boundary profile), `20260828-230245-d71dea17` (startup), and `20260828-230257-f0c24c26` (local calls).
 
 | Workload | Calls | PowerShell | Typed CLR | Hand-written C# | Typed vs PowerShell | Typed vs C# |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 251.47 ms | 5.96 ms | 2.37 ms | **42.2x faster** | 2.51x slower |
-| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 234.80 ms | 5.89 ms | 2.56 ms | **39.9x faster** | 2.30x slower |
-| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 41.47 ms | 5.22 ms | 3.24 ms | **7.9x faster** | 1.61x slower |
-| Indexed sum over 1,000-element typed array | 1,000 | 58.73 ms | 6.06 ms | 3.05 ms | **9.7x faster** | 1.99x slower |
-
-The real PowerInfoBlox IPv4-to-PTR helper was measured separately on clean candidate `cf61babd` with 10,000 calls, two warmups, six measured samples, and minimum/maximum exclusion. Run `20260823-173135-cde90279` completed with zero validation failures: PowerShell took 102.81 ms, generated typed CLR 6.34 ms, and hand-written C# 4.41 ms. The generated method was **16.2x faster than PowerShell** and 1.44x slower than the hand-written implementation. Calling the tiny generated binary cmdlet 10,000 times took 356.46 ms, reinforcing that cmdlets should perform coarser work per dispatch.
+| Real `Get-AllowedAverageMs`, absolute-cap branch | 50,000 | 199.87 ms | 6.70 ms | 3.65 ms | **29.8x faster** | 1.84x slower |
+| Real `Get-AllowedAverageMs`, relative-cap branch | 50,000 | 213.38 ms | 6.24 ms | 3.20 ms | **34.2x faster** | 1.95x slower |
+| Real PowerInfoBlox IPv4-to-PTR helper | 50,000 | 375.33 ms | 15.25 ms | 7.87 ms | **24.6x faster** | 1.94x slower |
+| Synthetic triangular-number loop, 1,000 x 1,000 iterations | 1,000 | 32.54 ms | 5.08 ms | 3.92 ms | **6.4x faster** | 1.29x slower |
+| Indexed sum over 1,000-element typed array | 1,000 | 36.26 ms | 5.06 ms | 3.64 ms | **7.2x faster** | 1.39x slower |
 
 These results prove a benefit only for eligible computation executed as CLR code. They do not promise that an arbitrary script or a generated cmdlet call is faster.
 
-The repeatable `powershell-compilation-typed-local-calls` lane exercises one entry script and one dot-sourced helper through both `pwsh -File` and a Strict executable. A quick dirty-candidate smoke run (`20260824-093600-31e9f538`) used 2,000 helper calls and recorded 245.04 ms for PowerShell versus 37.89 ms for the typed executable, or 6.47x. It had zero validation failures, but it is directional development evidence rather than the clean release baseline above.
+The repeatable `powershell-compilation-typed-local-calls` lane exercises one entry script and one dot-sourced helper through both `pwsh -File` and a Strict executable. The clean run used 20,000 helper calls and recorded 406.69 ms for PowerShell versus 38.72 ms for the typed executable, or **10.5x**.
 
-The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 1,965.61 ms and 1,934.12 ms in the two 50,000-call real scenarios, versus 251.47 ms and 234.80 ms for the original function. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 49.86 ms versus 4.94 ms, a **10.1x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
+The binary-cmdlet lane includes PowerShell command lookup, parameter binding, pipeline setup, and `WriteObject` for every call. It took 2,160.89 ms and 2,113.14 ms in the two 50,000-call threshold scenarios, versus 199.87 ms and 213.38 ms for the original functions. The dispatch-amortization workload then performed equivalent work through 1,000 fine cmdlet calls or one coarse command: 45.91 ms versus 5.16 ms, an **8.9x** improvement. The useful product shape is a coarse cmdlet that performs substantial compiled work per invocation, not a tiny arithmetic cmdlet called in a PowerShell loop.
 
-Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 35.63 ms, `pwsh -File` took 205.75 ms, and the runtime-packaged EXE took 465.31 ms. The typed executable is **5.8x faster than `pwsh -File`** and **13.1x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
+Executable startup proves that typed compilation changes the product result rather than merely its extension. The PowerShell-free typed EXE took 50.95 ms, `pwsh -File` took 202.98 ms, and the runtime-packaged EXE took 693.40 ms. The typed executable is **4.0x faster than `pwsh -File`** and **13.6x faster than packaging** in this one-shot workload. Packaging remains valuable for broad script compatibility and delivery ergonomics, not startup speed.
 
-The optimization and footprint matrix below was rebuilt and executed with the same clean candidate `dba44037` and the `win-x64` runtime identifier.
+The optimization and footprint matrix below was rebuilt and executed with the same clean candidate and the `win-x64` runtime identifier. ReadyToRun remains a measured experiment rather than a selectable public target.
 
 | Windows x64 artifact | Bytes | Runtime model |
 | --- | ---: | --- |
-| Typed framework-dependent EXE | 177,358 | installed .NET |
-| Typed self-contained trimmed EXE | 12,912,947 | bundled trimmed .NET runtime |
-| Typed NativeAOT EXE | 1,313,792 | native, no .NET or PowerShell runtime required |
-| Packaged PowerShell EXE | 54,862,022 | embedded PowerShell runtime assets |
+| Typed framework-dependent EXE | 190,158 | installed .NET |
+| Typed ReadyToRun EXE | 57,344 | installed .NET; benchmark-only |
+| Typed self-contained trimmed EXE | 13,444,295 | bundled trimmed .NET runtime |
+| Typed NativeAOT EXE | 2,880,000 | native, no .NET or PowerShell runtime required |
+| Packaged PowerShell EXE | 54,709,527 | embedded PowerShell runtime assets |
 
-The bounded Linux x64 run used PowerShell 7.5.4 on a .NET 9 host, two warmups, six measured samples for computation, 1,000 real-function calls, and 100 loop/dispatch calls. The supported net8 benchmark artifact produced disclosed CS1701 reference-unification warnings under that intermediate host; all measured operations still validated with zero failures. Run IDs are `20260823-120204-58213403`, `20260823-120307-747e5a55`, `20260823-120317-8a323de6`, and `20260823-120327-7f23ef4c`, pinned to clean candidate `7f6a4160`.
+The Hybrid boundary profile measured 1,750 crossings at 13,059.6 ns per crossing with a 0.9778 estimated boundary-overhead ratio; the corresponding non-boundary work share was approximately 0.0222. It correctly advised coarsening the boundary or retaining hosted execution; this is workload evidence, not a universal cutoff.
 
-On Linux, coarse binary dispatch took 5.47 ms versus 337.55 ms for repeated fine calls (**61.7x**), typed EXE startup took 68.77 ms versus 204.92 ms for `pwsh -File` and 532.68 ms for packaging, and the artifacts were 86,058 bytes framework-dependent, 13,432,873 bytes trimmed self-contained, 1,710,440 bytes NativeAOT, and 45,368,774 bytes packaged. The Linux typed, trimmed, NativeAOT, and packaged executables were all executed successfully on Linux; this is runtime proof, not Windows cross-publish evidence.
+Target-host certification separately executed the same Strict `net10.0` framework-dependent and NativeAOT workload on Windows x64 and Ubuntu 24.04 x64. Both hosts produced exact Unicode output (`Zażółć-東京|résource-Łódź-東京|10`), rejected invalid arguments with exit code 1, preserved resources, and passed executable-format, architecture, import, permission, and dependency-closure inspection. Windows cancellation used process termination and Linux cancellation produced SIGTERM exit 143. Windows PowerShell 5.1 independently revalidated the Windows artifacts. macOS remains experimental because the approved EvoMini authentication path did not establish a session; no macOS support claim is inferred from cross-publishing.
 
 Run the same matrix locally:
 
@@ -466,7 +468,7 @@ Run the same matrix locally:
 Invoke-BenchmarkSuite `
     -Path .\Benchmarks\PowerShellCompilation\powershell-compilation.benchmark.ps1 `
     -Variable @{ IncludeOptimizedExecutables = $true } `
-    -RunMode standard
+    -RunMode local
 ```
 
 See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for the quick smoke command and lane definitions.

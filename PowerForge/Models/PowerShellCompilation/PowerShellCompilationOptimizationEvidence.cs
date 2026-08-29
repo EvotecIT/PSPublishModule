@@ -1,10 +1,10 @@
 namespace PowerForge;
 
-/// <summary>Deterministic evidence emitted by the bound-IR optimization pipeline.</summary>
+/// <summary>Deterministic evidence emitted by bound-IR rewrites, backend selections, and source instrumentation.</summary>
 public sealed class PowerShellCompilationOptimizationEvidence
 {
     /// <summary>Evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Pure constant expressions replaced with equivalent literals.</summary>
     public int ConstantExpressionsFolded { get; set; }
@@ -30,16 +30,27 @@ public sealed class PowerShellCompilationOptimizationEvidence
     /// <summary>Bound statements emitted with authored-source sequence mapping.</summary>
     public int SourceMappedStatements { get; set; }
 
-    /// <summary>Ordered optimizer passes enabled for the build.</summary>
+    /// <summary>Ordered immutable bound-IR rewrite passes enabled for the build.</summary>
     public string[] Passes { get; set; } =
     {
         "constant-folding",
         "dead-branch-elimination",
+        "identity-conversion-elimination"
+    };
+
+    /// <summary>Ordered backend lowering selections whose use is counted by this evidence.</summary>
+    public string[] BackendOptimizations { get; set; } =
+    {
         "allocation-reduction",
         "pipeline-stage-fusion",
         "command-region-coalescing",
         "specialized-collection-loops",
-        "cached-conversion-plans",
+        "cached-conversion-plans"
+    };
+
+    /// <summary>Ordered generated-artifact instrumentation enabled for the build.</summary>
+    public string[] Instrumentation { get; set; } =
+    {
         "authored-source-sequence-mapping"
     };
 

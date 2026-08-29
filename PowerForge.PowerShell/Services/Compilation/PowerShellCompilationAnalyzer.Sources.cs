@@ -31,19 +31,36 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
         string? outputDirectory = null)
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, null);
+
+    /// <summary>Analyzes the exact compilation graph and dependency lock for an explicit target contract.</summary>
+    public PowerShellCompilationPlan Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode mode,
+        string? targetFramework,
+        PowerShellCompilationResourceMode resourceMode,
+        IEnumerable<string>? includeResource,
+        IEnumerable<string>? excludeResource,
+        string? outputDirectory,
+        PowerShellCompilationTargetContract? targetContract)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
 
+        var target = targetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(targetContract);
+        if (target is not null && target.ArtifactKind != input.Kind)
+            throw new ArgumentException("The explicit PowerShell compilation target kind conflicts with the resolved input.", nameof(targetContract));
+        var capabilityMode = target?.Mode ?? (mode == PowerShellCompilationMode.Analyze ? input.Mode : mode);
+        if (target is not null && mode != PowerShellCompilationMode.Analyze && mode != target.Mode)
+            throw new ArgumentException("The explicit PowerShell compilation target mode conflicts with the requested analysis mode.", nameof(targetContract));
         var normalizedTargetFramework = new PowerShellCompilationSpec(
             input.SourcePath,
-            mode,
-            targetFramework: targetFramework ?? "net8.0").TargetFramework;
-        var capabilityMode = mode == PowerShellCompilationMode.Analyze ? input.Mode : mode;
+            target?.Mode ?? mode,
+            targetFramework: target?.TargetFramework ?? targetFramework ?? "net8.0").TargetFramework;
         var plan = AnalyzeFiles(
-            mode,
+            target?.Mode ?? mode,
             input.CompilationSourceFiles,
             input.ModuleRoot,
             normalizedTargetFramework,
@@ -65,12 +82,28 @@ public sealed partial class PowerShellCompilationAnalyzer
             input.CompilationSourceFiles,
             dependencies,
             normalizedTargetFramework);
+        if (target is not null)
+        {
+            dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
+                input.SourcePath,
+                input.ModuleManifestPath,
+                input.ModuleRoot,
+                input.Kind,
+                capabilityMode,
+                input.CompilationSourceFiles,
+                dependencies,
+                normalizedTargetFramework,
+                target.RuntimeIdentifier,
+                includeRuntimePack: target.ArtifactKind == PowerShellCompilationArtifactKind.Executable &&
+                                    target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent);
+        }
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
             plan.TargetFramework,
             dependencies,
-            dependencyGraph);
+            dependencyGraph,
+            target);
         return capabilityMode == PowerShellCompilationMode.Package
             ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
             : combined;
@@ -116,7 +149,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     file.Units,
                     file.Diagnostics.Concat(new[] { diagnostic }).ToArray());
             }).ToArray();
-            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph);
+            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph, plan.TargetContract);
         }
     }
 

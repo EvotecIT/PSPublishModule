@@ -1,5 +1,6 @@
 using PowerForge;
 using PowerForge.Cli;
+using System.Text.Json;
 
 internal static partial class Program
 {
@@ -12,7 +13,7 @@ internal static partial class Program
         }
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
+                new[] { "--path", "--target-contract", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -82,7 +83,24 @@ internal static partial class Program
             error = "A PowerShell file or directory path is required.";
             return false;
         }
-        PowerShellCompilationArtifactKind? kind = null;
+        PowerShellCompilationTargetContract? target = null;
+        var targetPath = TryGetOptionValue(args, "--target-contract");
+        if (!string.IsNullOrWhiteSpace(targetPath))
+        {
+            try
+            {
+                var fullTargetPath = Path.GetFullPath(targetPath.Trim().Trim('"'));
+                target = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(File.ReadAllText(fullTargetPath), CliJson.Options)
+                         ?? throw new InvalidDataException($"Target contract '{fullTargetPath}' was empty.");
+                target = PowerShellCompilationTargetContractService.Normalize(target);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+        PowerShellCompilationArtifactKind? kind = target?.ArtifactKind;
         var kindValue = TryGetOptionValue(args, "--kind");
         if (!string.IsNullOrWhiteSpace(kindValue))
         {
@@ -93,10 +111,27 @@ internal static partial class Program
             }
             kind = parsedKind;
         }
-        var modeValue = TryGetOptionValue(args, "--mode") ?? nameof(PowerShellCompilationMode.Analyze);
+        if (target is not null && kind != target.ArtifactKind)
+        {
+            error = "The explicit artifact kind conflicts with the target contract.";
+            return false;
+        }
+        var modeValue = TryGetOptionValue(args, "--mode") ?? target?.Mode.ToString() ?? nameof(PowerShellCompilationMode.Analyze);
         if (!Enum.TryParse<PowerShellCompilationMode>(modeValue, true, out var mode) || !Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
         {
             error = $"Unknown compilation mode '{modeValue}'.";
+            return false;
+        }
+        if (target is not null && mode != target.Mode)
+        {
+            error = "The explicit compilation mode conflicts with the target contract.";
+            return false;
+        }
+        var frameworkValue = TryGetOptionValue(args, "--framework");
+        if (target is not null && !string.IsNullOrWhiteSpace(frameworkValue) &&
+            !frameworkValue.Equals(target.TargetFramework, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "The explicit target framework conflicts with the target contract.";
             return false;
         }
         var resourceValue = TryGetOptionValue(args, "--resource-mode") ?? nameof(PowerShellCompilationResourceMode.Declared);
@@ -105,7 +140,7 @@ internal static partial class Program
             error = $"Unknown resource mode '{resourceValue}'. Use Declared, CompleteModule, or None.";
             return false;
         }
-        request = new PowerShellAnalysisRequest(path, kind, mode, resourceMode);
+        request = new PowerShellAnalysisRequest(path, kind, mode, resourceMode, target);
         error = string.Empty;
         return true;
     }
@@ -119,16 +154,17 @@ internal static partial class Program
         return new PowerShellCompilationAnalyzer().Analyze(
             resolved,
             request.Mode,
-            TryGetOptionValue(args, "--framework") ?? "net8.0",
+            request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? "net8.0",
             request.ResourceMode,
             GetOptionValues(args, "--include-resource"),
             GetOptionValues(args, "--exclude-resource"),
-            TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+            TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
+            request.TargetContract);
     }
 
     private static PowerShellCompilationExplanation CreatePowerShellExplanation(string[] args, PowerShellAnalysisRequest request)
     {
-        var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+        var targetFramework = request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? "net8.0";
         var resolved = new PowerShellCompilationInputResolver().Resolve(
             request.Path,
             request.Kind,
@@ -140,7 +176,8 @@ internal static partial class Program
             request.ResourceMode,
             GetOptionValues(args, "--include-resource"),
             GetOptionValues(args, "--exclude-resource"),
-            TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved));
+            TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
+            request.TargetContract);
         return request.Mode == PowerShellCompilationMode.Analyze
             ? PowerShellCompilationExplanationService.Create(plan)
             : PowerShellCompilationExplainShaper.CreateFinalExplanation(resolved, plan, targetFramework);
@@ -150,5 +187,6 @@ internal static partial class Program
         string Path,
         PowerShellCompilationArtifactKind? Kind,
         PowerShellCompilationMode Mode,
-        PowerShellCompilationResourceMode ResourceMode);
+        PowerShellCompilationResourceMode ResourceMode,
+        PowerShellCompilationTargetContract? TargetContract);
 }

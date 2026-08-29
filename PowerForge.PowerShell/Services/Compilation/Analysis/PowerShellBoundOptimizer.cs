@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-/// <summary>Runs deterministic, semantics-preserving rewrites over immutable bound IR.</summary>
+/// <summary>Runs deterministic rewrites and records backend-selection opportunities over immutable bound IR.</summary>
 internal sealed class PowerShellBoundOptimizer
 {
     private int _constantExpressionsFolded;

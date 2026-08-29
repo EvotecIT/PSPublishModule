@@ -582,6 +582,9 @@ New-BenchmarkSuite 'powershell-compilation-packaged-startup' -OutputRoot $output
     foreach ($entry in $optimizedExecutableEvidence.GetEnumerator()) {
         Add-BenchmarkMetadata "$($entry.Key)ExecutableSha256" $entry.Value.Sha256
         Add-BenchmarkMetadata "$($entry.Key)ExecutableBytes" $entry.Value.Bytes
+        if ($entry.Value.PSObject.Properties.Name -contains 'DotNetSdkVersion') {
+            Add-BenchmarkMetadata "$($entry.Key)DotNetSdkVersion" $entry.Value.DotNetSdkVersion
+        }
     }
     Set-BenchmarkPolicy -Warmup 2 -Iterations $(if ($quick) { 3 } else { 10 }) -Order Rotated -OutlierMode ExcludeMinMax
     Add-BenchmarkCase Startup @{ Expected = 150.0 }

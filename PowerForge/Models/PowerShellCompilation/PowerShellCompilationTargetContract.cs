@@ -192,25 +192,22 @@ public static class PowerShellCompilationTargetContractService
         contract.Architecture = contract.Architecture?.Trim() ?? string.Empty;
         var expectedOperatingSystem = GetRidPart(contract.RuntimeIdentifier, 0);
         var expectedArchitecture = GetRidPart(contract.RuntimeIdentifier, -1);
-        var expectedSupportLevel = GetSupportLevel(
-            contract.ArtifactKind,
-            contract.Mode,
-            contract.Deployment,
-            contract.TargetFramework,
-            contract.RuntimeIdentifier);
         if (!contract.OperatingSystem.Equals(expectedOperatingSystem, StringComparison.OrdinalIgnoreCase) ||
             !contract.Architecture.Equals(expectedArchitecture, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("PowerShell compilation target operating system or architecture conflicts with its runtime identifier.");
-        if (!contract.SupportLevel.Equals(expectedSupportLevel, StringComparison.Ordinal))
-            throw new InvalidOperationException("PowerShell compilation target support level conflicts with its runtime identifier.");
         contract.OperatingSystem = expectedOperatingSystem;
         contract.Architecture = expectedArchitecture;
-        contract.SupportLevel = expectedSupportLevel;
         var suppliedHash = contract.ContractSha256;
         contract.ContractSha256 = string.Empty;
         var actual = ComputeSha256(contract);
         if (!string.IsNullOrWhiteSpace(suppliedHash) && !suppliedHash.Equals(actual, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("PowerShell compilation target contract does not match its recorded SHA-256.");
+        contract.SupportLevel = GetSupportLevel(
+            contract.ArtifactKind,
+            contract.Mode,
+            contract.Deployment,
+            contract.TargetFramework,
+            contract.RuntimeIdentifier);
         contract.SchemaVersion = 2;
         contract.Explicit = true;
         contract.ContractSha256 = ComputeSha256(contract);

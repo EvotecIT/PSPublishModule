@@ -14,17 +14,11 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         var versionsRoot = Path.Combine(Path.GetFullPath(packageRoot!), packageId);
         if (!Directory.Exists(versionsRoot))
             throw new InvalidOperationException($"The reviewed runtime pack '{packageId}' is not restored in the configured NuGet package root.");
-        var frameworkMajor = ParseFrameworkMajor(framework);
-        var versionRoot = Directory.EnumerateDirectories(versionsRoot)
-            .Select(path => new { Path = path, Version = ParsePackageVersion(Path.GetFileName(path)) })
-            .Where(candidate => candidate.Version is not null && candidate.Version.Major == frameworkMajor)
-            .OrderByDescending(candidate => candidate.Version)
-            .ThenByDescending(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(candidate => candidate.Path)
-            .FirstOrDefault();
-        if (versionRoot is null)
-            throw new InvalidOperationException($"The reviewed runtime pack '{packageId}' has no restored version for '{framework}'.");
-        var version = Path.GetFileName(versionRoot);
+        _ = ParseFrameworkMajor(framework);
+        var version = PowerShellCompilationToolchainFingerprint.ResolveRuntimePackVersion(framework);
+        var versionRoot = Path.Combine(versionsRoot, version);
+        if (!Directory.Exists(versionRoot))
+            throw new InvalidOperationException($"The runtime pack selected by the active dotnet SDK is not restored: '{packageId}/{version}'.");
         var managedRoot = Path.Combine(versionRoot, "runtimes", runtimeIdentifier!, "lib", framework);
         if (!Directory.Exists(managedRoot))
             throw new InvalidOperationException($"The reviewed runtime pack '{packageId}/{version}' has no managed assets for '{framework}/{runtimeIdentifier}'.");
@@ -109,6 +103,4 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         return major;
     }
 
-    private static Version? ParsePackageVersion(string value)
-        => Version.TryParse(value.Split('-')[0], out var version) ? version : null;
 }

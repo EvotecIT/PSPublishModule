@@ -28,7 +28,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         };
     }
 
-    private static void ApplyExplicitTargetContract(PowerShellCompilationBuildSpec spec)
+    internal static void ApplyExplicitTargetContract(PowerShellCompilationBuildSpec spec)
     {
         if (spec.TargetContract is null) return;
         var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
@@ -93,14 +93,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationTargetContract target,
         PowerShellCompilationDependencyGraph dependencyGraph)
     {
-        var sdk = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Directory.GetCurrentDirectory(),
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
-        if (!sdk.Succeeded)
-            throw new InvalidOperationException("Unable to capture the exact dotnet SDK identity before compilation.");
-        var sdkVersion = sdk.StdOut.Trim();
+        var sdkVersion = PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version;
         WriteSdkSelection(workspace, sdkVersion);
         var workspaceSdk = new ProcessRunner().RunAsync(new ProcessRunRequest(
             "dotnet",

@@ -5,13 +5,13 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellAnalyzeUsage =
-        "Usage: powerforge powershell analyze <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+        "Usage: powerforge powershell analyze <path> [--target-contract <target.json>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
         "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
     private const string PowerShellExplainUsage =
-        "Usage: powerforge powershell explain <path> [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+        "Usage: powerforge powershell explain <path> [--target-contract <target.json>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
 
     private static int CommandPowerShell(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -85,6 +85,23 @@ internal static partial class Program
 
         try
         {
+            PowerShellCompilationTargetContract? targetContract = null;
+            var targetContractPath = TryGetOptionValue(args, "--target-contract");
+            if (!string.IsNullOrWhiteSpace(targetContractPath))
+            {
+                var fullTargetContractPath = Path.GetFullPath(targetContractPath.Trim().Trim('"'));
+                targetContract = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(
+                    File.ReadAllText(fullTargetContractPath),
+                    CliJson.Options)
+                    ?? throw new InvalidDataException($"Target contract '{fullTargetContractPath}' did not contain a contract.");
+                targetContract = PowerShellCompilationTargetContractService.Normalize(targetContract);
+                if (kindOverride.HasValue && kindOverride.Value != targetContract.ArtifactKind)
+                    return WritePowerShellError(outputJson, 2, "The explicit artifact kind conflicts with the target contract.", logger, "powershell.build");
+                if (modeOverride.HasValue && modeOverride.Value != targetContract.Mode)
+                    return WritePowerShellError(outputJson, 2, "The explicit compilation mode conflicts with the target contract.", logger, "powershell.build");
+                kindOverride = targetContract.ArtifactKind;
+                modeOverride = targetContract.Mode;
+            }
             var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
             var entryPoint = TryGetOptionValue(args, "--entry-point");
             var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
@@ -108,16 +125,6 @@ internal static partial class Program
                     File.ReadAllText(fullDependencyLockPath),
                     CliJson.Options)
                     ?? throw new InvalidDataException($"Dependency lock '{fullDependencyLockPath}' did not contain a graph.");
-            }
-            PowerShellCompilationTargetContract? targetContract = null;
-            var targetContractPath = TryGetOptionValue(args, "--target-contract");
-            if (!string.IsNullOrWhiteSpace(targetContractPath))
-            {
-                var fullTargetContractPath = Path.GetFullPath(targetContractPath.Trim().Trim('"'));
-                targetContract = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(
-                    File.ReadAllText(fullTargetContractPath),
-                    CliJson.Options)
-                    ?? throw new InvalidDataException($"Target contract '{fullTargetContractPath}' did not contain a contract.");
             }
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
@@ -209,7 +216,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
+                new[] { "--path", "--target-contract", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))

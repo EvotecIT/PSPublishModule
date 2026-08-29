@@ -306,6 +306,18 @@ public sealed class PowerShellCompilationPlan
         string? targetFramework = null,
         PowerShellCompilationDependency[]? dependencies = null,
         PowerShellCompilationDependencyGraph? dependencyGraph = null)
+        : this(mode, files, targetFramework, dependencies, dependencyGraph, null)
+    {
+    }
+
+    /// <summary>Creates an aggregate compilation plan for an explicit semantic and deployment target.</summary>
+    public PowerShellCompilationPlan(
+        PowerShellCompilationMode mode,
+        PowerShellCompilationFilePlan[] files,
+        string? targetFramework,
+        PowerShellCompilationDependency[]? dependencies,
+        PowerShellCompilationDependencyGraph? dependencyGraph,
+        PowerShellCompilationTargetContract? targetContract)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -314,6 +326,7 @@ public sealed class PowerShellCompilationPlan
         Files = files ?? Array.Empty<PowerShellCompilationFilePlan>();
         Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
         DependencyGraph = dependencyGraph;
+        TargetContract = targetContract;
         ResourceSummary = PowerShellCompilationResourceSummary.Create(Dependencies);
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
@@ -335,6 +348,9 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Locked dependency graph used for analysis and deployment evidence when input resolution supplied one.</summary>
     public PowerShellCompilationDependencyGraph? DependencyGraph { get; }
+
+    /// <summary>Normalized explicit target whose deployment inputs shaped this plan, when supplied.</summary>
+    public PowerShellCompilationTargetContract? TargetContract { get; }
 
     /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; }

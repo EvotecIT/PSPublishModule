@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace PowerForge.Tests;
@@ -353,6 +354,64 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var buildDocument = JsonDocument.Parse(build.StdOut);
             var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
             Assert.True(manifest.GetProperty("dependencyLockReviewed").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitTargetContractRoundTripsFromAnalyzeAndExplainIntoReviewedBuild()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Target Contract Tests", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "output");
+        var source = Path.Combine(root, "Target.ps1");
+        var targetPath = Path.Combine(root, "target.json");
+        var lockPath = Path.Combine(root, "lock.json");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(source, "param([int] $Value); return $Value");
+        var architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        var runtimeIdentifier = OperatingSystem.IsWindows() ? $"win-{architecture}" : OperatingSystem.IsLinux() ? $"linux-{architecture}" : $"osx-{architecture}";
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier,
+            selfContained: false,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: true);
+        File.WriteAllText(targetPath, JsonSerializer.Serialize(target));
+        try
+        {
+            var analyze = await RunCliAsync(
+                repositoryRoot,
+                $"powershell analyze \"{source}\" --target-contract \"{targetPath}\" --output json");
+            Assert.True(analyze.ExitCode == 0, FormatFailure("target-contract analyze", analyze));
+            using (var document = JsonDocument.Parse(analyze.StdOut))
+            {
+                var plan = document.RootElement.GetProperty("result");
+                Assert.Equal("Strict", plan.GetProperty("mode").GetString());
+                Assert.Equal("net10.0", plan.GetProperty("targetFramework").GetString());
+                Assert.Equal(runtimeIdentifier, plan.GetProperty("targetContract").GetProperty("runtimeIdentifier").GetString());
+                File.WriteAllText(lockPath, plan.GetProperty("dependencyGraph").GetRawText());
+            }
+
+            var explain = await RunCliAsync(
+                repositoryRoot,
+                $"powershell explain \"{source}\" --target-contract \"{targetPath}\" --output json");
+            Assert.True(explain.ExitCode == 0, FormatFailure("target-contract explain", explain));
+
+            var build = await RunCliAsync(
+                repositoryRoot,
+                $"powershell build \"{source}\" --target-contract \"{targetPath}\" --dependency-lock \"{lockPath}\" --out \"{output}\" --output json");
+            Assert.True(build.ExitCode == 0, FormatFailure("target-contract reviewed build", build));
+            using var buildDocument = JsonDocument.Parse(build.StdOut);
+            var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
+            Assert.True(manifest.GetProperty("dependencyLockReviewed").GetBoolean());
+            Assert.Equal(target.ContractSha256, manifest.GetProperty("targetContract").GetProperty("contractSha256").GetString());
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -10,6 +11,22 @@ internal static class PowerShellCompilationToolchainFingerprint
 
     internal static string ComputeSdkSha256(string sdkVersion)
     {
+        var selection = ResolveSelectedSdk();
+        if (!selection.Version.Equals(sdkVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not match requested provenance version '{sdkVersion}'.");
+        return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
+    }
+
+    internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
+    {
+        var versionRun = new ProcessRunner().RunAsync(new ProcessRunRequest(
+            "dotnet",
+            Directory.GetCurrentDirectory(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        if (!versionRun.Succeeded || string.IsNullOrWhiteSpace(versionRun.StdOut))
+            throw new InvalidOperationException("Unable to resolve the selected dotnet SDK version for PowerShell compilation.");
+        var sdkVersion = versionRun.StdOut.Trim();
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
             "dotnet",
             Directory.GetCurrentDirectory(),
@@ -31,7 +48,25 @@ internal static class PowerShellCompilationToolchainFingerprint
             .SingleOrDefault();
         if (sdkRoot is null || !Directory.Exists(sdkRoot))
             throw new InvalidOperationException($"Unable to resolve the selected dotnet SDK directory for version '{sdkVersion}'.");
-        return SdkHashes.GetOrAdd(sdkRoot, ComputeToolchainSha256);
+        return new PowerShellCompilationSdkSelection(sdkVersion, sdkRoot);
+    }
+
+    internal static string ResolveRuntimePackVersion(string targetFramework)
+    {
+        var selection = ResolveSelectedSdk();
+        var bundledVersionsPath = Path.Combine(selection.RootPath, "Microsoft.NETCoreSdk.BundledVersions.props");
+        if (!File.Exists(bundledVersionsPath))
+            throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not expose bundled runtime-pack metadata.");
+        var document = XDocument.Load(bundledVersionsPath, LoadOptions.None);
+        var framework = document.Descendants()
+            .Where(static element => element.Name.LocalName.Equals("KnownFrameworkReference", StringComparison.Ordinal))
+            .SingleOrDefault(element =>
+                string.Equals((string?)element.Attribute("Include"), "Microsoft.NETCore.App", StringComparison.Ordinal) &&
+                string.Equals((string?)element.Attribute("TargetFramework"), targetFramework, StringComparison.OrdinalIgnoreCase));
+        var version = (string?)framework?.Attribute("LatestRuntimeFrameworkVersion");
+        if (string.IsNullOrWhiteSpace(version))
+            throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' has no Microsoft.NETCore.App runtime-pack identity for '{targetFramework}'.");
+        return version!;
     }
 
     private static string ComputeToolchainSha256(string sdkRoot)
@@ -74,4 +109,16 @@ internal static class PowerShellCompilationToolchainFingerprint
 
     private static string Hex(IEnumerable<byte> bytes)
         => string.Concat(bytes.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+}
+
+internal sealed class PowerShellCompilationSdkSelection
+{
+    internal PowerShellCompilationSdkSelection(string version, string rootPath)
+    {
+        Version = version;
+        RootPath = rootPath;
+    }
+
+    internal string Version { get; }
+    internal string RootPath { get; }
 }

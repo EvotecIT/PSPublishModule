@@ -9,6 +9,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     public PowerShellCompilationDependencyGraph AnalyzeGraph(PowerShellCompilationBuildSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        PowerShellCompilationArtifactBuilder.ApplyExplicitTargetContract(spec);
         var runtimeIdentifier = PowerShellCompilationArtifactBuilder.ResolveRuntimeIdentifier(spec);
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
         var sourcePath = Path.GetFullPath(spec.SourcePath);

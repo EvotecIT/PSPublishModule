@@ -1,4 +1,5 @@
 using Xunit;
+using System.Runtime.InteropServices;
 
 namespace PowerForge.Tests;
 
@@ -131,6 +132,48 @@ public sealed class PowerShellCompilationDependencyGraphTests
         Assert.True(result.Manifest!.DependencyLockReviewed);
         Assert.Equal(spec.ExpectedDependencyLock.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
         Assert.False(string.IsNullOrWhiteSpace(spec.RuntimeIdentifier));
+    }
+
+    [Fact]
+    public void TargetContractOnlyPlannerProducesTheExactNativeAotLockConsumedByBuild()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("TargetContract.ps1", "param([int] $Value); return $Value");
+        var architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        var runtimeIdentifier = OperatingSystem.IsWindows() ? $"win-{architecture}" : OperatingSystem.IsLinux() ? $"linux-{architecture}" : $"osx-{architecture}";
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            "net10.0",
+            runtimeIdentifier,
+            selfContained: true,
+            singleFile: true,
+            PowerShellCompilationExecutableOptimization.NativeAot,
+            explicitContract: true);
+        var spec = new PowerShellCompilationBuildSpec(
+            script,
+            Path.Combine(fixture.Root, "target-contract-out"),
+            "Dependency.TargetContract",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict)
+        {
+            TargetContract = target
+        };
+
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var runtimePackVersion = PowerShellCompilationToolchainFingerprint.ResolveRuntimePackVersion("net10.0");
+        Assert.Contains(spec.ExpectedDependencyLock.Nodes, node =>
+            node.Identity.Provenance == "DotNetRuntimePack" &&
+            node.Identity.Source.Contains($"/{runtimePackVersion}/", StringComparison.Ordinal));
+        Assert.Equal("net10.0", spec.TargetFramework);
+        Assert.Equal(runtimeIdentifier, spec.RuntimeIdentifier);
+        Assert.Equal(PowerShellCompilationExecutableOptimization.NativeAot, spec.Optimization);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(spec.ExpectedDependencyLock.LockSha256, result.Manifest!.DependencyGraph!.LockSha256);
+        Assert.Equal(target.ContractSha256, result.Manifest.TargetContract!.ContractSha256);
     }
 
     [Fact]

@@ -32,7 +32,7 @@ Invoke-BenchmarkSuite `
     -RunMode quick
 ```
 
-Artifacts are written under `Ignore\Benchmarks\PowerShellCompilation`. The metadata pins SHA-256 values for the generated typed library, binary module, typed executable, and packaged executable used by the run, together with executable byte sizes.
+Artifacts are written under `Ignore\Benchmarks\PowerShellCompilation`. The metadata pins SHA-256 values for the generated typed library, binary module, typed executable, packaged executable, ReadyToRun experiment, trimmed executable, and NativeAOT executable used by the run, together with executable byte sizes. It also records the ReadyToRun SDK, actual Hybrid typed/hosted boundary crossings, nanoseconds per crossing, estimated boundary-overhead ratio, and the resulting coarsening advisory.
 
 The `powershell-compilation-typed-local-calls` lane uses the same entry script and helper file for both engines. The PowerShell lane dot-sources and dispatches the helper normally; the Strict lane compiles the dependency closure into direct static CLR calls. It therefore measures the product behavior unlocked by multi-file typed executables, including process startup, rather than an unrelated hand-written C# surrogate.
 
@@ -40,4 +40,28 @@ Do not interpret the binary-cmdlet lane as pure arithmetic throughput: it intent
 
 The same quick matrix can run under Linux PowerShell. A host whose PowerShell runtime sits on an intermediate .NET major may emit reference-unification warnings while loading the supported `net8.0` benchmark artifact; those warnings must be disclosed with the run rather than treated as a clean standard baseline.
 
-For a bounded cross-platform baseline, override `Calls`, `LoopCalls`, `Warmup`, and `Iterations`. Positional workload semantics remain identical; only the sample volume changes. `IncludeOptimizedExecutables` publishes and executes the checked-in `typed-executable-optimization.ps1` workload as both trimmed and NativeAOT single-file artifacts, then records their hashes and byte sizes in startup metadata.
+For a bounded cross-platform baseline, override `Calls`, `LoopCalls`, `Warmup`, and `Iterations`. Positional workload semantics remain identical; only the sample volume changes. `IncludeOptimizedExecutables` publishes and executes the checked-in `typed-executable-optimization.ps1` workload as ReadyToRun, trimmed, and NativeAOT artifacts, then records their SDK, hashes, and byte sizes in startup metadata. ReadyToRun is benchmark-only and does not become a public compilation target.
+
+## Target-host certification
+
+The target-host harness builds or validates the checked-in workload as Strict `net10.0` framework-dependent and NativeAOT executables. It verifies exact Unicode/resource output, invalid-argument behavior, cancellation, file permissions, executable format and architecture, native imports, and the reviewed delivered closure. A RID is promoted only after this harness runs on that RID's actual host.
+
+Build and execute on the current host:
+
+```powershell
+.\Benchmarks\PowerShellCompilation\Test-PowerShellCompilationTargetHost.ps1 `
+    -OutputDirectory .\Ignore\Benchmarks\PowerShellCompilation\target-host
+```
+
+Validate already-built artifacts from another supported PowerShell host, including Windows PowerShell 5.1:
+
+```powershell
+$artifactRoot = '.\Ignore\Benchmarks\PowerShellCompilation\target-host'
+powershell.exe -NoLogo -NoProfile -File `
+    .\Benchmarks\PowerShellCompilation\Test-PowerShellCompilationTargetHost.ps1 `
+    -OutputDirectory .\Ignore\Benchmarks\PowerShellCompilation\target-host-ps51 `
+    -ExistingManagedArtifactPath "$artifactRoot\PowerForge.TargetHost.Managed.win-x64.exe" `
+    -ExistingNativeAotArtifactPath "$artifactRoot\PowerForge.TargetHost.NativeAot.win-x64.exe"
+```
+
+The current promoted target set is deliberately small: Strict `net10.0` framework-dependent and NativeAOT executables on `win-x64` and `linux-x64`. Portable managed artifacts remain `PortableManaged`; other named frameworks, deployment models, operating systems, and architectures remain `Experimental` until their exact target-host matrix passes.
