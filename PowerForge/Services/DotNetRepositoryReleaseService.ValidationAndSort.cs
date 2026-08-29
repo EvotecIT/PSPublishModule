@@ -321,10 +321,14 @@ public sealed partial class DotNetRepositoryReleaseService
                     var versionRange = dependency.Attribute("version")?.Value?.Trim();
                     if (!DependencyTargetsSelectedVersion(versionRange, selectedPackage, expectedPackageId))
                         continue;
-                    var framework = dependency.Ancestors().FirstOrDefault(element =>
-                        element.Name.LocalName.Equals("group", StringComparison.OrdinalIgnoreCase))
-                        ?.Attribute("targetFramework")?.Value?.Trim();
-                    var effectiveFramework = string.IsNullOrWhiteSpace(framework) ? PublishDependency.AllFrameworks : framework!;
+                    var group = dependency.Ancestors().FirstOrDefault(element =>
+                        element.Name.LocalName.Equals("group", StringComparison.OrdinalIgnoreCase));
+                    var framework = group?.Attribute("targetFramework")?.Value?.Trim();
+                    var effectiveFramework = group is null
+                        ? PublishDependency.AllFrameworks
+                        : string.IsNullOrWhiteSpace(framework)
+                            ? PublishDependency.FallbackFramework
+                            : framework!;
                     dependencies[dependencyId + "\n" + effectiveFramework] = new PublishDependency(dependencyId, effectiveFramework);
                 }
             }
@@ -355,8 +359,9 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => Path.GetFullPath(entry.Value.CsprojPath),
             entry => entry.Key,
             StringComparer.OrdinalIgnoreCase);
-        var documents = LoadPlannedDocuments(project.CsprojPath);
-        var frameworks = ReadPlannedTargetFrameworks(documents, configuration);
+        var documents = LoadPlannedDocuments(project.CsprojPath, configuration);
+        var outerProperties = ReadPlannedProperties(documents, configuration, targetFramework: null);
+        var frameworks = ReadPlannedTargetFrameworks(outerProperties);
         var evaluations = frameworks.Length == 0 ? new string?[] { null } : frameworks.Cast<string?>().ToArray();
         var dependencies = new Dictionary<string, PublishDependency>(StringComparer.OrdinalIgnoreCase);
         foreach (var targetFramework in evaluations)
@@ -364,7 +369,7 @@ public sealed partial class DotNetRepositoryReleaseService
             var properties = ReadPlannedProperties(documents, configuration, targetFramework);
             foreach (var reference in documents.SelectMany(document => document.Descendants()).Where(element =>
                          element.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase) &&
-                         IsPlannedItemActive(element, configuration, targetFramework) &&
+                         IsPlannedItemActive(element, properties) &&
                          !IsPrivateReference(element)))
             {
                 var include = reference.Attribute("Include")?.Value?.Trim();
@@ -373,17 +378,18 @@ public sealed partial class DotNetRepositoryReleaseService
                 include = ExpandPlannedProperties(include!, properties);
                 if (include.IndexOf("$(", StringComparison.Ordinal) >= 0)
                     continue;
-                var fullPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(project.CsprojPath)!, include));
+                var fullPath = Path.GetFullPath(Path.Combine(GetPlannedElementDirectory(reference, project.CsprojPath), include));
                 if (selectedProjectPaths.TryGetValue(fullPath, out var packageId))
                     AddPlannedDependency(dependencies, packageId, targetFramework);
             }
 
             foreach (var reference in documents.SelectMany(document => document.Descendants()).Where(element =>
                          element.Name.LocalName.Equals("PackageReference", StringComparison.OrdinalIgnoreCase) &&
-                         IsPlannedItemActive(element, configuration, targetFramework) &&
+                         IsPlannedItemActive(element, properties) &&
                          !IsPrivateReference(element)))
             {
-                var packageId = (reference.Attribute("Include") ?? reference.Attribute("Update"))?.Value?.Trim();
+                // Update changes metadata on an existing item; it does not introduce a package.
+                var packageId = reference.Attribute("Include")?.Value?.Trim();
                 if (string.IsNullOrWhiteSpace(packageId))
                     continue;
                 var effectivePackageId = ExpandPlannedProperties(packageId!, properties);
@@ -411,22 +417,22 @@ public sealed partial class DotNetRepositoryReleaseService
         dependencies[packageId + "\n" + framework] = new PublishDependency(packageId, framework);
     }
 
-    private static string[] ReadPlannedTargetFrameworks(IEnumerable<XDocument> documents, string? configuration)
-        => documents.SelectMany(document => document.Descendants())
-            .Where(element =>
-                (element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase) ||
-                 element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase)) &&
-                ConditionMatches(element.Parent?.Attribute("Condition")?.Value, configuration, null) &&
-                ConditionMatches(element.Attribute("Condition")?.Value, configuration, null))
-            .SelectMany(element => element.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+    private static string[] ReadPlannedTargetFrameworks(IReadOnlyDictionary<string, string> properties)
+    {
+        var value = properties.TryGetValue("TargetFrameworks", out var frameworks) && !string.IsNullOrWhiteSpace(frameworks)
+            ? frameworks
+            : properties.TryGetValue("TargetFramework", out var framework) ? framework : string.Empty;
+        return ExpandPlannedProperties(value, properties)
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(value => value.Trim())
             .Where(value => value.Length > 0 && value.IndexOf("$(", StringComparison.Ordinal) < 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
-    private static bool IsPlannedItemActive(XElement element, string? configuration, string? targetFramework)
-        => ConditionMatches(element.Parent?.Attribute("Condition")?.Value, configuration, targetFramework) &&
-           ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework);
+    private static bool IsPlannedItemActive(XElement element, IReadOnlyDictionary<string, string> properties)
+        => ConditionMatches(element.Parent?.Attribute("Condition")?.Value, properties) &&
+           ConditionMatches(element.Attribute("Condition")?.Value, properties);
 
     private static IReadOnlyDictionary<string, string> ReadPlannedProperties(
         IEnumerable<XDocument> documents,
@@ -440,10 +446,10 @@ public sealed partial class DotNetRepositoryReleaseService
         };
         foreach (var group in documents.SelectMany(document => document.Descendants()).Where(element =>
                      element.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
-                     ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework)))
+                     ConditionMatches(element.Attribute("Condition")?.Value, properties)))
         {
             foreach (var property in group.Elements().Where(element =>
-                         ConditionMatches(element.Attribute("Condition")?.Value, configuration, targetFramework)))
+                         ConditionMatches(element.Attribute("Condition")?.Value, properties)))
             {
                 properties[property.Name.LocalName] = ExpandPlannedProperties(property.Value.Trim(), properties);
             }
@@ -455,7 +461,7 @@ public sealed partial class DotNetRepositoryReleaseService
         => Regex.Replace(value, @"\$\((?<name>[^)]+)\)", match =>
             properties.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
 
-    private static IReadOnlyList<XDocument> LoadPlannedDocuments(string projectPath)
+    private static IReadOnlyList<XDocument> LoadPlannedDocuments(string projectPath, string? configuration)
     {
         var documents = new List<XDocument>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -463,10 +469,10 @@ public sealed partial class DotNetRepositoryReleaseService
         var directoryBuildProps = FindNearestBuildFile(directory, "Directory.Build.props");
         var directoryBuildTargets = FindNearestBuildFile(directory, "Directory.Build.targets");
         if (directoryBuildProps is not null)
-            LoadPlannedDocument(directoryBuildProps, documents, visited);
-        LoadPlannedDocument(Path.GetFullPath(projectPath), documents, visited);
+            LoadPlannedDocument(directoryBuildProps, Path.GetFullPath(projectPath), configuration, documents, visited);
+        LoadPlannedDocument(Path.GetFullPath(projectPath), Path.GetFullPath(projectPath), configuration, documents, visited);
         if (directoryBuildTargets is not null)
-            LoadPlannedDocument(directoryBuildTargets, documents, visited);
+            LoadPlannedDocument(directoryBuildTargets, Path.GetFullPath(projectPath), configuration, documents, visited);
         return documents;
     }
 
@@ -483,42 +489,69 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static void LoadPlannedDocument(
         string path,
+        string projectPath,
+        string? configuration,
         ICollection<XDocument> documents,
         ISet<string> visited)
     {
         var fullPath = Path.GetFullPath(path);
         if (!visited.Add(fullPath) || !File.Exists(fullPath))
             return;
-        var document = XDocument.Load(fullPath, LoadOptions.PreserveWhitespace);
+        var document = XDocument.Load(fullPath, LoadOptions.PreserveWhitespace | LoadOptions.SetBaseUri);
         documents.Add(document);
         var directory = Path.GetDirectoryName(fullPath)!;
+        var importProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Configuration"] = configuration ?? string.Empty,
+            ["MSBuildProjectDirectory"] = Path.GetDirectoryName(projectPath)!,
+            ["MSBuildProjectFullPath"] = projectPath,
+            ["MSBuildThisFileDirectory"] = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
+            ["MSBuildThisFileFullPath"] = fullPath,
+            ["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath)
+        };
+        foreach (var group in document.Descendants().Where(element =>
+                     element.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                     ConditionMatches(element.Attribute("Condition")?.Value, importProperties)))
+        {
+            foreach (var property in group.Elements().Where(element =>
+                         ConditionMatches(element.Attribute("Condition")?.Value, importProperties)))
+            {
+                importProperties[property.Name.LocalName] = ExpandPlannedProperties(property.Value.Trim(), importProperties);
+            }
+        }
         foreach (var import in document.Descendants().Where(element =>
                      element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
         {
             var importedPath = import.Attribute("Project")?.Value?.Trim();
-            if (string.IsNullOrWhiteSpace(importedPath) || importedPath!.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            if (string.IsNullOrWhiteSpace(importedPath) || !ConditionMatches(import.Attribute("Condition")?.Value, importProperties))
                 continue;
-            var candidate = Path.GetFullPath(Path.Combine(directory, importedPath!));
+            importedPath = ExpandPlannedProperties(importedPath!, importProperties);
+            if (importedPath.IndexOf("$(", StringComparison.Ordinal) >= 0 || importedPath.IndexOfAny(new[] { '*', '?' }) >= 0)
+                continue;
+            var candidate = Path.GetFullPath(Path.Combine(directory, importedPath));
             if (File.Exists(candidate))
-                LoadPlannedDocument(candidate, documents, visited);
+                LoadPlannedDocument(candidate, projectPath, configuration, documents, visited);
         }
     }
 
-    private static bool ConditionMatches(string? condition, string? configuration, string? targetFramework)
+    private static bool ConditionMatches(string? condition, IReadOnlyDictionary<string, string> properties)
     {
         if (string.IsNullOrWhiteSpace(condition))
             return true;
 
-        var expanded = ExpandPlannedProperties(condition!, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Configuration"] = configuration ?? string.Empty,
-            ["TargetFramework"] = targetFramework ?? string.Empty
-        });
+        var expanded = ExpandPlannedProperties(condition!, properties);
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
             return true;
 
         var orBranches = Regex.Split(expanded, @"\s+[Oo][Rr]\s+");
         return orBranches.Any(branch => Regex.Split(branch, @"\s+[Aa][Nn][Dd]\s+").All(EvaluateSimpleCondition));
+    }
+
+    private static string GetPlannedElementDirectory(XElement element, string projectPath)
+    {
+        if (Uri.TryCreate(element.BaseUri, UriKind.Absolute, out var sourceUri) && sourceUri.IsFile)
+            return Path.GetDirectoryName(sourceUri.LocalPath)!;
+        return Path.GetDirectoryName(projectPath)!;
     }
 
     private static bool EvaluateSimpleCondition(string condition)
@@ -586,6 +619,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private sealed class PublishDependency
     {
         internal const string AllFrameworks = "*";
+        internal const string FallbackFramework = "<fallback>";
 
         internal PublishDependency(string packageId, string framework)
         {

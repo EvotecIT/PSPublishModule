@@ -209,6 +209,106 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
     }
 
+    [Fact]
+    public void SortProjectsForPublish_TreatsTargetlessDependencyGroupAsFrameworkFallback()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var app = workspace.AddProject("App", dependencyGroups: new Dictionary<string, string[]>
+        {
+            [string.Empty] = ["Shared"],
+            ["net8.0"] = []
+        });
+        var shared = workspace.AddProject("Shared", dependencyGroups: new Dictionary<string, string[]>
+        {
+            ["net8.0"] = ["App"]
+        });
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app]);
+
+        Assert.Equal(2, ordered.Count);
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningUsesProjectPropertiesInItemConditions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><UseShared>false</UseShared></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" Condition="'$(UseShared)' == 'true'" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningExpandsPropertyBasedTargetFrameworks()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><SupportedFrameworks>net8.0;net472</SupportedFrameworks><TargetFrameworks>$(SupportedFrameworks)</TargetFrameworks></PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningResolvesMsBuildThisFileDirectoryImports()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        var buildDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "build"));
+        File.WriteAllText(Path.Combine(buildDirectory.FullName, "dependencies.props"), """
+<Project><ItemGroup><ProjectReference Include="../../Shared/Shared.csproj" /></ItemGroup></Project>
+""");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="$(MSBuildThisFileDirectory)build/dependencies.props" />
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningDoesNotCreateEdgesFromPackageReferenceUpdates()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Update="Shared" Version="[1.0.0]" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
     private sealed class PublishOrderWorkspace : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "powerforge-publish-order", Guid.NewGuid().ToString("N"));
