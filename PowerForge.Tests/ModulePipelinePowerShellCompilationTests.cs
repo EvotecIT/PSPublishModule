@@ -152,7 +152,8 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{strictName}}' `
                 -StagingPath '{{EscapePowerShellLiteral(strictStaging)}}' -KeepStaging -SkipInstall -NoInteractive -Quiet -PassThru -Settings {
                     New-ConfigurationBuild -Enable -CompilePowerShell -PowerShellCompilationMode Strict `
-                        -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationAllowUnreviewedDependencies
+                        -PowerShellCompilationTargetFramework net8.0 -PowerShellCompilationAllowUnreviewedDependencies `
+                        -PowerShellCompilationEmitIrSnapshots
                 } | Out-Null
             try {
                 Build-Module -Path '{{EscapePowerShellLiteral(testRoot)}}' -ModuleName '{{rejectedName}}' `
@@ -174,6 +175,11 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Assert.True(File.Exists(Path.Combine(hybridStaging, hybridName + ".dll")));
             Assert.True(File.Exists(Path.Combine(hybridStaging, "README.md")));
             Assert.True(File.Exists(Path.Combine(strictStaging, strictName + ".dll")));
+            var strictEvidence = ReadCompilationEvidence(Path.Combine(strictStaging, strictName + ".powerforge-compilation.json"));
+            Assert.True(strictEvidence.IrSnapshots?.Emitted, JsonSerializer.Serialize(strictEvidence.IrSnapshots));
+            Assert.True(
+                File.Exists(Path.Combine(strictStaging, strictName + ".powerforge-ir.json")),
+                "Staged files: " + string.Join(", ", Directory.EnumerateFiles(strictStaging, "*", SearchOption.AllDirectories).Select(path => Path.GetRelativePath(strictStaging, path))));
             Assert.True(File.Exists(rejectionMarker));
             Assert.Contains("compilation failed", File.ReadAllText(rejectionMarker), StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(Path.Combine(rejectedStaging, rejectedName + ".dll")));
@@ -294,7 +300,8 @@ public sealed class ModulePipelinePowerShellCompilationTests
                             IncludeResource = new[] { "README.md", "Assets/metadata.txt" },
                             ExcludeResource = new[] { "excluded.txt" },
                             AllowUnreviewedDependencies = true,
-                            UseBuildCache = true
+                            UseBuildCache = true,
+                            EmitIrSnapshots = true
                         }
                     }
                 },
@@ -416,6 +423,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
             Assert.False(File.Exists(Path.Combine(stagingRoot, "excluded.txt")));
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-module-compilation.json")));
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.json")));
+            Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-ir.json")));
             Assert.True(File.Exists(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.p7s")));
             AssertPortableEvidence(
                 ReadCompilationEvidence(Path.Combine(stagingRoot, moduleName + ".powerforge-compilation.json")),
@@ -503,6 +511,11 @@ public sealed class ModulePipelinePowerShellCompilationTests
                 var contractError = Assert.Throws<InvalidOperationException>(() => new ModulePipelineRunner(new NullLogger()).Run(spec));
                 Assert.Contains("compilation contract", contractError.Message, StringComparison.Ordinal);
                 compilationConfiguration.IncludeResource = new[] { "README.md", "Assets/metadata.txt" };
+
+                compilationConfiguration.EmitIrSnapshots = false;
+                var irContractError = Assert.Throws<InvalidOperationException>(() => new ModulePipelineRunner(new NullLogger()).Run(spec));
+                Assert.Contains("compilation contract", irContractError.Message, StringComparison.Ordinal);
+                compilationConfiguration.EmitIrSnapshots = true;
 
                 spec.Build.Version = "2.0.0";
                 var releasePlanError = Assert.Throws<InvalidOperationException>(() => new ModulePipelineRunner(new NullLogger()).Run(spec));

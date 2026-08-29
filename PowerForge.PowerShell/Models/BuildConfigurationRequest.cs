@@ -136,6 +136,10 @@ internal sealed class BuildConfigurationRequest
     public bool PowerShellCompilationUseBuildCache { get; set; }
     public bool PowerShellCompilationBuildCacheDirectorySpecified { get; set; }
     public string? PowerShellCompilationBuildCacheDirectory { get; set; }
+    public bool PowerShellCompilationEmitIrSnapshotsSpecified { get; set; }
+    public bool PowerShellCompilationEmitIrSnapshots { get; set; }
+    public bool PowerShellCompilationExpectedPublicAbiSha256Specified { get; set; }
+    public string? PowerShellCompilationExpectedPublicAbiSha256 { get; set; }
     public bool PowerShellCompilationDependencyLockSpecified { get; set; }
     public PowerShellCompilationDependencyGraph? PowerShellCompilationDependencyLock { get; set; }
     public bool PowerShellCompilationAllowUnreviewedDependenciesSpecified { get; set; }

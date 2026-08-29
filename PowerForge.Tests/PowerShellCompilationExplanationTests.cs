@@ -127,4 +127,33 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
         Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
     }
+
+    [Fact]
+    public void SemanticFingerprintIgnoresRelocationAndDeclarationOrderButPreservesParameterOrder()
+    {
+        var firstRoot = Path.Combine(Path.GetTempPath(), "PowerForge.SemanticFingerprint", Guid.NewGuid().ToString("N"));
+        var secondRoot = Path.Combine(Path.GetTempPath(), "PowerForge.SemanticFingerprint", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(firstRoot);
+        Directory.CreateDirectory(secondRoot);
+        try
+        {
+            var firstPath = Path.Combine(firstRoot, "input.psm1");
+            var secondPath = Path.Combine(secondRoot, "input.psm1");
+            File.WriteAllText(firstPath, "function Get-First { param([int] $Left, [string] $Right) $Left }; function Get-Second { 2 }");
+            File.WriteAllText(secondPath, "function Get-Second { 2 }; function Get-First { param([int] $Left, [string] $Right) $Left }");
+
+            string Fingerprint(string path) => PowerShellCompilationExplanationService.Create(
+                new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Strict, targetFramework: "net8.0")))
+                .SemanticFingerprintSha256;
+
+            Assert.Equal(Fingerprint(firstPath), Fingerprint(secondPath));
+            File.WriteAllText(secondPath, "function Get-Second { 2 }; function Get-First { param([string] $Right, [int] $Left) $Left }");
+            Assert.NotEqual(Fingerprint(firstPath), Fingerprint(secondPath));
+        }
+        finally
+        {
+            try { Directory.Delete(firstRoot, recursive: true); } catch { }
+            try { Directory.Delete(secondRoot, recursive: true); } catch { }
+        }
+    }
 }

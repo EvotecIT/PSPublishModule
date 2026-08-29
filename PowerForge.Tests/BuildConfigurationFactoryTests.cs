@@ -123,6 +123,10 @@ public sealed class BuildConfigurationFactoryTests
             PowerShellCompilationTargetFramework = "net10.0",
             PowerShellCompilationIncludeResourceSpecified = true,
             PowerShellCompilationIncludeResource = new[] { "assets/**" },
+            PowerShellCompilationEmitIrSnapshotsSpecified = true,
+            PowerShellCompilationEmitIrSnapshots = true,
+            PowerShellCompilationExpectedPublicAbiSha256Specified = true,
+            PowerShellCompilationExpectedPublicAbiSha256 = new string('a', 64),
             PowerShellCompilationAllowUnreviewedDependenciesSpecified = true,
             PowerShellCompilationAllowUnreviewedDependencies = true
         });
@@ -135,6 +139,8 @@ public sealed class BuildConfigurationFactoryTests
         Assert.Equal(new[] { "assets/**" }, compilation.IncludeResource);
         Assert.True(compilation.AllowUnreviewedDependencies);
         Assert.True(compilation.UseBuildCache);
+        Assert.True(compilation.EmitIrSnapshots);
+        Assert.Equal(new string('a', 64), compilation.ExpectedPublicAbiSha256);
     }
 
     [Fact]

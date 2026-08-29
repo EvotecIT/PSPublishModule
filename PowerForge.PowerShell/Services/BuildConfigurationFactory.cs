@@ -116,6 +116,8 @@ internal sealed class BuildConfigurationFactory
            request.PowerShellCompilationExcludeResourceSpecified ||
            request.PowerShellCompilationUseBuildCacheSpecified ||
            request.PowerShellCompilationBuildCacheDirectorySpecified ||
+           request.PowerShellCompilationEmitIrSnapshotsSpecified ||
+           request.PowerShellCompilationExpectedPublicAbiSha256Specified ||
            request.PowerShellCompilationDependencyLockSpecified ||
            request.PowerShellCompilationAllowUnreviewedDependenciesSpecified ||
            request.PowerShellCompilationTimeoutSecondsSpecified;
@@ -131,6 +133,8 @@ internal sealed class BuildConfigurationFactory
             throw new ArgumentOutOfRangeException(nameof(request), "PowerShellCompilationTimeoutSeconds must be at least 1.");
         if (request.PowerShellCompilationDependencyLockSpecified && request.PowerShellCompilationAllowUnreviewedDependencies)
             throw new ArgumentException("PowerShellCompilationDependencyLock and PowerShellCompilationAllowUnreviewedDependencies are mutually exclusive.", nameof(request));
+        if (!string.IsNullOrWhiteSpace(request.PowerShellCompilationExpectedPublicAbiSha256) && mode != PowerShellCompilationMode.Strict)
+            throw new ArgumentException("PowerShellCompilationExpectedPublicAbiSha256 requires Strict mode.", nameof(request));
 
         return new PowerShellModuleCompilationConfiguration
         {
@@ -146,6 +150,8 @@ internal sealed class BuildConfigurationFactory
                 ? request.PowerShellCompilationUseBuildCache
                 : true,
             BuildCacheDirectory = request.PowerShellCompilationBuildCacheDirectory,
+            EmitIrSnapshots = request.PowerShellCompilationEmitIrSnapshots,
+            ExpectedPublicAbiSha256 = request.PowerShellCompilationExpectedPublicAbiSha256?.Trim(),
             DependencyLock = request.PowerShellCompilationDependencyLock,
             AllowUnreviewedDependencies = request.PowerShellCompilationAllowUnreviewedDependencies,
             TimeoutSeconds = request.PowerShellCompilationTimeoutSecondsSpecified

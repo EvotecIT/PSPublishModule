@@ -123,6 +123,14 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     [Parameter]
     public SwitchParameter EmitSource { get; set; }
 
+    /// <summary>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</summary>
+    [Parameter]
+    public SwitchParameter EmitIrSnapshots { get; set; }
+
+    /// <summary>Reviewed public ABI SHA-256 that the generated artifact must match.</summary>
+    [Parameter]
+    public string? ExpectedPublicAbiSha256 { get; set; }
+
     /// <summary>Maximum restore and compile time in seconds.</summary>
     [Parameter]
     [ValidateRange(1, int.MaxValue)]
@@ -192,6 +200,8 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             SigningTimeoutSeconds = SigningTimeoutSeconds,
             KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
             EmitSource = EmitSource.IsPresent,
+            EmitIrSnapshots = EmitIrSnapshots.IsPresent,
+            ExpectedPublicAbiSha256 = ExpectedPublicAbiSha256,
             TimeoutSeconds = TimeoutSeconds,
             ExpectedDependencyLock = DependencyLock,
             AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent

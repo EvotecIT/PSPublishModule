@@ -8,7 +8,7 @@ namespace PowerForge;
 /// <summary>Converts a completed script-module staging tree into a generated binary-module staging tree.</summary>
 internal sealed class PowerShellModuleCompilationIntegrator
 {
-    private const int CheckpointSchemaVersion = 3;
+    private const int CheckpointSchemaVersion = 4;
 
     public (ModuleBuildResult BuildResult, PowerShellModuleCompilationResult CompilationResult) Compile(
         ModuleBuildResult buildResult,
@@ -52,6 +52,8 @@ internal sealed class PowerShellModuleCompilationIntegrator
                 TargetFramework = configuration.TargetFramework,
                 UseBuildCache = configuration.UseBuildCache,
                 BuildCacheDirectory = configuration.BuildCacheDirectory,
+                EmitIrSnapshots = configuration.EmitIrSnapshots,
+                ExpectedPublicAbiSha256 = configuration.ExpectedPublicAbiSha256,
                 ExpectedDependencyLock = configuration.DependencyLock,
                 AllowUnreviewedDependencyResolution = configuration.AllowUnreviewedDependencies,
                 TimeoutSeconds = configuration.TimeoutSeconds
@@ -140,6 +142,8 @@ internal sealed class PowerShellModuleCompilationIntegrator
         if (!(checkpoint.ExcludeResource ?? Array.Empty<string>()).SequenceEqual(NormalizePatterns(configuration.ExcludeResource), StringComparer.Ordinal)) contractMismatches.Add("excluded resources");
         if (!string.Equals(checkpoint.DependencyLockSha256, configuration.DependencyLock?.LockSha256 ?? string.Empty, StringComparison.OrdinalIgnoreCase)) contractMismatches.Add("dependency lock");
         if (checkpoint.AllowUnreviewedDependencies != configuration.AllowUnreviewedDependencies) contractMismatches.Add("dependency review policy");
+        if (checkpoint.EmitIrSnapshots != configuration.EmitIrSnapshots) contractMismatches.Add("IR snapshot policy");
+        if (!string.Equals(checkpoint.ExpectedPublicAbiSha256, configuration.ExpectedPublicAbiSha256 ?? string.Empty, StringComparison.OrdinalIgnoreCase)) contractMismatches.Add("expected public ABI");
         if (contractMismatches.Count > 0)
             throw new InvalidOperationException(
                 $"Reusable compiled staging does not match the requested PowerShell compilation contract: {string.Join(", ", contractMismatches)}.");
@@ -239,6 +243,8 @@ internal sealed class PowerShellModuleCompilationIntegrator
             ExcludeResource = NormalizePatterns(configuration.ExcludeResource),
             DependencyLockSha256 = configuration.DependencyLock?.LockSha256 ?? string.Empty,
             AllowUnreviewedDependencies = configuration.AllowUnreviewedDependencies,
+            EmitIrSnapshots = configuration.EmitIrSnapshots,
+            ExpectedPublicAbiSha256 = configuration.ExpectedPublicAbiSha256 ?? string.Empty,
             StagingInputSha256 = result.StagingInputSha256,
             SigningCertificateThumbprint = signing is null
                 ? string.Empty
@@ -355,6 +361,11 @@ internal sealed class PowerShellModuleCompilationIntegrator
         if (manifest.DependencyGraph is not null)
             PowerShellCompilationDependencyLockHasher.EnsureValid(manifest.DependencyGraph, "canonical compilation evidence");
         PowerShellCompilationReproductionEvidenceBuilder.Validate(manifest);
+        if (manifest.IrSnapshots?.Emitted != configuration.EmitIrSnapshots)
+            throw new InvalidOperationException("Reusable compiled staging IR snapshot evidence does not match the requested compilation contract.");
+        if (!string.IsNullOrWhiteSpace(configuration.ExpectedPublicAbiSha256) &&
+            !string.Equals(manifest.PublicAbi?.Sha256, configuration.ExpectedPublicAbiSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Reusable compiled staging public ABI does not match the requested compilation contract.");
         if (configuration.DependencyLock is not null &&
             !string.Equals(
                 manifest.DependencyGraph?.LockSha256,
@@ -718,6 +729,8 @@ internal sealed class PowerShellModuleCompilationIntegrator
         public string[] ExcludeResource { get; set; } = Array.Empty<string>();
         public string DependencyLockSha256 { get; set; } = string.Empty;
         public bool AllowUnreviewedDependencies { get; set; }
+        public bool EmitIrSnapshots { get; set; }
+        public string ExpectedPublicAbiSha256 { get; set; } = string.Empty;
         public string StagingInputSha256 { get; set; } = string.Empty;
         public string SigningCertificateThumbprint { get; set; } = string.Empty;
         public CheckpointFile[] Files { get; set; } = Array.Empty<CheckpointFile>();

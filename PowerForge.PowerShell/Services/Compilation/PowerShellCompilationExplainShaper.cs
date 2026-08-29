@@ -42,7 +42,8 @@ public static class PowerShellCompilationExplainShaper
                 Array.Empty<PowerShellCompilationDiagnostic>(),
                 input.CompilationSourceFiles,
                 lifecycleSources: null,
-                optimization: executable.Optimization);
+                optimization: executable.Optimization,
+                irSnapshots: executable.IrSnapshots);
         }
 
         var transpiler = new PowerShellTypedCompilationTranspiler();

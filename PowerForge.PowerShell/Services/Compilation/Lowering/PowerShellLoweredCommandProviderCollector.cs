@@ -4,10 +4,11 @@ internal static class PowerShellLoweredCommandProviderCollector
 {
     internal static PowerShellCompilationCommandProviderContract[] Collect(IEnumerable<PowerShellLoweredStatement> statements)
         => Enumerate(statements)
-            .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
+            .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion + "\0" + provider.CommandName, StringComparer.Ordinal)
             .Select(static group => group.First())
             .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
             .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
+            .ThenBy(static provider => provider.CommandName, StringComparer.Ordinal)
             .ToArray();
 
     private static IEnumerable<PowerShellCompilationCommandProviderContract> Enumerate(IEnumerable<PowerShellLoweredStatement> statements)

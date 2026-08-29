@@ -56,7 +56,8 @@ internal static class PowerShellCompilationAbiBuilder
                 method.ConfirmImpact,
                 string.Join("\0", method.Aliases.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)));
             foreach (var provider in method.CommandProviders.OrderBy(static item => item.ProviderId, StringComparer.Ordinal)
-                         .ThenBy(static item => item.ProviderVersion, StringComparer.Ordinal))
+                         .ThenBy(static item => item.ProviderVersion, StringComparer.Ordinal)
+                         .ThenBy(static item => item.CommandName, StringComparer.Ordinal))
             {
                 AppendRecord(builder, "command-provider",
                     provider.ProviderId,

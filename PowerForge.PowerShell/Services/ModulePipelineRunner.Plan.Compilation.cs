@@ -16,6 +16,8 @@ public sealed partial class ModulePipelineRunner
             ExcludeResource = source.ExcludeResource?.ToArray() ?? Array.Empty<string>(),
             UseBuildCache = source.UseBuildCache,
             BuildCacheDirectory = source.BuildCacheDirectory,
+            EmitIrSnapshots = source.EmitIrSnapshots,
+            ExpectedPublicAbiSha256 = source.ExpectedPublicAbiSha256,
             DependencyLock = source.DependencyLock,
             AllowUnreviewedDependencies = source.AllowUnreviewedDependencies,
             TimeoutSeconds = source.TimeoutSeconds
@@ -38,5 +40,7 @@ public sealed partial class ModulePipelineRunner
             throw new InvalidOperationException("PowerShell module compilation timeout must be at least one second.");
         if (compilation.DependencyLock is not null && compilation.AllowUnreviewedDependencies)
             throw new InvalidOperationException("PowerShell module compilation cannot combine a reviewed dependency lock with AllowUnreviewedDependencies.");
+        if (!string.IsNullOrWhiteSpace(compilation.ExpectedPublicAbiSha256) && compilation.Mode != PowerShellCompilationMode.Strict)
+            throw new InvalidOperationException("PowerShell module compilation ExpectedPublicAbiSha256 requires Strict mode.");
     }
 }

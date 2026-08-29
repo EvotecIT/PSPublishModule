@@ -148,6 +148,49 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
     }
 
+    [Fact]
+    [Trait("Category", "PowerShellCompilation")]
+    public void Build_HybridRetainsDistinctHostedCommandsFromTheSameProviderFamily()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Invoke-HostedPair { [CmdletBinding()] param([int] $Value) " +
+            "[int] $result = $Value; Invoke-FirstDependency; Invoke-SecondDependency; return $result }",
+            ".psm1");
+        var manifestPath = Path.ChangeExtension(fixture.ScriptPath, ".psd1");
+        File.WriteAllText(
+            manifestPath,
+            "@{ RootModule='input.psm1'; ModuleVersion='1.0.0'; RequiredModules=@('GenericDependency'); FunctionsToExport=@('Invoke-HostedPair') }");
+        var moduleRoot = Path.Combine(fixture.RootPath, "modules", "GenericDependency");
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "GenericDependency.psm1"),
+            "function Invoke-FirstDependency { 'first' }; function Invoke-SecondDependency { 'second' }; " +
+            "Export-ModuleMember Invoke-FirstDependency,Invoke-SecondDependency");
+        File.WriteAllText(
+            Path.Combine(moduleRoot, "GenericDependency.psd1"),
+            "@{ RootModule='GenericDependency.psm1'; ModuleVersion='1.0.0'; FunctionsToExport=@('Invoke-FirstDependency','Invoke-SecondDependency') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "Generic.HostedProviderProof",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            ModuleManifestPath = manifestPath
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var hosted = result.Manifest!.CommandProviders
+            .Where(static provider => provider.Family == PowerShellCompilationCommandFamily.HostedRegion)
+            .ToArray();
+        Assert.Equal(
+            new[] { "Invoke-FirstDependency", "Invoke-SecondDependency" },
+            hosted.Select(static provider => provider.CommandName));
+        Assert.Single(hosted.Select(static provider => provider.ProviderId).Distinct(StringComparer.Ordinal));
+        Assert.Single(hosted.Select(static provider => provider.ProviderVersion).Distinct(StringComparer.Ordinal));
+    }
+
     private static string RunModuleProofWithModulePath(string modulePath, string command, string additionalModulePath)
     {
         var startInfo = new System.Diagnostics.ProcessStartInfo

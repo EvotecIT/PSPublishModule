@@ -127,7 +127,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 .ToArray(),
             filtered.SourcePaths,
             lifecycleSources: null,
-            optimization: filtered.Optimization);
+            optimization: filtered.Optimization,
+            irSnapshots: filtered.IrSnapshots);
     }
 
     internal static string Generate(

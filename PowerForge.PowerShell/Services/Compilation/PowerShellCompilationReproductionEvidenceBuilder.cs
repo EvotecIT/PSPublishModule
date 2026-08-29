@@ -38,7 +38,11 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         string generatedSourceSha256,
         IReadOnlyCollection<PowerShellCompilationArtifactFile> files,
         IReadOnlyCollection<PowerShellCompilationDiagnostic> diagnostics,
-        IReadOnlyCollection<PowerShellCompilationCommandProviderContract> providers)
+        IReadOnlyCollection<PowerShellCompilationCommandProviderContract> providers,
+        PowerShellCompilationIrSnapshotEvidence irSnapshots,
+        PowerShellCompilationFailureMap failureMap,
+        PowerShellCompilationAuditTrail diagnosticAudit,
+        PowerShellCompilationDiagnosticsPolicy diagnosticsPolicy)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (unitDispositionLedger is null) throw new ArgumentNullException(nameof(unitDispositionLedger));
@@ -56,7 +60,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         var sourceMapSha256 = GetSourceMapSha256(files);
         var evidence = new PowerShellCompilationReproductionEvidence
         {
-            SchemaVersion = 2,
+            SchemaVersion = 3,
             Mode = plan.Mode,
             Kind = kind,
             Sources = sources,
@@ -73,6 +77,10 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             UnitDispositionLedgerSha256 = ComputeTextSha256(Serialize(unitDispositionLedger)),
             DecisionTraceSha256 = ComputeTextSha256(Serialize(decisionTrace)),
             DiagnosticsSha256 = ComputeDiagnosticsSha256(diagnostics),
+            IrSnapshotsSha256 = irSnapshots.Sha256,
+            FailureMapSha256 = failureMap.Sha256,
+            DiagnosticAuditSha256 = diagnosticAudit.Sha256,
+            DiagnosticsPolicySha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.Hash(diagnosticsPolicy),
             DotNetSdkVersion = toolchain.DotNetSdkVersion,
             DotNetSdkSha256 = toolchain.DotNetSdkSha256
         };
@@ -89,7 +97,16 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             ?? throw new InvalidOperationException("Canonical compilation evidence is missing its final decision trace.");
         var unitDispositionLedger = manifest.UnitDispositionLedger
             ?? throw new InvalidOperationException("Canonical compilation evidence is missing its final unit-disposition ledger.");
-        if (evidence.SchemaVersion != 2 ||
+        var failureMap = manifest.FailureMap
+            ?? throw new InvalidOperationException("Canonical compilation evidence is missing its portable failure map.");
+        var diagnosticAudit = manifest.DiagnosticAudit
+            ?? throw new InvalidOperationException("Canonical compilation evidence is missing its diagnostic audit trail.");
+        var diagnosticsPolicy = manifest.DiagnosticsPolicy
+            ?? throw new InvalidOperationException("Canonical compilation evidence is missing its diagnostics policy.");
+        var failureMapSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeFailureMapSha256(failureMap);
+        var diagnosticAuditSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeAuditTrailSha256(diagnosticAudit);
+        var diagnosticsPolicySha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.Hash(diagnosticsPolicy);
+        if (evidence.SchemaVersion != 3 ||
             evidence.Mode != manifest.Mode ||
             evidence.Kind != manifest.Kind ||
             !EqualsIgnoreCase(evidence.CompilerVersion, manifest.Toolchain?.CompilerVersion) ||
@@ -104,7 +121,13 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             !EqualsIgnoreCase(evidence.ProviderContractsSha256, ComputeProviderContractsSha256(manifest.CommandProviders)) ||
             !EqualsIgnoreCase(evidence.UnitDispositionLedgerSha256, ComputeTextSha256(Serialize(unitDispositionLedger))) ||
             !EqualsIgnoreCase(evidence.DecisionTraceSha256, ComputeTextSha256(Serialize(decisionTrace))) ||
-            !EqualsIgnoreCase(evidence.DiagnosticsSha256, ComputeDiagnosticsSha256(manifest.Diagnostics)))
+            !EqualsIgnoreCase(evidence.DiagnosticsSha256, ComputeDiagnosticsSha256(manifest.Diagnostics)) ||
+            !EqualsIgnoreCase(evidence.IrSnapshotsSha256, manifest.IrSnapshots?.Sha256) ||
+            !EqualsIgnoreCase(failureMap.Sha256, failureMapSha256) ||
+            !EqualsIgnoreCase(evidence.FailureMapSha256, failureMapSha256) ||
+            !EqualsIgnoreCase(diagnosticAudit.Sha256, diagnosticAuditSha256) ||
+            !EqualsIgnoreCase(evidence.DiagnosticAuditSha256, diagnosticAuditSha256) ||
+            !EqualsIgnoreCase(evidence.DiagnosticsPolicySha256, diagnosticsPolicySha256))
         {
             throw new InvalidOperationException("Canonical compilation reproduction evidence does not match its compiler manifest.");
         }
@@ -147,6 +170,10 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             evidence.UnitDispositionLedgerSha256,
             evidence.DecisionTraceSha256,
             evidence.DiagnosticsSha256,
+            evidence.IrSnapshotsSha256,
+            evidence.FailureMapSha256,
+            evidence.DiagnosticAuditSha256,
+            evidence.DiagnosticsPolicySha256,
             evidence.DotNetSdkVersion,
             evidence.DotNetSdkSha256
         }));

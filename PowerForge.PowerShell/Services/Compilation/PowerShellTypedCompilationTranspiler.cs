@@ -229,7 +229,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, boundResult.Optimization);
+        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, boundResult.Optimization, boundResult.IrSnapshots);
     }
 
     private static void EmitFunctionGraph(
@@ -334,7 +334,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             if (!paths.TryGetValue(function.Symbol.DocumentId, out var path)) continue;
             emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
         }
-        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel());
+        return new BoundEmissionIndex(emissions, result.Optimization.ToPublicModel(), PowerShellCompilationIrSnapshotBuilder.Create(result));
     }
 
     private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
@@ -381,6 +381,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.CollectionElementType,
             emitted.OutputScalarization,
             emitted.HostedRegionSiteCount);
+        method.DocumentId = emitted.SourceSpan.DocumentId;
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -402,7 +403,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         IEnumerable<PowerShellCompilationDiagnostic> diagnostics,
         IEnumerable<ParsedSource> parsedFiles,
         string? targetFramework,
-        PowerShellCompilationOptimizationEvidence? optimization = null)
+        PowerShellCompilationOptimizationEvidence? optimization = null,
+        PowerShellCompilationIrSnapshotBundle? irSnapshots = null)
     {
         var template = ReadTemplate();
         var source = template
@@ -423,21 +425,25 @@ public sealed class PowerShellTypedCompilationTranspiler
                 .ToArray(),
             sourcePaths,
             parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework)).ToArray(),
-            optimization);
+            optimization,
+            irSnapshots);
     }
 
     private sealed class BoundEmissionIndex
     {
         internal BoundEmissionIndex(
             IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> emissions,
-            PowerShellCompilationOptimizationEvidence optimization)
+            PowerShellCompilationOptimizationEvidence optimization,
+            PowerShellCompilationIrSnapshotBundle irSnapshots)
         {
             Emissions = emissions;
             Optimization = optimization;
+            IrSnapshots = irSnapshots;
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
         internal PowerShellCompilationOptimizationEvidence Optimization { get; }
+        internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
     }
 
     private static string ReadTemplate()

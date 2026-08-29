@@ -231,6 +231,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Full path of the authored PowerShell file containing the function.</summary>
     public string SourcePath { get; }
 
+    /// <summary>Stable parser-independent source document identity.</summary>
+    public string DocumentId { get; internal set; } = string.Empty;
+
     /// <summary>Whether the generated method expects PSCmdlet stream delegates.</summary>
     public bool RequiresPowerShellStreams { get; }
 
@@ -363,6 +366,22 @@ public sealed class PowerShellTypedCompilationResult
         string[]? sourcePaths,
         PowerShellCompilationLifecycleSource[]? lifecycleSources,
         PowerShellCompilationOptimizationEvidence? optimization)
+        : this(sourcePath, namespaceName, typeName, sourceCode, methods, diagnostics, sourcePaths, lifecycleSources, optimization, null)
+    {
+    }
+
+    /// <summary>Creates a typed-compilation result with authored sources, lifecycle sources, optimization evidence, and optional semantic IR snapshots.</summary>
+    public PowerShellTypedCompilationResult(
+        string sourcePath,
+        string namespaceName,
+        string typeName,
+        string sourceCode,
+        PowerShellCompiledMethod[] methods,
+        PowerShellCompilationDiagnostic[] diagnostics,
+        string[]? sourcePaths,
+        PowerShellCompilationLifecycleSource[]? lifecycleSources,
+        PowerShellCompilationOptimizationEvidence? optimization,
+        PowerShellCompilationIrSnapshotBundle? irSnapshots)
     {
         SourcePath = sourcePath ?? string.Empty;
         NamespaceName = namespaceName ?? string.Empty;
@@ -373,6 +392,7 @@ public sealed class PowerShellTypedCompilationResult
         SourcePaths = sourcePaths ?? (string.IsNullOrWhiteSpace(SourcePath) ? Array.Empty<string>() : new[] { SourcePath });
         LifecycleSources = lifecycleSources ?? Array.Empty<PowerShellCompilationLifecycleSource>();
         Optimization = optimization ?? new PowerShellCompilationOptimizationEvidence();
+        IrSnapshots = irSnapshots;
     }
 
     /// <summary>Full PowerShell source path.</summary>
@@ -401,6 +421,9 @@ public sealed class PowerShellTypedCompilationResult
 
     /// <summary>Bound-IR optimization evidence produced while compiling these methods.</summary>
     public PowerShellCompilationOptimizationEvidence Optimization { get; }
+
+    /// <summary>Optional semantic-only bound/lowered IR snapshots produced by the canonical pipeline.</summary>
+    public PowerShellCompilationIrSnapshotBundle? IrSnapshots { get; }
 
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;

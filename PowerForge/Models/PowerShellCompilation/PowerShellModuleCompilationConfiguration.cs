@@ -29,6 +29,12 @@ public sealed class PowerShellModuleCompilationConfiguration
     /// <summary>Optional machine-local root for generated-build cache entries.</summary>
     public string? BuildCacheDirectory { get; set; }
 
+    /// <summary>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</summary>
+    public bool EmitIrSnapshots { get; set; }
+
+    /// <summary>Optional reviewed public ABI SHA-256 that the generated binary module must match.</summary>
+    public string? ExpectedPublicAbiSha256 { get; set; }
+
     /// <summary>Reviewed dependency graph that the build must reproduce exactly.</summary>
     public PowerShellCompilationDependencyGraph? DependencyLock { get; set; }
 

@@ -78,7 +78,8 @@ internal static class PowerShellTypedExecutableCompiler
             entry.Emission,
             localMethods.ToArray(),
             descriptions.ToArray(),
-            semantic.Optimization.ToPublicModel());
+            semantic.Optimization.ToPublicModel(),
+            PowerShellCompilationIrSnapshotBuilder.Create(semantic));
     }
 
     private static void ValidateSourceClosure(string entryPoint, string[] requestedSources)
@@ -146,7 +147,8 @@ internal static class PowerShellTypedExecutableCompiler
         PowerShellLoweredFunction function,
         PowerShellCSharpMethodEmission method,
         string sourcePath)
-        => new(
+    {
+        var description = new PowerShellCompiledMethod(
             unit.Name,
             method.GeneratedName,
             method.ReturnType.FullName ?? method.ReturnType.Name,
@@ -166,6 +168,9 @@ internal static class PowerShellTypedExecutableCompiler
             sourceEndColumn: method.SourceSpan.EndColumn,
             sourceMap: method.SourceMap,
             commandProviders: method.CommandProviders);
+        description.DocumentId = function.Symbol.DocumentId;
+        return description;
+    }
 
     private static void ValidateCommands(
         string path,
@@ -266,13 +271,15 @@ internal sealed class PowerShellTypedExecutableCompilation
         PowerShellCSharpMethodEmission entryPointMethod,
         PowerShellCSharpMethodEmission[] localMethods,
         PowerShellCompiledMethod[] methods,
-        PowerShellCompilationOptimizationEvidence optimization)
+        PowerShellCompilationOptimizationEvidence optimization,
+        PowerShellCompilationIrSnapshotBundle irSnapshots)
     {
         EntryPoint = entryPoint;
         EntryPointMethod = entryPointMethod;
         LocalMethods = localMethods;
         Methods = methods;
         Optimization = optimization;
+        IrSnapshots = irSnapshots;
     }
 
     internal PowerShellTypedExecutableContract EntryPoint { get; }
@@ -280,6 +287,7 @@ internal sealed class PowerShellTypedExecutableCompilation
     internal PowerShellCSharpMethodEmission[] LocalMethods { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
     internal PowerShellCompilationOptimizationEvidence Optimization { get; }
+    internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
 }
 
 internal sealed class PowerShellTypedExecutableContract

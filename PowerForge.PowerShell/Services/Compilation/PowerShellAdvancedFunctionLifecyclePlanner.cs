@@ -34,7 +34,8 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             typed.Diagnostics,
             typed.SourcePaths,
             typed.LifecycleSources,
-            typed.Optimization);
+            typed.Optimization,
+            typed.IrSnapshots);
     }
 
     private static PowerShellCompiledMethod CreateMethod(PowerShellCompilationLifecycleSource source)

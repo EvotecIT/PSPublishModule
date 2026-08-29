@@ -212,6 +212,12 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Whether a durable, independently buildable copy of the generated source project should be published.</summary>
     public bool EmitSource { get; set; }
 
+    /// <summary>Whether a redacted, semantic-only bound/lowered IR snapshot should be published for diffing.</summary>
+    public bool EmitIrSnapshots { get; set; }
+
+    /// <summary>Optional expected public ABI SHA-256 used to fail closed on ABI drift.</summary>
+    public string? ExpectedPublicAbiSha256 { get; set; }
+
     /// <summary>Maximum time allowed for restore and compilation.</summary>
     public int TimeoutSeconds { get; set; } = 300;
 
@@ -240,7 +246,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 9;
+    public int SchemaVersion { get; set; } = 10;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -275,6 +281,9 @@ public sealed class PowerShellCompilationArtifactManifest
     /// <summary>Bound-IR optimization evidence for generated typed methods.</summary>
     public PowerShellCompilationOptimizationEvidence? IrOptimization { get; set; }
 
+    /// <summary>Optional redacted bound/lowered IR snapshot artifact.</summary>
+    public PowerShellCompilationIrSnapshotEvidence? IrSnapshots { get; set; }
+
     /// <summary>Deterministic final decision trace from authored units to artifact disposition.</summary>
     public PowerShellCompilationExplanation? DecisionTrace { get; set; }
 
@@ -286,6 +295,15 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Static typed/hosted transition evidence for the artifact plan.</summary>
     public PowerShellCompilationBoundaryEvidence? Boundaries { get; set; }
+
+    /// <summary>Portable statement-level mapping used for build and runtime diagnosis.</summary>
+    public PowerShellCompilationFailureMap? FailureMap { get; set; }
+
+    /// <summary>Auditable cache, graph, ABI, boundary, and provider decisions.</summary>
+    public PowerShellCompilationAuditTrail? DiagnosticAudit { get; set; }
+
+    /// <summary>Retention and redaction policy attached to this diagnostic evidence.</summary>
+    public PowerShellCompilationDiagnosticsPolicy? DiagnosticsPolicy { get; set; }
 
     /// <summary>Whether the artifact must execute inside or host a PowerShell runtime.</summary>
     public bool RequiresPowerShellRuntime { get; set; }
@@ -542,6 +560,9 @@ public sealed class PowerShellCompilationBuildResult
 
     /// <summary>Combined bounded output from the generated .NET build.</summary>
     public string BuildOutput { get; set; } = string.Empty;
+
+    /// <summary>Redacted source-mapped diagnosis when the build fails.</summary>
+    public PowerShellCompilationFailure? Failure { get; set; }
 
     /// <summary>Artifact evidence when successful.</summary>
     public PowerShellCompilationArtifactManifest? Manifest { get; set; }

@@ -102,7 +102,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(1, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, explanation.GetProperty("schemaVersion").GetInt32());
             var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
             Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
             var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
@@ -110,6 +110,47 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             Assert.Equal(24, unit.GetProperty("unitId").GetString()!.Length);
             Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray());
             Assert.DoesNotContain(root, explanation.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task DiagnoseMapsRuntimeEvidenceThroughPortableManifestContract()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Diagnose Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sourcePath = Path.Combine(root, "Input.ps1");
+            var outputPath = Path.Combine(root, "output");
+            var failurePath = Path.Combine(root, "runtime.log");
+            File.WriteAllText(sourcePath, "function Get-Value { param([int] $Value) return $Value }");
+            var build = new PowerForge.PowerShellCompilationArtifactBuilder().Build(
+                new PowerForge.PowerShellCompilationBuildSpec(
+                    sourcePath,
+                    outputPath,
+                    "CliDiagnoseProof",
+                    PowerForge.PowerShellCompilationArtifactKind.Library,
+                    PowerForge.PowerShellCompilationMode.Strict,
+                    allowUnreviewedDependencyResolution: true));
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var mapEntry = Assert.Single(build.Manifest!.FailureMap!.Entries);
+            File.WriteAllText(failurePath, $"failure in {mapEntry.DocumentId}:line {mapEntry.SourceStartLine} token=private-value");
+
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell diagnose \"{build.ManifestPath}\" --failure \"{failurePath}\" --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Equal("powershell.diagnose", document.RootElement.GetProperty("command").GetString());
+            var location = Assert.Single(document.RootElement.GetProperty("result").GetProperty("locations").EnumerateArray());
+            Assert.Equal("Input.ps1", location.GetProperty("relativePath").GetString());
+            Assert.DoesNotContain("private-value", document.RootElement.GetRawText(), StringComparison.Ordinal);
         }
         finally
         {

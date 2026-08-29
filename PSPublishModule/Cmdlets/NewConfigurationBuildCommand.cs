@@ -349,6 +349,14 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Parameter]
     public string? PowerShellCompilationBuildCacheDirectory { get; set; }
 
+    /// <summary>Publish a redacted semantic-only bound/lowered IR snapshot beside canonical evidence.</summary>
+    [Parameter]
+    public SwitchParameter PowerShellCompilationEmitIrSnapshots { get; set; }
+
+    /// <summary>Reviewed public ABI SHA-256 that the generated binary module must match.</summary>
+    [Parameter]
+    public string? PowerShellCompilationExpectedPublicAbiSha256 { get; set; }
+
     /// <summary>Reviewed dependency graph that the compilation build must reproduce exactly.</summary>
     [Parameter]
     public PowerShellCompilationDependencyGraph? PowerShellCompilationDependencyLock { get; set; }
@@ -510,6 +518,10 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             PowerShellCompilationUseBuildCache = PowerShellCompilationUseBuildCache.IsPresent,
             PowerShellCompilationBuildCacheDirectorySpecified = bound.ContainsKey(nameof(PowerShellCompilationBuildCacheDirectory)),
             PowerShellCompilationBuildCacheDirectory = PowerShellCompilationBuildCacheDirectory,
+            PowerShellCompilationEmitIrSnapshotsSpecified = bound.ContainsKey(nameof(PowerShellCompilationEmitIrSnapshots)),
+            PowerShellCompilationEmitIrSnapshots = PowerShellCompilationEmitIrSnapshots.IsPresent,
+            PowerShellCompilationExpectedPublicAbiSha256Specified = bound.ContainsKey(nameof(PowerShellCompilationExpectedPublicAbiSha256)),
+            PowerShellCompilationExpectedPublicAbiSha256 = PowerShellCompilationExpectedPublicAbiSha256,
             PowerShellCompilationDependencyLockSpecified = bound.ContainsKey(nameof(PowerShellCompilationDependencyLock)),
             PowerShellCompilationDependencyLock = PowerShellCompilationDependencyLock,
             PowerShellCompilationAllowUnreviewedDependenciesSpecified = bound.ContainsKey(nameof(PowerShellCompilationAllowUnreviewedDependencies)),

@@ -56,7 +56,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
         var coreAssembly = typeof(PowerShellCompilationPlan).Assembly;
         var safeContract = new
         {
-            schemaVersion = 2,
+            schemaVersion = 3,
             sourceInputSha256,
             sourceTreeSha256,
             compiler = new
@@ -198,6 +198,8 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                 excludeResource = NormalizeStrings(compilation.ExcludeResource, StringComparer.OrdinalIgnoreCase),
                 compilation.UseBuildCache,
                 buildCacheDirectory = Normalize(compilation.BuildCacheDirectory),
+                compilation.EmitIrSnapshots,
+                expectedPublicAbiSha256 = Normalize(compilation.ExpectedPublicAbiSha256),
                 dependencyLockSha256 = Normalize(compilation.DependencyLock?.LockSha256),
                 compilation.AllowUnreviewedDependencies,
                 compilation.TimeoutSeconds

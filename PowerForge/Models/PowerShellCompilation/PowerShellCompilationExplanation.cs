@@ -134,7 +134,7 @@ public sealed class PowerShellCompilationReproductionSource
 public sealed class PowerShellCompilationReproductionEvidence
 {
     /// <summary>Reproduction evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 3;
     /// <summary>Selected compilation mode.</summary>
     public PowerShellCompilationMode Mode { get; set; }
     /// <summary>Selected artifact kind.</summary>
@@ -167,6 +167,14 @@ public sealed class PowerShellCompilationReproductionEvidence
     public string UnitDispositionLedgerSha256 { get; set; } = string.Empty;
     /// <summary>Exact ordered diagnostic identity.</summary>
     public string DiagnosticsSha256 { get; set; } = string.Empty;
+    /// <summary>Exact optional bound/lowered IR snapshot identity.</summary>
+    public string IrSnapshotsSha256 { get; set; } = string.Empty;
+    /// <summary>Exact portable failure-map identity.</summary>
+    public string FailureMapSha256 { get; set; } = string.Empty;
+    /// <summary>Exact diagnostic audit-trail identity.</summary>
+    public string DiagnosticAuditSha256 { get; set; } = string.Empty;
+    /// <summary>Exact retention/redaction policy identity.</summary>
+    public string DiagnosticsPolicySha256 { get; set; } = string.Empty;
     /// <summary>Selected SDK version.</summary>
     public string DotNetSdkVersion { get; set; } = string.Empty;
     /// <summary>Exact selected SDK identity.</summary>
@@ -179,7 +187,11 @@ public sealed class PowerShellCompilationReproductionEvidence
 public sealed class PowerShellCompilationExplanation
 {
     /// <summary>Explanation schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+    /// <summary>Compatibility contract used by semantic fingerprints across supported hosts.</summary>
+    public int SemanticCompatibilityVersion { get; set; } = 1;
+    /// <summary>SHA-256 over semantic decisions with authored coordinates and traversal order removed.</summary>
+    public string SemanticFingerprintSha256 { get; set; } = string.Empty;
     /// <summary>Selected compilation mode.</summary>
     public PowerShellCompilationMode Mode { get; set; }
     /// <summary>Selected target framework, when supplied.</summary>

@@ -87,7 +87,7 @@ internal static class PowerShellTypedExecutableEmitter
             .Replace("{{COMMON_PARAMETER_NAMES}}", commonParameterNames)
             .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", commandBinding.IsAdvancedFunction ? "false" : "true")
             .Replace("{{INVOCATION}}", invocationSource);
-        return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods, compilation.Optimization);
+        return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods, compilation.Optimization, compilation.IrSnapshots);
     }
 
     private static string GenerateStringArray(IEnumerable<string> values)
@@ -156,16 +156,19 @@ internal sealed class PowerShellTypedExecutableEmission
         string compiledSource,
         string programSource,
         PowerShellCompiledMethod[] methods,
-        PowerShellCompilationOptimizationEvidence optimization)
+        PowerShellCompilationOptimizationEvidence optimization,
+        PowerShellCompilationIrSnapshotBundle irSnapshots)
     {
         CompiledSource = compiledSource;
         ProgramSource = programSource;
         Methods = methods;
         Optimization = optimization;
+        IrSnapshots = irSnapshots;
     }
 
     internal string CompiledSource { get; }
     internal string ProgramSource { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
     internal PowerShellCompilationOptimizationEvidence Optimization { get; }
+    internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
 }

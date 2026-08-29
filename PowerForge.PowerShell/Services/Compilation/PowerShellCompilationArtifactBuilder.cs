@@ -52,6 +52,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         using var workspaceLease = PowerShellCompilationWorkspace.Create(spec.KeepBuildWorkspace);
         var workspace = workspaceLease.Path;
         var result = new PowerShellCompilationBuildResult { BuildWorkspace = spec.KeepBuildWorkspace ? workspace : null };
+        var failureStage = PowerShellCompilationFailureStage.Input;
+        PowerShellCompilationPlan? failurePlan = null;
+        PowerShellCompilationFailureMap? failureMap = null;
+        int? failureExitCode = null;
 
         try
         {
@@ -64,6 +68,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
+            failureStage = PowerShellCompilationFailureStage.Dependency;
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
             ValidateExpectedDependencyLock(spec, dependencyGraph);
@@ -90,8 +95,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     throw new FileNotFoundException($"Required module manifest file reference '{missingManifestReference.RelativePath}' was not found.", missingManifestReference.SourcePath);
                 throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
             }
+            failureStage = PowerShellCompilationFailureStage.Analysis;
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, capabilities, spec.CommandProviders);
+            failurePlan = plan;
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
 
@@ -104,7 +111,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             int compiledMethods;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
             var optimizationEvidence = new PowerShellCompilationOptimizationEvidence();
+            PowerShellCompilationIrSnapshotBundle? irSnapshots = null;
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
+            PowerShellCompilationAbiManifest? publicAbi = null;
             PowerShellCompilationDependencyClosure? dependencyClosure = null;
             var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
@@ -134,6 +143,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 compiledMethods = executable.Methods.Length;
                 compiledMethodDetails = executable.Methods;
                 optimizationEvidence = executable.Optimization;
+                irSnapshots = executable.IrSnapshots;
             }
             else if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Hybrid)
             {
@@ -151,6 +161,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 compiledMethods = hybrid.CompiledMethods.Length;
                 usesPowerShellRuntimeFallback = plan.TotalUnits > compiledMethods;
                 optimizationEvidence = typed.Optimization;
+                irSnapshots = typed.IrSnapshots;
             }
             else if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
             {
@@ -234,6 +245,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
                     : typed.Methods;
                 optimizationEvidence = typed.Optimization;
+                irSnapshots = typed.IrSnapshots;
             }
             else
             {
@@ -282,19 +294,40 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 runtimeManifestHooks.Select(static hook => "Manifest runtime script hook: " + hook),
                 compiledMethodDetails);
             usesPowerShellRuntimeFallback = unitDispositionLedger.UsesPowerShellRuntimeFallback;
+            failureMap = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, compiledMethodDetails, unitDispositionLedger);
 
-            if (spec.Mode == PowerShellCompilationMode.Strict && !requiresPowerShellRuntime && compiledMethodDetails.Count > 0)
+            if (spec.Mode == PowerShellCompilationMode.Strict && compiledMethodDetails.Count > 0)
             {
-                runtimeFreeContract = PowerShellRuntimeFreeArtifactContract.Create(
-                    workspace,
-                    "PowerForge.Compiled",
-                    typed?.TypeName ?? "CompiledPowerShellScript",
-                    compiledMethodDetails);
+                failureStage = PowerShellCompilationFailureStage.Abi;
+                if (!requiresPowerShellRuntime)
+                {
+                    runtimeFreeContract = PowerShellRuntimeFreeArtifactContract.Create(
+                        workspace,
+                        "PowerForge.Compiled",
+                        typed?.TypeName ?? "CompiledPowerShellScript",
+                        compiledMethodDetails);
+                    publicAbi = runtimeFreeContract.PublicAbi;
+                }
+                else if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
+                {
+                    publicAbi = PowerShellCompilationAbiBuilder.Create(
+                        "PowerForge.Compiled",
+                        typed?.TypeName ?? PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
+                        compiledMethodDetails);
+                    File.WriteAllText(
+                        Path.Combine(workspace, "PowerForgePublicAbiContract.g.cs"),
+                        PowerShellRuntimeFreeContractSource.GeneratePublicAbiMetadata(publicAbi),
+                        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                }
             }
+            if (!string.IsNullOrWhiteSpace(spec.ExpectedPublicAbiSha256) &&
+                !string.Equals(publicAbi?.Sha256, spec.ExpectedPublicAbiSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The generated public ABI does not match the expected ABI SHA-256.");
 
             GeneratedBuildProcessResult? restore = null;
             if (spec.UseBuildCache)
             {
+                failureStage = PowerShellCompilationFailureStage.Restore;
                 restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier);
                 if (restore.TimedOut)
                     throw new TimeoutException($"Generated .NET restore exceeded {spec.TimeoutSeconds} seconds.");
@@ -307,6 +340,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 targetContract,
                 dependencyGraph,
                 toolchain);
+            failureStage = spec.Optimization == PowerShellCompilationExecutableOptimization.None
+                ? PowerShellCompilationFailureStage.Build
+                : PowerShellCompilationFailureStage.Optimization;
             var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
                 : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null);
@@ -315,10 +351,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (process.TimedOut)
                 throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
             if (process.ExitCode != 0)
+            {
+                failureExitCode = process.ExitCode;
                 throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
+            }
             PowerShellCompilationArtifactBuildCache.Store(spec, buildCache, publishDirectory);
             VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
 
+            failureStage = PowerShellCompilationFailureStage.Publication;
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try
             {
@@ -377,6 +417,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                                         ? "GeneratedPackagedSource"
                                         : "GeneratedSource")));
                 }
+                var irSnapshotEvidence = new PowerShellCompilationIrSnapshotEvidence { Emitted = false };
+                if (spec.EmitIrSnapshots)
+                {
+                    irSnapshotEvidence = PowerShellCompilationDiagnosticsEvidenceBuilder.PublishIrSnapshots(
+                        Path.GetDirectoryName(stagedArtifact.PrimaryPath) ?? artifactStagingDirectory,
+                        artifactName,
+                        irSnapshots,
+                        out var irSnapshotFile);
+                    if (irSnapshotFile is not null)
+                        stagedArtifact = stagedArtifact.WithAdditionalFiles(new[] { irSnapshotFile });
+                }
                 var signing = PowerShellCompilationArtifactSigner.Sign(spec, stagedArtifact.Files);
                 if (signing is not null)
                 {
@@ -406,12 +457,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     .ToArray();
                 diagnostics = PowerShellCompilationReproductionEvidenceBuilder.MakeDiagnosticsPortable(plan, diagnostics);
                 var commandProviders = compiledMethodDetails.SelectMany(static method => method.CommandProviders)
-                    .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion, StringComparer.Ordinal)
+                    .GroupBy(static provider => provider.ProviderId + "\0" + provider.ProviderVersion + "\0" + provider.CommandName, StringComparer.Ordinal)
                     .Select(static group => group.First())
                     .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
                     .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
+                    .ThenBy(static provider => provider.CommandName, StringComparer.Ordinal)
                     .ToArray();
                 var decisionTrace = PowerShellCompilationExplanationService.CreateFinal(plan, unitDispositionLedger);
+                var diagnosticAudit = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateAuditTrail(
+                    spec,
+                    buildCache,
+                    dependencyGraph,
+                    publicAbi,
+                    unitDispositionLedger,
+                    commandProviders);
+                var diagnosticsPolicy = PowerShellCompilationDiagnosticsEvidenceBuilder.CreatePolicy();
                 var reproduction = PowerShellCompilationReproductionEvidenceBuilder.Create(
                     plan,
                     spec.Kind,
@@ -419,11 +479,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     decisionTrace,
                     toolchain,
                     runtimeFreeContract?.SemanticProfile,
-                    runtimeFreeContract?.PublicAbi,
+                    publicAbi,
                     runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty,
                     stagedArtifact.Files,
                     diagnostics,
-                    commandProviders);
+                    commandProviders,
+                    irSnapshotEvidence,
+                    failureMap,
+                    diagnosticAudit,
+                    diagnosticsPolicy);
                 var manifest = new PowerShellCompilationArtifactManifest
                 {
                     ArtifactName = artifactName,
@@ -437,14 +501,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Toolchain = toolchain,
                     BuildCache = buildCache,
                     IrOptimization = optimizationEvidence,
+                    IrSnapshots = irSnapshotEvidence,
                     DecisionTrace = decisionTrace,
                     UnitDispositionLedger = unitDispositionLedger,
                     Reproduction = reproduction,
                     Boundaries = boundaryEvidence,
+                    FailureMap = failureMap,
+                    DiagnosticAudit = diagnosticAudit,
+                    DiagnosticsPolicy = diagnosticsPolicy,
                     RequiresPowerShellRuntime = requiresPowerShellRuntime,
                     UsesPowerShellRuntimeFallback = usesPowerShellRuntimeFallback,
                     SemanticProfile = runtimeFreeContract?.SemanticProfile,
-                    PublicAbi = runtimeFreeContract?.PublicAbi,
+                    PublicAbi = publicAbi,
                     GeneratedSourceSha256 = runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty,
                     ContainsEmbeddedPowerShellSource = spec.Kind == PowerShellCompilationArtifactKind.Executable && requiresPowerShellRuntime ||
                         stagedArtifact.Files.Any(static file => PowerShellStrictDependencyClosureVerifier.IsPowerShellSource(file.Path)),
@@ -513,7 +581,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         catch (Exception ex)
         {
             result.Succeeded = false;
-            result.Error = ex.Message;
+            result.Failure = PowerShellCompilationDiagnosticsEvidenceBuilder.MapFailure(
+                failureStage,
+                failureStage + "Failure",
+                ex.Message,
+                result.BuildOutput,
+                failureExitCode,
+                failurePlan,
+                failureMap);
+            result.Error = result.Failure.Summary;
             return result;
         }
     }

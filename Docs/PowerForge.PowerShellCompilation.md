@@ -67,7 +67,7 @@ For the common case, point PowerForge at the module directory. It selects the ma
 powerforge powershell build .\MyModule --allow-unreviewed-dependencies --emit-source
 ```
 
-Artifact builds require a separately reviewed dependency graph by default. Capture the `dependencyGraph` from `powerforge powershell analyze <path> --output json`, review and store that graph, then pass the raw graph JSON with `--dependency-lock <graph.json>` or the equivalent `-DependencyLock` cmdlet object. For a local development build only, `--allow-unreviewed-dependencies` / `-AllowUnreviewedDependencies` is the explicit opt-out; manifest schema 9 records `dependencyLockReviewed: false` so that result cannot be mistaken for a reviewed build.
+Artifact builds require a separately reviewed dependency graph by default. Capture the `dependencyGraph` from `powerforge powershell analyze <path> --output json`, review and store that graph, then pass the raw graph JSON with `--dependency-lock <graph.json>` or the equivalent `-DependencyLock` cmdlet object. For a local development build only, `--allow-unreviewed-dependencies` / `-AllowUnreviewedDependencies` is the explicit opt-out; manifest schema 10 records `dependencyLockReviewed: false` so that result cannot be mistaken for a reviewed build.
 
 The accepted input shapes are:
 
@@ -178,7 +178,16 @@ powerforge powershell explain .\MyModule --mode Strict
 powerforge powershell explain .\MyModule --mode Hybrid --output json
 ```
 
-This first explainability contract reports canonical analyzer decisions plus file, unit, and missing-dependency blocker chains. Inferred type/value-state traces, complete provider/dependency-node resolution, lowering choices, reproduction bundles, and generated/runtime failure mapping remain future evidence layers.
+The explanation schema includes a compatibility version and semantic fingerprint. The fingerprint excludes relocation coordinates and traversal order while preserving semantic order such as parameter position, so equivalent inputs can be compared across supported hosts without pretending that every byte of presentation JSON must match. Final artifact explanations add inferred types and value states, provider/dependency resolution, lowering choices, final fallback/rejection causes, and artifact disposition.
+
+Successful builds carry a portable statement-level failure map and a deterministic diagnostic audit trail. The audit records build-cache reasons, dependency-lock state, public-ABI state, fallback crossings, and selected provider contracts. To map a captured runtime failure back to authored source, provide the artifact manifest and local failure log:
+
+```powershell
+powerforge powershell diagnose .\artifacts\Tool.powerforge-compilation.json `
+    --failure .\runtime-failure.log
+```
+
+The result is available as human output or `--output json`. It reports the compiler/runtime stage, stable reason, authored relative path, unit identity, source line/column, diagnostic code, and typed/hosted boundary. Absolute paths, authored source text, parser objects, environment state, and common secret assignments are removed from portable diagnostics.
 
 Package a script as an executable:
 
@@ -291,6 +300,8 @@ Build-Module -ModuleName 'Any.Module' -Path $repositoryRoot -Settings {
 
 Release builds should pass a separately reviewed dependency graph through `-PowerShellCompilationDependencyLock`. `-PowerShellCompilationAllowUnreviewedDependencies` is the explicit local/development opt-out shown above. Resource inclusion remains declarative through `-PowerShellCompilationResourceMode`, `-PowerShellCompilationIncludeResource`, and `-PowerShellCompilationExcludeResource`; no module name or folder convention changes compiler behavior.
 
+Use `-PowerShellCompilationEmitIrSnapshots` when a reviewed build needs a diffable semantic-only bound/lowered IR file. Use `-PowerShellCompilationExpectedPublicAbiSha256 <sha256>` with Strict compilation to fail closed when the generated public ABI differs from a reviewed baseline. The same controls are `-EmitIrSnapshots` / `-ExpectedPublicAbiSha256` on `Build-PowerShellArtifact` and `--emit-ir` / `--expected-abi-sha256` on the CLI.
+
 `Build-Module` produces a module, so this opt-in deliberately produces a DLL-backed binary module. A standalone application has a different entrypoint and deployment contract; use `Build-PowerShellArtifact -Kind Executable` (or the equivalent CLI command) with an explicit `.ps1` entry point when several scripts participate.
 
 ## Modes
@@ -397,7 +408,7 @@ Every bound node carries:
 
 With that boundary, a feature is bound once and backends consume the same proven semantic model. Strict EXEs accept only pure-CLR nodes; binary modules may admit cmdlet-host nodes; Hybrid artifacts may additionally admit bounded runtime regions. The former direct AST-to-C# emitter and its partial implementations were deleted after the existing behavior migrated; there is no compatibility switch that can silently bypass the IR.
 
-Canonical command and pipeline semantics are complete within their bounded provider contract. Milestones 14 and 15 are complete for the explicitly supported target profiles and measured optimization contract; Milestone 17 explainability and the Milestone 16 external provider SDK remain open. New command families still add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
+Canonical command and pipeline semantics are complete within their bounded provider contract. Milestones 14, 15, and 17 are complete for the explicitly supported target profiles, measured optimization contract, and reproducible diagnostics contract; the Milestone 16 external provider SDK remains planned. New command families still add one deterministic binder/registry owner, typed stage/cardinality contracts, and lowering support rather than coordinated special cases in analysis, emission, shaping, and census.
 
 Every newly eligible language feature should satisfy the same acceptance packet:
 
@@ -423,7 +434,9 @@ Each successful build writes `<name>.powerforge-compilation.json`. The manifest 
 - exact source diagnostics and locations for unsupported units;
 - byte sizes for the primary artifact and every durable file;
 - the complete discovered dependency/resource plan and each item's delivery disposition;
-- executable optimization mode and Authenticode signing evidence when requested.
+- executable optimization mode and Authenticode signing evidence when requested;
+- a semantic explanation fingerprint, portable statement/boundary failure map, deterministic cache/dependency/ABI/fallback/provider audit trail, and the local-only retention/redaction policy;
+- optional semantic-only bound/lowered IR evidence and its integrity hash when explicitly requested.
 
 The manifest includes the immutable final unit-disposition ledger used by coverage, explain output, census, reproduction hashes, and boundary profiling. Dependency causes are attached only to the affected source unit; manifest-wide or otherwise non-unit runtime requirements remain delivery causes. Diagnostic hashes include portable file identity as well as code, feature, location, and message. For module-pipeline delivery, the same canonical finalizer runs after the last mutation in staging, packed ZIP, unpacked folder, managed repository package, and installed-module roots. Producer-local paths are replaced with portable relative identities, file hashes are recomputed against the delivered root, and machine-local checkpoint authority is excluded. Authenticode counts are carried into a copied delivery only for byte-identical files from the verified signed source root, so an installation version rewrite or unpacked post-copy replacement cannot retain stale positive signing evidence.
 
@@ -440,6 +453,10 @@ dotnet build .\artifacts\MyModule.generated\MyModule.csproj -c Release
 ```
 
 Every emitted source file is listed with its role, SHA-256, and size in the compilation manifest. The emitted project includes local `Directory.Build.*`, `Directory.Packages.props`, and `global.json` isolation files so an ancestor repository's MSBuild, central-package, or SDK policy cannot silently change the inspection rebuild. Rebuilding the artifact without source emission removes a prior generated-source directory so stale C# cannot be mistaken for the current binary.
+
+Add `--emit-ir`, `-EmitIrSnapshots`, or the `Build-Module` configuration equivalent to publish `<name>.powerforge-ir.json`. This file contains stable symbol/document identities, resolved types, output cardinality/value states, capabilities, effects, disposition, and bound/lowered node kinds. It never contains authored source text, parser AST objects, literal values, absolute paths, or hosted executable source. Its hash, the failure map, audit trail, redaction policy, decision trace, diagnostics, source map, ABI, dependency lock, target, providers, compiler, and SDK are all bound into reproduction evidence.
+
+Diagnostics are local-only and are never uploaded automatically. Manifest, trace, audit, map, and optional IR evidence follow the artifact lifetime. Failed-build or crash bundles remain user-managed and should normally be removed after seven days when no longer needed. Generated source is intentionally a separate explicit opt-in because it contains reconstructable implementation details and, for packaged artifacts, may include authored source.
 
 ## Measured performance
 

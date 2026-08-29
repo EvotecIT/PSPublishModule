@@ -64,6 +64,7 @@ public static class PowerShellCompilationExplanationService
         explanation.TypedUnits = ledger.EmittedUnits;
         explanation.RuntimeFallbackUnits = ledger.RuntimeRoutedUnits;
         explanation.RejectedUnits = ledger.RejectedUnits;
+        explanation.SemanticFingerprintSha256 = ComputeSemanticFingerprint(explanation);
         return explanation;
     }
 
@@ -83,7 +84,7 @@ public static class PowerShellCompilationExplanationService
             .ToArray();
         var units = files.SelectMany(static file => file.Units).ToArray();
         var rejectedUnits = units.Count(static unit => unit.Decision == PowerShellCompilationDecisionKind.Rejected);
-        return new PowerShellCompilationExplanation
+        var explanation = new PowerShellCompilationExplanation
         {
             Mode = plan.Mode,
             TargetFramework = plan.TargetFramework ?? string.Empty,
@@ -104,6 +105,8 @@ public static class PowerShellCompilationExplanationService
                 .ToArray(),
             Files = files
         };
+        explanation.SemanticFingerprintSha256 = ComputeSemanticFingerprint(explanation);
+        return explanation;
     }
 
     private static PowerShellCompilationDependencyTrace CreateDependencyTrace(
@@ -281,6 +284,76 @@ public static class PowerShellCompilationExplanationService
         return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(identity))
             .Take(12)
             .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    private static string ComputeSemanticFingerprint(PowerShellCompilationExplanation explanation)
+    {
+        var builder = new StringBuilder();
+        Append(explanation.SemanticCompatibilityVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Append(explanation.Mode.ToString());
+        Append(explanation.TargetFramework);
+        Append(explanation.CanProceed ? "true" : "false");
+        foreach (var file in explanation.Files.OrderBy(static item => NormalizePath(item.RelativePath), StringComparer.Ordinal))
+        {
+            Append(NormalizePath(file.RelativePath));
+            foreach (var cause in file.Causes
+                         .OrderBy(static item => item.Code)
+                         .ThenBy(static item => item.FeatureId, StringComparer.Ordinal)
+                         .ThenBy(static item => item.Message, StringComparer.Ordinal))
+            {
+                Append(cause.Code.ToString());
+                Append(cause.FeatureId);
+                Append(cause.Message);
+            }
+            foreach (var unit in file.Units
+                         .OrderBy(static item => item.Kind)
+                         .ThenBy(static item => item.Name, StringComparer.Ordinal)
+                         .ThenBy(static item => item.ReturnType, StringComparer.Ordinal))
+            {
+                Append(unit.Kind.ToString());
+                Append(unit.Name);
+                Append(unit.ReturnType);
+                Append(unit.Decision.ToString());
+                Append(unit.LoweringRoute);
+                Append(unit.ArtifactDisposition);
+                Append(unit.SemanticEligible ? "true" : "false");
+                Append(unit.Emitted ? "true" : "false");
+                Append(unit.RetainedHostedSource ? "true" : "false");
+                Append(unit.RuntimeCommandRegions.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                Append(unit.BoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                foreach (var parameter in unit.Parameters)
+                {
+                    Append(parameter.Name);
+                    Append(parameter.TypeName);
+                    Append(parameter.AllowNull ? "true" : "false");
+                    Append(parameter.HasDefaultValue ? "true" : "false");
+                }
+                foreach (var cause in unit.Causes
+                             .OrderBy(static item => item.Code)
+                             .ThenBy(static item => item.FeatureId, StringComparer.Ordinal)
+                             .ThenBy(static item => item.Message, StringComparer.Ordinal))
+                {
+                    Append(cause.Code.ToString());
+                    Append(cause.FeatureId);
+                    Append(cause.Message);
+                }
+            }
+        }
+        foreach (var dependency in explanation.Dependencies
+                     .OrderBy(static item => NormalizePath(item.RelativePath), StringComparer.Ordinal)
+                     .ThenBy(static item => item.Name, StringComparer.Ordinal))
+        {
+            Append(dependency.Name);
+            Append(NormalizePath(dependency.RelativePath));
+            Append(dependency.Kind.ToString());
+            Append(dependency.Discovery.ToString());
+            Append(dependency.Disposition.ToString());
+        }
+        using var sha = SHA256.Create();
+        return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(builder.ToString()))
+            .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+
+        void Append(string value) => builder.Append(value.Length).Append(':').Append(value).Append('\n');
     }
 
     private static string NormalizePath(string path)
