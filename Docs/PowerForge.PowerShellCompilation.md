@@ -67,7 +67,7 @@ For the common case, point PowerForge at the module directory. It selects the ma
 powerforge powershell build .\MyModule --allow-unreviewed-dependencies --emit-source
 ```
 
-Artifact builds require a separately reviewed dependency graph by default. Capture the `dependencyGraph` from `powerforge powershell analyze <path> --output json`, review and store that graph, then pass the raw graph JSON with `--dependency-lock <graph.json>` or the equivalent `-DependencyLock` cmdlet object. For a local development build only, `--allow-unreviewed-dependencies` / `-AllowUnreviewedDependencies` is the explicit opt-out; manifest schema 5 records `dependencyLockReviewed: false` so that result cannot be mistaken for a reviewed build.
+Artifact builds require a separately reviewed dependency graph by default. Capture the `dependencyGraph` from `powerforge powershell analyze <path> --output json`, review and store that graph, then pass the raw graph JSON with `--dependency-lock <graph.json>` or the equivalent `-DependencyLock` cmdlet object. For a local development build only, `--allow-unreviewed-dependencies` / `-AllowUnreviewedDependencies` is the explicit opt-out; manifest schema 9 records `dependencyLockReviewed: false` so that result cannot be mistaken for a reviewed build.
 
 The accepted input shapes are:
 
@@ -287,7 +287,7 @@ Build-Module -ModuleName 'Any.Module' -Path $repositoryRoot -Settings {
 }
 ```
 
-`Hybrid` is the migration default: eligible functions become binary cmdlets and unsupported behavior remains explicit script fallback. `Strict` fails unless every executable unit can be emitted without fallback. `ModulePipelineResult.PowerShellCompilationResult` reports total, compiled, and fallback units plus the exact coverage percentage and staged assembly path.
+`Hybrid` is the migration default: eligible functions become binary cmdlets and unsupported behavior remains explicit script fallback. `Strict` fails unless every executable unit can be emitted without fallback. `ModulePipelineResult.PowerShellCompilationResult` reports analyzed and emitted units, semantic and shaping fallback, runtime-routed units, omissions, exact coverage percentage, and the staged assembly path. These counts come from one final unit-disposition ledger, so a unit may be both emitted and runtime-routed when it retains source or contains a bounded hosted command region.
 
 Release builds should pass a separately reviewed dependency graph through `-PowerShellCompilationDependencyLock`. `-PowerShellCompilationAllowUnreviewedDependencies` is the explicit local/development opt-out shown above. Resource inclusion remains declarative through `-PowerShellCompilationResourceMode`, `-PowerShellCompilationIncludeResource`, and `-PowerShellCompilationExcludeResource`; no module name or folder convention changes compiler behavior.
 
@@ -425,6 +425,8 @@ Each successful build writes `<name>.powerforge-compilation.json`. The manifest 
 - the complete discovered dependency/resource plan and each item's delivery disposition;
 - executable optimization mode and Authenticode signing evidence when requested.
 
+The manifest includes the immutable final unit-disposition ledger used by coverage, explain output, census, reproduction hashes, and boundary profiling. For module-pipeline delivery, the same canonical finalizer runs after the last mutation in staging, packed ZIP, unpacked folder, managed repository package, and installed-module roots. Producer-local paths are replaced with portable relative identities, file hashes are recomputed against the delivered root, and machine-local checkpoint authority is excluded.
+
 A packaged EXE therefore reports `requiresPowerShellRuntime: true` and `usesPowerShellRuntimeFallback: true`. A strict CLR library reports both values as `false`. A strict binary module requires PowerShell as its cmdlet host but reports no script fallback.
 
 PowerForge stages the complete owned artifact shape and manifest before publication. Rebuilding under the same artifact name replaces prior EXE, DLL, PDB, module-directory, generated-source directory, manifest, and exactly the resource files recorded by the previous manifest. Removed resources are deleted, unrelated neighboring files are preserved, unowned collisions fail, same-name publication is serialized across threads and processes, and a failed durable commit rolls back to the previous set instead of leaving a new binary beside stale integrity evidence.
@@ -495,7 +497,7 @@ See [the benchmark README](../Benchmarks/PowerShellCompilation/README.md) for th
 
 ## Portable generic acceptance corpus
 
-PowerForge carries a self-contained, product-neutral compiler corpus under `Benchmarks/PowerShellCompilation/Corpus`. The Hybrid module exercises parameter metadata and defaults, operators, typed recursion, runtime-state injection, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its committed net10 census baseline records a portable source fingerprint and 8/8 post-emission functions (100%) with no fallback or eligible-function loss during graph or binary-cmdlet shaping. The multi-file Strict program is separately required to analyze 3/3 units, build as a runtime-free net8 executable, and match direct PowerShell execution.
+PowerForge carries a self-contained, product-neutral compiler corpus under `Benchmarks/PowerShellCompilation/Corpus`. The Hybrid module exercises parameter metadata and defaults, operators, typed recursion, runtime-state injection, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its committed net10 census baseline records a portable source fingerprint and 8/8 post-emission functions (100%) with no retained-source fallback or eligible-function loss. One emitted function also records its bounded hosted command region as runtime-routed; typed coverage and runtime routing are intentionally independent measures. The multi-file Strict program is separately required to analyze 3/3 units, build as a runtime-free net8 executable, and match direct PowerShell execution.
 
 This is the stable acceptance surface for generic compiler contracts. It runs from any checkout without neighboring repositories:
 
