@@ -43,6 +43,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (spec is null) throw new ArgumentNullException(nameof(spec));
+            spec.PlannedProjectContentsByPath = null;
             if (string.IsNullOrWhiteSpace(spec.RootPath))
             {
                 result.Success = false;
@@ -343,6 +344,14 @@ public sealed partial class DotNetRepositoryReleaseService
                         spec.VersionBindings,
                         plannedProjectContents)
                     : Array.Empty<ProjectVersionBindingFileUpdate>();
+
+                foreach (var plannedBinding in versionBindingPlan.Where(static item => item.HasChanges))
+                {
+                    plannedProjectContents[Path.GetFullPath(plannedBinding.Update.FilePath)] = plannedBinding.Update.UpdatedContent;
+                }
+                spec.PlannedProjectContentsByPath = spec.WhatIf && plannedProjectContents.Count > 0
+                    ? plannedProjectContents
+                    : null;
 
                 if (spec.WhatIf)
                 {

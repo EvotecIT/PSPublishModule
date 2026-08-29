@@ -16,7 +16,8 @@ public sealed partial class DotNetRepositoryReleaseService
         if (string.IsNullOrWhiteSpace(condition))
             return true;
 
-        var expanded = ExpandPlannedProperties(condition!, properties);
+        var expanded = Regex.Replace(condition!, @"\$\((?<name>[A-Za-z_][A-Za-z0-9_.-]*)\)", match =>
+            properties.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : string.Empty);
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' contains an unresolved property.");
 

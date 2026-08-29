@@ -142,7 +142,8 @@ public sealed partial class DotNetRepositoryReleaseService
     internal IReadOnlyList<DotNetRepositoryProjectResult> SortProjectsForPublish(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph = false,
-        string? configuration = null)
+        string? configuration = null,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath = null)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -162,7 +163,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var entry in byPackageId)
         {
             var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration)
+                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, plannedProjectContentsByPath)
                 : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
             foreach (var dependency in selectedDependencies)
                 edges.Add(new PublishDependencyEdge(entry.Key, dependency.PackageId, dependency.Framework));
@@ -324,7 +325,8 @@ public sealed partial class DotNetRepositoryReleaseService
     private static IReadOnlyCollection<PublishDependency> ReadPlannedProjectDependencies(
         DotNetRepositoryProjectResult project,
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
-        string? configuration)
+        string? configuration,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
@@ -333,13 +335,13 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => Path.GetFullPath(entry.Value.CsprojPath),
             entry => entry.Key,
             StringComparer.OrdinalIgnoreCase);
-        var outerEvaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework: null);
+        var outerEvaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework: null, plannedProjectContentsByPath);
         var frameworks = ReadPlannedTargetFrameworks(outerEvaluation.Properties);
         var evaluations = frameworks.Length == 0 ? new string?[] { null } : frameworks.Cast<string?>().ToArray();
         var dependencies = new Dictionary<string, PublishDependency>(StringComparer.OrdinalIgnoreCase);
         foreach (var targetFramework in evaluations)
         {
-            var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework);
+            var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework, plannedProjectContentsByPath);
             if (evaluation.Properties.TryGetValue("NuspecFile", out var nuspecFile) && !string.IsNullOrWhiteSpace(nuspecFile))
             {
                 ReadPlannedNuspecDependencies(evaluation, project, selectedPackages, dependencies);
@@ -353,45 +355,57 @@ public sealed partial class DotNetRepositoryReleaseService
                 continue;
             }
 
-            var projectReferences = ApplyPlannedItemOperations(evaluation.Items, "ProjectReference");
-            foreach (var reference in projectReferences.Where(IsPackedProjectReference))
+            foreach (var item in evaluation.Items.Where(item => item.ItemType.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
             {
-                foreach (var include in SplitPlannedItems(reference.Include))
-                {
+                foreach (var include in SplitPlannedItems(item.Include))
                     EnsurePlannedReferenceIsResolved(include, project);
-                    foreach (var selectedProject in selectedProjectPaths)
-                    {
-                        if (PlannedProjectReferenceMatches(reference.BaseDirectory, include, selectedProject.Key))
-                            AddPlannedDependency(dependencies, selectedProject.Value, targetFramework);
-                    }
-                }
+            }
+            foreach (var selectedProject in selectedProjectPaths)
+            {
+                var reference = ResolvePlannedItemForCandidate(
+                    evaluation.Items,
+                    "ProjectReference",
+                    selectedProject.Key,
+                    static (item, pattern, candidate) => PlannedProjectReferenceMatches(item.BaseDirectory, pattern, candidate));
+                if (reference is not null && IsPackedProjectReference(reference))
+                    AddPlannedDependency(dependencies, selectedProject.Value, targetFramework);
             }
 
             var centralVersionsEnabled = evaluation.Properties.TryGetValue("ManagePackageVersionsCentrally", out var centralSetting) &&
                                          string.Equals(centralSetting, "true", StringComparison.OrdinalIgnoreCase);
-            var centralVersions = centralVersionsEnabled
-                ? ApplyPlannedItemOperations(evaluation.Items, "PackageVersion")
-                    .Where(item => !string.IsNullOrWhiteSpace(item.Include))
-                    .GroupBy(item => item.Include!, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(
-                        group => group.Key,
-                        group => group.Last().GetMetadata("Version"),
-                        StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-            var packageReferences = ApplyPlannedItemOperations(evaluation.Items, "PackageReference");
-            foreach (var reference in packageReferences.Where(reference => !IsPrivateReference(reference)))
+            var centralVersions = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (centralVersionsEnabled)
             {
-                foreach (var effectivePackageId in SplitPlannedItems(reference.Include))
+                foreach (var packageId in selectedPackages.Keys)
                 {
-                    EnsurePlannedReferenceIsResolved(effectivePackageId, project);
-                    if (!selectedPackages.TryGetValue(effectivePackageId, out var selectedPackage))
-                        continue;
-                    var versionRange = reference.GetMetadata("VersionOverride") ?? reference.GetMetadata("Version");
-                    if (string.IsNullOrWhiteSpace(versionRange) && centralVersions.TryGetValue(effectivePackageId, out var centralVersion))
-                        versionRange = centralVersion;
-                    if (DependencyTargetsSelectedVersion(versionRange, selectedPackage, GetEffectivePackageId(project)))
-                        AddPlannedDependency(dependencies, effectivePackageId, targetFramework);
+                    var versionItem = ResolvePlannedItemForCandidate(
+                        evaluation.Items,
+                        "PackageVersion",
+                        packageId,
+                        static (_, pattern, candidate) => PlannedItemSpecMatches(pattern, candidate));
+                    if (versionItem is not null)
+                        centralVersions[packageId] = versionItem.GetMetadata("Version");
                 }
+            }
+            foreach (var item in evaluation.Items.Where(item => item.ItemType.Equals("PackageReference", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var include in SplitPlannedItems(item.Include))
+                    EnsurePlannedReferenceIsResolved(include, project);
+            }
+            foreach (var selectedPackage in selectedPackages)
+            {
+                var reference = ResolvePlannedItemForCandidate(
+                    evaluation.Items,
+                    "PackageReference",
+                    selectedPackage.Key,
+                    static (_, pattern, candidate) => PlannedItemSpecMatches(pattern, candidate));
+                if (reference is null || IsPrivateReference(reference))
+                    continue;
+                var versionRange = reference.GetMetadata("VersionOverride") ?? reference.GetMetadata("Version");
+                if (string.IsNullOrWhiteSpace(versionRange) && centralVersions.TryGetValue(selectedPackage.Key, out var centralVersion))
+                    versionRange = centralVersion;
+                if (DependencyTargetsSelectedVersion(versionRange, selectedPackage.Value, GetEffectivePackageId(project)))
+                    AddPlannedDependency(dependencies, selectedPackage.Key, targetFramework);
             }
         }
 
@@ -470,6 +484,28 @@ public sealed partial class DotNetRepositoryReleaseService
         var normalizedInclude = include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
         var candidatePattern = Path.GetFullPath(Path.Combine(baseDirectory, normalizedInclude));
         return PlannedItemSpecMatches(candidatePattern, Path.GetFullPath(selectedProjectPath));
+    }
+
+    private static PlannedItem? ResolvePlannedItemForCandidate(
+        IEnumerable<PlannedItem> source,
+        string itemType,
+        string candidate,
+        Func<PlannedItem, string, string, bool> matches)
+    {
+        PlannedItem? result = null;
+        foreach (var item in source.Where(item => item.ItemType.Equals(itemType, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (SplitPlannedItems(item.Remove).Any(pattern => matches(item, pattern, candidate)))
+                result = null;
+            if (result is not null && SplitPlannedItems(item.Update).Any(pattern => matches(item, pattern, candidate)))
+                result = result.WithMetadata(item.Metadata);
+            if (SplitPlannedItems(item.Include).Any(pattern => matches(item, pattern, candidate)) &&
+                !SplitPlannedItems(item.Exclude).Any(pattern => matches(item, pattern, candidate)))
+            {
+                result = item.WithInclude(candidate);
+            }
+        }
+        return result;
     }
 
     private static void AddPlannedDependency(

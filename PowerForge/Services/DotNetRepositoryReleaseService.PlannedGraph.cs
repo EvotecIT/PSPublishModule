@@ -10,11 +10,25 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
-    private static PlannedEvaluation EvaluatePlannedProject(string projectPath, string? configuration, string? targetFramework)
+    private static PlannedEvaluation EvaluatePlannedProject(
+        string projectPath,
+        string? configuration,
+        string? targetFramework,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath = null)
     {
         var fullProjectPath = Path.GetFullPath(projectPath);
         var projectDirectory = Path.GetDirectoryName(fullProjectPath)!;
-        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry environmentProperty in Environment.GetEnvironmentVariables())
+        {
+            if (environmentProperty.Key is string name &&
+                environmentProperty.Value is not null &&
+                Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_.-]*$", RegexOptions.CultureInvariant))
+            {
+                properties[name] = environmentProperty.Value.ToString() ?? string.Empty;
+            }
+        }
+        foreach (var globalProperty in new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Configuration"] = configuration ?? string.Empty,
             ["TargetFramework"] = targetFramework ?? string.Empty,
@@ -26,7 +40,10 @@ public sealed partial class DotNetRepositoryReleaseService
             ["MSBuildProjectDirectory"] = projectDirectory,
             ["MSBuildProjectFullPath"] = fullProjectPath,
             ["MSBuildProjectName"] = Path.GetFileNameWithoutExtension(fullProjectPath)
-        };
+        })
+        {
+            properties[globalProperty.Key] = globalProperty.Value;
+        }
         SetDerivedTargetFrameworkProperties(properties, targetFramework);
 
         var items = new List<PlannedItem>();
@@ -37,12 +54,12 @@ public sealed partial class DotNetRepositoryReleaseService
         var buildProps = FindNearestBuildFile(directory, "Directory.Build.props");
         var buildTargets = FindNearestBuildFile(directory, "Directory.Build.targets");
         if (packagesProps is not null)
-            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited);
+            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
         if (buildProps is not null)
-            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited);
-        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited);
+            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
         if (buildTargets is not null)
-            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited);
+            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
         return new PlannedEvaluation(properties, items);
     }
 
@@ -66,6 +83,8 @@ public sealed partial class DotNetRepositoryReleaseService
             return prefix;
         }
 
+        if (evaluation.Properties.TryGetValue("VersionSuffix", out var defaultSuffix) && !string.IsNullOrWhiteSpace(defaultSuffix))
+            return "1.0.0-" + ExpandPlannedProperties(defaultSuffix, evaluation.Properties);
         return "1.0.0";
     }
 
@@ -85,7 +104,11 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private static string FormatFrameworkVersion(Version version)
     {
-        var fields = version.Build > 0 ? new[] { version.Major, version.Minor, version.Build } : new[] { version.Major, version.Minor };
+        var fields = version.Revision >= 0
+            ? new[] { version.Major, version.Minor, version.Build, version.Revision }
+            : version.Build >= 0
+                ? new[] { version.Major, version.Minor, version.Build }
+                : new[] { version.Major, version.Minor };
         return string.Join(".", fields);
     }
 
@@ -95,12 +118,15 @@ public sealed partial class DotNetRepositoryReleaseService
         Dictionary<string, string> properties,
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
-        ISet<string> visited)
+        ISet<string> visited,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath) || !visited.Add(fullPath))
             return;
-        var root = XDocument.Load(fullPath, LoadOptions.PreserveWhitespace).Root;
+        var root = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(fullPath, out var plannedContent)
+            ? XDocument.Parse(plannedContent, LoadOptions.PreserveWhitespace).Root
+            : XDocument.Load(fullPath, LoadOptions.PreserveWhitespace).Root;
         if (root is null)
             return;
 
@@ -112,7 +138,7 @@ public sealed partial class DotNetRepositoryReleaseService
         properties["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath);
         try
         {
-            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited);
+            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited, plannedProjectContentsByPath);
         }
         finally
         {
@@ -133,7 +159,8 @@ public sealed partial class DotNetRepositoryReleaseService
         Dictionary<string, string> properties,
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
-        ISet<string> visited)
+        ISet<string> visited,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var projectDirectory = Path.GetDirectoryName(projectPath)!;
         foreach (var element in elements)
@@ -188,7 +215,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             if (name.Equals("Import", StringComparison.OrdinalIgnoreCase))
             {
-                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited);
+                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("ImportGroup", StringComparison.OrdinalIgnoreCase))
@@ -196,7 +223,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (!ConditionMatches(element.Attribute("Condition")?.Value, properties, sourceDirectory))
                     continue;
                 foreach (var import in element.Elements().Where(child => child.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
-                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited);
+                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("Choose", StringComparison.OrdinalIgnoreCase))
@@ -204,7 +231,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 var selected = element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) && ConditionMatches(branch.Attribute("Condition")?.Value, properties, sourceDirectory))
                                ?? element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase));
                 if (selected is not null)
-                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited);
+                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited, plannedProjectContentsByPath);
             }
         }
     }
@@ -230,7 +257,8 @@ public sealed partial class DotNetRepositoryReleaseService
         Dictionary<string, string> properties,
         ICollection<PlannedItem> items,
         IDictionary<string, Dictionary<string, string>> definitions,
-        ISet<string> visited)
+        ISet<string> visited,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (!ConditionMatches(import.Attribute("Condition")?.Value, properties, sourceDirectory))
             return;
@@ -238,12 +266,45 @@ public sealed partial class DotNetRepositoryReleaseService
         if (string.IsNullOrWhiteSpace(importedPath))
             return;
         importedPath = ExpandPlannedProperties(importedPath!, properties);
-        if (importedPath.IndexOf("$(", StringComparison.Ordinal) >= 0 || importedPath.IndexOfAny(new[] { '*', '?' }) >= 0)
+        if (importedPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because import '{importedPath}' cannot be resolved without full MSBuild evaluation.");
-        var resolvedPath = ResolvePlannedPath(sourceDirectory, importedPath);
-        if (!File.Exists(resolvedPath))
-            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because imported project '{resolvedPath}' does not exist.");
-        EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited);
+        var importedPaths = ResolvePlannedImportPaths(sourceDirectory, importedPath);
+        if (importedPaths.Count == 0 && importedPath.IndexOfAny(new[] { '*', '?' }) < 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because imported project '{ResolvePlannedPath(sourceDirectory, importedPath)}' does not exist.");
+        foreach (var resolvedPath in importedPaths)
+            EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited, plannedProjectContentsByPath);
+    }
+
+    private static IReadOnlyList<string> ResolvePlannedImportPaths(string sourceDirectory, string importedPath)
+    {
+        if (importedPath.IndexOfAny(new[] { '*', '?' }) < 0)
+        {
+            var resolved = ResolvePlannedPath(sourceDirectory, importedPath);
+            return File.Exists(resolved) ? new[] { resolved } : Array.Empty<string>();
+        }
+
+        return ResolvePlannedWildcardPaths(sourceDirectory, importedPath);
+    }
+
+    private static IReadOnlyList<string> ResolvePlannedWildcardPaths(string baseDirectory, string pattern)
+    {
+        var normalized = pattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        var combinedPattern = Path.IsPathRooted(normalized) ? normalized : Path.Combine(baseDirectory, normalized);
+        var wildcardIndex = combinedPattern.IndexOfAny(new[] { '*', '?' });
+        var separatorIndex = combinedPattern.LastIndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, wildcardIndex);
+        var pathRoot = Path.GetPathRoot(combinedPattern) ?? string.Empty;
+        var rootPrefix = separatorIndex >= 0
+            ? combinedPattern.Substring(0, separatorIndex < pathRoot.Length ? pathRoot.Length : separatorIndex)
+            : baseDirectory;
+        var searchRoot = Path.GetFullPath(rootPrefix);
+        if (!Directory.Exists(searchRoot))
+            return Array.Empty<string>();
+        var suffix = separatorIndex >= 0 ? combinedPattern.Substring(separatorIndex + 1) : combinedPattern;
+        var canonicalPattern = Path.Combine(searchRoot, suffix);
+        return Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories)
+            .Where(path => PlannedItemSpecMatches(canonicalPattern, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IReadOnlyList<PlannedItem> ApplyPlannedItemOperations(IEnumerable<PlannedItem> source, string itemType)
@@ -265,7 +326,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         result[index] = result[index].WithMetadata(item.Metadata);
                 }
             }
-            foreach (var include in SplitPlannedItems(item.Include))
+            foreach (var include in ExpandPlannedItemIncludes(item, itemType))
             {
                 if (!SplitPlannedItems(item.Exclude).Any(exclude => PlannedItemSpecMatches(exclude, include)))
                     result.Add(item.WithInclude(include));
@@ -274,13 +335,34 @@ public sealed partial class DotNetRepositoryReleaseService
         return result;
     }
 
+    private static IEnumerable<string> ExpandPlannedItemIncludes(PlannedItem item, string itemType)
+    {
+        foreach (var include in SplitPlannedItems(item.Include))
+        {
+            if (include.IndexOfAny(new[] { '*', '?' }) < 0 ||
+                itemType.Equals("PackageReference", StringComparison.OrdinalIgnoreCase) ||
+                itemType.Equals("PackageVersion", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return include;
+                continue;
+            }
+
+            foreach (var path in ResolvePlannedWildcardPaths(item.BaseDirectory, include))
+                yield return NormalizePlannedItemSpec(FrameworkCompatibility.GetRelativePath(item.BaseDirectory, path));
+        }
+    }
+
     private static bool PlannedItemSpecMatches(string pattern, string value)
     {
         var normalizedPattern = NormalizePlannedItemSpec(pattern);
         var normalizedValue = NormalizePlannedItemSpec(value);
         if (normalizedPattern.IndexOfAny(new[] { '*', '?' }) < 0)
             return string.Equals(normalizedPattern, normalizedValue, StringComparison.OrdinalIgnoreCase);
-        var regex = "^" + Regex.Escape(normalizedPattern).Replace(@"\*\*", ".*").Replace(@"\*", "[^/]*").Replace(@"\?", "[^/]") + "$";
+        var regex = "^" + Regex.Escape(normalizedPattern)
+            .Replace(@"\*\*/", "(?:.*/)?")
+            .Replace(@"\*\*", ".*")
+            .Replace(@"\*", "[^/]*")
+            .Replace(@"\?", "[^/]") + "$";
         return Regex.IsMatch(normalizedValue, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
@@ -339,7 +421,7 @@ public sealed partial class DotNetRepositoryReleaseService
         internal string BaseDirectory { get; }
         internal IReadOnlyDictionary<string, string> Metadata { get; }
         internal string? GetMetadata(string name) => Metadata.TryGetValue(name, out var value) ? value : null;
-        internal PlannedItem WithInclude(string include) => new(ItemType, include, null, null, null, BaseDirectory, Metadata);
+        internal PlannedItem WithInclude(string include) => new(ItemType, include, Exclude, null, null, BaseDirectory, Metadata);
         internal PlannedItem WithMetadata(IReadOnlyDictionary<string, string> updates)
         {
             var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

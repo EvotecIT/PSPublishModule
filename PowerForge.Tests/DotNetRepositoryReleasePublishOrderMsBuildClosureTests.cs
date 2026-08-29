@@ -110,7 +110,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
             });
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(["Sample.Shared", "Sample.App"], result.Projects.Where(project => project.IsPackable).Select(project => project.PackageId));
+            Assert.Equal(["Sample.App", "Sample.Shared"], result.Projects.Where(project => project.IsPackable).Select(project => project.PackageId).OrderBy(static id => id, StringComparer.Ordinal));
             Assert.Equal(["Sample.Shared.2.3.4.nupkg", "Sample.App.2.3.4.nupkg"], result.PublishedPackages.Select(Path.GetFileName));
         }
         finally
@@ -389,6 +389,238 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
         var ordered = CreateService().SortProjectsForPublish([two, one], true, "Release");
 
         Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningTreatsUndefinedPropertiesAsEmptyInConditions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(PowerForgeTestsUndefinedProperty)' == ''"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningIncludesEnvironmentPropertiesUsedByMsBuildConditions()
+    {
+        const string propertyName = "PowerForgeTestsEnvironmentSwitch";
+        var previous = Environment.GetEnvironmentVariable(propertyName);
+        try
+        {
+            Environment.SetEnvironmentVariable(propertyName, "true");
+            using var workspace = new PublishOrderWorkspace();
+            var shared = workspace.AddProject("Shared");
+            var app = workspace.AddProject("App");
+            File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(PowerForgeTestsEnvironmentSwitch)' == 'true'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+            var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+            Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(propertyName, previous);
+        }
+    }
+
+    [Fact]
+    public void PlanningPreservesFourPartTargetPlatformVersions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0-windows10.0.19041.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(TargetPlatformVersion)' == '10.0.19041.0'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningEvaluatesWildcardImportsInDeterministicOrderAndAllowsEmptyMatches()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        var imports = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "imports"));
+        File.WriteAllText(Path.Combine(imports.FullName, "01-default.props"), "<Project><PropertyGroup><UseShared>false</UseShared></PropertyGroup></Project>");
+        File.WriteAllText(Path.Combine(imports.FullName, "02-override.props"), "<Project><PropertyGroup><UseShared>true</UseShared></PropertyGroup></Project>");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="imports/**/*.props" />
+  <Import Project="optional/*.props" />
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(UseShared)' == 'true'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningMaterializesWildcardIncludesBeforeApplyingExcludes()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        var legacy = workspace.AddProject("Legacy");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Shared/*.csproj;../Legacy/*.csproj" Exclude="../Legacy/Legacy.csproj" /></ItemGroup>
+</Project>
+""");
+        File.WriteAllText(legacy.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../App/App.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([legacy, app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App", "Legacy"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningPreservesWildcardExcludesThroughItemExpressions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        var legacy = workspace.AddProject("Legacy");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <LocalProject Include="../Shared/*.csproj;../Legacy/*.csproj" Exclude="../Legacy/Legacy.csproj" />
+    <ProjectReference Include="@(LocalProject)" />
+  </ItemGroup>
+</Project>
+""");
+        File.WriteAllText(legacy.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../App/App.csproj" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([legacy, app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App", "Legacy"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningUsesPendingProjectContentsForVersionBasedPackageReferences()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared", version: "2.0.0");
+        var app = workspace.AddProject("App", version: "2.0.0");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version></PropertyGroup>
+  <ItemGroup><PackageReference Include="Shared" Version="[$(Version)]" /></ItemGroup>
+</Project>
+""");
+        var planned = File.ReadAllText(app.CsprojPath).Replace("<Version>1.0.0</Version>", "<Version>2.0.0</Version>", StringComparison.Ordinal);
+
+        var ordered = CreateService().SortProjectsForPublish(
+            [app, shared],
+            true,
+            "Release",
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Path.GetFullPath(app.CsprojPath)] = planned
+            });
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void WhatIfOrdersPackagesFromThePendingVersionUpdateGraph()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        const string sharedPackageId = "PowerForge.Tests.PendingGraph.Shared";
+        const string appPackageId = "PowerForge.Tests.PendingGraph.App";
+        var shared = workspace.AddProject("Shared", packageId: sharedPackageId);
+        var app = workspace.AddProject("App", packageId: appPackageId);
+        File.WriteAllText(shared.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><PackageId>PowerForge.Tests.PendingGraph.Shared</PackageId><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup>
+</Project>
+""");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><PackageId>PowerForge.Tests.PendingGraph.App</PackageId><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup>
+  <ItemGroup><PackageReference Include="PowerForge.Tests.PendingGraph.Shared" Version="[$(Version)]" /></ItemGroup>
+</Project>
+""");
+        var root = Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!;
+
+        var result = CreateService().Execute(new DotNetRepositoryReleaseSpec
+        {
+            RootPath = root,
+            Configuration = "Release",
+            OutputPath = Path.Combine(root, "Artefacts", "packages"),
+            ExpectedVersion = "2.0.0",
+            UpdateVersions = true,
+            Pack = true,
+            Publish = true,
+            WhatIf = true,
+            PublishApiKey = "unused",
+            PublishSource = "https://api.nuget.org/v3/index.json"
+        });
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal(
+            [sharedPackageId + ".2.0.0.nupkg", appPackageId + ".2.0.0.nupkg"],
+            result.PublishedPackages.Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void PlanningUsesSdkDefaultVersionPrefixWhenOnlyVersionSuffixIsDeclared()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><VersionSuffix>beta.1</VersionSuffix><IsPackable>true</IsPackable></PropertyGroup>
+</Project>
+""");
+
+        var result = CreateService().Execute(new DotNetRepositoryReleaseSpec
+        {
+            RootPath = Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!,
+            Configuration = "Release",
+            Pack = false,
+            Publish = false,
+            WhatIf = true,
+            UpdateVersions = false
+        });
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal("1.0.0-beta.1", Assert.Single(result.Projects).NewVersion);
     }
 
     private static DotNetRepositoryReleaseService CreateService() => new(new NullLogger());
