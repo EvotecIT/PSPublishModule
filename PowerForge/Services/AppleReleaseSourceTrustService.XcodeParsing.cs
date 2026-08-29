@@ -205,7 +205,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         var plistReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "DEVELOPMENT_LANGUAGE", "PRODUCT_BUNDLE_IDENTIFIER", "MARKETING_VERSION",
-            "CURRENT_PROJECT_VERSION", "PRODUCT_MODULE_NAME"
+            "CURRENT_PROJECT_VERSION", "PRODUCT_MODULE_NAME", "PRODUCT_BUNDLE_PACKAGE_TYPE",
+            "MACOSX_DEPLOYMENT_TARGET", "IPHONEOS_DEPLOYMENT_TARGET", "TVOS_DEPLOYMENT_TARGET",
+            "WATCHOS_DEPLOYMENT_TARGET", "XROS_DEPLOYMENT_TARGET", "DRIVERKIT_DEPLOYMENT_TARGET"
         };
         var bytes = File.ReadAllBytes(plistPath);
         if (bytes.Length >= 8 &&
