@@ -46,6 +46,29 @@ public sealed partial class DotNetRepositoryReleaseService
         return new PlannedEvaluation(properties, items);
     }
 
+    private static string ResolvePlannedProjectVersion(
+        DotNetRepositoryProjectResult project,
+        DotNetRepositoryReleaseSpec spec)
+    {
+        var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework: null);
+        foreach (var propertyName in new[] { "PackageVersion", "Version" })
+        {
+            if (evaluation.Properties.TryGetValue(propertyName, out var value) && !string.IsNullOrWhiteSpace(value))
+                return ExpandPlannedProperties(value, evaluation.Properties);
+        }
+
+        if (evaluation.Properties.TryGetValue("VersionPrefix", out var prefix) && !string.IsNullOrWhiteSpace(prefix))
+        {
+            prefix = ExpandPlannedProperties(prefix, evaluation.Properties);
+            if (evaluation.Properties.TryGetValue("VersionSuffix", out var suffix) && !string.IsNullOrWhiteSpace(suffix))
+                return prefix + "-" + ExpandPlannedProperties(suffix, evaluation.Properties);
+            return prefix;
+        }
+
+        return "1.0.0";
+    }
+
     private static void SetDerivedTargetFrameworkProperties(IDictionary<string, string> properties, string? targetFramework)
     {
         if (string.IsNullOrWhiteSpace(targetFramework))
@@ -217,7 +240,10 @@ public sealed partial class DotNetRepositoryReleaseService
         importedPath = ExpandPlannedProperties(importedPath!, properties);
         if (importedPath.IndexOf("$(", StringComparison.Ordinal) >= 0 || importedPath.IndexOfAny(new[] { '*', '?' }) >= 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because import '{importedPath}' cannot be resolved without full MSBuild evaluation.");
-        EvaluatePlannedFile(ResolvePlannedPath(sourceDirectory, importedPath), projectPath, properties, items, definitions, visited);
+        var resolvedPath = ResolvePlannedPath(sourceDirectory, importedPath);
+        if (!File.Exists(resolvedPath))
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because imported project '{resolvedPath}' does not exist.");
+        EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited);
     }
 
     private static IReadOnlyList<PlannedItem> ApplyPlannedItemOperations(IEnumerable<PlannedItem> source, string itemType)

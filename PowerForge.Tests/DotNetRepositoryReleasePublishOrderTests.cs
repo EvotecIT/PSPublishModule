@@ -129,16 +129,16 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
-    public void SortProjectsForPublish_DoesNotTreatMutuallyExclusiveFrameworkGroupsAsOneCycle()
+    public void SortProjectsForPublish_RejectsCrossFrameworkCyclesWithoutAValidGlobalOrder()
     {
         using var workspace = new PublishOrderWorkspace();
         var one = workspace.AddProject("One", dependencyGroups: new Dictionary<string, string[]> { ["net8.0"] = ["Two"] });
         var two = workspace.AddProject("Two", dependencyGroups: new Dictionary<string, string[]> { ["net472"] = ["One"] });
 
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([two, one]);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new DotNetRepositoryReleaseService(new NullLogger()).SortProjectsForPublish([two, one]));
 
-        Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+        Assert.Contains("dependency cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
         var app = workspace.AddProject("App");
         File.WriteAllText(app.CsprojPath, """
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="missing.props" />
+  <Import Project="missing.props" Condition="Exists('missing.props')" />
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Release'">
     <ProjectReference Include="../Shared/Shared.csproj" />
@@ -163,6 +163,22 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
 
         Assert.Equal(["Shared", "App"], release.Select(project => project.PackageId));
         Assert.Equal(["App", "Shared"], debug.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void SortProjectsForPublish_PlanningFailsClosedWhenActiveImportIsMissing()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, "<Project><Import Project=\"missing.props\" /></Project>");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new DotNetRepositoryReleaseService(new NullLogger())
+                .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release"));
+
+        Assert.Contains("does not exist", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("missing.props", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -211,7 +227,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
-    public void SortProjectsForPublish_TreatsTargetlessDependencyGroupAsFrameworkFallback()
+    public void SortProjectsForPublish_RejectsFallbackAndFrameworkEdgesThatFormAGlobalCycle()
     {
         using var workspace = new PublishOrderWorkspace();
         var app = workspace.AddProject("App", dependencyGroups: new Dictionary<string, string[]>
@@ -224,10 +240,10 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
             ["net8.0"] = ["App"]
         });
 
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app]);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new DotNetRepositoryReleaseService(new NullLogger()).SortProjectsForPublish([shared, app]));
 
-        Assert.Equal(2, ordered.Count);
+        Assert.Contains("dependency cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

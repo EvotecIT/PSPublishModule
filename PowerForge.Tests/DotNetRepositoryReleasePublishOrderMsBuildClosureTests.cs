@@ -17,18 +17,85 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFrameworks>net8.0;net472</TargetFrameworks></PropertyGroup>
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' And '$(TargetFrameworkVersion)' >= 'v8.0'"><ProjectReference Include="../Two/Two.csproj" /></ItemGroup>
-</Project>
-""");
-        File.WriteAllText(two.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFrameworks>net8.0;net472</TargetFrameworks></PropertyGroup>
-  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'"><ProjectReference Include="../One/One.csproj" /></ItemGroup>
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework' And '$(TargetFrameworkVersion)' >= 'v4.7.2'"><ProjectReference Include="../Two/Two.csproj" /></ItemGroup>
 </Project>
 """);
 
         var ordered = CreateService().SortProjectsForPublish([two, one], true, "Release");
 
-        Assert.Equal(["One", "Two"], ordered.Select(project => project.PackageId));
+        Assert.Equal(["Two", "One"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void PlanningHonorsParenthesizedBooleanConditions()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="('$(Configuration)' == 'Release' Or '$(Configuration)' == 'Debug') And ('$(TargetFramework)' == 'net8.0')">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = CreateService().SortProjectsForPublish([app, shared], true, "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    public void WhatIfUsesImportedPackageIdentityAndVersionWithoutRequiringSdkEvaluation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"), """
+<Project>
+  <PropertyGroup>
+    <PackageId>Sample.$(MSBuildProjectName)</PackageId>
+    <PackageVersion>2.3.4</PackageVersion>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+</Project>
+""");
+            var sharedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Shared"));
+            File.WriteAllText(Path.Combine(sharedDirectory.FullName, "Shared.csproj"), """
+<Project Sdk="Intentionally.Missing.Sdk/999.0.0">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+</Project>
+""");
+            var appDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "App"));
+            File.WriteAllText(Path.Combine(appDirectory.FullName, "App.csproj"), """
+<Project Sdk="Intentionally.Missing.Sdk/999.0.0">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
+</Project>
+""");
+
+            var result = CreateService().Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "Artefacts", "packages"),
+                Pack = true,
+                Publish = true,
+                WhatIf = true,
+                PublishApiKey = "unused",
+                PublishSource = "https://api.nuget.org/v3/index.json",
+                UpdateVersions = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(["Sample.Shared", "Sample.App"], result.Projects.Where(project => project.IsPackable).Select(project => project.PackageId));
+            Assert.Equal(["Sample.Shared.2.3.4.nupkg", "Sample.App.2.3.4.nupkg"], result.PublishedPackages.Select(Path.GetFileName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]

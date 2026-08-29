@@ -82,8 +82,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
-                            PackageId = ResolvePackageId(item.Path, item.Name),
-                            IsPackable = IsPackable(item.Path),
+                            PackageId = ResolvePackageId(item.Path, item.Name, spec),
+                            IsPackable = IsPackable(item.Path, spec),
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
                     }
@@ -97,8 +97,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
-                    PackageId = ResolvePackageId(entry.Path, entry.Name),
-                    IsPackable = IsPackable(entry.Path)
+                    PackageId = ResolvePackageId(entry.Path, entry.Name, spec),
+                    IsPackable = IsPackable(entry.Path, spec)
                 });
             }
 

@@ -38,7 +38,31 @@ public sealed partial class DotNetRepositoryReleaseService {
         }
     }
 
-    private static string ResolvePackageId(string csprojPath, string fallbackProjectName) {
+    private static bool IsPackable(string csprojPath, DotNetRepositoryReleaseSpec spec) {
+        if (!spec.WhatIf)
+            return IsPackable(csprojPath);
+
+        var evaluation = EvaluatePlannedProject(csprojPath, ResolvePlannedConfiguration(spec), targetFramework: null);
+        if (!evaluation.Properties.TryGetValue("IsPackable", out var value) || string.IsNullOrWhiteSpace(value))
+            return true;
+        value = ExpandPlannedProperties(value, evaluation.Properties);
+        if (!bool.TryParse(value, out var isPackable))
+            throw new InvalidOperationException($"Cannot determine whether '{csprojPath}' is packable because IsPackable '{value}' is not Boolean.");
+        return isPackable;
+    }
+
+    private static string ResolvePackageId(
+        string csprojPath,
+        string fallbackProjectName,
+        DotNetRepositoryReleaseSpec spec) {
+        if (spec.WhatIf) {
+            var evaluation = EvaluatePlannedProject(csprojPath, ResolvePlannedConfiguration(spec), targetFramework: null);
+            var packageId = ResolvePlannedPackageIdentity(evaluation.Properties, fallbackProjectName);
+            if (packageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{packageId}' contains an unresolved MSBuild property.");
+            return packageId;
+        }
+
         try {
             var doc = XDocument.Load(csprojPath);
             var packageId = doc.Descendants()
@@ -52,6 +76,20 @@ public sealed partial class DotNetRepositoryReleaseService {
             return fallbackProjectName;
         }
     }
+
+    private static string ResolvePlannedPackageIdentity(
+        IReadOnlyDictionary<string, string> properties,
+        string fallbackProjectName) {
+        foreach (var propertyName in new[] { "PackageId", "AssemblyName", "MSBuildProjectName" }) {
+            if (!properties.TryGetValue(propertyName, out var value) || string.IsNullOrWhiteSpace(value))
+                continue;
+            return ExpandPlannedProperties(value, properties).Trim();
+        }
+        return fallbackProjectName;
+    }
+
+    private static string ResolvePlannedConfiguration(DotNetRepositoryReleaseSpec spec)
+        => string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
 
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec) {
         var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;

@@ -171,30 +171,6 @@ public sealed partial class DotNetRepositoryReleaseService
         if (TryOrderProjects(byPackageId, edges, out var ordered, out var cycle))
             return ordered;
 
-        var frameworkGroups = edges
-            .Select(edge => edge.Framework)
-            .Where(framework => !string.Equals(framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(framework => framework, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        foreach (var framework in frameworkGroups)
-        {
-            var frameworkEdges = edges.Where(edge =>
-                string.Equals(edge.Framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(edge.Framework, framework, StringComparison.OrdinalIgnoreCase));
-            if (!TryOrderProjects(byPackageId, frameworkEdges, out _, out var frameworkCycle))
-                ThrowDependencyCycle(frameworkCycle);
-        }
-
-        if (frameworkGroups.Length == 0)
-            ThrowDependencyCycle(cycle);
-
-        var preferredEdges = edges.Where(edge =>
-            string.Equals(edge.Framework, PublishDependency.AllFrameworks, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(edge.Framework, frameworkGroups[0], StringComparison.OrdinalIgnoreCase));
-        if (TryOrderProjects(byPackageId, preferredEdges, out ordered, out _))
-            return ordered;
-
         ThrowDependencyCycle(cycle);
         return Array.Empty<DotNetRepositoryProjectResult>();
     }
@@ -531,79 +507,6 @@ public sealed partial class DotNetRepositoryReleaseService
                 return candidate;
         }
         return null;
-    }
-
-
-    private static bool ConditionMatches(string? condition, IReadOnlyDictionary<string, string> properties, string conditionDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(condition))
-            return true;
-
-        var expanded = ExpandPlannedProperties(condition!, properties);
-        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
-            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' contains an unresolved property.");
-
-        var orBranches = Regex.Split(expanded, @"\s+[Oo][Rr]\s+");
-        return orBranches.Any(branch => Regex.Split(branch, @"\s+[Aa][Nn][Dd]\s+").All(clause => EvaluateSimpleCondition(clause, conditionDirectory)));
-    }
-
-    private static bool EvaluateSimpleCondition(string condition, string conditionDirectory)
-    {
-        var trimmed = TrimConditionParentheses(condition.Trim());
-        var exists = Regex.Match(trimmed, "^(?<not>!)?\\s*Exists\\(\\s*(?<quote>['\\\"])(?<path>.*?)\\k<quote>\\s*\\)$", RegexOptions.IgnoreCase);
-        if (exists.Success)
-        {
-            var path = ResolvePlannedPath(conditionDirectory, exists.Groups["path"].Value);
-            var result = File.Exists(path) || Directory.Exists(path);
-            return exists.Groups["not"].Success ? !result : result;
-        }
-        if (bool.TryParse(trimmed, out var boolean))
-            return boolean;
-
-        var match = Regex.Match(
-            trimmed,
-            "^\\s*(?<left>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*(?<operator>==|!=|>=|<=|>|<)\\s*(?<right>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*$");
-        if (!match.Success)
-            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' requires unsupported MSBuild evaluation.");
-        var left = UnquoteConditionOperand(match.Groups["left"].Value.Trim());
-        var right = UnquoteConditionOperand(match.Groups["right"].Value.Trim());
-        var equal = string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
-        var comparisonOperator = match.Groups["operator"].Value;
-        if (comparisonOperator == "==")
-            return equal;
-        if (comparisonOperator == "!=")
-            return !equal;
-
-        var comparison = CompareConditionOperands(left, right, condition);
-        return comparisonOperator == ">" ? comparison > 0 :
-            comparisonOperator == ">=" ? comparison >= 0 :
-            comparisonOperator == "<" ? comparison < 0 : comparison <= 0;
-    }
-
-    private static string TrimConditionParentheses(string condition)
-    {
-        while (condition.Length >= 2 && condition[0] == '(' && condition[condition.Length - 1] == ')')
-            condition = condition.Substring(1, condition.Length - 2).Trim();
-        return condition;
-    }
-
-    private static string UnquoteConditionOperand(string operand)
-        => operand.Length >= 2 && ((operand[0] == '\'' && operand[operand.Length - 1] == '\'') || (operand[0] == '"' && operand[operand.Length - 1] == '"'))
-            ? operand.Substring(1, operand.Length - 2)
-            : operand;
-
-    private static int CompareConditionOperands(string left, string right, string originalCondition)
-    {
-        var normalizedLeft = left.TrimStart('v', 'V');
-        var normalizedRight = right.TrimStart('v', 'V');
-        if (Version.TryParse(normalizedLeft, out var leftVersion) && Version.TryParse(normalizedRight, out var rightVersion))
-            return leftVersion.CompareTo(rightVersion);
-        if (decimal.TryParse(left, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var leftNumber) &&
-            decimal.TryParse(right, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var rightNumber))
-        {
-            return leftNumber.CompareTo(rightNumber);
-        }
-        throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because relational condition '{originalCondition}' does not compare numeric or version values.");
     }
 
     private static bool IsPrivateReference(PlannedItem element)
