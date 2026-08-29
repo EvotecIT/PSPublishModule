@@ -11,6 +11,8 @@ namespace PowerForge;
 /// </summary>
 internal sealed partial class AppleReleaseSourceTrustService
 {
+    private AppleReleaseSourceTrustValidationScope _validationScope =
+        AppleReleaseSourceTrustValidationScope.BuildExecution;
     private static readonly HashSet<string> AlwaysRejectedIgnoredExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".swift", ".m", ".mm", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp",
@@ -48,11 +50,15 @@ internal sealed partial class AppleReleaseSourceTrustService
     internal string ResolveExactCommit(string repositoryRoot, string configPath)
         => Capture(repositoryRoot, configPath).SourceCommit;
 
-    internal AppleReleaseSourceTrustSnapshot Capture(string repositoryRoot, string configPath)
+    internal AppleReleaseSourceTrustSnapshot Capture(
+        string repositoryRoot,
+        string configPath,
+        AppleReleaseSourceTrustValidationScope validationScope = AppleReleaseSourceTrustValidationScope.BuildExecution)
     {
         lock (_validationGate)
         {
             ResetValidationState();
+            _validationScope = validationScope;
             try
             {
                 return CaptureCore(repositoryRoot, configPath);
@@ -60,6 +66,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             finally
             {
                 ResetValidationState();
+                _validationScope = AppleReleaseSourceTrustValidationScope.BuildExecution;
             }
         }
     }
@@ -740,6 +747,12 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private static StringComparer GetPathComparer()
         => Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+}
+
+internal enum AppleReleaseSourceTrustValidationScope
+{
+    SourceInspection,
+    BuildExecution
 }
 
 internal sealed class AppleReleaseSourceTrustSnapshot
