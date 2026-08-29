@@ -144,7 +144,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph = false)
     {
-        ArgumentNullException.ThrowIfNull(projects);
+        if (projects is null)
+            throw new ArgumentNullException(nameof(projects));
         if (projects.Count <= 1)
             return projects.ToArray();
 
@@ -152,8 +153,9 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var project in projects)
         {
             var packageId = GetEffectivePackageId(project);
-            if (!byPackageId.TryAdd(packageId, project))
+            if (byPackageId.ContainsKey(packageId))
                 throw new InvalidOperationException($"Cannot determine a safe NuGet publish order because package id '{packageId}' is produced by more than one selected project.");
+            byPackageId.Add(packageId, project);
         }
 
         var dependencies = byPackageId.Keys.ToDictionary(
@@ -267,7 +269,7 @@ public sealed partial class DotNetRepositoryReleaseService
                              element.Name.LocalName.Equals("dependency", StringComparison.OrdinalIgnoreCase)))
                 {
                     var dependencyId = dependency.Attribute("id")?.Value?.Trim();
-                    if (!string.IsNullOrWhiteSpace(dependencyId) && selectedPackages.ContainsKey(dependencyId))
+                    if (dependencyId is not null && dependencyId.Length > 0 && selectedPackages.ContainsKey(dependencyId))
                         dependencies.Add(dependencyId);
                 }
             }
