@@ -6,6 +6,7 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Run_NoBuildPublishRebindsAfterDownstreamPublishItemHook()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

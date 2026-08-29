@@ -329,20 +329,39 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XAttribute("Project", existingCustomAfterTargets!)));
             }
 
-            var target = new XElement(
+            string targetSuffix = Guid.NewGuid().ToString("N");
+            var validationTarget = new XElement(
                 "Target",
                 new XAttribute(
                     "Name",
-                    "_PowerForgeBindNoBuildPublishInputs_" + Guid.NewGuid().ToString("N")),
-                new XAttribute("BeforeTargets", "_ComputeResolvedFilesToPublishTypes"));
-                int index = 0;
-            foreach ((NoBuildPublishInput[] inputs, _) in mappedInputs)
+                    "_PowerForgeValidateNoBuildPublishInputs_" + targetSuffix),
+                new XAttribute(
+                    "BeforeTargets",
+                    "_ComputeResolvedFilesToPublishTypes;_ComputeFilesToBundle"));
+            var copyBindingTarget = new XElement(
+                "Target",
+                new XAttribute("Name", "_PowerForgeBindNoBuildPublishCopies_" + targetSuffix),
+                new XAttribute("AfterTargets", "_ComputeResolvedFilesToPublishTypes"),
+                new XAttribute(
+                    "BeforeTargets",
+                    "_CopyResolvedFilesToPublishPreserveNewest;" +
+                    "_CopyResolvedFilesToPublishAlways;" +
+                    "_CopyResolvedFilesToPublishIfDifferent"));
+            var bundleBindingTarget = new XElement(
+                "Target",
+                new XAttribute("Name", "_PowerForgeBindNoBuildBundleInputs_" + targetSuffix),
+                new XAttribute("AfterTargets", "_ComputeFilesToBundle"),
+                new XAttribute("BeforeTargets", "PrepareForBundle;GenerateSingleFileBundle"));
+            var copyItems = new XElement("ItemGroup");
+            var bundleItems = new XElement("ItemGroup");
+            int index = 0;
+            foreach ((NoBuildPublishInput[] inputs, string snapshotPath) in mappedInputs)
             {
                 NoBuildPublishInput input = inputs[0];
                 string itemName = "_PowerForgeProvenNoBuildInput" +
                     index++.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 string originalPath = EscapeMsBuildConditionLiteral(input.FullPath);
-                target.Add(new XElement(
+                validationTarget.Add(new XElement(
                     "ItemGroup",
                     new XElement(
                         itemName,
@@ -350,16 +369,130 @@ public sealed partial class DotNetPublishPipelineRunner
                         new XAttribute(
                             "Condition",
                             $"'%(ResolvedFileToPublish.FullPath)' == '{originalPath}'"))));
-                target.Add(new XElement(
+                validationTarget.Add(new XElement(
                     "Error",
                     new XAttribute("Condition", $"'@({itemName})' == ''"),
                     new XAttribute(
                         "Text",
                         "A proven no-build publish input was not present in ResolvedFileToPublish: " +
                         input.FullPath)));
+
+                string[] copyBuckets =
+                [
+                    "_ResolvedFileToPublishPreserveNewest",
+                    "_ResolvedFileToPublishAlways",
+                    "_ResolvedFileToPublishIfDifferent"
+                ];
+                foreach (string bucket in copyBuckets)
+                {
+                    copyItems.Add(new XElement(
+                        bucket,
+                        new XAttribute("Remove", $"@({bucket})"),
+                        new XAttribute(
+                            "Condition",
+                            $"'%({bucket}.FullPath)' == '{originalPath}'")));
+                }
+
+                string bundleMatch = itemName + "Bundle";
+                bundleItems.Add(new XElement(
+                    bundleMatch,
+                    new XAttribute("Include", "@(_FilesToBundle)"),
+                    new XAttribute(
+                        "Condition",
+                        $"'%(_FilesToBundle.FullPath)' == '{originalPath}'")));
+                bundleItems.Add(new XElement(
+                    "_FilesToBundle",
+                    new XAttribute("Remove", "@(_FilesToBundle)"),
+                    new XAttribute(
+                        "Condition",
+                        $"'%(_FilesToBundle.FullPath)' == '{originalPath}'")));
+
+                foreach (NoBuildPublishInput replacementInput in inputs)
+                {
+                    string copyToPublishDirectory = replacementInput.Metadata.TryGetValue(
+                        "CopyToPublishDirectory",
+                        out string? copyValue)
+                        ? copyValue ?? string.Empty
+                        : string.Empty;
+                    string? bucket = copyToPublishDirectory.Equals(
+                        "PreserveNewest",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? "_ResolvedFileToPublishPreserveNewest"
+                        : copyToPublishDirectory.Equals("Always", StringComparison.OrdinalIgnoreCase)
+                            ? "_ResolvedFileToPublishAlways"
+                            : copyToPublishDirectory.Equals("IfDifferent", StringComparison.OrdinalIgnoreCase)
+                                ? "_ResolvedFileToPublishIfDifferent"
+                                : null;
+                    if (bucket is not null)
+                    {
+                        copyItems.Add(CreateSnapshotReplacement(
+                            bucket,
+                            snapshotPath,
+                            replacementInput,
+                            condition: null));
+                    }
+                    bundleItems.Add(CreateSnapshotReplacement(
+                        "_FilesToBundle",
+                        snapshotPath,
+                        replacementInput,
+                        $"'@({bundleMatch})' != ''"));
+                }
             }
-            project.Add(target);
+            copyBindingTarget.Add(copyItems);
+            bundleBindingTarget.Add(bundleItems);
+            project.Add(validationTarget);
+            project.Add(copyBindingTarget);
+            project.Add(bundleBindingTarget);
             new XDocument(project).Save(targetsPath, SaveOptions.DisableFormatting);
+        }
+
+        private static XElement CreateSnapshotReplacement(
+            string itemName,
+            string snapshotPath,
+            NoBuildPublishInput input,
+            string? condition)
+        {
+            var replacement = new XElement(itemName, new XAttribute("Include", snapshotPath));
+            if (!string.IsNullOrWhiteSpace(condition))
+                replacement.Add(new XAttribute("Condition", condition!));
+            foreach (KeyValuePair<string, string> metadata in input.Metadata)
+            {
+                if (IsIntrinsicItemMetadata(metadata.Key) || !TryVerifyXmlName(metadata.Key))
+                    continue;
+                replacement.Add(new XElement(metadata.Key, metadata.Value ?? string.Empty));
+            }
+            replacement.SetElementValue("RelativePath", input.RelativePath);
+            return replacement;
+        }
+
+        private static bool IsIntrinsicItemMetadata(string name)
+            => name.Equals("Identity", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("FullPath", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("RootDir", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("Filename", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("Extension", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("RelativeDir", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("Directory", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("RecursiveDir", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("ModifiedTime", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("CreatedTime", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("AccessedTime", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("DefiningProjectFullPath", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("DefiningProjectDirectory", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("DefiningProjectName", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("DefiningProjectExtension", StringComparison.OrdinalIgnoreCase);
+
+        private static bool TryVerifyXmlName(string name)
+        {
+            try
+            {
+                _ = System.Xml.XmlConvert.VerifyName(name);
+                return !name.Contains(':');
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static string EscapeMsBuildConditionLiteral(string value)

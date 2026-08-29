@@ -12,6 +12,7 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly string _installationRoot;
         private readonly string? _selectedSdkDirectory;
         private readonly string[] _capturedRoots;
+        private readonly string[] _observedRoots;
         private readonly Dictionary<string, FileSnapshot> _files;
         private readonly List<FileSystemWatcher> _watchers = new();
         private int _changed;
@@ -22,12 +23,14 @@ public sealed partial class DotNetPublishPipelineRunner
             string installationRoot,
             string? selectedSdkDirectory,
             string[] capturedRoots,
+            string[] observedRoots,
             Dictionary<string, FileSnapshot> files)
         {
             _executablePath = executablePath;
             _installationRoot = installationRoot;
             _selectedSdkDirectory = selectedSdkDirectory;
             _capturedRoots = capturedRoots;
+            _observedRoots = observedRoots;
             _files = files;
         }
 
@@ -44,6 +47,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     ? Environment.CurrentDirectory
                     : Path.GetFullPath(workingDirectory),
                 out string? selectedSdkDirectory);
+            string[] observedRoots = ResolveObservedRoots(installationRoot, capturedRoots);
             Dictionary<string, FileSnapshot> firstFiles = CaptureFiles(capturedRoots);
             TrustedDotNetInstallationSnapshot? snapshot = null;
             try
@@ -55,6 +59,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     installationRoot,
                     selectedSdkDirectory,
                     capturedRoots,
+                    observedRoots,
                     files);
                 snapshot.StartWatchers();
                 Dictionary<string, FileSnapshot> secondFiles = CaptureFiles(capturedRoots);
@@ -142,7 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             var watched = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-            foreach (string root in _capturedRoots)
+            foreach (string root in _observedRoots)
             {
                 if (Directory.Exists(root))
                 {
@@ -209,13 +214,24 @@ public sealed partial class DotNetPublishPipelineRunner
             StringComparison comparison = IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            return _capturedRoots.Any(root =>
+            return _observedRoots.Any(root =>
                 string.Equals(fullPath, root, comparison) ||
                 (Directory.Exists(root) && IsSameOrBelowBuildInputPath(fullPath, root)));
         }
 
         internal bool AffectsCapturedClosureForTest(string path)
             => AffectsCapturedClosure(path);
+
+        private static string[] ResolveObservedRoots(
+            string installationRoot,
+            IEnumerable<string> capturedRoots)
+        {
+            var roots = new List<string>(capturedRoots);
+            AddDirectoryIfPresent(roots, Path.Combine(installationRoot, "packs"));
+            AddDirectoryIfPresent(roots, Path.Combine(installationRoot, "sdk-manifests"));
+            AddDirectoryIfPresent(roots, Path.Combine(installationRoot, "metadata", "workloads"));
+            return NormalizeCapturedRoots(roots);
+        }
 
         private static string[] ResolveCapturedRoots(
             string executablePath,

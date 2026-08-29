@@ -86,6 +86,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Run_UnsignedBuildPublishAllowsDirtyDevelopmentCheckout()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

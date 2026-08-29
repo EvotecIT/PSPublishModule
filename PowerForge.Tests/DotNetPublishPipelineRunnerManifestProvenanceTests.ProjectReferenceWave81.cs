@@ -92,17 +92,19 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([input], null);
             using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot second =
                 DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([input], null);
-            string firstName = XDocument.Load(first.TargetsPath).Root!
-                .Element("Target")!
-                .Attribute("Name")!
-                .Value;
-            string secondName = XDocument.Load(second.TargetsPath).Root!
-                .Element("Target")!
-                .Attribute("Name")!
-                .Value;
+            string firstName = XDocument.Load(first.TargetsPath).Descendants("Target")
+                .Select(target => target.Attribute("Name")!.Value)
+                .Single(name => name.StartsWith(
+                    "_PowerForgeBindNoBuildPublishCopies_",
+                    StringComparison.Ordinal));
+            string secondName = XDocument.Load(second.TargetsPath).Descendants("Target")
+                .Select(target => target.Attribute("Name")!.Value)
+                .Single(name => name.StartsWith(
+                    "_PowerForgeBindNoBuildPublishCopies_",
+                    StringComparison.Ordinal));
 
-            Assert.StartsWith("_PowerForgeBindNoBuildPublishInputs_", firstName, StringComparison.Ordinal);
-            Assert.NotEqual("_PowerForgeBindNoBuildPublishInputs", firstName);
+            Assert.StartsWith("_PowerForgeBindNoBuildPublishCopies_", firstName, StringComparison.Ordinal);
+            Assert.NotEqual("_PowerForgeBindNoBuildPublishCopies", firstName);
             Assert.NotEqual(firstName, secondName);
         }
         finally
@@ -143,6 +145,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             XDocument targets = XDocument.Load(snapshot.TargetsPath);
             Assert.Single(snapshotFiles);
             Assert.Empty(targets.Descendants("ResolvedFileToPublish"));
+            StringComparison pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            string[] snapshotReferences = targets.Descendants()
+                .Where(element =>
+                    element.Name.LocalName.StartsWith("_ResolvedFileToPublish", StringComparison.Ordinal) ||
+                    element.Name.LocalName.Equals("_FilesToBundle", StringComparison.Ordinal))
+                .Select(element => element.Attribute("Include")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => Path.GetFullPath(value!))
+                .Where(value => string.Equals(value, snapshotFiles[0], pathComparison))
+                .ToArray();
+            Assert.Equal(2, snapshotReferences.Length);
+            Assert.Contains(targets.Descendants("RelativePath"), element => element.Value == "first/Library.dll");
+            Assert.Contains(targets.Descendants("RelativePath"), element => element.Value == "second/Library.dll");
             Assert.Contains(
                 targets.Descendants("Error"),
                 element => element.Attribute("Text")?.Value.Contains(

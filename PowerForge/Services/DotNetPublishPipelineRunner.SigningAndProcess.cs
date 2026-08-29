@@ -577,6 +577,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .GetAwaiter()
             .GetResult();
         ValidateActiveDotNetInstallationSnapshot(fileName, verifyHashes: false);
+        ActiveNativeAotPathSnapshot.Value?.ValidateUnchanged(verifyHashes: false);
         _cancellationToken.Value.ThrowIfCancellationRequested();
         return (result.ExitCode, result.StdOut, result.StdErr);
     }
@@ -863,9 +864,17 @@ public sealed partial class DotNetPublishPipelineRunner
         if (configureDotNetRuntime && ActiveNativeAotPublish.Value)
         {
             string dotNetPath = ResolveDotNetChildExecutable("dotnet");
-            values["PATH"] = BuildTrustedNativeAotPath(
+            string trustedNativeAotPath = BuildTrustedNativeAotPath(
                 dotNetPath,
                 Environment.GetEnvironmentVariable("PATH"));
+            if (ActiveToolSnapshotScope.Value)
+            {
+                TrustedNativeAotPathSnapshot snapshot = ActiveNativeAotPathSnapshot.Value ??=
+                    TrustedNativeAotPathSnapshot.Create(trustedNativeAotPath);
+                snapshot.EnsurePath(trustedNativeAotPath);
+                snapshot.ValidateUnchanged(verifyHashes: false);
+            }
+            values["PATH"] = trustedNativeAotPath;
         }
         return values;
     }

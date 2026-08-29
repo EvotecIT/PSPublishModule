@@ -146,8 +146,23 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             using DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot snapshot =
                 DotNetPublishPipelineRunner.NoBuildPublishInputSnapshot.Create([input], null);
             XDocument targets = XDocument.Load(snapshot.TargetsPath);
+            string snapshotPath = Assert.Single(Directory.GetFiles(
+                Path.Combine(Path.GetDirectoryName(snapshot.TargetsPath)!, "inputs"),
+                "*",
+                SearchOption.AllDirectories));
 
             Assert.Empty(targets.Descendants("ResolvedFileToPublish"));
+            StringComparison pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            Assert.Contains(targets.Descendants(), element =>
+                (element.Name.LocalName.StartsWith("_ResolvedFileToPublish", StringComparison.Ordinal) ||
+                 element.Name.LocalName.Equals("_FilesToBundle", StringComparison.Ordinal)) &&
+                !string.IsNullOrWhiteSpace(element.Attribute("Include")?.Value) &&
+                string.Equals(
+                    Path.GetFullPath(element.Attribute("Include")!.Value),
+                    snapshotPath,
+                    pathComparison));
             Assert.Contains(targets.Descendants("Error"), error =>
                 error.Attribute("Text")?.Value.Contains(sourcePath, StringComparison.OrdinalIgnoreCase) == true);
         }

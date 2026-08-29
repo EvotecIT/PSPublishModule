@@ -209,10 +209,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.Equal(provenBytes, File.ReadAllBytes(snapshotPath));
             Assert.Contains(
-                "BeforeTargets=\"_ComputeResolvedFilesToPublishTypes\"",
+                "AfterTargets=\"_ComputeResolvedFilesToPublishTypes\"",
                 targets,
                 StringComparison.Ordinal);
-            Assert.DoesNotContain(snapshotPath, targets, StringComparison.Ordinal);
+            Assert.Contains(snapshotPath, targets, StringComparison.Ordinal);
+            Assert.Contains("_ResolvedFileToPublish", targets, StringComparison.Ordinal);
             Assert.DoesNotContain("ResolvedFileToPublish Remove", targets, StringComparison.OrdinalIgnoreCase);
         }
         finally

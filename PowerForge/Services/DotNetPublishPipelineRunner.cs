@@ -21,6 +21,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly AsyncLocal<string?> ActiveDotNetExecutablePath = new();
     private static readonly AsyncLocal<string?> ActiveDotNetExecutableSha256 = new();
     private static readonly AsyncLocal<TrustedDotNetInstallationSnapshot?> ActiveDotNetInstallationSnapshot = new();
+    private static readonly AsyncLocal<TrustedNativeAotPathSnapshot?> ActiveNativeAotPathSnapshot = new();
     private static readonly AsyncLocal<string?> ActiveGitExecutablePath = new();
     private static readonly AsyncLocal<string?> ActiveGitExecutableSha256 = new();
     private static readonly AsyncLocal<bool> ActiveNativeAotPublish = new();

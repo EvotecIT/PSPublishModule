@@ -183,6 +183,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_AllowsControlledProjectGeneratedPublishInput()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

@@ -921,8 +921,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         try
         {
-            if (!TryResolveTrustedBuildTool("git", out string gitPath))
-                return null;
+            string gitPath = ResolveGitChildExecutable("git");
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo

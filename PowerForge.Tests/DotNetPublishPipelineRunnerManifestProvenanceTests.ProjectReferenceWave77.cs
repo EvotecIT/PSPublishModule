@@ -7,6 +7,7 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_NoBuildPublishAcceptsProjectReferenceWithIgnoredOutputs()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

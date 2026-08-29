@@ -36,6 +36,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
         string? previousDotNetExecutableSha256 = ActiveDotNetExecutableSha256.Value;
         TrustedDotNetInstallationSnapshot? previousDotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
+        TrustedNativeAotPathSnapshot? previousNativeAotPathSnapshot = ActiveNativeAotPathSnapshot.Value;
         string? previousGitExecutablePath = ActiveGitExecutablePath.Value;
         string? previousGitExecutableSha256 = ActiveGitExecutableSha256.Value;
         bool previousNativeAotPublish = ActiveNativeAotPublish.Value;
@@ -44,6 +45,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ActiveDotNetExecutablePath.Value = null;
         ActiveDotNetExecutableSha256.Value = null;
         ActiveDotNetInstallationSnapshot.Value = null;
+        ActiveNativeAotPathSnapshot.Value = null;
         ActiveGitExecutablePath.Value = null;
         ActiveGitExecutableSha256.Value = null;
         ActiveToolSnapshotScope.Value = true;
@@ -324,17 +326,35 @@ public sealed partial class DotNetPublishPipelineRunner
             finally
             {
                 TrustedDotNetInstallationSnapshot? dotNetInstallationSnapshot = ActiveDotNetInstallationSnapshot.Value;
+                TrustedNativeAotPathSnapshot? nativeAotPathSnapshot = ActiveNativeAotPathSnapshot.Value;
                 try
                 {
-                    if (dotNetInstallationSnapshot is not null)
+                    try
                     {
-                        try
+                        if (nativeAotPathSnapshot is not null)
                         {
-                            dotNetInstallationSnapshot.ValidateUnchanged(verifyHashes: true);
+                            try
+                            {
+                                nativeAotPathSnapshot.ValidateUnchanged(verifyHashes: true);
+                            }
+                            finally
+                            {
+                                nativeAotPathSnapshot.Dispose();
+                            }
                         }
-                        finally
+                    }
+                    finally
+                    {
+                        if (dotNetInstallationSnapshot is not null)
                         {
-                            dotNetInstallationSnapshot.Dispose();
+                            try
+                            {
+                                dotNetInstallationSnapshot.ValidateUnchanged(verifyHashes: true);
+                            }
+                            finally
+                            {
+                                dotNetInstallationSnapshot.Dispose();
+                            }
                         }
                     }
                 }
@@ -345,6 +365,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     ActiveDotNetExecutablePath.Value = previousDotNetExecutablePath;
                     ActiveDotNetExecutableSha256.Value = previousDotNetExecutableSha256;
                     ActiveDotNetInstallationSnapshot.Value = previousDotNetInstallationSnapshot;
+                    ActiveNativeAotPathSnapshot.Value = previousNativeAotPathSnapshot;
                     ActiveGitExecutablePath.Value = previousGitExecutablePath;
                     ActiveGitExecutableSha256.Value = previousGitExecutableSha256;
                     ActiveNativeAotPublish.Value = previousNativeAotPublish;
