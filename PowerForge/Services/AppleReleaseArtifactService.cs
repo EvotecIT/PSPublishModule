@@ -348,10 +348,84 @@ internal sealed class AppleReleaseArtifactService
 
     private static long GetAvailableBytes(string path)
     {
-        var root = Path.GetPathRoot(Path.GetFullPath(path));
-        if (string.IsNullOrWhiteSpace(root))
+        var drives = DriveInfo.GetDrives()
+            .Where(static drive => drive.IsReady)
+            .ToArray();
+        var root = ResolveOwningDriveRoot(path, drives.Select(static drive => drive.Name));
+        var drive = drives.FirstOrDefault(candidate => ResolvePhysicalPath(candidate.Name).Equals(
+                root,
+                StringComparison.Ordinal))
+            ?? new DriveInfo(root);
+        return drive.AvailableFreeSpace;
+    }
+
+    /// <summary>
+    /// Resolves the deepest mounted drive root that contains a path. This is
+    /// required on Unix, where <see cref="Path.GetPathRoot(string)"/> returns
+    /// <c>/</c> for paths hosted by separately mounted volumes.
+    /// </summary>
+    internal static string ResolveOwningDriveRoot(string path, IEnumerable<string> driveRoots)
+    {
+        if (driveRoots is null)
+            throw new ArgumentNullException(nameof(driveRoots));
+
+        var fullPath = ResolvePhysicalPath(path);
+        var mountedRoot = driveRoots
+            .Where(static root => !string.IsNullOrWhiteSpace(root))
+            .Select(ResolvePhysicalPath)
+            .Where(root => IsWithinRoot(fullPath, root))
+            .OrderByDescending(static root => root.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar).Length)
+            .FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(mountedRoot))
+            return mountedRoot;
+
+        var fallbackRoot = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(fallbackRoot))
             throw new InvalidOperationException($"Unable to resolve disk root for '{path}'.");
-        return new DriveInfo(root).AvailableFreeSpace;
+        return fallbackRoot;
+    }
+
+    /// <summary>
+    /// Resolves symbolic links and junctions in every existing path component
+    /// so volume selection follows the physical project location.
+    /// </summary>
+    internal static string ResolvePhysicalPath(string path)
+    {
+#if NET8_0_OR_GREATER
+        var fullPath = Path.GetFullPath(path);
+        var pathRoot = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(pathRoot))
+            return fullPath;
+
+        var current = pathRoot;
+        var components = fullPath[pathRoot.Length..].Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        foreach (var component in components)
+        {
+            var candidate = Path.Combine(current, component);
+            FileSystemInfo? info = Directory.Exists(candidate)
+                ? new DirectoryInfo(candidate)
+                : File.Exists(candidate)
+                    ? new FileInfo(candidate)
+                    : null;
+            if (info?.LinkTarget is not null)
+            {
+                var resolvedTarget = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+                current = string.IsNullOrWhiteSpace(resolvedTarget)
+                    ? candidate
+                    : ResolvePhysicalPath(resolvedTarget);
+            }
+            else
+                current = candidate;
+        }
+
+        return Path.GetFullPath(current);
+#else
+        return Path.GetFullPath(path);
+#endif
     }
 
     private static long GigabytesToBytes(double value)
