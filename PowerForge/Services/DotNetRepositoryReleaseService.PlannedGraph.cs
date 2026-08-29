@@ -185,7 +185,11 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec)
     {
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
-        var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework: null);
+        var evaluation = EvaluatePlannedProject(
+            project.CsprojPath,
+            configuration,
+            targetFramework: null,
+            spec.PlannedProjectContentsByPath);
         foreach (var propertyName in new[] { "PackageVersion", "Version" })
         {
             if (evaluation.Properties.TryGetValue(propertyName, out var value) && !string.IsNullOrWhiteSpace(value))

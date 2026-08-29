@@ -51,30 +51,61 @@ public sealed partial class DotNetRepositoryReleaseService {
         return isPackable;
     }
 
-    private static string ResolvePackageId(
+    private string ResolvePackageId(
         string csprojPath,
         string fallbackProjectName,
         DotNetRepositoryReleaseSpec spec) {
         if (spec.WhatIf) {
             var evaluation = EvaluatePlannedProject(csprojPath, ResolvePlannedConfiguration(spec), targetFramework: null);
-            var packageId = ResolvePlannedPackageIdentity(evaluation.Properties, fallbackProjectName);
-            if (packageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
-                throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{packageId}' contains an unresolved MSBuild property.");
-            return packageId;
+            var plannedPackageId = ResolvePlannedPackageIdentity(evaluation.Properties, fallbackProjectName);
+            if (plannedPackageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{plannedPackageId}' contains an unresolved MSBuild property.");
+            return plannedPackageId;
         }
 
-        try {
-            var doc = XDocument.Load(csprojPath);
-            var packageId = doc.Descendants()
-                .FirstOrDefault(e => e.Name.LocalName.Equals("PackageId", StringComparison.OrdinalIgnoreCase))
-                ?.Value;
-
-            return string.IsNullOrWhiteSpace(packageId)
-                ? fallbackProjectName
-                : (packageId ?? string.Empty).Trim();
-        } catch {
-            return fallbackProjectName;
+        var projectDirectory = Path.GetDirectoryName(csprojPath) ?? spec.RootPath;
+        var configuration = ResolvePlannedConfiguration(spec);
+        var exitCode = RunDotnetMsBuildGetProperty(
+            csprojPath,
+            projectDirectory,
+            configuration,
+            targetFramework: null,
+            propertyName: "PackageId",
+            fallbackProjectName,
+            _logger,
+            out var packageId,
+            out var stdErr,
+            out var stdOut,
+            out _);
+        if (exitCode != 0) {
+            var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
+            throw new InvalidOperationException(
+                $"Cannot determine the package id for '{csprojPath}' because MSBuild PackageId evaluation failed. {detail}".Trim());
         }
+        if (!string.IsNullOrWhiteSpace(packageId))
+            return packageId!.Trim();
+
+        exitCode = RunDotnetMsBuildGetProperty(
+            csprojPath,
+            projectDirectory,
+            configuration,
+            targetFramework: null,
+            propertyName: "AssemblyName",
+            fallbackProjectName,
+            _logger,
+            out var assemblyName,
+            out stdErr,
+            out stdOut,
+            out _);
+        if (exitCode != 0) {
+            var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
+            throw new InvalidOperationException(
+                $"Cannot determine the package id for '{csprojPath}' because MSBuild AssemblyName evaluation failed. {detail}".Trim());
+        }
+
+        return string.IsNullOrWhiteSpace(assemblyName)
+            ? fallbackProjectName
+            : assemblyName!.Trim();
     }
 
     private static string ResolvePlannedPackageIdentity(

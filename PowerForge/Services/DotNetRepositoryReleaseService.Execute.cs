@@ -356,6 +356,17 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (spec.WhatIf)
                 {
                     versionBindingService.LogPlanned(versionBindingPlan);
+                    if (versionBindingPlan.Any(static item => item.HasChanges) &&
+                        !TryRefreshEffectiveVersionsAfterBindings(
+                            packable,
+                            result,
+                            spec,
+                            spec.VersionBindings,
+                            out var refreshError))
+                    {
+                        result.Success = false;
+                        progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, refreshError);
+                    }
                 }
                 else
                 {

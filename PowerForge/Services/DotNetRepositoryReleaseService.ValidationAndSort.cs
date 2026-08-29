@@ -408,6 +408,13 @@ public sealed partial class DotNetRepositoryReleaseService
 
             var centralVersionsEnabled = evaluation.Properties.TryGetValue("ManagePackageVersionsCentrally", out var centralSetting) &&
                                          string.Equals(centralSetting, "true", StringComparison.OrdinalIgnoreCase);
+            var transitivePinningEnabled = evaluation.Properties.TryGetValue("CentralPackageTransitivePinningEnabled", out var transitivePinningSetting) &&
+                                           string.Equals(transitivePinningSetting, "true", StringComparison.OrdinalIgnoreCase);
+            if (transitivePinningEnabled)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because CentralPackageTransitivePinningEnabled can promote restored transitive dependencies that are not present in the process-free project graph.");
+            }
             var centralVersions = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             if (centralVersionsEnabled)
             {
