@@ -364,16 +364,30 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var targetFramework in evaluations)
         {
             var evaluation = EvaluatePlannedProject(project.CsprojPath, configuration, targetFramework);
+            if (evaluation.Properties.TryGetValue("NuspecFile", out var nuspecFile) && !string.IsNullOrWhiteSpace(nuspecFile))
+            {
+                ReadPlannedNuspecDependencies(evaluation, project, selectedPackages, dependencies);
+                continue;
+            }
+            var suppressesDependencies =
+                (evaluation.Properties.TryGetValue("SuppressDependenciesWhenPacking", out var suppressDependencies) && string.Equals(suppressDependencies, "true", StringComparison.OrdinalIgnoreCase)) ||
+                (evaluation.Properties.TryGetValue("PackAsTool", out var packAsTool) && string.Equals(packAsTool, "true", StringComparison.OrdinalIgnoreCase));
+            if (suppressesDependencies)
+            {
+                continue;
+            }
+
             var projectReferences = ApplyPlannedItemOperations(evaluation.Items, "ProjectReference");
-            foreach (var reference in projectReferences.Where(reference => !IsPrivateReference(reference)))
+            foreach (var reference in projectReferences.Where(IsPackedProjectReference))
             {
                 foreach (var include in SplitPlannedItems(reference.Include))
                 {
-                    if (include.IndexOf("$(", StringComparison.Ordinal) >= 0)
-                        continue;
-                    var fullPath = ResolvePlannedPath(reference.SourceDirectory, include);
-                    if (selectedProjectPaths.TryGetValue(fullPath, out var packageId))
-                        AddPlannedDependency(dependencies, packageId, targetFramework);
+                    EnsurePlannedReferenceIsResolved(include, project);
+                    foreach (var selectedProject in selectedProjectPaths)
+                    {
+                        if (PlannedProjectReferenceMatches(reference.BaseDirectory, include, selectedProject.Key))
+                            AddPlannedDependency(dependencies, selectedProject.Value, targetFramework);
+                    }
                 }
             }
 
@@ -393,8 +407,8 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 foreach (var effectivePackageId in SplitPlannedItems(reference.Include))
                 {
-                    if (effectivePackageId.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-                        !selectedPackages.TryGetValue(effectivePackageId, out var selectedPackage))
+                    EnsurePlannedReferenceIsResolved(effectivePackageId, project);
+                    if (!selectedPackages.TryGetValue(effectivePackageId, out var selectedPackage))
                         continue;
                     var versionRange = reference.GetMetadata("VersionOverride") ?? reference.GetMetadata("Version");
                     if (string.IsNullOrWhiteSpace(versionRange) && centralVersions.TryGetValue(effectivePackageId, out var centralVersion))
@@ -406,6 +420,80 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         return dependencies.Values.ToArray();
+    }
+
+    private static void ReadPlannedNuspecDependencies(
+        PlannedEvaluation evaluation,
+        DotNetRepositoryProjectResult project,
+        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
+        IDictionary<string, PublishDependency> dependencies)
+    {
+        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(project.CsprojPath))!;
+        var configuredPath = ExpandPlannedProperties(evaluation.Properties["NuspecFile"], evaluation.Properties);
+        if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because NuspecFile '{configuredPath}' is unresolved.");
+        var nuspecPath = ResolvePlannedPath(projectDirectory, configuredPath);
+        if (!File.Exists(nuspecPath))
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom nuspec '{nuspecPath}' does not exist.");
+
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in evaluation.Properties)
+            tokens[property.Key] = property.Value;
+        tokens["id"] = GetEffectivePackageId(project);
+        tokens["version"] = GetSelectedPackageVersion(project);
+        if (evaluation.Properties.TryGetValue("NuspecProperties", out var nuspecProperties))
+        {
+            foreach (var entry in SplitPlannedItems(ExpandPlannedProperties(nuspecProperties, evaluation.Properties)))
+            {
+                var separator = entry.IndexOf('=');
+                if (separator <= 0)
+                    throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because NuspecProperties entry '{entry}' is invalid.");
+                tokens[entry.Substring(0, separator).Trim()] = entry.Substring(separator + 1).Trim();
+            }
+        }
+
+        string ExpandToken(string value)
+        {
+            var expanded = Regex.Replace(value, @"\$(?<name>[^$]+)\$", match =>
+                tokens.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
+            if (expanded.IndexOf('$') >= 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom nuspec value '{value}' contains an unresolved token.");
+            return expanded;
+        }
+
+        var metadata = XDocument.Load(nuspecPath).Descendants().FirstOrDefault(element =>
+            element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
+        if (metadata is null)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom nuspec '{nuspecPath}' has no metadata element.");
+
+        foreach (var dependency in metadata.Descendants().Where(element => element.Name.LocalName.Equals("dependency", StringComparison.OrdinalIgnoreCase)))
+        {
+            var dependencyId = ExpandToken(dependency.Attribute("id")?.Value?.Trim() ?? string.Empty);
+            if (dependencyId.Length == 0 || !selectedPackages.TryGetValue(dependencyId, out var selectedPackage))
+                continue;
+            var versionRange = ExpandToken(dependency.Attribute("version")?.Value?.Trim() ?? string.Empty);
+            if (!DependencyTargetsSelectedVersion(versionRange, selectedPackage, GetEffectivePackageId(project)))
+                continue;
+            var group = dependency.Ancestors().FirstOrDefault(element => element.Name.LocalName.Equals("group", StringComparison.OrdinalIgnoreCase));
+            var framework = group?.Attribute("targetFramework")?.Value?.Trim();
+            AddPlannedDependency(
+                dependencies,
+                dependencyId,
+                group is null ? PublishDependency.AllFrameworks : string.IsNullOrWhiteSpace(framework) ? PublishDependency.FallbackFramework : framework);
+        }
+    }
+
+    private static void EnsurePlannedReferenceIsResolved(string value, DotNetRepositoryProjectResult project)
+    {
+        if (value.IndexOf("$(", StringComparison.Ordinal) >= 0 || value.IndexOf("@(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because reference '{value}' contains an unresolved MSBuild expression.");
+    }
+
+    private static bool PlannedProjectReferenceMatches(string baseDirectory, string include, string selectedProjectPath)
+    {
+        var normalizedInclude = include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        var candidatePattern = Path.GetFullPath(Path.Combine(baseDirectory, normalizedInclude));
+        return PlannedItemSpecMatches(candidatePattern, Path.GetFullPath(selectedProjectPath));
     }
 
     private static void AddPlannedDependency(
@@ -446,28 +534,76 @@ public sealed partial class DotNetRepositoryReleaseService
     }
 
 
-    private static bool ConditionMatches(string? condition, IReadOnlyDictionary<string, string> properties)
+    private static bool ConditionMatches(string? condition, IReadOnlyDictionary<string, string> properties, string conditionDirectory)
     {
         if (string.IsNullOrWhiteSpace(condition))
             return true;
 
         var expanded = ExpandPlannedProperties(condition!, properties);
         if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0)
-            return true;
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' contains an unresolved property.");
 
         var orBranches = Regex.Split(expanded, @"\s+[Oo][Rr]\s+");
-        return orBranches.Any(branch => Regex.Split(branch, @"\s+[Aa][Nn][Dd]\s+").All(EvaluateSimpleCondition));
+        return orBranches.Any(branch => Regex.Split(branch, @"\s+[Aa][Nn][Dd]\s+").All(clause => EvaluateSimpleCondition(clause, conditionDirectory)));
     }
 
-    private static bool EvaluateSimpleCondition(string condition)
+    private static bool EvaluateSimpleCondition(string condition, string conditionDirectory)
     {
+        var trimmed = TrimConditionParentheses(condition.Trim());
+        var exists = Regex.Match(trimmed, "^(?<not>!)?\\s*Exists\\(\\s*(?<quote>['\\\"])(?<path>.*?)\\k<quote>\\s*\\)$", RegexOptions.IgnoreCase);
+        if (exists.Success)
+        {
+            var path = ResolvePlannedPath(conditionDirectory, exists.Groups["path"].Value);
+            var result = File.Exists(path) || Directory.Exists(path);
+            return exists.Groups["not"].Success ? !result : result;
+        }
+        if (bool.TryParse(trimmed, out var boolean))
+            return boolean;
+
         var match = Regex.Match(
-            condition.Trim(),
-            "^\\s*\\(?\\s*['\\\"](?<left>[^'\\\"]*)['\\\"]\\s*(?<operator>==|!=)\\s*['\\\"](?<right>[^'\\\"]*)['\\\"]\\s*\\)?\\s*$");
+            trimmed,
+            "^\\s*(?<left>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*(?<operator>==|!=|>=|<=|>|<)\\s*(?<right>'[^']*'|\\\"[^\\\"]*\\\"|[^=!<>]+?)\\s*$");
         if (!match.Success)
-            return true;
-        var equal = string.Equals(match.Groups["left"].Value, match.Groups["right"].Value, StringComparison.OrdinalIgnoreCase);
-        return match.Groups["operator"].Value == "==" ? equal : !equal;
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because condition '{condition}' requires unsupported MSBuild evaluation.");
+        var left = UnquoteConditionOperand(match.Groups["left"].Value.Trim());
+        var right = UnquoteConditionOperand(match.Groups["right"].Value.Trim());
+        var equal = string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        var comparisonOperator = match.Groups["operator"].Value;
+        if (comparisonOperator == "==")
+            return equal;
+        if (comparisonOperator == "!=")
+            return !equal;
+
+        var comparison = CompareConditionOperands(left, right, condition);
+        return comparisonOperator == ">" ? comparison > 0 :
+            comparisonOperator == ">=" ? comparison >= 0 :
+            comparisonOperator == "<" ? comparison < 0 : comparison <= 0;
+    }
+
+    private static string TrimConditionParentheses(string condition)
+    {
+        while (condition.Length >= 2 && condition[0] == '(' && condition[condition.Length - 1] == ')')
+            condition = condition.Substring(1, condition.Length - 2).Trim();
+        return condition;
+    }
+
+    private static string UnquoteConditionOperand(string operand)
+        => operand.Length >= 2 && ((operand[0] == '\'' && operand[operand.Length - 1] == '\'') || (operand[0] == '"' && operand[operand.Length - 1] == '"'))
+            ? operand.Substring(1, operand.Length - 2)
+            : operand;
+
+    private static int CompareConditionOperands(string left, string right, string originalCondition)
+    {
+        var normalizedLeft = left.TrimStart('v', 'V');
+        var normalizedRight = right.TrimStart('v', 'V');
+        if (Version.TryParse(normalizedLeft, out var leftVersion) && Version.TryParse(normalizedRight, out var rightVersion))
+            return leftVersion.CompareTo(rightVersion);
+        if (decimal.TryParse(left, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var leftNumber) &&
+            decimal.TryParse(right, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var rightNumber))
+        {
+            return leftNumber.CompareTo(rightNumber);
+        }
+        throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because relational condition '{originalCondition}' does not compare numeric or version values.");
     }
 
     private static bool IsPrivateReference(PlannedItem element)
@@ -477,6 +613,10 @@ public sealed partial class DotNetRepositoryReleaseService
             .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
             .Any(value => string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase));
     }
+
+    private static bool IsPackedProjectReference(PlannedItem reference)
+        => !IsPrivateReference(reference) &&
+           !string.Equals(reference.GetMetadata("TreatAsPackageReference"), "false", StringComparison.OrdinalIgnoreCase);
 
     private static bool DependencyTargetsSelectedVersion(
         string? versionRange,

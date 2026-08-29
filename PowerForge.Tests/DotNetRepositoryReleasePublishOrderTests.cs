@@ -8,7 +8,8 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetRepositoryReleasePublishOrderTests
+[Trait("Category", "DotNetPublishPrGate")]
+public sealed partial class DotNetRepositoryReleasePublishOrderTests
 {
     [Fact]
     public void SortProjectsForPublish_PublishesDependenciesBeforeConsumers()
@@ -275,7 +276,7 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         var app = workspace.AddProject("App");
         var buildDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "build"));
         File.WriteAllText(Path.Combine(buildDirectory.FullName, "dependencies.props"), """
-<Project><ItemGroup><ProjectReference Include="../../Shared/Shared.csproj" /></ItemGroup></Project>
+<Project><ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup></Project>
 """);
         File.WriteAllText(app.CsprojPath, """
 <Project Sdk="Microsoft.NET.Sdk">
