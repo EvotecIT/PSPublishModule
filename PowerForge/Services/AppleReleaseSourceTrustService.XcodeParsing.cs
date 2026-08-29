@@ -152,7 +152,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         var approvedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "inherited", "TARGET_NAME", "PRODUCT_NAME", "EXECUTABLE_NAME", "WRAPPER_NAME",
-            "FULL_PRODUCT_NAME", "CONTENTS_FOLDER_PATH", "INFOPLIST_PATH", "TEST_HOST"
+            "FULL_PRODUCT_NAME", "CONTENTS_FOLDER_PATH", "INFOPLIST_PATH", "TEST_HOST",
+            "BUILT_PRODUCTS_DIR"
         };
         foreach (var reference in ReadBuildSettingReferences(value, key, source))
         {
