@@ -375,7 +375,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("code-signing certificate", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            OperatingSystem.IsWindows() ? "code-signing certificate" : "requires the Windows certificate store",
+            result.Error,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
