@@ -126,7 +126,10 @@ internal sealed class AppleReleaseSourceSnapshot : IDisposable
         {
             var configPath = Path.GetFullPath(plan.ExactSourceConfigPath!);
             EnsureContained(repositoryRoot, configPath, "Apple exact-source config path");
-            var trust = new AppleReleaseSourceTrustService().Capture(repositoryRoot, configPath);
+            var validationScope = plan.Archive
+                ? AppleReleaseSourceTrustValidationScope.BuildExecution
+                : AppleReleaseSourceTrustValidationScope.SourceInspection;
+            var trust = new AppleReleaseSourceTrustService().Capture(repositoryRoot, configPath, validationScope);
             ValidateExpectedConfigurationSha256(trust.ExactConfigurationSha256, plan.ExactSourceConfigSha256);
             observedCommit = trust.SourceCommit;
         }

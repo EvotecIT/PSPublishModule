@@ -317,23 +317,7 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (var item in objects.Values)
         {
-            if (item.Isa.Equals("PBXShellScriptBuildPhase", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"PBX shell-script build phases are not accepted for exact-source checkpoints because arbitrary runtime inputs cannot be proven: {metadataPath}");
-            }
-
-            if (item.Isa.Equals("PBXBuildRule", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"PBX custom build rules are not accepted for exact-source checkpoints because their runtime inputs cannot be proven: {metadataPath}");
-            }
-
-            if (item.Isa.Equals("PBXLegacyTarget", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"PBX legacy targets are not accepted for exact-source checkpoints because their external build tool cannot be proven: {metadataPath}");
-            }
+            EnsureExecutionMetadataAccepted(item.Isa, metadataPath, _validationScope);
 
             if (item.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
             {
@@ -389,6 +373,33 @@ internal sealed partial class AppleReleaseSourceTrustService
                 generatedOutputPaths,
                 buildFileReferences,
                 shippingSources);
+        }
+    }
+
+    internal static void EnsureExecutionMetadataAccepted(
+        string isa,
+        string metadataPath,
+        AppleReleaseSourceTrustValidationScope validationScope)
+    {
+        if (validationScope == AppleReleaseSourceTrustValidationScope.SourceInspection)
+            return;
+
+        if (isa.Equals("PBXShellScriptBuildPhase", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"PBX shell-script build phases are not accepted for exact-source checkpoints because arbitrary runtime inputs cannot be proven: {metadataPath}");
+        }
+
+        if (isa.Equals("PBXBuildRule", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"PBX custom build rules are not accepted for exact-source checkpoints because their runtime inputs cannot be proven: {metadataPath}");
+        }
+
+        if (isa.Equals("PBXLegacyTarget", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"PBX legacy targets are not accepted for exact-source checkpoints because their external build tool cannot be proven: {metadataPath}");
         }
     }
 
