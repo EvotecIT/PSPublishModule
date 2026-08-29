@@ -1465,7 +1465,7 @@ Every new command family should normally require:
 - [x] Add XML documentation to public and non-obvious reusable contracts.
 - [x] Keep tests grouped by behavioral contract rather than implementation class count.
 - [x] Before Milestones 11–13, decompose the active analyzer, binder, lowered backend, lowerer, and large bound-pipeline test owners by semantic responsibility; output analysis, declarations, invocation rendering, host requirements, and hosted-pipeline tests now have named owners and the primary files retain growth headroom.
-- [ ] Split the actively growing `PowerShellCompilationArtifactBuilder.cs` coordinator and `PowerShellCompilationArtifactHardeningTests.cs` before the next production feature wave. The repository line-count tool reports 808 and 803 lines respectively at `06ffe2a4`, just above the preferred 800-line split point but below the 1,000-line hard ceiling; diagnostics/evidence publication, final assembly orchestration, and the corresponding hardening contract groups provide natural responsibility boundaries.
+- [ ] Split the actively growing `PowerShellCompilationArtifactBuilder.cs`, `PowerShellCompilationArtifactHardeningTests.cs`, and `ModulePipelineRunner.Plan.cs` coordinators before the next production feature wave. The repository line-count tool reports 808, 803, and 996 lines respectively at `06ffe2a4`; the first two are just above the preferred 800-line split point and the plan coordinator has no meaningful headroom below the 1,000-line hard ceiling. Diagnostics/evidence publication, final assembly orchestration, hardening contract groups, and remaining module-plan stages provide natural responsibility boundaries.
 
 ## Core architecture completion gate — Partial / Milestone 16
 
