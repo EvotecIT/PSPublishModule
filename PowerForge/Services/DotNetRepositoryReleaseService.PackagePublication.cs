@@ -102,7 +102,7 @@ public sealed partial class DotNetRepositoryReleaseService
             : spec.PublishSource!.Trim();
         result.PublishSource = source;
 
-        var orderedProjects = SortProjectsForPublish(projects);
+        var orderedProjects = SortProjectsForPublish(projects, usePlannedProjectGraph: spec.WhatIf);
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
         var packageLookup = orderedProjects
