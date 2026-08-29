@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using NuGet.Versioning;
 using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
@@ -1845,9 +1846,28 @@ internal static partial class WebPipelineRunner
 
     private static string? ResolveCurrentProjectVersion(ProjectCatalogEntry project)
     {
-        return NormalizeOptionalString(project.Metrics?.NuGet?.Version) ??
-               NormalizeOptionalString(project.Metrics?.PowerShellGallery?.Version) ??
-               NormalizeOptionalString(project.Version);
+        var candidates = new[]
+        {
+            NormalizeOptionalString(project.Metrics?.NuGet?.Version),
+            NormalizeOptionalString(project.Metrics?.PowerShellGallery?.Version),
+            NormalizeOptionalString(project.Version)
+        };
+
+        string? latestText = null;
+        NuGetVersion? latestVersion = null;
+        foreach (var candidate in candidates)
+        {
+            if (candidate is null || !NuGetVersion.TryParse(candidate, out var parsed))
+                continue;
+
+            if (latestVersion is null || parsed.CompareTo(latestVersion) > 0)
+            {
+                latestText = candidate;
+                latestVersion = parsed;
+            }
+        }
+
+        return latestText ?? candidates.FirstOrDefault(static candidate => candidate is not null);
     }
 
     private static void GenerateProjectSectionPages(

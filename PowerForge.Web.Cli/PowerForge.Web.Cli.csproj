@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="DBAClientX.SQLite" Version="0.15.0" />
+    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
   </ItemGroup>
 
   <ItemGroup>
