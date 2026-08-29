@@ -145,15 +145,36 @@ public sealed partial class DotNetRepositoryReleaseService {
         string fallbackProjectName,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath) {
         var properties = evaluation.Properties;
-        var projectIdentity = fallbackProjectName;
+        var projectIdentity = ResolvePlannedProjectIdentity(properties, fallbackProjectName);
+        return ResolvePlannedNuspecMetadataValue(
+                   evaluation,
+                   csprojPath,
+                   "id",
+                   new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["id"] = projectIdentity },
+                   plannedProjectContentsByPath)
+               ?? projectIdentity;
+    }
+
+    private static string ResolvePlannedProjectIdentity(
+        IReadOnlyDictionary<string, string> properties,
+        string fallbackProjectName) {
         foreach (var propertyName in new[] { "PackageId", "AssemblyName", "MSBuildProjectName" }) {
             if (!properties.TryGetValue(propertyName, out var value) || string.IsNullOrWhiteSpace(value))
                 continue;
-            projectIdentity = ExpandPlannedProperties(value, properties).Trim();
-            break;
+            return ExpandPlannedProperties(value, properties).Trim();
         }
+        return fallbackProjectName;
+    }
+
+    private static string? ResolvePlannedNuspecMetadataValue(
+        PlannedEvaluation evaluation,
+        string csprojPath,
+        string metadataName,
+        IReadOnlyDictionary<string, string> defaultTokens,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath) {
+        var properties = evaluation.Properties;
         if (!properties.TryGetValue("NuspecFile", out var nuspecFile) || string.IsNullOrWhiteSpace(nuspecFile))
-            return projectIdentity;
+            return null;
 
         var configuredPath = ExpandPlannedProperties(nuspecFile, properties);
         if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
@@ -166,7 +187,8 @@ public sealed partial class DotNetRepositoryReleaseService {
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in properties)
             tokens[property.Key] = property.Value;
-        tokens["id"] = projectIdentity;
+        foreach (var token in defaultTokens)
+            tokens[token.Key] = token.Value;
         if (properties.TryGetValue("NuspecProperties", out var nuspecProperties))
         {
             foreach (var entry in SplitPlannedItems(ExpandPlannedProperties(nuspecProperties, properties)))
@@ -181,16 +203,16 @@ public sealed partial class DotNetRepositoryReleaseService {
         var nuspec = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(nuspecPath, out var plannedNuspecContent)
             ? XDocument.Parse(plannedNuspecContent, LoadOptions.PreserveWhitespace)
             : XDocument.Load(nuspecPath);
-        var id = nuspec.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase))?
-            .Elements().FirstOrDefault(element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))?
+        var rawValue = nuspec.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase))?
+            .Elements().FirstOrDefault(element => element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?
             .Value.Trim();
-        if (string.IsNullOrWhiteSpace(id))
-            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec '{nuspecPath}' has no package id.");
-        var expandedId = Regex.Replace(id!, @"\$(?<name>[^$]+)\$", match =>
+        if (string.IsNullOrWhiteSpace(rawValue))
+            throw new InvalidOperationException($"Cannot determine the planned package {metadataName} for '{csprojPath}' because custom nuspec '{nuspecPath}' has no package {metadataName}.");
+        var expandedValue = Regex.Replace(rawValue!, @"\$(?<name>[^$]+)\$", match =>
             tokens.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
-        if (expandedId.IndexOf('$') >= 0)
-            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec id '{id}' contains an unresolved token.");
-        return expandedId.Trim();
+        if (expandedValue.IndexOf('$') >= 0)
+            throw new InvalidOperationException($"Cannot determine the planned package {metadataName} for '{csprojPath}' because custom nuspec {metadataName} '{rawValue}' contains an unresolved token.");
+        return expandedValue.Trim();
     }
 
     private static string ResolvePlannedConfiguration(DotNetRepositoryReleaseSpec spec)

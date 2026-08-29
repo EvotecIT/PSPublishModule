@@ -48,7 +48,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var globalProperty in new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Configuration"] = configuration ?? string.Empty,
-            ["TargetFramework"] = targetFramework ?? string.Empty,
+            ["TargetFramework"] = targetFramework ?? (properties.TryGetValue("TargetFramework", out var environmentTargetFramework) ? environmentTargetFramework : string.Empty),
             ["TargetFrameworkIdentifier"] = string.Empty,
             ["TargetFrameworkVersion"] = string.Empty,
             ["TargetFrameworkProfile"] = string.Empty,
@@ -64,7 +64,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             properties[globalProperty.Key] = globalProperty.Value;
         }
-        SetDerivedTargetFrameworkProperties(properties, targetFramework);
+        SetDerivedTargetFrameworkProperties(properties, properties["TargetFramework"]);
 
         var items = new List<PlannedItem>();
         var definitions = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
@@ -274,23 +274,44 @@ public sealed partial class DotNetRepositoryReleaseService
             configuration,
             targetFramework: null,
             spec.PlannedProjectContentsByPath);
+        string version = string.Empty;
         foreach (var propertyName in new[] { "PackageVersion", "Version" })
         {
             if (evaluation.Properties.TryGetValue(propertyName, out var value) && !string.IsNullOrWhiteSpace(value))
-                return ExpandPlannedProperties(value, evaluation.Properties);
+            {
+                version = ExpandPlannedProperties(value, evaluation.Properties);
+                break;
+            }
         }
 
-        if (evaluation.Properties.TryGetValue("VersionPrefix", out var prefix) && !string.IsNullOrWhiteSpace(prefix))
+        if (version.Length == 0 && evaluation.Properties.TryGetValue("VersionPrefix", out var prefix) && !string.IsNullOrWhiteSpace(prefix))
         {
             prefix = ExpandPlannedProperties(prefix, evaluation.Properties);
             if (evaluation.Properties.TryGetValue("VersionSuffix", out var suffix) && !string.IsNullOrWhiteSpace(suffix))
-                return prefix + "-" + ExpandPlannedProperties(suffix, evaluation.Properties);
-            return prefix;
+                version = prefix + "-" + ExpandPlannedProperties(suffix, evaluation.Properties);
+            else
+                version = prefix;
         }
 
-        if (evaluation.Properties.TryGetValue("VersionSuffix", out var defaultSuffix) && !string.IsNullOrWhiteSpace(defaultSuffix))
-            return "1.0.0-" + ExpandPlannedProperties(defaultSuffix, evaluation.Properties);
-        return "1.0.0";
+        if (version.Length == 0)
+        {
+            version = evaluation.Properties.TryGetValue("VersionSuffix", out var defaultSuffix) && !string.IsNullOrWhiteSpace(defaultSuffix)
+                ? "1.0.0-" + ExpandPlannedProperties(defaultSuffix, evaluation.Properties)
+                : "1.0.0";
+        }
+
+        var projectIdentity = ResolvePlannedProjectIdentity(evaluation.Properties, project.ProjectName);
+        return ResolvePlannedNuspecMetadataValue(
+                   evaluation,
+                   project.CsprojPath,
+                   "version",
+                   new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                   {
+                       ["id"] = projectIdentity,
+                       ["version"] = version
+                   },
+                   spec.PlannedProjectContentsByPath)
+               ?? version;
     }
 
     private static void SetDerivedTargetFrameworkProperties(IDictionary<string, string> properties, string? targetFramework)
@@ -579,7 +600,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var suffix = separatorIndex >= 0 ? combinedPattern.Substring(separatorIndex + 1) : combinedPattern;
         var canonicalPattern = Path.Combine(searchRoot, suffix);
         return Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories)
-            .Where(path => PlannedItemSpecMatches(canonicalPattern, path))
+            .Where(path => PlannedItemSpecMatches(canonicalPattern, path, searchRoot))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -592,20 +613,20 @@ public sealed partial class DotNetRepositoryReleaseService
             if (!string.IsNullOrWhiteSpace(item.Remove))
             {
                 var removals = SplitPlannedItems(item.Remove).ToArray();
-                result.RemoveAll(existing => existing.Include is not null && removals.Any(removal => PlannedItemSpecMatches(removal, existing.Include)));
+                result.RemoveAll(existing => existing.Include is not null && removals.Any(removal => PlannedItemSpecMatches(removal, existing.Include, item.BaseDirectory)));
             }
             if (!string.IsNullOrWhiteSpace(item.Update))
             {
                 var updates = SplitPlannedItems(item.Update).ToArray();
                 for (var index = 0; index < result.Count; index++)
                 {
-                    if (result[index].Include is { } include && updates.Any(update => PlannedItemSpecMatches(update, include)))
+                    if (result[index].Include is { } include && updates.Any(update => PlannedItemSpecMatches(update, include, item.BaseDirectory)))
                         result[index] = result[index].WithMetadata(item.Metadata, item.RemoveMetadata, item.KeepMetadata);
                 }
             }
             foreach (var include in ExpandPlannedItemIncludes(item, itemType))
             {
-                if (!SplitPlannedItems(item.Exclude).Any(exclude => PlannedItemSpecMatches(exclude, include)))
+                if (!SplitPlannedItems(item.Exclude).Any(exclude => PlannedItemSpecMatches(exclude, include, item.BaseDirectory)))
                     result.Add(item.WithInclude(include));
             }
         }
@@ -629,19 +650,31 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static bool PlannedItemSpecMatches(string pattern, string value)
+    private static bool PlannedItemSpecMatches(string pattern, string value, string? baseDirectory = null)
     {
         var normalizedPattern = NormalizePlannedItemSpec(pattern);
         var normalizedValue = NormalizePlannedItemSpec(value);
+        var comparison = LooksLikePlannedPathSpec(normalizedPattern) || LooksLikePlannedPathSpec(normalizedValue)
+            ? FrameworkCompatibility.GetPathStringComparisonForPath(
+                Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory ?? string.Empty, value))
+            : StringComparison.OrdinalIgnoreCase;
         if (normalizedPattern.IndexOfAny(new[] { '*', '?' }) < 0)
-            return string.Equals(normalizedPattern, normalizedValue, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(normalizedPattern, normalizedValue, comparison);
         var regex = "^" + Regex.Escape(normalizedPattern)
             .Replace(@"\*\*/", "(?:.*/)?")
             .Replace(@"\*\*", ".*")
             .Replace(@"\*", "[^/]*")
             .Replace(@"\?", "[^/]") + "$";
-        return Regex.IsMatch(normalizedValue, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var options = RegexOptions.CultureInvariant |
+                      (comparison == StringComparison.OrdinalIgnoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
+        return Regex.IsMatch(normalizedValue, regex, options);
     }
+
+    private static bool LooksLikePlannedPathSpec(string value)
+        => value.IndexOfAny(new[] { '/', '\\' }) >= 0 ||
+           value.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
+           value.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
+           value.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePlannedItemSpec(string value) => UnescapePlannedItemSpec(value).Trim().Replace('\\', '/');
 

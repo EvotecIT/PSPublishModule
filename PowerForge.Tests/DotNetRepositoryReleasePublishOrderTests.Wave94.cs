@@ -50,18 +50,18 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     <TargetFramework>net8.0</TargetFramework>
     <Version>1.0.0</Version>
     <NuspecFile>Producer.nuspec</NuspecFile>
-    <NuspecProperties>Flavor=Core</NuspecProperties>
+    <NuspecProperties>Flavor=Core;ReleaseVersion=2.0.0</NuspecProperties>
   </PropertyGroup>
 </Project>
 """);
             File.WriteAllText(Path.Combine(producerDirectory.FullName, "Producer.nuspec"), """
-<package><metadata><id>Actual.$Flavor$</id><version>$version$</version></metadata></package>
+<package><metadata><id>Zeta.$Flavor$</id><version>$ReleaseVersion$</version></metadata></package>
 """);
             var consumerDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Consumer"));
             File.WriteAllText(Path.Combine(consumerDirectory.FullName, "Consumer.csproj"), """
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version></PropertyGroup>
-  <ItemGroup><PackageReference Include="Actual.Core" Version="[1.0.0]" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Zeta.Core" Version="[2.0.0]" /></ItemGroup>
 </Project>
 """);
 
@@ -80,7 +80,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
             });
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(["Actual.Core.1.0.0.nupkg", "Consumer.1.0.0.nupkg"], result.PublishedPackages.Select(Path.GetFileName));
+            Assert.Equal(["Zeta.Core.2.0.0.nupkg", "Consumer.1.0.0.nupkg"], result.PublishedPackages.Select(Path.GetFileName));
         }
         finally
         {
