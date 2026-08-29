@@ -78,19 +78,73 @@ public sealed partial class DotNetRepositoryReleaseService
         ResolvePlannedSdkImports(projectRoot, projectDirectory, properties, out var sdkProps, out var sdkTargets);
         foreach (var sdkPropsPath in sdkProps)
             EvaluatePlannedFile(sdkPropsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
-        var packagesProps = FindNearestBuildFile(directory, "Directory.Packages.props");
         var buildProps = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.props", "ImportDirectoryBuildProps", "DirectoryBuildPropsPath", properties);
-        if (packagesProps is not null)
-            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         if (buildProps is not null)
             EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        var projectExtensionsDirectory = ResolvePlannedProjectExtensionsDirectory(projectDirectory, properties);
+        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "props", "ImportProjectExtensionProps", fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        var packagesProps = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Packages.props", "ImportDirectoryPackagesProps", "DirectoryPackagesPropsPath", properties);
+        if (packagesProps is not null)
+            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "targets", "ImportProjectExtensionTargets", fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         var buildTargets = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.targets", "ImportDirectoryBuildTargets", "DirectoryBuildTargetsPath", properties);
         if (buildTargets is not null)
             EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         foreach (var sdkTargetsPath in sdkTargets)
             EvaluatePlannedFile(sdkTargetsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
         return new PlannedEvaluation(properties, items);
+    }
+
+    private static string ResolvePlannedProjectExtensionsDirectory(
+        string projectDirectory,
+        Dictionary<string, string> properties)
+    {
+        if (!properties.TryGetValue("BaseIntermediateOutputPath", out var baseIntermediateOutputPath) || string.IsNullOrWhiteSpace(baseIntermediateOutputPath))
+        {
+            baseIntermediateOutputPath = "obj" + Path.DirectorySeparatorChar;
+            properties["BaseIntermediateOutputPath"] = baseIntermediateOutputPath;
+        }
+        var configuredPath = properties.TryGetValue("MSBuildProjectExtensionsPath", out var projectExtensionsPath) && !string.IsNullOrWhiteSpace(projectExtensionsPath)
+            ? projectExtensionsPath
+            : baseIntermediateOutputPath;
+        configuredPath = ExpandPlannedProperties(configuredPath, properties);
+        if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
+            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because MSBuildProjectExtensionsPath '{configuredPath}' is unresolved.");
+        var resolvedPath = ResolvePlannedPath(projectDirectory, configuredPath);
+        properties["MSBuildProjectExtensionsPath"] = resolvedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return resolvedPath;
+    }
+
+    private static void EvaluatePlannedProjectExtensionFiles(
+        string extensionsDirectory,
+        string projectFile,
+        string extension,
+        string importPropertyName,
+        string projectPath,
+        Dictionary<string, string> properties,
+        ICollection<PlannedItem> items,
+        IDictionary<string, Dictionary<string, string>> definitions,
+        ISet<string> visited,
+        ISet<string> localProperties,
+        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
+    {
+        if (properties.TryGetValue(importPropertyName, out var importValue))
+        {
+            importValue = ExpandPlannedProperties(importValue, properties);
+            if (importValue.IndexOf("$(", StringComparison.Ordinal) >= 0)
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because {importPropertyName} '{importValue}' is unresolved.");
+            if (!string.Equals(importValue.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        if (!Directory.Exists(extensionsDirectory))
+            return;
+
+        foreach (var path in Directory.EnumerateFiles(extensionsDirectory, projectFile + ".*." + extension, SearchOption.TopDirectoryOnly)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            EvaluatePlannedFile(path, projectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        }
     }
 
     private static XElement LoadPlannedRoot(string path, IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)

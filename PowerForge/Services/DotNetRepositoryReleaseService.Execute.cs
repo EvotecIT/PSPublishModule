@@ -404,6 +404,14 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
                 }
 
+                if (plannedProjectContents.Count > 0 &&
+                    !packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)) &&
+                    !TryRefreshEffectivePackageIds(packable, spec, out var identityError))
+                {
+                    result.Success = false;
+                    progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, identityError);
+                }
+
                 if (!packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))
                     progress?.PhaseCompleted(ProjectBuildProgressPhase.Versioning, $"{packable.Length} project version(s) resolved");
             }

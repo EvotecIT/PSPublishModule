@@ -56,7 +56,11 @@ public sealed partial class DotNetRepositoryReleaseService {
         string fallbackProjectName,
         DotNetRepositoryReleaseSpec spec) {
         if (spec.WhatIf) {
-            var evaluation = EvaluatePlannedProject(csprojPath, ResolvePlannedConfiguration(spec), targetFramework: null);
+            var evaluation = EvaluatePlannedProject(
+                csprojPath,
+                ResolvePlannedConfiguration(spec),
+                targetFramework: null,
+                spec.PlannedProjectContentsByPath);
             var plannedPackageId = ResolvePlannedPackageIdentity(evaluation.Properties, fallbackProjectName);
             if (plannedPackageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
                 throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{plannedPackageId}' contains an unresolved MSBuild property.");
@@ -106,6 +110,28 @@ public sealed partial class DotNetRepositoryReleaseService {
         return string.IsNullOrWhiteSpace(assemblyName)
             ? fallbackProjectName
             : assemblyName!.Trim();
+    }
+
+    private bool TryRefreshEffectivePackageIds(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec,
+        out string? error) {
+        error = null;
+        foreach (var project in projects) {
+            try {
+                var packageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
+                if (!string.Equals(project.PackageId, packageId, StringComparison.Ordinal)) {
+                    _logger.Info($"{project.ProjectName}: effective package id changed from {project.PackageId} to {packageId} after version updates.");
+                }
+                project.PackageId = packageId;
+            } catch (Exception ex) {
+                project.ErrorMessage = $"Unable to re-evaluate the effective package id after version updates: {ex.Message}";
+                error = $"{project.ProjectName}: {project.ErrorMessage}";
+                _logger.Warn(error);
+                return false;
+            }
+        }
+        return true;
     }
 
     private static string ResolvePlannedPackageIdentity(
