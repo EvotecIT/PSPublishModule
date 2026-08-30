@@ -178,6 +178,76 @@ try {
 
     [Fact]
     [Trait("Category", "Integration")]
+    public void GeneratedDesktopBootstrapperSkipsTopLevelNativeLibrariesWithoutRecordingErrors()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var windowsPowerShell = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell",
+            "v1.0",
+            "powershell.exe");
+        if (!File.Exists(windowsPowerShell))
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "pf-bootstrapper-desktop-native-" + Guid.NewGuid().ToString("N"));
+        var libDefault = Path.Combine(root, "Lib", "Default");
+        Directory.CreateDirectory(libDefault);
+
+        try
+        {
+            var moduleAssembly = BuildDesktopFixture(root);
+            File.Copy(moduleAssembly, Path.Combine(libDefault, "DemoModule.dll"), overwrite: true);
+            File.WriteAllBytes(Path.Combine(libDefault, "e_sqlite3.dll"), new byte[] { 0, 1, 2, 3 });
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: true);
+
+            var proofScript = Path.Combine(root, "Validate-NativeLibraryProbe.ps1");
+            File.WriteAllText(
+                proofScript,
+                """
+$Error.Clear()
+Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force -ErrorAction Stop
+if ($Error.Count -ne 0) {
+    throw "Native library probing recorded $($Error.Count) error(s): $($Error[0].Exception.Message)"
+}
+'NATIVE_LIBRARY_SKIPPED_CLEANLY'
+""");
+
+            var result = RunProcess(
+                windowsPowerShell,
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{proofScript}\"",
+                root,
+                timeoutMilliseconds: 30000);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"Windows PowerShell native-library proof failed.{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}");
+            Assert.Contains("NATIVE_LIBRARY_SKIPPED_CLEANLY", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public void GeneratedCoreBootstrapperPrependsResolvedNativeRuntimeBeforeImport()
     {
         if (!OperatingSystem.IsWindows())

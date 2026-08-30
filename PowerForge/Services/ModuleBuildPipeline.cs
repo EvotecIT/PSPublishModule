@@ -228,6 +228,7 @@ public sealed class ModuleBuildPipeline
             UseAssemblyLoadContext = useAssemblyLoadContext,
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
+            HandleRuntimes = spec.HandleRuntimes,
             CsprojRequiredReasons = spec.RefreshManifestOnly || spec.SkipDotNetBuild
                 ? Array.Empty<string>()
                 : spec.CsprojRequiredReasons ?? Array.Empty<string>(),

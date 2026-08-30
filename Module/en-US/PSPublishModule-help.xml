@@ -45799,6 +45799,26 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessorArchitecture</maml:name>
+          <maml:description>
+            <maml:para>Specifies the processor architecture required to import the module.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">MSIL</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">X86</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">IA64</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Amd64</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Arm</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>ProjectUri</maml:name>
           <maml:description>
             <maml:para>Specifies the URI for the module's project page.</maml:para>
@@ -46023,6 +46043,26 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
           <maml:para>Specifies the prerelease tag for the module.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProcessorArchitecture</maml:name>
+        <maml:description>
+          <maml:para>Specifies the processor architecture required to import the module.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">None</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">MSIL</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">X86</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">IA64</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Amd64</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Arm</command:parameterValue>
+        </command:parameterValueGroup>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />

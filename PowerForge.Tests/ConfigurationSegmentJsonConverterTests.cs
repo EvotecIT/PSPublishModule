@@ -56,6 +56,29 @@ public sealed class ConfigurationSegmentJsonConverterTests
     }
 
     [Fact]
+    public void SegmentsSchema_IncludesManifestProcessorArchitecture()
+    {
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var manifestProperties = schema.RootElement
+            .GetProperty("$defs")
+            .GetProperty("ManifestConfiguration")
+            .GetProperty("properties");
+
+        var processorArchitecture = manifestProperties.GetProperty("ProcessorArchitecture");
+        var supportedValues = processorArchitecture
+            .GetProperty("enum")
+            .EnumerateArray()
+            .Where(static item => item.ValueKind == JsonValueKind.String)
+            .Select(static item => item.GetString())
+            .ToArray();
+
+        Assert.Equal(new[] { "None", "MSIL", "X86", "IA64", "Amd64", "Arm" }, supportedValues);
+        Assert.Contains(
+            processorArchitecture.GetProperty("enum").EnumerateArray(),
+            static item => item.ValueKind == JsonValueKind.Null);
+    }
+
+    [Fact]
     public void Deserialize_ReadsReleaseProtectionSegment()
     {
         const string json = """

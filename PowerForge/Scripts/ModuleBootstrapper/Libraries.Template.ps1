@@ -93,13 +93,6 @@ foreach ($L in $LibrariesToLoad) {
     try {
         $LibraryPathParts = @($PSScriptRoot) + @($L -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $LibraryPath = [IO.Path]::Combine([string[]] $LibraryPathParts)
-        try {
-            $null = [System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)
-        } catch [System.BadImageFormatException] {
-            Write-Verbose -Message "Skipping non-managed library '$L'."
-            continue
-        }
-
         Add-Type -Path $LibraryPath -ErrorAction Stop
     } catch {
         if ($_.Exception.Message -like '*Assembly with same name is already loaded*') {

@@ -178,6 +178,7 @@ public sealed partial class ModulePipelineRunner
                         Copyright = m.Copyright,
                         Description = m.Description,
                         PowerShellVersion = m.PowerShellVersion,
+                        ProcessorArchitecture = m.ProcessorArchitecture,
                         Tags = m.Tags,
                         IconUri = m.IconUri,
                         ProjectUri = m.ProjectUri,

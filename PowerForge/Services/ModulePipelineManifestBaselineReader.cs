@@ -30,6 +30,7 @@ internal static class ModulePipelineManifestBaselineReader
                 Copyright = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "Copyright"),
                 Description = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "Description"),
                 PowerShellVersion = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "PowerShellVersion") ?? string.Empty,
+                ProcessorArchitecture = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "ProcessorArchitecture"),
                 Tags = NormalizeArray(ModuleManifestValueReader.ReadPsDataStringOrArray(manifestPath, "Tags")),
                 IconUri = ReadPsDataSingleString(manifestPath, "IconUri"),
                 ProjectUri = ReadPsDataSingleString(manifestPath, "ProjectUri"),
