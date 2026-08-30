@@ -84,7 +84,7 @@ The lowered C# method backend does not reference SMA AST types, and the former d
 
 The dependency-ordered semantic pipeline migration checkpoint and bounded Milestones 6 and 9–15 are **Complete** after the latest review defects were reproduced and fixed at their canonical owners. Milestone 14 closes for its deliberately narrow supported set and for the generic `Build-Module` delivery contract: Strict `net10.0` framework-dependent and NativeAOT executables on `win-x64` and `linux-x64` are supported, while other named RIDs and deployment profiles remain experimental rather than weakening that gate. Milestone 15 closes with three immutable IR rewrites, five backend-lowering/source-evidence optimization families, clean-candidate performance evidence, and measured Hybrid boundary cost. Milestone 17 is **Complete** with semantic fingerprints, portable failure mapping, optional semantic-only IR snapshots, deterministic diagnostic audit evidence, and explicit retention/redaction policy.
 
-Milestone 16 is **Complete**, so the compiler architecture completion gate is **Complete**: a separately built provider SDK now owns deterministic packages, trust policy, lock/provenance binding, ABI negotiation, metadata-only discovery, and conformance evidence without importing modules or executing authored source. Product maturity remains a separate gate. Milestones 18 and 20 are complete; Milestones 19, 21, and 22 retain explicitly external qualification or release work. Dependency discovery and a deterministic artifact disposition do not by themselves prove every external module, remote management target, deployment profile, or public package lane.
+The canonical compiler pipeline is **Complete**, but the extensibility/profile architecture gate is **Partial**. The separately built provider SDK currently provides deterministic metadata packages, policy inputs, lock/provenance binding, ABI declarations, metadata-only discovery, and metadata conformance without importing modules or executing authored source. It does not yet let an independent package contribute executable lowering/runtime-free adapter behavior. Milestone 18 has useful profile and oracle foundations but is also **Partial** until named profiles affect compilation and each promoted feature has exact-host differential evidence. Milestones 19–22 retain the corresponding ecosystem, useful-coverage, project/release, and platform gates. Dependency discovery, hosted compatibility, and deterministic artifact disposition do not by themselves prove native emission or external-provider execution.
 
 ## Artifact ladder
 
@@ -811,8 +811,9 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 5. Migrate all current behavior | Complete | The pre-existing compiler surface and executable invocation shaping were migrated; Milestone 10 must move its later hosted lifecycle path onto the same boundary |
 | 6. Define runtime-free artifact contract and managed ABI | Complete | Strict publication is fail-closed and ABI v4 carries value state, output/null/cardinality, streams, and binding semantics |
 | 7. Preserve help and module contracts | Complete | Compiled functions retain full help/export behavior |
-| Semantic pipeline migration checkpoint | Complete | Publication certification, consumed locks, command-family lowering, lifecycle ownership, and responsibility-based growth headroom are closed |
-| Core architecture completion gate | Complete | The compiler core, bounded delivery/optimization, explainability, and external-provider SDK/trust boundaries are complete |
+| Semantic pipeline migration checkpoint | Complete | Publication certification, consumed locks, command-family lowering, lifecycle ownership, and canonical semantic ownership are closed; current file-growth work remains in the maintainability gate |
+| Core semantic pipeline gate | Complete | Parser, binder, bound IR, lowering, backend, delivery, and explainability have canonical owners |
+| Extensibility/profile architecture gate | Partial | Executable external providers, signer/identity trust, effective semantic profiles, and complete semantic oracles remain open |
 | 8. Build command and pipeline semantics | Complete | Deterministic injected providers, typed family stages, complete CLR stream sinks, and runtime-free adapter execution share one semantic route |
 | 9. Resolve modules, dependencies, and interop | Complete / planning contract | Builds consume exact graph locks; transitive module, managed, native/process, and COM dispositions are deterministic, while executable clean-target ecosystem qualification continues in Milestone 19 |
 | 10. Complete advanced-function lifecycle | Complete | Canonical lifecycle IR preserves raw records, guarantees cleanup, and enforces PowerShell 5.1/7/7.3+ behavior explicitly |
@@ -821,12 +822,12 @@ This is an ownership map, not permission for a folder-only rewrite. Create each 
 | 13. Run generic coverage waves | Complete / bounded wave | The product-neutral corpus and caller-supplied replaceable census proved the generic prioritization mechanism; Milestone 20 now owns the fixed public packet and future expansion |
 | 14. Productize managed, Hybrid, and native delivery | Complete / bounded supported profiles | `Build-Module` can convert arbitrary staged script modules into measured Hybrid or Strict binary modules; exact target contracts, evidence, verified caching, Hybrid EXE, native closure inspection, and target-host execution support Strict `net10.0` framework-dependent and NativeAOT EXEs on `win-x64` and `linux-x64`; all other named profiles remain experimental |
 | 15. Optimize proven IR | Complete | Three immutable IR rewrites plus five backend-lowering/source-evidence optimization families, authored source/PDB mapping, measured boundary cost, and clean-candidate benchmark evidence preserve the differential and artifact contracts |
-| 16. Productize the provider SDK and trust model | Complete | Versioned external providers are discoverable, validated, isolated, and conformance-tested without executing source during analysis |
+| 16. Productize the provider SDK and trust model | Partial / metadata foundation | Versioned provider metadata is discoverable and lockable; executable provider extension and authoritative package/signer trust remain open |
 | 17. Add compiler explainability and reproducible diagnostics | Complete | Human and versioned JSON explain output, semantic fingerprints, integrity-bound reproduction evidence, source/boundary failure mapping, optional semantic-only IR, auditable cache/graph/ABI/fallback/provider decisions, and local-only retention/redaction policy are implemented |
-| 18. Establish versioned semantic oracles | Complete | Every promoted feature has pinned upstream provenance, named PowerShell profiles, and black-box differential proof without copying PowerShell's compiler architecture |
-| 19. Qualify real dependency and interop ecosystems | Partial / external qualification | Local provider and interop contracts execute hermetically; signed external binary/transitive-wrapper proof and the remote management failure matrix remain open |
-| 20. Expand generic coverage continuously | Complete / fixed initial packet | Public, generated, and adversarial corpora drive semantic work by generic blocker value rather than product identity; future waves use the same route |
-| 21. Productize project, lock, restore, and package UX | Complete locally / public release open | A clean project can restore an isolated environment and produce the same qualified artifact without repository-specific build logic; public publish, upgrade, and rollback proof remains open |
+| 18. Establish versioned semantic oracles | Partial / harness foundation | Named profiles, provenance records, and a differential harness exist; exact-host identity, effective compilation profiles, and per-feature oracle coverage remain open |
+| 19. Qualify real dependency and interop ecosystems | Partial / external qualification | Hosted Hybrid interop and one direct typed CIM query are proven; signed wrappers, executable external providers, and the remote management matrix remain open |
+| 20. Establish generic measurement and expand useful coverage | Partial / measurement foundation | Public and external packets expose safe compatibility and generic blockers, but baseline enforcement and emitted real-workload benefit remain open |
+| 21. Productize project, lock, restore, and package UX | Partial / local workflow foundation | Local restore/build/test/pack/install works, but profile enforcement, complete artifact-set install identity, and public lifecycle proof remain open |
 | 22. Broaden platform and profile-guided performance maturity | Partial / target qualification | The support matrix and measured recommendation/budget policies are implemented; physical macOS/Arm64 and additional profile promotion remain open |
 
 Closure sequence completed on this branch:
@@ -1019,7 +1020,7 @@ Integrated evidence from the final 2026-08-29 closure candidate:
 - PowerShell 7 Hybrid advanced-function fixtures preserve original pipeline-record identity and properties while executing `begin`, per-record `process`, `end`, and `clean` through a hosted `SteppablePipeline`; cleanup runs across begin/process/end failure paths, PowerShell 5.1 behavior and pre-7.3 `clean` rejection are explicit, and Strict rejects hosted-only lifecycle;
 - deterministic external command-provider registration, typed projection/filter/map/sort stages, distinct information and `Write-Host`/`PSHOST` sinks, complete PowerShell stream ownership, and injected runtime-free adapters flow through the canonical semantic/lowered contracts; the strict library proof executes an injected provider without an SMA dependency;
 - the clean-target interop matrix records TFM/RID/bitness, ownership, error, cancellation, cleanup, threading, and COM apartment contracts without activating COM or executing authored source; actual adapter execution remains profile-specific, while supported-RID promotion passed for the bounded Strict executable profiles named in Milestone 14;
-- the repository-wide 800-line command still reports pre-existing owners; the formerly 1,200–1,900-line active planning and execution owners were split by responsibility, and every touched non-generated compiler production/test file remains below the 1,000-line hard ceiling.
+- the repository-wide 800-line command still reports pre-existing owners; the formerly 1,200–1,900-line active compiler planning and execution owners were split by responsibility. The current review nevertheless found `ModuleBootstrapperGenerator.cs` at 1,501 lines after a compilation-related edit and `PowerShellBoundCSharpBackend.cs` at 799 lines, so further production growth requires responsibility-based splits rather than another exception or partial-class shell.
 
 Current 2026-08-30 expansion evidence keeps each proof lane separate:
 
@@ -1030,7 +1031,20 @@ Current 2026-08-30 expansion evidence keeps each proof lane separate:
 - two clean quick benchmark packets at implementation head `99c1ad0fc9a25aae5b71eb6f308cebf339fa2fbe` completed every lane without validation failure. The repeated build/import qualification rows remained within the prior quick reference envelope; these are smoke and variance evidence, not a replacement for the full promotion packet or a universal performance promise;
 - `net472`, `net8.0`, and `net10.0` compiler-owner builds and the `net10.0` CLI build complete with zero warnings or errors. Physical macOS/Arm64, signed external-module/transitive-wrapper, remote management, and public package lifecycle evidence remain open exactly where Milestones 19, 21, and 22 say they do.
 
-Green tests prove the integrated branch candidate and the tested artifact profiles. They do not certify an opaque native closure, substitute for the separately recorded NativeAOT target-host execution, establish default-branch integration, publish a package, or prove a release.
+Green tests prove the tested branch candidate and artifact profiles. They do not certify an opaque native closure, substitute for the separately recorded NativeAOT target-host execution, establish current default-branch integration, publish a package, or prove a release.
+
+### 2026-08-30 independent maturity reclassification
+
+The validation review at branch head `afe1946a344352ee8cb9fa534be5aeda34b95f68` reproduced the external assessment online and offline: 6/6 inputs, 154 source files, zero parser errors, 3/185 emitted units, 3/173 emitted functions, and zero complete-workload executions. Fifty-three focused semantic-oracle, fuzzing, provider, management, interop, project-workflow, lock, maturity, and census tests passed. The broad compiler-category result reported by the implementation remains consistent after the one exact failing test passed in isolation; however, forcing SDK `10.0.303` through `dotnet exec` produced an MSBuild task-host failure while normal `dotnet test` selected the preview SDK allowed by `global.json`. A supported, deterministic SDK-selection lane must replace that ad hoc invocation before the toolchain identity is promoted.
+
+The review also established four corrections to the previous status:
+
+- `SemanticProfileId` is validated, packaged, and reported, but it is not carried into the compiler target contract, target hash, binder, lowering, provider selection, or cache identity. It is currently evidence metadata, not an effective semantic switch.
+- the external provider package path is metadata-only. It can register constrained stream declarations, but provider assemblies cannot yet contribute executable lowering or runtime-free adapters; publisher/license identity is self-declared and NuGet signature integrity is not yet a complete signer-trust policy.
+- the semantic-oracle harness is useful but does not yet preserve all claimed observations or pin every exact host artifact. Per-feature provenance currently exceeds per-feature executable oracle coverage, and the upstream review helper is not an automated immutable-profile monitor.
+- the fixed public Hybrid packet proves safe build/import/invocation with 735/735 units retained or runtime-routed, but emits 0/735 units. Its baseline file is not currently enforced by the public runner. This is compatibility proof, not evidence that users benefit from typed emission in those modules.
+
+The branch was also 36 commits behind the then-current `origin/main`; a merge-tree preview found no textual conflict, but default-branch integration and all post-integration gates remain required before additional semantic implementation or release work. These findings do not reopen the canonical parser → binder → bound IR → lowering → backend design. They reopen the provider, profile/oracle, acceptance-benefit, and maintainability gates so new coverage does not create an inert second configuration brain or an unreviewable backend.
 
 ## Semantic pipeline migration checkpoint — Complete
 
@@ -1268,16 +1282,19 @@ Exit gate: **Complete.** Three immutable rewrite passes and the separately class
 
 ## Milestone 16 — Productize the provider SDK and trust model
 
-- [x] Publish a small provider SDK whose public surface is the versioned command-family, semantic-profile, adapter-operation, dependency, AOT, stream, error, and capability contracts already consumed by the compiler.
+- [x] Build and deterministically pack a small provider SDK whose public surface describes versioned command-family, semantic-profile, adapter-operation, dependency, AOT, stream, error, and capability metadata consumed by the compiler.
 - [x] Define deterministic provider discovery from explicit build inputs and locked packages; do not scan arbitrary loaded assemblies, user profiles, or ambient module paths.
 - [x] Add provider/adapter ABI negotiation and reject unsupported schema, semantic-profile, or operation versions before source analysis.
-- [x] Bind provider assemblies, packages, signatures, publishers, licenses, and transitive dependencies into the reviewed dependency lock and artifact provenance.
-- [x] Isolate provider loading from the compiler process where required, with bounded metadata exchange and no permission to import modules or execute authored source during analysis.
-- [x] Add a conformance kit covering registration-order independence, ambiguous aliases, module qualification, diagnostics, output/cardinality/value state, every declared stream, errors, cancellation, cleanup, AOT claims, and runtime-free artifact inspection.
-- [x] Add explicit allow/deny policy and fail closed when a provider’s declared adapter behavior differs from its locked or observed artifact contract.
+- [x] Bind provider package/archive/payload hashes and declared assemblies, publisher, license, dependencies, target restrictions, and capabilities into the reviewed provider/dependency locks and artifact provenance.
+- [x] Keep provider discovery metadata-only and out of the compiler process; importing modules, loading arbitrary provider assemblies, or executing authored source during analysis is prohibited.
+- [x] Add metadata conformance covering deterministic registration, ambiguous aliases, qualification, schema/profile negotiation, declared streams, dependency identities, target restrictions, and fail-closed malformed or conflicting packages.
+- [ ] Reconcile provider identity, publisher, license, dependencies, and package contents against canonical NuGet `.nuspec` metadata rather than trusting only `provider.json`; validate an explicit NuGet signer-chain/policy or reviewed signer fingerprint, not signature integrity alone.
+- [ ] Define one versioned executable provider ABI through which an independently built package can supply typed binding/lowering and runtime-free adapter implementation without compiler-source edits, command-name branches, or a second eligibility authority.
+- [ ] Isolate executable provider validation/conformance from the compiler process and prove values, types, cardinality, every stream, errors, cancellation, cleanup, dependency closure, and AOT/runtime-free claims against the package's actual implementation.
+- [ ] Execute at least one separately built filesystem/HTTP/managed-wrapper provider through Strict and Hybrid artifacts, then reuse the same route for directory-service, WMI/CIM/CDXML, native/process, and future COM providers where those operations can honestly be runtime-free.
 - [x] Document the route for reusable filesystem, HTTP, JSON/CSV, managed-wrapper, directory-service, management-provider (WMI/CIM/CDXML), native, process, and future COM providers without turning command names into compiler intrinsics.
 
-Exit gate: **Complete.** A separately built provider package is deterministically packed, reviewed, locked, registered, conformance-tested, and consumed without compiler-source edits, ambient discovery, assembly loading during analysis, or a second eligibility path. Public feed publication remains a release decision rather than part of the architecture gate.
+Exit gate: **Partial / metadata and integrity foundation complete.** A separately built provider package can be deterministically packed, discovered, reviewed, locked, and metadata-validated without ambient discovery or authored-source execution. The gate closes only when authoritative package/signer identity is proven and an independent provider contributes executable semantics and a runtime-free adapter through the canonical binder/IR/lowering path. Public feed publication remains a separate release decision.
 
 ## Milestone 17 — Add compiler explainability and reproducible diagnostics
 
@@ -1294,41 +1311,44 @@ Exit gate: **Complete.** A user can explain why a unit compiled, fell back, or f
 
 ## Milestone 18 — Establish versioned semantic oracles
 
-This completed correctness gate strengthens both built-in and external-provider semantic paths without copying PowerShell's compiler architecture.
+This correctness gate strengthens both built-in and external-provider semantic paths without copying PowerShell's compiler architecture.
 
-- [x] Define immutable semantic-profile manifests for Windows PowerShell 5.1 and each supported PowerShell 7 behavior family. Record the exact host version/build, edition, OS, architecture, culture, experimental features, and upstream PowerShell commit or release identity used as evidence.
-- [x] Add one semantic-provenance record per promoted feature: PowerForge feature ID and contract version, official documentation/spec reference, pinned upstream source/test reference, observed host matrix, intentional divergences, and owning binder/IR/runtime-free helper.
-- [x] Build a black-box oracle harness that executes minimized cases in the selected PowerShell hosts and compares values, CLR/PowerShell-visible types, null/AutomationNull state, output cardinality and enumeration, property/order behavior, all streams, error identity/category/termination, exit code, culture/encoding effects, and declared filesystem/process effects.
-- [x] Keep oracle fixtures independent of emitted C# and compiler implementation details. The same expected-result envelope must be consumable by interpreted, Strict, Hybrid, and equivalent hand-written C# lanes.
-- [x] Review and attribute any adapted MIT-licensed upstream tests in a pinned provenance manifest. Prefer small minimized behavioral cases over copying broad upstream suites or engine implementation.
-- [x] Add generated, property-based, metamorphic, and adversarial cases for conversions, operators, collections, binding, pipeline enumeration, scoping, and errors within the supported grammar.
-- [x] Add an upstream-change monitor that proposes affected profile/feature reviews when referenced PowerShell source or tests change. It must never silently move a semantic profile or accept new behavior from the newest branch.
-- [x] Fail feature promotion when the selected hosts disagree and no explicit version split, target-specific lowering, fallback, or rejection contract exists.
+- [x] Define named semantic-profile manifests for Windows PowerShell 5.1 and supported PowerShell 7 behavior families, plus versioned semantic-provenance records with documentation/upstream references and canonical compiler owners.
+- [x] Build a black-box oracle harness whose fixtures are independent of emitted C# and compiler implementation details and whose expected-result envelope can be compared with interpreted, Strict, Hybrid, and hand-written C# lanes.
+- [x] Add initial generated, property-based, metamorphic, and adversarial cases for arithmetic/conversion behavior and selected stream/filesystem semantics within the supported grammar.
+- [ ] Pin the exact executable host artifact for every promoted profile—patch/build, edition, OS, architecture, culture, feature switches, executable hash, and upstream commit/release identity—instead of a broad version range or executable name.
+- [ ] Preserve and compare structured output value/type/null/`AutomationNull`/cardinality/enumeration state, original property order, all stream records, structured error identity/category/termination, exit code, culture/encoding, and declared filesystem/process effects without reducing them to formatted text or a constant empty effect list.
+- [ ] Add a minimized executable oracle case and exact observed-host matrix for every promoted semantic feature. Provenance records must point to real cases rather than mechanically pairing every feature with every profile.
+- [ ] Carry the selected semantic-profile identity and behavior into target-contract hashing, analysis, provider resolution, binder/lowering decisions, cache keys, artifact selection, and diagnostics. Different behavior profiles must not produce an identical compilation identity unless their semantics are proven equivalent.
+- [ ] Add an automated upstream-change lane that compares the pinned PowerShell source/test references and proposes affected reviews without silently advancing any immutable profile.
+- [ ] Fail feature promotion when selected hosts disagree and no explicit version split, target-specific lowering, fallback, or rejection contract exists.
 - [x] Prohibit Strict output from depending on PowerShell internal APIs, copied expression trees, private binders, or an installed engine. The upstream implementation remains evidence, not executable compiler infrastructure.
 
-Exit gate: **Complete.** Every promoted semantic family has a named immutable profile, pinned provenance, minimized host/oracle evidence, an explicit difference path, and one canonical binder/IR/runtime-free owner. The upstream monitor proposes reviews without silently moving profile behavior.
+Exit gate: **Partial / profile and harness foundation complete.** Named profiles, provenance schemas, a black-box harness, initial cross-host cases, and the prohibition on PowerShell internals are present. The gate closes when semantic profiles actually govern compilation, exact host artifacts are pinned, every promoted family has structured per-feature oracle evidence, and upstream change review is automated without silently moving behavior.
 
 ## Milestone 19 — Qualify real dependency and interop ecosystems
 
-This milestone consumes the Milestone 16 provider/trust boundary for external Strict adapters. Hosted Hybrid fixture work may start earlier, but external provider promotion is blocked until the SDK and conformance kit are real.
+This milestone consumes the Milestone 16 executable-provider/trust boundary for external Strict adapters. Hosted Hybrid fixture work may continue earlier, but it must be reported as PowerShell-hosted compatibility rather than runtime-free provider execution.
 
 - [x] Add a hermetic clean-target runner with an intentionally empty ambient module path and package cache, followed only by restore from the reviewed dependency lock and declared feeds/local sources.
 - [ ] Execute a signed external binary module with transitive managed dependencies through its declared hosted module boundary; verify version/GUID/architecture/load-context selection, help/format/type data, streams, errors, cancellation, and cleanup.
 - [ ] Execute a managed-wrapper provider from a separately built and locked package in Strict and Hybrid artifacts without compiler-source edits or assembly-name special cases.
-- [x] Add an AD-style administration fixture. Hybrid must preserve an installed `ActiveDirectory`-like binary module and its transitive requirements as an explicit runtime route. Strict support requires a separately versioned directory-service provider with typed operations; it must not pretend that arbitrary binary cmdlets were translated from PowerShell source.
-- [x] Add a Windows Management Instrumentation v1 fixture for the Windows PowerShell 5.1 profile. Because the WMI v1 cmdlets are absent from PowerShell 7, Hybrid must retain them behind an explicit Windows PowerShell hosted boundary. Any Strict replacement uses a separately versioned management provider and records that it implements a typed management operation contract rather than claiming binary compatibility with `Get-WmiObject` or the other removed cmdlets.
-- [x] Add a CIM/MI provider family for query, enumerate, get, create, modify, delete, method invocation, association, and indication subscription. Its contract includes namespace/class/query identity, local versus remote target, WS-Man versus DCOM transport, session creation and reuse, authentication/credential inputs, timeout/throttle, serialization/type shaping, errors, cancellation, and deterministic session/subscription cleanup. Credentials and live session identities remain runtime inputs and never enter locks or portable diagnostics.
-- [x] Treat CDXML as declarative provider metadata: parse and lock its class, method, parameter, output, and adapter requirements without importing the module or contacting a target. Known metadata may bind to the CIM provider; custom adapters, dynamic metadata, unsupported output shaping, and session-dependent discovery remain hosted or rejected.
+- [x] Add an AD-style administration fixture in Hybrid. It preserves an installed `ActiveDirectory`-like binary module and its transitive requirements as an explicit runtime route. Strict support remains blocked on a separately versioned executable directory-service provider with typed operations; arbitrary binary cmdlets are not translated from PowerShell source.
+- [x] Add a Windows Management Instrumentation v1 Hybrid fixture for the Windows PowerShell 5.1 profile. Because the WMI v1 cmdlets are absent from PowerShell 7, it remains an explicit Windows PowerShell hosted boundary. A future Strict replacement must use a separately versioned executable management provider and must not claim binary compatibility with removed WMI cmdlets.
+- [x] Define a typed CIM/MI operation contract for query, enumerate, get, create, modify, delete, method invocation, association, and indication subscription, including namespace/class/query, local/remote target, transport, session, authentication, timeout/throttle, shaping, errors, cancellation, and deterministic cleanup. A direct C# local query proves the adapter foundation; it does not prove arbitrary `Get-CimInstance` lowering.
+- [ ] Execute the complete typed CIM/MI operation family through compiler-generated Strict artifacts, then prove remote WS-Man/DCOM/session behavior and failure handling on declared Windows targets.
+- [ ] Either implement certificate authentication inputs and execution or remove `Certificate` from the advertised CIM authentication contract; unsupported authentication must fail at validation rather than silently map to default behavior.
+- [x] Preserve CDXML through declared Hybrid behavior and deterministic metadata/dependency planning without contacting a target. Runtime-free CDXML binding remains blocked on the executable CIM provider; custom adapters, dynamic metadata, unsupported output shaping, and session-dependent discovery remain hosted or rejected.
 - [ ] Execute local and remote management fixtures against declared Windows targets, including missing class/namespace, access denied, unreachable host, protocol mismatch, target reboot/disconnect, partial enumeration, cancellation, and cleanup. The official [CIM session contract](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_cimsession) and [PowerShell 5.1 versus 7 WMI differences](https://learn.microsoft.com/en-us/powershell/scripting/whats-new/differences-from-windows-powershell) are profile evidence, not substitutes for target-host tests.
 - [x] Execute native-library and child-process adapters on each currently claimed target, including bitness/ABI, argument and environment encoding, standard streams, exit/error mapping, cancellation, child-tree cleanup, deployment closure, and missing/incompatible asset rejection.
 - [x] Execute an explicit Windows COM route across the currently supported local profile with declared identity, activation policy, marshalling, error mapping, RCW/object lifetime, cleanup, and registration absence behavior. COM remains Windows-only unless a different provider contract is deliberately created.
 - [x] Keep CDXML/CIM, implicit remoting, dynamic module discovery, and uninspectable provider behavior hosted or rejected until each has an explicit provider and target contract.
-- [x] Bind provider/module publisher, signature, license, redistributability, package hash, transitive dependencies, and target restrictions into the reviewed lock, SBOM, provenance, and final artifact disposition.
+- [ ] Bind authoritative provider/module publisher, signer trust, canonical package/license identity, redistributability, package hash, transitive dependencies, and target restrictions into the reviewed lock, SBOM, provenance, and final artifact disposition. Self-declared provider metadata is not sufficient.
 - [x] Prove missing ambient dependencies, wrong versions, spoofed identities, case collisions, malformed packages, incompatible native assets, and untrusted providers fail before publication.
 
-Exit gate: **Partial.** The bounded local WMI/CIM/CDXML, administration-style, native/process, and COM routes execute through declared Hybrid or typed-provider contracts, while unsupported routes remain hosted or rejected. Signed external binary-module/transitive-wrapper proof and the remote management failure matrix remain required target-lab qualification; deterministic local planning is not presented as that evidence.
+Exit gate: **Partial.** Bounded WMI/CIM/CDXML, administration-style, native/process, and COM examples are preserved through declared Hybrid routes; one direct typed local CIM query proves an adapter foundation. Generated Strict management-provider execution, authoritative provider trust, signed external binary-module/transitive-wrapper proof, and the remote management operation/failure matrix remain required. Deterministic planning and hosted execution are not presented as native compilation.
 
-## Milestone 20 — Expand generic coverage continuously
+## Milestone 20 — Establish generic measurement and expand useful coverage continuously
 
 Milestone 13 proved the mechanism. This milestone turns it into a maintained compatibility program without making Evotec modules or any public product into compiler intrinsics.
 
@@ -1338,11 +1358,15 @@ Milestone 13 proved the mechanism. This milestone turns it into a maintained com
 - [x] Rank the frontier by generic value: sole blocker, units and complete programs unlocked, frequency across unrelated inputs, semantic risk, provider dependency, target reach, and measured performance value. Do not prioritize by module name or by the easiest percentage increase.
 - [x] Require every accepted feature wave to pass the Milestone 18 oracle, Strict rejection/Hybrid fallback tests, generated artifact execution, source/failure mapping, dependency closure, and target-profile gates before refreshing the corpus baseline.
 - [x] Add differential fuzzing and minimized regression retention for parser/binder crashes, nondeterminism, incorrect acceptance, unbounded diagnostics, source-root escapes, and semantic mismatches.
-- [x] Establish an initial product packet, fixed before implementation, containing at least ten unrelated public modules across five scenario families that analyze and complete clean-target Hybrid build/import/invocation, plus at least three nontrivial standalone Strict programs executed on two supported RIDs.
+- [x] Establish an initial product packet, fixed before implementation, containing at least ten unrelated public modules across five scenario families that analyze and complete clean-target Hybrid build/import/invocation, plus three fixed standalone Strict fixtures executed on two supported RIDs.
 - [x] Keep a second exact-hash external assessment packet for coverage-frontier inputs that are not acceptance candidates yet. Its workload metadata may name public sources, but compiler decisions remain based only on syntax, bound semantics, providers, target contracts, and resource policy.
 - [x] Report per-scenario progress and complete-program outcomes. Never describe emitted functions divided by authored functions as “percentage of the PowerShell language” or a probability that an arbitrary module works.
+- [ ] Make the public packet runner consume and enforce its checked-in baseline, including source identity, complete input rows, post-emission disposition, invocation evidence, and no-loss/no-regression rules.
+- [ ] Consolidate HTTPS/archive acquisition, path normalization, collision detection, size/count/compression bounds, hash verification, and offline replay behind one shared harness owner used by both public and external packets.
+- [ ] Add a fixed Hybrid benefit packet that emits and invokes compiled commands from at least three unrelated scenario families. Continue to require safe retention for everything unsupported, but do not count a 0%-emission module as typed-compilation benefit.
+- [ ] Add at least one realistic multi-file Strict application and differential execution packet beyond the small compiler fixtures, with dependency, error, stream, resource, startup, and performance evidence on every advertised target.
 
-Exit gate: **Complete for the fixed initial packet.** Ten unrelated public modules pass clean-target Hybrid build/import/invocation, three nontrivial Strict programs execute on `win-x64` and `linux-x64`, and the fuzz/oracle lanes have zero unexplained differentials. The ledger reports complete-program and disposition evidence separately from code coverage and never claims a percentage of the language.
+Exit gate: **Partial / measurement and compatibility foundation complete.** Ten unrelated public modules pass clean-target Hybrid build/import/invocation with all 735 units safely retained or runtime-routed, and the fixed Strict fixtures execute on `win-x64` and `linux-x64`. The public Hybrid packet currently emits 0/735 units, its baseline is not enforced by its runner, and the external packet is census-only. The gate closes when the shared harness enforces both packets and real unrelated workloads demonstrate emitted-and-invoked Hybrid benefit plus a realistic runtime-free Strict application.
 
 Frontier snapshot on 2026-08-30: the separate six-workload packet acquired and analyzed 154 source files with zero parser-error files. Post-emission coverage is 3/185 units (1.62%) and 3/173 functions (1.73%); complete-workload execution is intentionally 0/6 because this lane does not build, import, invoke, or claim runtime independence. The strongest cross-workload gaps are runtime scope, bound pipeline syntax, member/invoke-member expressions, pipeline lifecycle, missing lowering, parameter types, and common command-provider shapes. Compatible `#requires` evaluation is also a large isolated opportunity in one input. Coverage work must address those semantic families generically and then pass the oracle, fallback, artifact, dependency, and target-profile gates before this baseline is refreshed.
 
@@ -1356,15 +1380,18 @@ This is the toolchain/ecosystem part of “Python territory”: users need a rep
 - [x] Support offline locked restore after an explicit acquisition step and produce actionable evidence for missing, incompatible, untrusted, or integrity-invalid dependencies.
 - [x] Authenticate restored archive content against NuGet's canonical closure identity, verify extracted bytes against that archive, and make the generated compilation project consume the selected target `packages.lock.json` in locked mode with exact actual-closure reconciliation.
 - [x] Define wheel-like qualified artifact variants by semantic profile, artifact kind, TFM, RID, architecture, and deployment model. Selection fails closed instead of silently loading a nearby binary.
+- [ ] Carry the manifest's semantic profile into the actual compilation target, semantic decisions, hashes, caches, provider selection, package variant, and diagnostics; reject any profile that is recognized only as a label.
 - [x] Pack source, binary-module, CLR-library, managed EXE, and NativeAOT outputs with normalized manifests, SBOM, provenance, signatures, ABI/semantic identities, and exact dependency requirements appropriate to each artifact.
+- [ ] Derive project-local installation identity from the complete authenticated artifact-set hash and qualified target identity rather than a truncated target hash plus primary-artifact hash, so packages with different manifests/resources/sidecars cannot collide.
 - [ ] Publish versioned compiler/core/CLI/PowerShell/provider packages through an explicitly authorized release lane, then prove install, upgrade, rollback, and clean-consumer usage from public feeds. Source/branch proof remains distinct from public-package availability.
 - [x] Define compatibility and deprecation policy for project, target-contract, dependency-lock, provider, manifest, explain/diagnose, cache, and public ABI schemas before a stable toolchain release.
 
-Exit gate: **Complete for source/local use; public release proof remains open.** From a clean project, the generic CLI restores the exact reviewed environment online or offline, authenticates package archives and extracted payloads, consumes the target closure lock during generated compilation, analyzes, recommends, builds, tests, packs, installs idempotently, diagnoses drift/tampering, and reproduces semantic/artifact identities without repository-specific logic or ambient resolution. The public-package publish/upgrade/rollback item remains unchecked because no release was authorized.
+Exit gate: **Partial / local workflow foundation complete.** From a clean project, the generic CLI restores the exact reviewed environment online or offline, authenticates package archives and extracted payloads, consumes the target closure lock during generated compilation, analyzes, recommends, builds, tests, packs, and diagnoses drift without repository-specific resolution. The semantic profile must still become an effective compilation input, install identity must cover the complete artifact set, and public publish/install/upgrade/rollback proof remains open and unauthorized.
 
 ## Milestone 22 — Broaden platform and profile-guided performance maturity
 
 - [ ] Add target-host execution lanes for the next explicitly selected Windows, Linux, and macOS x64/Arm64 profiles. Support is promoted one RID/deployment profile at a time; cross-publish remains experimental.
+- [ ] Pin and exercise one supported SDK-selection path for build, test, MSBuild task-host, and benchmark evidence. A broad `latestFeature` roll-forward or unsupported `dotnet exec` workaround must not make toolchain identity depend on whichever preview SDK is installed.
 - [x] Turn Hybrid boundary profiling into an opt-in recommendation workflow that identifies hot eligible regions, crossing cost, and coarse-boundary candidates without changing source or artifact mode automatically.
 - [x] Add further immutable IR rewrites, allocation reduction, pipeline fusion, loop specialization, conversion caching, and mapping only when a named corpus/benchmark exposes a cost and semantic/source-map proof remains intact.
 - [x] Evaluate ReadyToRun, trimming, NativeAOT, composite artifacts, and profile-guided optimization per scenario. Do not treat one backend as universally faster or smaller.
@@ -1376,12 +1403,15 @@ Exit gate: **Partial.** The support matrix advertises only the already target-pr
 
 ## Next implementation order
 
-The architecture, oracle, fixed public packet, and local project workflow are now established. Further work should extend the same owners without reopening them:
+The canonical semantic pipeline is established, but its profile, provider, oracle, and benefit gates must close before broad release or platform expansion:
 
-1. **Ecosystem qualification:** finish the Milestone 19 signed external-module/wrapper and remote-management target matrix through the provider and clean-target contracts already in place.
-2. **Release qualification:** use an explicitly authorized lane to publish and prove compiler/core/CLI/provider install, upgrade, rollback, and clean-consumer use for Milestone 21.
-3. **Platform promotion:** select one experimental Milestone 22 RID/deployment profile at a time and add physical target-host semantic, install, and performance proof before advertising it.
-4. **Coverage waves:** expand Milestone 20 only through the canonical parser → binder → bound IR → lowering → backend route, with pinned oracle and corpus evidence for each accepted semantic family.
+1. **Integrate and rebaseline:** integrate current `origin/main`, select the supported SDK deterministically, and rerun compiler, oracle/provider/project, public/external packet, multi-TFM, line-size, and artifact gates on the resulting head.
+2. **Close one-brain correctness:** carry semantic profiles through target identity and compilation; finish structured exact-host oracles; reconcile provider identity/signers with canonical package metadata; define and execute the external provider ABI; consolidate corpus acquisition; split `ModuleBootstrapperGenerator` and the 799-line backend before adding responsibilities.
+3. **Run value-ranked semantic waves:** prioritize complete units and workloads unlocked by compatible `#requires` evaluation, runtime scope, typed member/invoke-member expressions, pipeline syntax/lifecycle, parameter typing, and common provider shapes. Every change must use parser → binder → bound IR → lowering → backend and the exact profile/oracle path.
+4. **Prove user benefit:** enforce the packet baselines, invoke emitted Hybrid commands from unrelated real workloads, and qualify one realistic multi-file Strict application with semantic and performance comparisons. Safe fallback remains required, but 0%-emission compatibility is not the success metric for this step.
+5. **Qualify ecosystems:** finish the signed external-module/wrapper, executable directory/CIM provider, authentication, and remote-management target matrix through the same provider and clean-target contracts.
+6. **Release only with authority:** after useful-benefit and clean-consumer gates pass, use an explicitly authorized lane to publish and prove compiler/core/CLI/provider install, upgrade, rollback, and clean-consumer use.
+7. **Promote platforms last:** select one experimental RID/deployment profile at a time and add physical target-host semantic, install, and performance proof before advertising it.
 
 Do not translate syntax nodes directly in an emitter, clone PowerShell's internal compiler, add product-specific provider branches, or infer support from cross-publish alone.
 
@@ -1478,12 +1508,13 @@ Every new command family should normally require:
 - [x] Keep substantial generated PowerShell and C# templates in native template/resource files.
 - [x] Add XML documentation to public and non-obvious reusable contracts.
 - [x] Keep tests grouped by behavioral contract rather than implementation class count.
-- [x] Before Milestones 11–13, decompose the active analyzer, binder, lowered backend, lowerer, and large bound-pipeline test owners by semantic responsibility; output analysis, declarations, invocation rendering, host requirements, and hosted-pipeline tests now have named owners and the primary files retain growth headroom.
+- [ ] Before the next semantic wave, split `PowerShellBoundCSharpBackend.cs` from its current 799-line boundary by a named backend responsibility; prior analyzer/binder/lowerer/test decompositions remain valid but do not create backend headroom.
 - [x] Split the actively growing artifact builder, hardening tests, and module-plan coordinator by responsibility before the next production feature wave. Diagnostics/evidence publication, final assembly orchestration, hardening contract groups, and module-plan segment aggregation now have named owners with growth headroom.
+- [ ] Split the 1,501-line `ModuleBootstrapperGenerator.cs` by semantic responsibility before touching it again; compilation-related edits make the existing oversized owner part of this gate even though it also serves broader module packaging.
 
-## Core architecture completion gate — Complete
+## Core semantic-pipeline gate — Complete; extensibility/profile closure — Partial
 
-The redesign is complete only when all of the following are true:
+The parser-to-artifact semantic pipeline is canonical. The broader redesign is complete only when all of the following are true:
 
 - [x] no backend consumes PowerShell AST;
 - [x] no emitter performs semantic type or effect inference;
@@ -1506,19 +1537,22 @@ The redesign is complete only when all of the following are true:
 - [x] every named supported NativeAOT RID has target-host execution proof; unproved RIDs remain experimental;
 - [x] generated source, ABI, dependencies, target contract, SBOM, artifact hashes, build inputs, and toolchain evidence have provenance bound to the consumed reviewed lock and explicit target contract;
 - [x] generated artifacts preserve invocation, export, help, source-map, fallback, original pipeline-input, and synchronized lifecycle-cleanup contracts in the supported profiles;
-- [x] touched non-generated compiler production/test files stay below the 1,000-line hard ceiling; the artifact builder, hardening tests, and module-plan coordinator were split by responsibility before further production growth, and active semantic owners remain below the preferred 800-line split point;
-- [x] active compiler owners have responsibility-based headroom for planned value/object/command expansion, not only sub-800 line counts;
+- [ ] touched non-generated production/test files in the compilation path stay below the 1,000-line hard ceiling; `ModuleBootstrapperGenerator.cs` is currently 1,501 lines and must be decomposed before further changes;
+- [ ] active compiler owners have responsibility-based headroom for planned value/object/command expansion; the 799-line lowered backend has reached the preferred split point;
 - [x] adding an operator, syntax form, or command family has one obvious canonical semantic/lowering/backend owner and an injectable provider route where appropriate.
-- [x] a separately built, locked, trusted, and conformance-tested provider package can extend Strict/Hybrid behavior without compiler-source edits, ambient discovery, authored-source execution during analysis, or a parallel eligibility path.
+- [ ] the selected semantic profile participates in target hashing, binding/lowering, provider resolution, caching, artifact selection, and diagnostics rather than acting only as package metadata;
+- [ ] a separately built, authoritatively trusted, implementation-conformance-tested provider package can extend Strict/Hybrid executable behavior without compiler-source edits, ambient discovery, authored-source execution during analysis, or a parallel eligibility path;
+- [ ] every promoted feature has structured, minimized differential evidence against an exact pinned host artifact for each claimed semantic profile;
+- [ ] public and external corpus acquisition and baseline enforcement share one bounded, path-safe owner, and the public acceptance lane invokes emitted commands rather than proving hosted compatibility alone.
 
-Milestone 16 closes the remaining extensibility architecture boundary. It does not by itself make the product broadly compatible with arbitrary modules or scripts. Milestones 18 and 20 now provide bounded semantic-profile and fixed-packet confidence; the remaining product gate is external ecosystem, public release, and wider target qualification.
+The semantic compiler does not have a competing AST/emitter eligibility brain. The open risks are different: a currently inert semantic-profile label, a metadata-only external-provider path, incomplete per-feature oracle evidence, duplicated corpus-acquisition policy, and production owners without safe growth headroom. Closing Milestones 16, 18, and the benefit portion of Milestone 20 prevents those gaps from becoming parallel behavior as coverage expands.
 
-## Product maturity gate — Partial / Milestones 19–22
+## Product maturity gate — Partial / Milestones 16 and 18–22
 
-- [x] every promoted semantic feature has a named, pinned, differentially proven profile under Milestone 18;
-- [ ] the remaining signed external binary-module/managed-wrapper and remote-management failure matrix passes Milestone 19 clean-target execution; bounded local directory, WMI/CIM/CDXML, native/process, and Windows COM routes are already covered;
-- [x] the fixed public-corpus and Strict-program packet passes Milestone 20 without product-specific compiler paths;
-- [x] clean-project restore/build/test/pack/install and tamper diagnosis pass locally under Milestone 21;
+- [ ] every promoted semantic feature has a named, effective, exact-host, differentially proven profile under Milestone 18;
+- [ ] the signed external binary-module/managed-wrapper, executable provider, and remote-management operation/failure matrix passes Milestone 19 clean-target execution; bounded Hybrid WMI/CIM/CDXML, native/process, and Windows COM routes are already covered;
+- [ ] the fixed public-corpus and Strict-program packet enforces its baseline and proves emitted real-workload benefit under Milestone 20 without product-specific compiler paths;
+- [ ] clean-project restore/build/test/pack/install and tamper diagnosis pass locally under Milestone 21 with effective profile selection and complete artifact-set install identity;
 - [ ] public-package publish/install/upgrade/rollback proof remains open under Milestone 21;
 - [x] every currently advertised OS/architecture/deployment profile has Milestone 22 target-host and performance evidence;
 - [ ] physical macOS/Arm64 promotion and a stable-channel release remain open under Milestone 22.
