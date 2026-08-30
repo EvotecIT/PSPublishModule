@@ -2619,7 +2619,7 @@ public partial class WebSiteVerifierTests
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\ndescription: Generated card route.\nslug: index\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\n**Generated card route.**");
             File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
             var spec = new SiteSpec
             {
@@ -2648,10 +2648,10 @@ public partial class WebSiteVerifierTests
                 Collection = "pages",
                 OutputPath = "/",
                 Title = "Home",
-                Description = "Generated card route.",
+                Description = string.Empty,
                 Slug = "index",
                 Kind = PageKind.Home,
-                HtmlContent = "<p>Home</p>",
+                HtmlContent = "<p><strong>Generated card route.</strong></p>",
                 Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             });
             Assert.StartsWith("/assets/social/generated/", cardRoute, StringComparison.Ordinal);

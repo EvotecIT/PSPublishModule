@@ -258,6 +258,57 @@ public static partial class WebSiteBuilder
         return items;
     }
 
+    /// <summary>Builds the same rendered base content items used by a site build for artifact verification.</summary>
+    internal static IReadOnlyList<ContentItem> BuildContentItemsForVerification(SiteSpec spec, WebSitePlan plan)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var previousRenderCache = BuildRenderCacheScope.Value;
+        var previousRootPath = BuildRootPathScope.Value;
+        var previousProjectDataCache = BuildProjectDataCacheScope.Value;
+        BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
+        BuildRootPathScope.Value = plan.RootPath;
+        BuildProjectDataCacheScope.Value = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var redirects = new List<RedirectSpec>();
+            if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
+            if (spec.Redirects is { Length: > 0 }) redirects.AddRange(spec.Redirects);
+
+            var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, WebJson.Options).ToList();
+            foreach (var project in projectSpecs)
+            {
+                if (project.Redirects is { Length: > 0 })
+                    redirects.AddRange(project.Redirects);
+            }
+            AddVersioningAliasRedirects(spec, redirects);
+
+            var data = LoadData(spec, plan, projectSpecs);
+            var projectMap = projectSpecs
+                .Where(static project => !string.IsNullOrWhiteSpace(project.Slug))
+                .ToDictionary(static project => project.Slug, StringComparer.OrdinalIgnoreCase);
+            var projectContentMap = projectSpecs
+                .Where(static project => project.Content is not null && !string.IsNullOrWhiteSpace(project.Slug))
+                .ToDictionary(static project => project.Slug, static project => project.Content!, StringComparer.OrdinalIgnoreCase);
+
+            return BuildContentItems(
+                spec,
+                plan,
+                redirects,
+                data,
+                projectMap,
+                projectContentMap,
+                ResolveCacheRoot(spec, plan.RootPath));
+        }
+        finally
+        {
+            BuildRenderCacheScope.Value = previousRenderCache;
+            BuildRootPathScope.Value = previousRootPath;
+            BuildProjectDataCacheScope.Value = previousProjectDataCache;
+        }
+    }
+
     private static List<ContentItem> MaterializeLocalizedFallbackPages(SiteSpec spec, IReadOnlyList<ContentItem> items)
     {
         if (spec is null || items is null || items.Count == 0)
