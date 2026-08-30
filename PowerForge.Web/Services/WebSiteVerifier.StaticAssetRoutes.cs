@@ -133,8 +133,8 @@ public static partial class WebSiteVerifier
                 WebSiteBuilder.IsSearchableContent(route.Draft, route.Route)))
             yield break;
 
-        yield return "/search/index.html";
-        yield return "/search/";
+        foreach (var route in GetStaticAssetRoutes("search/index.html"))
+            yield return route;
     }
 
     private static IEnumerable<string> DiscoverGeneratedSearchDataRoutes(
@@ -268,16 +268,21 @@ public static partial class WebSiteVerifier
         var collectionPageSizes = (spec.Collections ?? Array.Empty<CollectionSpec>())
             .Where(static collection => collection is not null && !string.IsNullOrWhiteSpace(collection.Name))
             .Select(CollectionPresetDefaults.Apply)
+            .Where(static collection => (collection.PageSize ?? 0) > 0)
             .ToDictionary(
                 static collection => collection.Name,
-                collection => Math.Max(0, collection.PageSize ?? defaultPageSize),
+                collection => collection.PageSize!.Value,
                 StringComparer.OrdinalIgnoreCase);
         var taxonomyPageSizes = (spec.Taxonomies ?? Array.Empty<TaxonomySpec>())
             .Where(static taxonomy => taxonomy is not null && !string.IsNullOrWhiteSpace(taxonomy.Name))
+            .Where(static taxonomy => (taxonomy.PageSize ?? 0) > 0)
             .ToDictionary(
                 static taxonomy => taxonomy.Name,
-                taxonomy => Math.Max(0, taxonomy.PageSize ?? defaultPageSize),
+                taxonomy => taxonomy.PageSize!.Value,
                 StringComparer.OrdinalIgnoreCase);
+        var knownRoutes = new HashSet<string>(
+            routes.Select(static route => NormalizeRouteForNavigationMatch(route.Route)),
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var section in routes.Where(static route => !route.Draft && route.Kind is PageKind.Section or PageKind.Taxonomy or PageKind.Term))
         {
@@ -311,13 +316,17 @@ public static partial class WebSiteVerifier
             var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
             for (var page = 2; page <= totalPages; page++)
             {
+                var pagedRoute = WebSiteBuilder.BuildPaginationRoute(
+                    section.Route,
+                    pageSegment,
+                    page,
+                    spec.TrailingSlash);
+                if (!knownRoutes.Add(NormalizeRouteForNavigationMatch(pagedRoute)))
+                    continue;
+
                 yield return section with
                 {
-                    Route = WebSiteBuilder.BuildPaginationRoute(
-                        section.Route,
-                        pageSegment,
-                        page,
-                        spec.TrailingSlash),
+                    Route = pagedRoute,
                     TranslationKey = string.IsNullOrWhiteSpace(section.TranslationKey)
                         ? string.Empty
                         : $"{section.TranslationKey}:page:{page}",
@@ -398,9 +407,11 @@ public static partial class WebSiteVerifier
                 var baseRoute = normalizedRoute.Equals("/404", StringComparison.OrdinalIgnoreCase)
                     ? string.Empty
                     : normalizedRoute;
-                yield return string.IsNullOrWhiteSpace(baseRoute)
+                var destination = string.IsNullOrWhiteSpace(baseRoute)
                     ? "/" + encoded
                     : baseRoute + "/" + encoded;
+                foreach (var resourceRoute in GetStaticAssetRoutes(destination))
+                    yield return resourceRoute;
             }
         }
     }

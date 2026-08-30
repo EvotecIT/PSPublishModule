@@ -457,7 +457,7 @@ public partial class WebSiteVerifierTests
                 Name = "Root pagination",
                 BaseUrl = "https://example.test",
                 TrailingSlash = TrailingSlashMode.Always,
-                Pagination = new PaginationSpec { Enabled = true, PathSegment = "page" },
+                Pagination = new PaginationSpec { Enabled = true, PathSegment = "page", DefaultPageSize = 2 },
                 Collections =
                 [
                     new CollectionSpec
@@ -465,7 +465,7 @@ public partial class WebSiteVerifierTests
                         Name = "pages",
                         Input = "content",
                         Output = "/",
-                        PageSize = 2
+                        PageSize = 0
                     }
                 ],
                 StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
@@ -496,6 +496,50 @@ public partial class WebSiteVerifierTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotRegisterPaginationRouteOccupiedByDraftContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-pagination-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "page", "2"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "_index.md"), "---\ntitle: Home\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "content", "one.md"), "---\ntitle: One\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "two.md"), "---\ntitle: Two\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "content", "page", "2", "index.md"), "---\ntitle: Reserved\ndraft: true\n---\nReserved");
+            File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
+
+            var spec = new SiteSpec
+            {
+                Name = "Pagination collision",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Pagination = new PaginationSpec { Enabled = true, PathSegment = "page", DefaultPageSize = 1 },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Page 2", Url = "/page/2/" }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/page/2/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
 
@@ -532,7 +576,13 @@ public partial class WebSiteVerifierTests
                         new MenuSpec
                         {
                             Name = "main",
-                            Items = [new MenuItemSpec { Title = "Search", Url = "/search/" }]
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Search", Url = "/search/" },
+                                new MenuItemSpec { Title = "Search index", Url = "/search/index" },
+                                new MenuItemSpec { Title = "Search file", Url = "/search/index.html" },
+                                new MenuItemSpec { Title = "Invalid search file directory", Url = "/search/index.html/" }
+                            ]
                         }
                     ]
                 }
@@ -550,7 +600,12 @@ public partial class WebSiteVerifierTests
                 "---\ntitle: Public\nslug: public\n---\n\nPublic");
             var withSearchableContent = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
             Assert.DoesNotContain(withSearchableContent.Warnings, warning =>
-                warning.Contains("/search/", StringComparison.OrdinalIgnoreCase) &&
+                (warning.Contains("points to '/search/'", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("points to '/search/index'", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("points to '/search/index.html'", StringComparison.OrdinalIgnoreCase)) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(withSearchableContent.Warnings, warning =>
+                warning.Contains("/search/index.html/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally
@@ -579,6 +634,7 @@ public partial class WebSiteVerifierTests
             File.WriteAllText(Path.Combine(blog, "post.md"), "---\ntitle: Post\n---\n\nSearchable post");
             File.WriteAllText(Path.Combine(pages, "index.md"), "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
             File.WriteAllText(Path.Combine(pages, "manual.pdf"), "not found help");
+            File.WriteAllText(Path.Combine(pages, "legacy.html"), "<h1>Legacy help</h1>");
             File.WriteAllText(Path.Combine(feeds, "entry.md"), "---\ntitle: Feed entry\n---\n\nFeed entry");
             File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"route-theme\",\"assetsPath\":\"./assets\"}");
             File.WriteAllText(Path.Combine(theme, "assets", "brand.svg"), "<svg/>");
@@ -590,6 +646,8 @@ public partial class WebSiteVerifierTests
                 "/blog/index.json",
                 "/404.html",
                 "/manual.pdf",
+                "/legacy.html",
+                "/legacy",
                 "/search/index.json",
                 "/search/manifest.json",
                 "/search/en/index.json",
@@ -2423,6 +2481,59 @@ public partial class WebSiteVerifierTests
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains("/pl/tags/index.xml", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersMaterializedFallbackForMultiSegmentLanguagePrefixes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-multi-prefix-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "_index.md"), "---\ntitle: Docs\ntranslation_key: docs\n---\nDocs");
+            File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
+            var spec = new SiteSpec
+            {
+                Name = "Multi-prefix fallback",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Prefix = "en/us", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl/pl" }
+                    ]
+                },
+                Collections = [new CollectionSpec { Name = "docs", Input = "content", Output = "/docs" }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Polish docs", Url = "/pl/pl/docs/" }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/pl/pl/docs/'", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally

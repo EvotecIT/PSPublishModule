@@ -285,6 +285,9 @@ public static partial class WebSiteVerifier
         var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
         var fileRoutes = staticRoutes
+            .Concat(generatedFeatureRoutes.Where(static route =>
+                route.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                route.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)))
             .Concat(generatedOutputRoutes)
             .Concat(generatedResourceRoutes)
             .Concat(generatedSearchDataRoutes)
@@ -295,7 +298,9 @@ public static partial class WebSiteVerifier
         var navigationRoutes = publishableRoutes
             .Where(route => EmitsIndexHtml(spec, route))
             .Select(static route => ResolveBuiltNavigationRoute(route.Route))
-            .Concat(generatedFeatureRoutes)
+            .Concat(generatedFeatureRoutes.Where(static route =>
+                !route.EndsWith(".html", StringComparison.OrdinalIgnoreCase) &&
+                !route.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)))
             .Concat(generatedPaginationRoutes
                 .Where(route => EmitsIndexHtml(spec, route))
                 .Select(static route => route.Route));
