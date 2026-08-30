@@ -100,6 +100,18 @@ public sealed class PowerForgeCliAppleDeployTests
             Assert.Equal("MacCatalyst", macResult.GetProperty("archiveVariant").GetString());
             Assert.Equal("Free", macResult.GetProperty("profile").GetString());
             Assert.Equal("/Applications", macResult.GetProperty("installRoot").GetString());
+
+            File.WriteAllText(Path.Combine(tempRoot, ".gitignore"), "Local.xcconfig\n");
+            RunGit(tempRoot, "add", ".gitignore");
+            RunGit(tempRoot, "commit", "-m", "ignore local input");
+            File.WriteAllText(Path.Combine(tempRoot, "Local.xcconfig"), "SETTING = local");
+
+            var unsafePlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+            Assert.Equal(1, unsafePlan.ExitCode);
+            Assert.Contains("Git-ignored files", unsafePlan.StdErr + unsafePlan.StdOut, StringComparison.Ordinal);
+            Assert.Contains("Local.xcconfig", unsafePlan.StdErr + unsafePlan.StdOut, StringComparison.Ordinal);
         }
         finally
         {

@@ -68,7 +68,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Path.Combine(root.FullName, "DerivedData");
+            var derived = ExternalOutputPath(root, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
             InitializeGitRepository(root.FullName);
@@ -109,6 +109,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -345,7 +346,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task BuildAsync_rejects_output_paths_that_contain_the_build_root(bool useDerivedDataPath)
+    public async Task BuildAsync_rejects_output_paths_that_overlap_the_build_root(bool useDerivedDataPath)
     {
         var parent = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(), "PowerForge.Tests.OutputRoot", Guid.NewGuid().ToString("N")));
@@ -376,12 +377,83 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 useDerivedDataPath ? nameof(AppleAppBuildRequest.DerivedDataPath) : nameof(AppleAppBuildRequest.AppPath),
                 exception.Message,
                 StringComparison.Ordinal);
-            Assert.Contains("must not contain BuildRoot", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must be outside BuildRoot", exception.Message, StringComparison.Ordinal);
             Assert.Empty(runner.Requests);
         }
         finally
         {
             try { parent.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_derived_data_inside_the_build_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.OutputRoot", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = Path.Combine(root.FullName, "DerivedData")
+                }));
+
+            Assert.Contains(nameof(AppleAppBuildRequest.DerivedDataPath), exception.Message, StringComparison.Ordinal);
+            Assert.Contains("must be outside BuildRoot", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_uses_volume_case_rules_for_build_root_containment()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.CaseRoot", Guid.NewGuid().ToString("N") + "Aa"));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) !=
+                StringComparison.OrdinalIgnoreCase)
+            {
+                return;
+            }
+
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+            var differentlyCasedRoot = ToggleFirstLetterCase(root.FullName);
+
+            var result = await new AppleDeviceDeploymentService(runner).BuildAsync(
+                new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = differentlyCasedRoot,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData")
+                });
+
+            Assert.True(result.Succeeded);
+            Assert.Single(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
 
@@ -407,7 +479,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 ProjectPath = project.FullName,
                 Scheme = "CasaRay",
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
-                DerivedDataPath = Path.Combine(root.FullName, "DerivedData"),
+                DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
                 XcodeBuildExecutable = "xcodebuild-test",
                 BuildRoot = root.FullName
             });
@@ -421,7 +493,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 ProjectPath = project.FullName,
                 Scheme = "CasaRay",
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
-                DerivedDataPath = Path.Combine(root.FullName, "OtherDerivedData"),
+                DerivedDataPath = ExternalOutputPath(root, "OtherDerivedData"),
                 XcodeBuildExecutable = "xcodebuild-test",
                 BuildRoot = root.FullName,
                 AdditionalArguments = [$"POWERFORGE_SOURCE_REVISION={new string('b', 40)}"]
@@ -429,6 +501,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -464,9 +537,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                         ProjectPath = project.FullName,
                         Scheme = "CasaRay",
                         DeviceIdentifier = "device-1",
-                        DerivedDataPath = Path.Combine(
-                            root.FullName,
-                            "DerivedData"),
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
                         XcodeBuildExecutable = "xcodebuild-test",
                         BuildRoot = root.FullName
                     }));
@@ -475,6 +546,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -593,7 +665,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Path.Combine(root.FullName, "DerivedData");
+            var derived = ExternalOutputPath(root, "DerivedData");
             var actualApp = Directory.CreateDirectory(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "Tactra.app"));
             var service = new AppleDeviceDeploymentService(new CapturingProcessRunner(_ => Success("ok")));
             InitializeGitRepository(root.FullName);
@@ -613,6 +685,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -625,7 +698,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Path.Combine(root.FullName, "DerivedData");
+            var derived = ExternalOutputPath(root, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
             InitializeGitRepository(root.FullName);
@@ -645,6 +718,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -657,7 +731,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Path.Combine(root.FullName, "DerivedData");
+            var derived = ExternalOutputPath(root, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
             InitializeGitRepository(root.FullName);
@@ -678,6 +752,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -692,7 +767,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
             var mirror = Path.Combine(mirrorRoot.FullName, "mirror");
-            var derived = Path.Combine(root.FullName, "DerivedData");
+            var derived = ExternalOutputPath(root, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
             InitializeGitRepository(root.FullName);
@@ -725,6 +800,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
             try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
@@ -736,7 +812,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
             var output = """
 App installed:
 • bundleID: com.evotecit.tactra
@@ -760,6 +836,7 @@ App installed:
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -772,7 +849,7 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -805,6 +882,7 @@ App installed:
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -817,7 +895,7 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -846,6 +924,7 @@ App installed:
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -858,7 +937,7 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.app"));
+            var app = Directory.CreateDirectory(ExternalOutputPath(root, "CasaRay.app"));
             var runner = new CapturingProcessRunner(request => request.Arguments.Contains("install")
                 ? Success("App installed:\n• bundleID: com.evotecit.casaray\n")
                 : Success("ok"));
@@ -893,6 +972,7 @@ App installed:
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -905,7 +985,7 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.app"));
+            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -952,12 +1032,46 @@ App installed:
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
+
+    private static string ExternalOutputPath(DirectoryInfo sourceRoot, string leaf)
+        => Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs",
+            leaf);
+
+    private static string ToggleFirstLetterCase(string path)
+    {
+        var parent = Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException("Test path must have a parent directory.");
+        var name = Path.GetFileName(path);
+        var first = char.IsUpper(name[0])
+            ? char.ToLowerInvariant(name[0])
+            : char.ToUpperInvariant(name[0]);
+        return Path.Combine(parent, first + name.Substring(1));
+    }
+
+    private static void DeleteExternalOutputs(DirectoryInfo sourceRoot)
+    {
+        var outputRoot = Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs");
+        try
+        {
+            if (Directory.Exists(outputRoot))
+                Directory.Delete(outputRoot, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup for test outputs.
+        }
+    }
 
     private static void InitializeGitRepository(string workingDirectory)
     {

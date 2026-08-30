@@ -5,7 +5,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleCheckpoint_writes_publish_shaped_plan_after_archive()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -31,7 +31,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     CheckpointAppleApps = true,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.True(result.Success, result.ErrorMessage);

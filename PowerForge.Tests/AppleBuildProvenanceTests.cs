@@ -63,6 +63,26 @@ public sealed class AppleBuildProvenanceTests
             git));
     }
 
+    [Theory]
+    [InlineData("--assume-unchanged")]
+    [InlineData("--skip-worktree")]
+    public void ResolveLocalSourceRevision_rejects_hidden_tracked_file_changes(
+        string indexFlag)
+    {
+        var root = CreateRepository();
+        try
+        {
+            RunGit(root.FullName, "update-index", indexFlag, "tracked.txt");
+            File.WriteAllText(Path.Combine(root.FullName, "tracked.txt"), "hidden change");
+
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void RejectIgnoredBuildInputs_rejects_inputs_copied_to_the_build()
     {

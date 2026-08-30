@@ -91,7 +91,9 @@ internal static partial class Program
                 Scheme = scheme,
                 DerivedDataPath = derivedDataPath,
                 SourceRevision = planOnly
-                    ? AppleBuildProvenance.RequireLocalSourceRevision(projectRoot)
+                    ? AppleBuildProvenance.CaptureBuildInputs(
+                        projectRoot,
+                        excludesGeneratedDirectories: useBuildMirror).Revision
                     : null,
                 Device = deviceIdentifier ?? device,
                 InstallRoot = requestedPlatform == ApplePlatform.macOS ? Path.GetFullPath(installRoot) : null,

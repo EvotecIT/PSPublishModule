@@ -49,9 +49,26 @@ internal static class AppleBuildProvenance
             .GetResult();
         if (!status.Succeeded)
             return null;
+        var indexFlags = git.RunRawAsync(
+                projectRoot,
+                ["ls-files", "-v", "-z"])
+            .GetAwaiter()
+            .GetResult();
+        if (!indexFlags.Succeeded || HasHiddenTrackedFiles(indexFlags.StdOut))
+            return null;
         return string.IsNullOrWhiteSpace(status.StdOut)
             ? revision
             : null;
+    }
+
+    internal static Snapshot CaptureBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories)
+    {
+        var snapshot = Capture(sourceRoot);
+        RejectIgnoredBuildInputs(sourceRoot, excludesGeneratedDirectories);
+        RejectSymbolicLinkBuildInputs(sourceRoot, excludesGeneratedDirectories);
+        return snapshot;
     }
 
     internal static void RejectIgnoredBuildInputs(
@@ -153,18 +170,20 @@ internal static class AppleBuildProvenance
 
     internal static bool IsGitMetadataMutation(
         FileSystemEventArgs args,
-        string sourceRoot)
+        string sourceRoot,
+        StringComparison pathComparison)
     {
         var metadataRoot = Path.Combine(Path.GetFullPath(sourceRoot), ".git");
-        return IsPathMutation(args, metadataRoot);
+        return IsPathMutation(args, metadataRoot, pathComparison);
     }
 
     internal static bool IsPathMutation(
         FileSystemEventArgs args,
-        string path)
-        => IsPathWithin(args.FullPath, path) ||
+        string path,
+        StringComparison pathComparison)
+        => IsPathWithin(args.FullPath, path, pathComparison) ||
            args is RenamedEventArgs renamed &&
-           IsPathWithin(renamed.OldFullPath, path);
+           IsPathWithin(renamed.OldFullPath, path, pathComparison);
 
     internal static IReadOnlyList<string> AppendXcodeBuildSetting(
         IEnumerable<string>? additionalArguments,
@@ -202,11 +221,11 @@ internal static class AppleBuildProvenance
         return normalized;
     }
 
-    private static bool IsPathWithin(string candidate, string root)
+    private static bool IsPathWithin(
+        string candidate,
+        string root,
+        StringComparison comparison)
     {
-        var comparison = Path.DirectorySeparatorChar == '\\'
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         var fullCandidate = Path.GetFullPath(candidate);
         var fullRoot = Path.GetFullPath(root);
         if (fullCandidate.Equals(fullRoot, comparison))
@@ -215,6 +234,21 @@ internal static class AppleBuildProvenance
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return fullCandidate.StartsWith(prefix, comparison);
+    }
+
+    private static bool HasHiddenTrackedFiles(string output)
+    {
+        foreach (var entry in output.Split(
+                     new[] { '\0' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (entry.Length < 3 || entry[1] != ' ')
+                return true;
+            var tag = entry[0];
+            if (tag == 'S' || char.IsLower(tag))
+                return true;
+        }
+        return false;
     }
 
     private static bool IsExcludedGeneratedPath(string path)

@@ -1980,6 +1980,10 @@ internal sealed partial class PowerForgeReleaseService
                 DiscoverAppStoreConnectAppId(app, credential, request.AppleAction);
         }
 
+        var requireImmutableSourceSnapshot =
+            request.RequireImmutableAppleSourceSnapshot ||
+            request.AppleAction == PowerForgeAppleReleaseAction.Ship ||
+            options.Archive && appleSourceCommit.Length > 0;
         var plan = new PowerForgeAppleReleasePlan
         {
             Progress = request.Progress as IPowerForgeReleaseProgressReporterV2,
@@ -1995,16 +1999,13 @@ internal sealed partial class PowerForgeReleaseService
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = requestedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
-            RequireImmutableSourceSnapshot = request.RequireImmutableAppleSourceSnapshot ||
-                                             request.AppleAction == PowerForgeAppleReleaseAction.Ship,
+            RequireImmutableSourceSnapshot = requireImmutableSourceSnapshot,
             ApprovedPlanSha256 = request.AppleExpectedPlanSha256?.Trim(),
-            ExactSourceConfigPath = (request.RequireImmutableAppleSourceSnapshot ||
-                                     request.AppleAction == PowerForgeAppleReleaseAction.Ship) &&
+            ExactSourceConfigPath = requireImmutableSourceSnapshot &&
                                     File.Exists(request.ConfigPath)
                 ? request.ConfigPath
                 : null,
-            ExactSourceConfigSha256 = (request.RequireImmutableAppleSourceSnapshot ||
-                                       request.AppleAction == PowerForgeAppleReleaseAction.Ship) &&
+            ExactSourceConfigSha256 = requireImmutableSourceSnapshot &&
                                       !string.IsNullOrWhiteSpace(request.ConfigPath) &&
                                       !string.IsNullOrWhiteSpace(request.LoadedConfigurationSha256)
                 ? request.LoadedConfigurationSha256

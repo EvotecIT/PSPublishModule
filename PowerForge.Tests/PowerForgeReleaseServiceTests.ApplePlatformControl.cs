@@ -753,7 +753,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleUpload_PreservesAcceptedNotarizationWhenStaplingFails()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -798,7 +798,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleSourceCommit = sourceCommit,
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                         AppleAction = PowerForgeAppleReleaseAction.Upload
                     });
 
@@ -837,7 +837,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleSourceCommit = sourceCommit,
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                         AppleAction = PowerForgeAppleReleaseAction.Configured,
                         AppleAdoptExistingBuild = true,
                         AppleActionConfirmed = true
@@ -855,7 +855,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
                     AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
@@ -923,7 +923,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
                     AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
@@ -965,7 +965,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleAction = PowerForgeAppleReleaseAction.Upload
                 });
 
@@ -995,7 +995,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new PowerForgeReleaseRequest
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
                     AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true
