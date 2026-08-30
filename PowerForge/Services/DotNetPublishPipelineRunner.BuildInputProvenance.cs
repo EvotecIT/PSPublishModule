@@ -465,6 +465,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     pathMapsByEvaluation[evaluationKey],
                     buildPlan?.NoBuildInPublish == true,
                     graphNodes,
+                    evaluationsByEvaluation[evaluationKey].EvaluatedProperties,
                     out EvaluatedPublishInput[] publishInputs))
             {
                 projectDirectories = directories.ToArray();
@@ -543,9 +544,31 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach ((ProjectEvaluationRequest request, GeneratedProjectReferenceOutput output) in generatedProjectReferenceOutputs)
         {
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
-            if (outputRootsByEvaluation.TryGetValue(referencedProject.BuildVisitKey(), out string[]? outputRoots) &&
+            if (!TryResolveProjectEvaluationKey(
+                    referencedProject,
+                    request.TargetFramework,
+                    requestsByEvaluation,
+                    evaluationsByEvaluation,
+                    out string referencedProjectKey) &&
+                (!evaluationsByEvaluation.TryGetValue(
+                     request.BuildVisitKey(),
+                     out EvaluatedProjectInputs? parentEvaluation) ||
+                 !TryResolveGeneratedProjectReferenceEvaluationKey(
+                     request,
+                     output.ProjectReference,
+                     parentEvaluation.ProjectReferences,
+                     requestsByEvaluation,
+                     evaluationsByEvaluation,
+                     out referencedProjectKey)))
+            {
+                buildInputs.Add(output.OutputPath);
+                sourceInputs.Add(output.OutputPath);
+                continue;
+            }
+            referencedProject = requestsByEvaluation[referencedProjectKey];
+            if (outputRootsByEvaluation.TryGetValue(referencedProjectKey, out string[]? outputRoots) &&
                 expectedOutputPathsByEvaluation.TryGetValue(
-                    referencedProject.BuildVisitKey(),
+                    referencedProjectKey,
                     out string[]? expectedOutputPaths) &&
                 IsTrustedGeneratedOutputPath(
                     output.OutputPath,
@@ -557,22 +580,27 @@ public sealed partial class DotNetPublishPipelineRunner
                     referencedProject,
                     new[] { output.OutputPath },
                     buildInputsByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
+                        referencedProjectKey,
                         out string[]? evaluatedBuildInputs)
                         ? evaluatedBuildInputs
                         : Array.Empty<string>(),
                     msBuildInputsByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
+                        referencedProjectKey,
                         out string[]? evaluatedMsBuildInputs)
                         ? evaluatedMsBuildInputs
                         : Array.Empty<string>(),
+                    evaluationsByEvaluation.TryGetValue(
+                        referencedProjectKey,
+                        out EvaluatedProjectInputs? referencedEvaluation)
+                        ? referencedEvaluation.EvaluatedProperties
+                        : referencedProject.ReadEffectiveGlobalProperties(),
                     pathMapsByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
+                        referencedProjectKey,
                         out string? pathMap)
                         ? pathMap
                         : null,
                     verifiedPackagesByEvaluation.TryGetValue(
-                        referencedProject.BuildVisitKey(),
+                        referencedProjectKey,
                         out VerifiedPackageInputCatalog? verifiedPackages)
                         ? verifiedPackages
                         : null,
@@ -618,7 +646,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         targetFramework: null,
                         effectiveConfiguration,
                         globalProperties: null,
-                        buildPlan!.EnvironmentVariables);
+                        buildPlan!.EnvironmentVariables,
+                        buildPlan.ControlledBuildEnvironmentVariableNames);
                     continue;
                 }
 
@@ -633,7 +662,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         combination.Framework,
                         effectiveConfiguration,
                         properties,
-                        buildPlan!.EnvironmentVariables);
+                        buildPlan!.EnvironmentVariables,
+                        buildPlan.ControlledBuildEnvironmentVariableNames);
                 }
             }
 
@@ -718,6 +748,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
+            "-getProperty:PowerForgeSdkPackageLockFile",
             "-getProperty:MSBuildToolsPath",
             "-getProperty:MSBuildSDKsPath",
             "-getProperty:CustomAfterMicrosoftCommonTargets"
@@ -887,6 +918,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 {
                     return false;
                 }
+                evaluatedProjectReferenceConditionProperties =
+                    ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
                 if (projectReferenceDeclarations.Length > 0 ||
                     hasDynamicProjectReferenceTaskOutputs ||
                     preResolvePropertyDefinitions.Any(definition =>
@@ -894,8 +927,6 @@ public sealed partial class DotNetPublishPipelineRunner
                             "_GlobalPropertiesToRemoveFromProjectReferences",
                             StringComparison.OrdinalIgnoreCase)))
                 {
-                    evaluatedProjectReferenceConditionProperties =
-                        ReadEvaluatedProjectReferenceConditionProperties(request, importPaths);
                     if (!TryReadPreResolveTaskWideProjectReferencePropertyRemovals(
                             preResolvePropertyDefinitions,
                             evaluatedProjectReferenceConditionProperties,
@@ -1146,6 +1177,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 publishInputs,
                 verifiedPackages,
                 trustedBuildInfrastructureRoots,
+                evaluatedProjectReferenceConditionProperties,
                 ResolveExistingCustomAfterTargets(
                     customAfterMicrosoftCommonTargets,
                     Path.GetDirectoryName(request.ProjectPath)!));
@@ -1254,7 +1286,9 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             try
             {
-                environmentVariables = CreateSafeDotNetChildEnvironment(environmentVariables);
+                environmentVariables = CreateSafeDotNetChildEnvironment(
+                    environmentVariables,
+                    effectiveFileName);
             }
             catch (Exception exception)
             {

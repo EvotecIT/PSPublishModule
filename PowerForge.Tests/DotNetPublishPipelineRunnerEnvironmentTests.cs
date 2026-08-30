@@ -49,6 +49,49 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
     }
 
     [Fact]
+    public void Plan_AdmitsOnlyExplicitNonSecretEnvironmentVariablesToControlledBuilds()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var projectPath = CreateProject(root);
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                new DotNetPublishSpec
+                {
+                    DotNet = new DotNetPublishDotNetOptions
+                    {
+                        ProjectRoot = root,
+                        Restore = false,
+                        Build = false,
+                        Runtimes = new[] { "win-x64" },
+                        EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["DETERMINISTIC_BUILD_VALUE"] = new()
+                            {
+                                Value = "2026-08-29T20:00:00Z",
+                                Secret = false
+                            },
+                            ["PRIVATE_BUILD_TOKEN"] = new()
+                            {
+                                Value = "private-token",
+                                Secret = true
+                            }
+                        }
+                    },
+                    Targets = new[] { NewTarget(projectPath) }
+                },
+                configPath: null);
+
+            Assert.Contains("DETERMINISTIC_BUILD_VALUE", plan.ControlledBuildEnvironmentVariableNames);
+            Assert.DoesNotContain("PRIVATE_BUILD_TOKEN", plan.ControlledBuildEnvironmentVariableNames);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenRequiredDotNetEnvironmentVariableIsMissing()
     {
         var root = CreateTempRoot();

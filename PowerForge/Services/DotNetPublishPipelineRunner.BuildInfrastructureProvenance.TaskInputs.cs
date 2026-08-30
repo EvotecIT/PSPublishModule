@@ -52,7 +52,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool ContainsUncontrolledTaskInputPropertyFunction(
         XDocument document,
-        IReadOnlyCollection<XDocument> relatedDocuments)
+        IReadOnlyCollection<XDocument> relatedDocuments,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
     {
         if (relatedDocuments
             .SelectMany(related => related.Descendants())
@@ -61,18 +62,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
                 ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName))
             .Any(element => ContainsUncontrolledEnvironmentAssignments(element.Value)))
-        {
             return true;
-        }
 
         IEnumerable<string> taskInputs = document.Descendants()
-            .Where(IsControlledBuildTaskElement)
+            .Where(element =>
+                IsControlledBuildTaskElement(element) &&
+                !IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties))
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
             .Select(attribute => attribute.Value);
         IEnumerable<string> conditions = document.Descendants()
-            .Where(IsControlledBuildTaskElement)
+            .Where(element =>
+                IsControlledBuildTaskElement(element) &&
+                !IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties))
             .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
@@ -102,9 +105,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 decodedExpression.IndexOf("$($(", StringComparison.Ordinal) >= 0 ||
                 decodedExpression.IndexOf("@($(", StringComparison.Ordinal) >= 0 ||
                 decodedExpression.IndexOf("%($(", StringComparison.Ordinal) >= 0)
-            {
                 return true;
-            }
 
             foreach (Match match in Regex.Matches(
                          expression,
@@ -112,7 +113,11 @@ public sealed partial class DotNetPublishPipelineRunner
                          RegexOptions.CultureInvariant))
             {
                 string propertyName = match.Groups[1].Value;
-                if (HasTaskOutputAssignment(relatedDocuments, "PropertyName", propertyName))
+                if (HasTaskOutputAssignment(
+                        relatedDocuments,
+                        "PropertyName",
+                        propertyName,
+                        evaluatedProperties))
                     return true;
                 foreach (XElement property in relatedDocuments
                              .SelectMany(related => related.Descendants())
@@ -133,7 +138,11 @@ public sealed partial class DotNetPublishPipelineRunner
                          RegexOptions.CultureInvariant))
             {
                 string itemName = match.Groups[1].Value;
-                if (HasTaskOutputAssignment(relatedDocuments, "ItemName", itemName))
+                if (HasTaskOutputAssignment(
+                        relatedDocuments,
+                        "ItemName",
+                        itemName,
+                        evaluatedProperties))
                     return true;
                 foreach (XElement item in relatedDocuments
                              .SelectMany(related => related.Descendants())
@@ -177,7 +186,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool HasTaskOutputAssignment(
         IReadOnlyCollection<XDocument> relatedDocuments,
         string assignmentAttributeName,
-        string referencedName)
+        string referencedName,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
     {
         foreach (XElement output in relatedDocuments
                      .SelectMany(related => related.Descendants())
@@ -185,6 +195,7 @@ public sealed partial class DotNetPublishPipelineRunner
                          element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
                          element.Parent is not null &&
                          IsControlledBuildTaskElement(element.Parent) &&
+                         !IsDefinitelyInactiveMsBuildElement(element.Parent, evaluatedProperties) &&
                          !element.Parent.Name.LocalName.Equals(
                              "ReadLinesFromFile",
                              StringComparison.OrdinalIgnoreCase)))

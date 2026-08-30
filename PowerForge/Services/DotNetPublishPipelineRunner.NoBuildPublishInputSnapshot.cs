@@ -83,7 +83,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 framework,
                 plan.Configuration,
                 properties,
-                plan.EnvironmentVariables)
+                plan.EnvironmentVariables,
+                plan.ControlledBuildEnvironmentVariableNames)
             .BuildVisitKey();
     }
 

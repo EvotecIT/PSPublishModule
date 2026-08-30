@@ -28,6 +28,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedConditionProperties,
                         definition.DefiningProjectPath)))
             {
+                foreach (PreprocessedProjectPropertyDefinition definition in propertyDefinitions.Where(definition =>
+                             definition.Element.Name.LocalName.Equals(
+                                 "_GlobalPropertiesToRemoveFromProjectReferences",
+                                 StringComparison.OrdinalIgnoreCase)))
                 return false;
             }
             return true;
@@ -36,9 +40,7 @@ public sealed partial class DotNetPublishPipelineRunner
             value.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
             value.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
             !TryUnescapeMsBuildLiteral(value, out string? decoded))
-        {
             return false;
-        }
 
         removals = ReadProjectReferencePropertyNames(decoded);
         return true;

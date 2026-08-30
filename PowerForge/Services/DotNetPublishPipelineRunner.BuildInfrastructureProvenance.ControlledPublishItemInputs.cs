@@ -34,6 +34,15 @@ public sealed partial class DotNetPublishPipelineRunner
                       ControlledPublishFileItemNames.Contains(element.Name.LocalName)) &&
                      IsControlledBuildTargetItem(element, relatedDocuments)))
         {
+            if (evaluatedGlobalProperties is not null &&
+                IsDefinitelyInactiveMsBuildElement(
+                    item,
+                    evaluatedGlobalProperties,
+                    declaringPath))
+            {
+                continue;
+            }
+
             if (IsAmbientReferenceResolutionItem(item.Name.LocalName))
                 return false;
 

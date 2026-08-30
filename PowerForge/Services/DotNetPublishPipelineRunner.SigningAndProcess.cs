@@ -561,7 +561,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ? CreateSafeDotNetChildEnvironment(
                 environmentVariables,
                 inheritedVariableNames,
-                removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value)
+                removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value,
+                resolvedDotNetExecutablePath: fileName)
             : CreateSafeMsBuildChildEnvironment(
                 environmentVariables,
                 inheritedVariableNames,
@@ -802,7 +803,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Cast<object?>()
                 .Select(key => key?.ToString())
                 .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!));
+                .Select(name => name!),
+            removeUnapprovedAmbient: true,
+            resolvedDotNetExecutablePath: null);
+
+    internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
+        IReadOnlyDictionary<string, string?>? environmentVariables,
+        string resolvedDotNetExecutablePath)
+        => CreateSafeDotNetChildEnvironment(
+            environmentVariables,
+            Environment.GetEnvironmentVariables().Keys
+                .Cast<object?>()
+                .Select(key => key?.ToString())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!),
+            removeUnapprovedAmbient: true,
+            resolvedDotNetExecutablePath: resolvedDotNetExecutablePath);
 
     internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables,
@@ -810,17 +826,20 @@ public sealed partial class DotNetPublishPipelineRunner
         => CreateSafeDotNetChildEnvironment(
             environmentVariables,
             inheritedVariableNames,
-            removeUnapprovedAmbient: true);
+            removeUnapprovedAmbient: true,
+            resolvedDotNetExecutablePath: null);
 
     internal static IReadOnlyDictionary<string, string?> CreateSafeDotNetChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables,
         IEnumerable<string> inheritedVariableNames,
-        bool removeUnapprovedAmbient)
+        bool removeUnapprovedAmbient,
+        string? resolvedDotNetExecutablePath = null)
         => CreateSafeBuildChildEnvironment(
             environmentVariables,
             inheritedVariableNames,
             removeUnapprovedAmbient,
-            configureDotNetRuntime: true);
+            configureDotNetRuntime: true,
+            resolvedDotNetExecutablePath: resolvedDotNetExecutablePath);
 
     internal static IReadOnlyDictionary<string, string?> CreateSafeMsBuildChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables,
@@ -830,13 +849,15 @@ public sealed partial class DotNetPublishPipelineRunner
             environmentVariables,
             inheritedVariableNames,
             removeUnapprovedAmbient,
-            configureDotNetRuntime: false);
+            configureDotNetRuntime: false,
+            resolvedDotNetExecutablePath: null);
 
     private static IReadOnlyDictionary<string, string?> CreateSafeBuildChildEnvironment(
         IReadOnlyDictionary<string, string?>? environmentVariables,
         IEnumerable<string> inheritedVariableNames,
         bool removeUnapprovedAmbient,
-        bool configureDotNetRuntime)
+        bool configureDotNetRuntime,
+        string? resolvedDotNetExecutablePath)
     {
         ValidateExplicitDotNetEnvironmentVariables(environmentVariables);
         var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -854,16 +875,21 @@ public sealed partial class DotNetPublishPipelineRunner
                  !IsApprovedDotNetChildAmbientEnvironmentVariable(name))))
                 values[name] = null;
         }
-        values["DOTNET_ROOT"] = configureDotNetRuntime
-            ? Path.GetDirectoryName(ResolveDotNetChildExecutable("dotnet"))
+        string? resolvedDotNetPath = configureDotNetRuntime
+            ? string.IsNullOrWhiteSpace(resolvedDotNetExecutablePath)
+                ? ResolveDotNetChildExecutable("dotnet")
+                : Path.GetFullPath(resolvedDotNetExecutablePath)
             : null;
+        values["DOTNET_ROOT"] = resolvedDotNetPath is null
+            ? null
+            : Path.GetDirectoryName(resolvedDotNetPath);
         values["DOTNET_ROOT(x86)"] = null;
         values["DOTNET_MULTILEVEL_LOOKUP"] = configureDotNetRuntime ? "0" : null;
         foreach (string name in DisabledUserMsBuildImportEnvironmentVariables)
             values[name] = "false";
         if (configureDotNetRuntime && ActiveNativeAotPublish.Value)
         {
-            string dotNetPath = ResolveDotNetChildExecutable("dotnet");
+            string dotNetPath = resolvedDotNetPath!;
             string trustedNativeAotPath = BuildTrustedNativeAotPath(
                 dotNetPath,
                 Environment.GetEnvironmentVariable("PATH"));

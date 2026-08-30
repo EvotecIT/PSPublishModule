@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -128,6 +130,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> candidatePaths,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> evaluatedMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedProperties,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
         IDictionary<string, bool> cache)
@@ -173,7 +176,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedBuildInputs,
                     evaluatedMsBuildInputs,
                     request.ReadEffectiveGlobalProperties(),
-                    evaluatedProjectContexts: null,
+                    new Dictionary<string, IReadOnlyDictionary<string, string>[]>(
+                        IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                    {
+                        [Path.GetFullPath(request.ProjectPath)] = [evaluatedProperties]
+                    },
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -181,6 +188,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             if (!TryCreateControlledBuildEnvironment(
                     request.EnvironmentVariables,
+                    request.ControlledBuildEnvironmentVariableNames,
                     controlledGitRoot!,
                     controlledSourceRoot,
                     Path.GetDirectoryName(request.ProjectPath)!,
@@ -374,6 +382,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string lockFilePath)
     {
         arguments.Add("-noAutoResponse");
+        arguments.Add("-maxCpuCount:1");
+        arguments.Add("-nodeReuse:false");
         arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(nuGetConfig));
         arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(packageSource));
         arguments.Add("-p:RestoreAdditionalProjectSources=");
@@ -660,13 +670,20 @@ public sealed partial class DotNetPublishPipelineRunner
             string? targetFramework,
             string? configuration,
             IReadOnlyDictionary<string, string>? globalProperties,
-            IReadOnlyDictionary<string, string?>? environmentVariables)
+            IReadOnlyDictionary<string, string?>? environmentVariables,
+            IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
             Configuration = configuration;
             GlobalProperties = globalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             EnvironmentVariables = environmentVariables ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            ControlledBuildEnvironmentVariableNames = controlledBuildEnvironmentVariableNames?
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? Array.Empty<string>();
         }
 
         internal string ProjectPath { get; }
@@ -675,6 +692,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? Configuration { get; }
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
+        internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {
@@ -694,7 +712,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 targetFramework,
                 Configuration,
                 GlobalProperties,
-                EnvironmentVariables);
+                EnvironmentVariables,
+                ControlledBuildEnvironmentVariableNames);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -727,7 +746,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 targetFramework,
                 configuration,
                 properties,
-                EnvironmentVariables);
+                EnvironmentVariables,
+                ControlledBuildEnvironmentVariableNames);
         }
 
         internal string BuildVisitKey()
@@ -747,7 +767,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 AppendProjectReferenceKeySegment(key, "Property");
                 AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(property.Key));
-                AppendProjectReferenceKeySegment(key, property.Value);
+                AppendProjectReferenceKeySegment(key, HashProjectEvaluationIdentityValue(property.Value));
             }
             foreach (KeyValuePair<string, string?> environmentVariable in EnvironmentVariables.OrderBy(
                          entry => entry.Key,
@@ -755,10 +775,24 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 AppendProjectReferenceKeySegment(key, "Environment");
                 AppendProjectReferenceKeySegment(key, NormalizeEnvironmentIdentityName(environmentVariable.Key));
-                AppendProjectReferenceKeySegment(key, environmentVariable.Value ?? string.Empty);
+                AppendProjectReferenceKeySegment(
+                    key,
+                    HashProjectEvaluationIdentityValue(environmentVariable.Value ?? string.Empty));
+            }
+            foreach (string name in ControlledBuildEnvironmentVariableNames)
+            {
+                AppendProjectReferenceKeySegment(key, "ControlledEnvironment");
+                AppendProjectReferenceKeySegment(key, NormalizeEnvironmentIdentityName(name));
             }
             return key.ToString();
         }
+    }
+
+    internal static string HashProjectEvaluationIdentityValue(string value)
+    {
+        using SHA256 sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(value)))
+            .Replace("-", string.Empty);
     }
 
     private sealed class EvaluatedProjectInputs
@@ -778,6 +812,7 @@ public sealed partial class DotNetPublishPipelineRunner
             EvaluatedPublishInput[] publishInputs,
             VerifiedPackageInputCatalog? verifiedPackages,
             string[] trustedBuildInfrastructureRoots,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
             string? customAfterMicrosoftCommonTargets)
         {
             BuildInputs = buildInputs;
@@ -794,6 +829,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PublishInputs = publishInputs;
             VerifiedPackages = verifiedPackages;
             TrustedBuildInfrastructureRoots = trustedBuildInfrastructureRoots;
+            EvaluatedProperties = evaluatedProperties;
             CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
         }
 
@@ -811,6 +847,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal EvaluatedPublishInput[] PublishInputs { get; }
         internal VerifiedPackageInputCatalog? VerifiedPackages { get; }
         internal string[] TrustedBuildInfrastructureRoots { get; }
+        internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
         internal string? CustomAfterMicrosoftCommonTargets { get; }
     }
 

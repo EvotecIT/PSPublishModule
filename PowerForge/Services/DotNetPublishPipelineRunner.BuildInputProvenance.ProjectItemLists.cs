@@ -103,15 +103,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed class ControlledPublishGraphNode
     {
-        internal ControlledPublishGraphNode(ProjectEvaluationRequest request, string? pathMap)
+        internal ControlledPublishGraphNode(
+            ProjectEvaluationRequest request,
+            string? pathMap,
+            IReadOnlyDictionary<string, string> evaluatedProperties)
         {
             Request = request;
             PathMap = pathMap;
+            EvaluatedProperties = evaluatedProperties;
         }
 
         internal ProjectEvaluationRequest Request { get; }
 
         internal string? PathMap { get; }
+
+        internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
     }
 
     private static string[] ReadProjectReferenceItemListNames(
@@ -266,6 +272,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
@@ -289,6 +296,7 @@ public sealed partial class DotNetPublishPipelineRunner
             evaluatedPathMap,
             proveControlledGeneratedInputs,
             graphBuildNodes,
+            evaluatedProperties,
             out publishInputs);
     }
 
@@ -315,7 +323,8 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(key => !key.Equals(rootKey, StringComparison.Ordinal))
             .Select(key => new ControlledPublishGraphNode(
                 requestsByEvaluation[key],
-                pathMapsByEvaluation[key]))
+                pathMapsByEvaluation[key],
+                evaluationsByEvaluation[key].EvaluatedProperties))
             .ToArray();
         return true;
 
@@ -325,16 +334,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 return state == 2;
             if (!requestsByEvaluation.TryGetValue(key, out ProjectEvaluationRequest? request) ||
                 !evaluationsByEvaluation.TryGetValue(key, out EvaluatedProjectInputs? evaluation))
-            {
                 return false;
-            }
 
             states[key] = 1;
             foreach (EvaluatedProjectReference reference in evaluation.ProjectReferences)
             {
                 if (!File.Exists(reference.ProjectPath))
                     continue;
-                string childKey = request.ForProject(reference).BuildVisitKey();
+                ProjectEvaluationRequest childRequest = request.ForProject(reference);
+                if (!TryResolveProjectEvaluationKey(
+                        childRequest,
+                        request.TargetFramework,
+                        requestsByEvaluation,
+                        evaluationsByEvaluation,
+                        out string childKey))
+                    return false;
                 if (states.TryGetValue(childKey, out int childState) && childState == 1)
                     return false;
                 if (!Visit(childKey))
@@ -344,7 +358,133 @@ public sealed partial class DotNetPublishPipelineRunner
             orderedKeys.Add(key);
             return true;
         }
+
     }
+
+    private static bool TryResolveProjectEvaluationKey(
+        ProjectEvaluationRequest candidate,
+        string? inheritedTargetFramework,
+        IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
+        IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
+        out string key)
+    {
+        key = candidate.BuildVisitKey();
+        if (!string.IsNullOrWhiteSpace(candidate.TargetFramework))
+        {
+            return requestsByEvaluation.ContainsKey(key) &&
+                   evaluationsByEvaluation.ContainsKey(key);
+        }
+
+        if (!string.IsNullOrWhiteSpace(inheritedTargetFramework))
+        {
+            ProjectEvaluationRequest inherited = candidate.ForProject(
+                candidate.ProjectPath,
+                inheritedTargetFramework);
+            string inheritedKey = inherited.BuildVisitKey();
+            if (requestsByEvaluation.ContainsKey(inheritedKey) &&
+                evaluationsByEvaluation.ContainsKey(inheritedKey))
+            {
+                key = inheritedKey;
+                return true;
+            }
+        }
+        if (requestsByEvaluation.ContainsKey(key) && evaluationsByEvaluation.ContainsKey(key))
+            return true;
+
+        string[] matches = requestsByEvaluation
+            .Where(entry =>
+                evaluationsByEvaluation.ContainsKey(entry.Key) &&
+                !string.IsNullOrWhiteSpace(entry.Value.TargetFramework) &&
+                HasSameProjectEvaluationContext(candidate, entry.Value))
+            .Select(entry => entry.Key)
+            .ToArray();
+        if (matches.Length != 1)
+            return false;
+        key = matches[0];
+        return true;
+    }
+
+    private static bool TryResolveGeneratedProjectReferenceEvaluationKey(
+        ProjectEvaluationRequest parentRequest,
+        EvaluatedProjectReference generatedReference,
+        IReadOnlyCollection<EvaluatedProjectReference> resolvedReferences,
+        IReadOnlyDictionary<string, ProjectEvaluationRequest> requestsByEvaluation,
+        IReadOnlyDictionary<string, EvaluatedProjectInputs> evaluationsByEvaluation,
+        out string key)
+    {
+        key = string.Empty;
+        string generatedProjectPath = NormalizeProjectReferenceIdentityPath(
+            generatedReference.ProjectPath);
+        KeyValuePair<string, string>[] matches = resolvedReferences
+            .Select(parentRequest.ForProject)
+            .Select(candidate =>
+            {
+                if (!TryResolveProjectEvaluationKey(
+                        candidate,
+                        parentRequest.TargetFramework,
+                        requestsByEvaluation,
+                        evaluationsByEvaluation,
+                        out string candidateKey))
+                {
+                    return (KeyValuePair<string, string>?)null;
+                }
+                return new KeyValuePair<string, string>(candidate.ProjectPath, candidateKey);
+            })
+            .Where(candidate => candidate.HasValue)
+            .Select(candidate => candidate!.Value)
+            .ToArray();
+        return TrySelectSingleResolvedGeneratedProjectReferenceEvaluationKey(
+            generatedProjectPath,
+            matches,
+            out key);
+    }
+
+    internal static bool TrySelectSingleResolvedGeneratedProjectReferenceEvaluationKey(
+        string generatedProjectPath,
+        IEnumerable<KeyValuePair<string, string>> resolvedCandidates,
+        out string key)
+    {
+        key = string.Empty;
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        string[] matches = resolvedCandidates
+            .Where(candidate => NormalizeProjectReferenceIdentityPath(candidate.Key).Equals(
+                NormalizeProjectReferenceIdentityPath(generatedProjectPath),
+                comparison))
+            .Select(candidate => candidate.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (matches.Length != 1)
+            return false;
+
+        key = matches[0];
+        return true;
+    }
+
+    private static bool HasSameProjectEvaluationContext(
+        ProjectEvaluationRequest left,
+        ProjectEvaluationRequest right)
+        => NormalizeProjectReferenceIdentityPath(left.ProjectPath).Equals(
+               NormalizeProjectReferenceIdentityPath(right.ProjectPath),
+               StringComparison.Ordinal) &&
+           string.Equals(left.Configuration, right.Configuration, StringComparison.Ordinal) &&
+           HasSameProjectEvaluationProperties(left.GlobalProperties, right.GlobalProperties) &&
+           HasSameProjectEvaluationEnvironment(left.EnvironmentVariables, right.EnvironmentVariables);
+
+    private static bool HasSameProjectEvaluationProperties(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right)
+        => left.Count == right.Count && left.All(property =>
+            right.TryGetValue(property.Key, out string? value) &&
+            string.Equals(property.Value, value, StringComparison.Ordinal));
+
+    private static bool HasSameProjectEvaluationEnvironment(
+        IReadOnlyDictionary<string, string?> left,
+        IReadOnlyDictionary<string, string?> right)
+        => left.Count == right.Count && left.All(variable =>
+            right.TryGetValue(variable.Key, out string? value) &&
+            string.Equals(variable.Value, value, StringComparison.Ordinal));
 
     private static bool ContainsPotentialPublishItemMutation(
         string projectPath,

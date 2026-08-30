@@ -71,6 +71,9 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved environment variables passed to dotnet commands.</summary>
     public Dictionary<string, string?> EnvironmentVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Explicit non-secret environment variables admitted to controlled provenance builds.</summary>
+    internal string[] ControlledBuildEnvironmentVariableNames { get; set; } = Array.Empty<string>();
+
     /// <summary>Resolved targets (paths + publish options).</summary>
     public DotNetPublishTargetPlan[] Targets { get; set; } = Array.Empty<DotNetPublishTargetPlan>();
 

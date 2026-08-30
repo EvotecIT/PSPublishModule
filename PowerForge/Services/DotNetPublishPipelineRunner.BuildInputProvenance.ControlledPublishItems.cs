@@ -15,6 +15,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
@@ -32,7 +33,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedBuildInputs,
                     executableMsBuildInputs,
                     request.ReadEffectiveGlobalProperties(),
-                    BuildControlledPublishProjectContexts(request, graphBuildNodes),
+                    BuildControlledPublishProjectContexts(
+                        request,
+                        evaluatedProperties,
+                        graphBuildNodes),
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
@@ -40,6 +44,7 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             if (!TryCreateControlledBuildEnvironment(
                     request.EnvironmentVariables,
+                    request.ControlledBuildEnvironmentVariableNames,
                     controlledGitRoot!,
                     controlledSourceRoot,
                     Path.GetDirectoryName(request.ProjectPath)!,
@@ -292,19 +297,25 @@ public sealed partial class DotNetPublishPipelineRunner
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>
         BuildControlledPublishProjectContexts(
             ProjectEvaluationRequest rootRequest,
+            IReadOnlyDictionary<string, string> rootEvaluatedProperties,
             IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
     {
         StringComparer comparer = IsWindows()
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         return graphBuildNodes
-            .Select(node => node.Request)
-            .Concat(new[] { rootRequest })
-            .GroupBy(node => Path.GetFullPath(node.ProjectPath), comparer)
+            .Select(node => (
+                Request: node.Request,
+                EvaluatedProperties: node.EvaluatedProperties))
+            .Concat(new[]
+            {
+                (Request: rootRequest, EvaluatedProperties: rootEvaluatedProperties)
+            })
+            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath), comparer)
             .ToDictionary(
                 group => group.Key,
                 group => group
-                    .Select(node => node.ReadEffectiveGlobalProperties())
+                    .Select(node => node.EvaluatedProperties)
                     .GroupBy(
                         properties => string.Join("\n", properties.OrderBy(
                             property => property.Key,
