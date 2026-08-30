@@ -50,6 +50,17 @@ public static partial class WebSiteVerifier
         var warnings = new List<string>();
         var localization = ResolveLocalizationConfig(spec, warnings);
         var builderState = WebSiteBuilder.BuildVerificationState(spec, plan);
+        var builderProjectContentSources = builderState.Items
+            .Where(static item =>
+                item is not null &&
+                item.Collection.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(item.SourcePath) &&
+                !item.SourcePath.StartsWith("[", StringComparison.Ordinal))
+            .Select(static item => Path.GetFullPath(item.SourcePath))
+            .ToHashSet(
+                FileSystemPathComparison == StringComparison.OrdinalIgnoreCase
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal);
 
         if (spec.Collections is null || spec.Collections.Length == 0)
         {
@@ -63,7 +74,14 @@ public static partial class WebSiteVerifier
                 .Concat(staticOnlyRedirectRoutes)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-            ValidateNavigationLint(spec, localization, plan, Array.Empty<string>(), warnings, staticOnlyFileRoutes.Length > 0, staticOnlyFileRoutes);
+            ValidateNavigationLint(
+                spec,
+                localization,
+                plan,
+                Array.Empty<string>(),
+                warnings,
+                HasStaticAssetInputs(spec, plan.RootPath) || staticOnlyFileRoutes.Length > 0,
+                staticOnlyFileRoutes);
             return new WebVerifyResult
             {
                 Success = true,
@@ -101,6 +119,14 @@ public static partial class WebSiteVerifier
             {
                 if (IsUnderAnyRoot(file, leafBundleRoots) && !IsLeafBundleIndex(file))
                     continue;
+
+                var projectSlug = ResolveProjectSlug(plan, file);
+                if (effectiveCollection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(projectSlug) &&
+                    !builderProjectContentSources.Contains(Path.GetFullPath(file)))
+                {
+                    continue;
+                }
 
                 var markdown = File.ReadAllText(file);
                 var relativeFile = Path.GetRelativePath(plan.RootPath, file).Replace('\\', '/');
@@ -147,7 +173,6 @@ public static partial class WebSiteVerifier
                     continue;
                 }
 
-                var projectSlug = ResolveProjectSlug(plan, file);
                 var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
                 var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
                 route = ApplyLanguagePrefixToRoute(spec, localization, route, resolvedLanguage);
@@ -289,24 +314,23 @@ public static partial class WebSiteVerifier
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
         var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
+        var builderRoutes = builderState.Items
+            .Where(static item => item is not null)
+            .Select(ProjectBuilderContentRoute)
+            .ToArray();
         var generatedFeatureRoutes = DiscoverGeneratedFeatureRoutes(
             spec,
-            collectionRoutes.Values.SelectMany(static values => values));
-        var generatedPaginationRoutes = DiscoverGeneratedPaginationRoutes(
-            spec,
-            collectionRoutes.Values.SelectMany(static values => values),
-            taxonomyTermCountsByLanguage).ToArray();
-        var publishableRoutes = collectionRoutes.Values
-            .SelectMany(static values => values)
+            builderRoutes);
+        var publishableRoutes = builderRoutes
             .Where(static route => !route.Draft)
             .ToArray();
         var generatedOutputRoutes = DiscoverGeneratedOutputRoutes(
             spec,
-            publishableRoutes.Concat(generatedPaginationRoutes));
+            publishableRoutes);
         var generatedResourceRoutes = DiscoverGeneratedResourceRoutes(
-            publishableRoutes.Concat(generatedPaginationRoutes));
+            publishableRoutes);
         var generatedSearchDataRoutes = DiscoverGeneratedSearchDataRoutes(
-            publishableRoutes.Concat(generatedPaginationRoutes));
+            publishableRoutes);
         var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
         var generatedRedirectRoutes = DiscoverGeneratedRedirectRoutes(builderState.Redirects).ToArray();
@@ -326,11 +350,8 @@ public static partial class WebSiteVerifier
             .Where(route => EmitsIndexHtml(spec, route))
             .Where(static route => !IsBuiltNotFoundRoute(route.Route))
             .Select(static route => route.Route)
-            .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)))
-            .Concat(generatedPaginationRoutes
-                .Where(route => EmitsIndexHtml(spec, route))
-                .Select(static route => route.Route));
-        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0, fileRoutes);
+            .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)));
+        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, HasStaticAssetInputs(spec, plan.RootPath), fileRoutes);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

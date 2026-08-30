@@ -2,6 +2,39 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteVerifier
 {
+    private static CollectionRoute ProjectBuilderContentRoute(ContentItem item)
+    {
+        var taxonomyTerm = item.Kind == PageKind.Term &&
+                           item.Meta.TryGetValue("term", out var termValue)
+            ? termValue?.ToString()
+            : null;
+        return new CollectionRoute(
+            item.Collection,
+            item.OutputPath,
+            item.SourcePath,
+            item.Draft,
+            item.Language,
+            item.TranslationKey ?? string.Empty,
+            item.Kind,
+            item.Outputs ?? Array.Empty<string>(),
+            TaxonomyTerm: taxonomyTerm,
+            Resources: item.Resources ?? Array.Empty<PageResource>(),
+            ProjectSlug: item.ProjectSlug,
+            SocialCardItem: item);
+    }
+
+    private static bool HasStaticAssetInputs(SiteSpec spec, string rootPath)
+    {
+        if ((spec.StaticAssets ?? Array.Empty<StaticAssetSpec>()).Any(static mapping =>
+                mapping is not null && !string.IsNullOrWhiteSpace(mapping.Source)))
+        {
+            return true;
+        }
+
+        return !WebSiteBuilder.HasExplicitConventionalStaticMapping(spec, rootPath) &&
+               Directory.Exists(Path.Combine(rootPath, "static"));
+    }
+
     private static IEnumerable<string> DiscoverStaticAssetRoutes(SiteSpec spec, string rootPath)
     {
         var projectionRoot = Path.GetFullPath(Path.Combine(rootPath, ".powerforge-static-route-projection"));
@@ -291,124 +324,6 @@ public static partial class WebSiteVerifier
         var normalized = NormalizeRouteForNavigationMatch(route);
         return normalized.Equals("/404/", StringComparison.OrdinalIgnoreCase) ||
                normalized.Equals("/404", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static IEnumerable<CollectionRoute> DiscoverGeneratedPaginationRoutes(
-        SiteSpec spec,
-        IEnumerable<CollectionRoute> contentRoutes,
-        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage)
-    {
-        if (spec.Pagination is { Enabled: false })
-            yield break;
-
-        var routes = contentRoutes
-            .Where(static route => route is not null)
-            .ToArray();
-        if (routes.Length == 0)
-            yield break;
-
-        var pageSegment = WebSiteBuilder.NormalizePaginationSegment(spec.Pagination?.PathSegment);
-        var defaultPageSize = Math.Max(0, spec.Pagination?.DefaultPageSize ?? 0);
-        var collectionPageSizes = (spec.Collections ?? Array.Empty<CollectionSpec>())
-            .Where(static collection => collection is not null && !string.IsNullOrWhiteSpace(collection.Name))
-            .Select(CollectionPresetDefaults.Apply)
-            .Where(static collection => (collection.PageSize ?? 0) > 0)
-            .ToDictionary(
-                static collection => collection.Name,
-                collection => collection.PageSize!.Value,
-                StringComparer.OrdinalIgnoreCase);
-        var taxonomyPageSizes = (spec.Taxonomies ?? Array.Empty<TaxonomySpec>())
-            .Where(static taxonomy => taxonomy is not null && !string.IsNullOrWhiteSpace(taxonomy.Name))
-            .Where(static taxonomy => (taxonomy.PageSize ?? 0) > 0)
-            .ToDictionary(
-                static taxonomy => taxonomy.Name,
-                taxonomy => taxonomy.PageSize!.Value,
-                StringComparer.OrdinalIgnoreCase);
-        var knownRoutes = new HashSet<string>(
-            routes.Select(static route => NormalizeRouteForNavigationMatch(route.Route)),
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var section in routes.Where(static route => !route.Draft && route.Kind is PageKind.Section or PageKind.Taxonomy or PageKind.Term))
-        {
-            var pageSize = section.Kind == PageKind.Section
-                ? collectionPageSizes.TryGetValue(section.Collection, out var configuredCollectionPageSize)
-                    ? configuredCollectionPageSize
-                    : defaultPageSize
-                : taxonomyPageSizes.TryGetValue(section.Collection, out var configuredTaxonomyPageSize)
-                    ? configuredTaxonomyPageSize
-                    : defaultPageSize;
-            if (pageSize <= 0)
-                continue;
-
-            var sectionRoute = NormalizeRouteForNavigationMatch(section.Route);
-            var totalItems = section.Kind switch
-            {
-                PageKind.Section => routes.Count(candidate =>
-                    !candidate.Draft &&
-                    candidate.Kind is PageKind.Page or PageKind.Home &&
-                    string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(candidate.Route, section.Route, StringComparison.OrdinalIgnoreCase) &&
-                    NormalizeRouteForNavigationMatch(candidate.Route).StartsWith(sectionRoute, StringComparison.OrdinalIgnoreCase)),
-                PageKind.Taxonomy => ResolveTaxonomyTermTotal(taxonomyTermCountsByLanguage, section),
-                PageKind.Term => ResolveTaxonomyTermCount(taxonomyTermCountsByLanguage, section),
-                _ => 0
-            };
-            var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
-            for (var page = 2; page <= totalPages; page++)
-            {
-                var pagedRoute = WebSiteBuilder.BuildPaginationRoute(
-                    section.Route,
-                    pageSegment,
-                    page,
-                    spec.TrailingSlash);
-                if (!knownRoutes.Add(NormalizeRouteForNavigationMatch(pagedRoute)))
-                    continue;
-
-                yield return section with
-                {
-                    Route = pagedRoute,
-                    TranslationKey = string.IsNullOrWhiteSpace(section.TranslationKey)
-                        ? string.Empty
-                        : $"{section.TranslationKey}:page:{page}",
-                    Outputs = ["html"]
-                };
-            }
-        }
-    }
-
-    private static int ResolveTaxonomyTermCount(
-        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
-        CollectionRoute route)
-    {
-        if (string.IsNullOrWhiteSpace(route.TaxonomyTerm) ||
-            !taxonomyTermCountsByLanguage.TryGetValue(route.Collection, out var countsByLanguage) ||
-            !countsByLanguage.TryGetValue(route.Language, out var counts))
-        {
-            return 0;
-        }
-
-        var routeSlug = WebSiteBuilder.Slugify(route.TaxonomyTerm);
-        if (string.IsNullOrWhiteSpace(routeSlug))
-            return 0;
-
-        return counts
-            .Where(pair => WebSiteBuilder.Slugify(pair.Key).Equals(routeSlug, StringComparison.OrdinalIgnoreCase))
-            .Select(static pair => pair.Value)
-            .DefaultIfEmpty(0)
-            .Max();
-    }
-
-    private static int ResolveTaxonomyTermTotal(
-        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
-        CollectionRoute route)
-    {
-        if (!taxonomyTermCountsByLanguage.TryGetValue(route.Collection, out var countsByLanguage) ||
-            !countsByLanguage.TryGetValue(route.Language, out var counts))
-        {
-            return 0;
-        }
-
-        return counts.Count;
     }
 
     private static IEnumerable<string> DiscoverGeneratedOutputRoutes(

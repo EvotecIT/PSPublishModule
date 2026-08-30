@@ -694,9 +694,6 @@ public static partial class WebSiteVerifier
                 foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
                 {
                     var slug = Slugify(term);
-                    if (string.IsNullOrWhiteSpace(slug))
-                        continue;
-
                     var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
                     termRoute = ApplyLanguagePrefixToRoute(spec, localization, termRoute, language);
                     if (routes.TryGetValue(termRoute, out var existingTermRoute))
