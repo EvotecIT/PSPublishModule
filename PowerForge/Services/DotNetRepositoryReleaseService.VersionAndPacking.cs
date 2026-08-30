@@ -48,9 +48,6 @@ public sealed partial class DotNetRepositoryReleaseService
         out string? warning)
     {
         warning = null;
-        if (spec.WhatIf)
-            return ResolvePlannedProjectVersion(project, spec);
-
         string? declaredVersion = null;
         string? declaredExactVersion = null;
         if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var candidate))
@@ -109,7 +106,9 @@ public sealed partial class DotNetRepositoryReleaseService
         if (!string.IsNullOrWhiteSpace(declaredExactVersion))
             return declaredExactVersion!;
 
-        return string.Empty;
+        return spec.WhatIf && !string.IsNullOrWhiteSpace(declaredVersion)
+            ? declaredVersion!
+            : string.Empty;
     }
 
     private bool TryRefreshEffectiveVersionsAfterBindings(

@@ -8,10 +8,10 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-[Trait("Category", "DotNetPublishPrGate")]
-public sealed partial class DotNetRepositoryReleasePublishOrderTests
+public sealed class DotNetRepositoryReleasePublishOrderTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_PublishesDependenciesBeforeConsumers()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -25,6 +25,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_OrdersDiamondGraphWithoutPublishingConsumersEarly()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -44,6 +45,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_UsesPackedDependencyMetadataInsteadOfProjectXml()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -58,6 +60,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_IsDeterministicForIndependentPackages()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -72,6 +75,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_RejectsDependencyCycles()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -86,6 +90,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_RejectsMissingOrMalformedPackageMetadata()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -103,6 +108,7 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_RejectsDuplicatePackageIds()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -116,94 +122,30 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
     }
 
     [Fact]
-    public void SortProjectsForPublish_IgnoresDependencyRangesThatDoNotTargetSelectedVersion()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared", version: "2.0.0");
-        var app = workspace.AddProject("App", ["Shared"], dependencyVersion: "[1.0.0]");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app]);
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_RejectsCrossFrameworkCyclesWithoutAValidGlobalOrder()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var one = workspace.AddProject("One", dependencyGroups: new Dictionary<string, string[]> { ["net8.0"] = ["Two"] });
-        var two = workspace.AddProject("Two", dependencyGroups: new Dictionary<string, string[]> { ["net472"] = ["One"] });
-
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new DotNetRepositoryReleaseService(new NullLogger()).SortProjectsForPublish([two, one]));
-
-        Assert.Contains("dependency cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlansFromProjectXmlWithoutRunningDotNetAndHonorsConfiguration()
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_UsesAuthoritativeMsBuildEvaluationForWhatIf()
     {
         using var workspace = new PublishOrderWorkspace();
         var shared = workspace.AddProject("Shared");
         var app = workspace.AddProject("App");
         File.WriteAllText(app.CsprojPath, """
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="missing.props" Condition="Exists('missing.props')" />
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Release'">
     <ProjectReference Include="../Shared/Shared.csproj" />
   </ItemGroup>
 </Project>
 """);
-        var service = new DotNetRepositoryReleaseService(new NullLogger());
-
-        var release = service.SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
-        var debug = service.SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Debug");
-
-        Assert.Equal(["Shared", "App"], release.Select(project => project.PackageId));
-        Assert.Equal(["App", "Shared"], debug.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningFailsClosedWhenActiveImportIsMissing()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, "<Project><Import Project=\"missing.props\" /></Project>");
-
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new DotNetRepositoryReleaseService(new NullLogger())
-                .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release"));
-
-        Assert.Contains("does not exist", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("missing.props", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningExcludesPrivatePackageReferences()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Shared" Version="[1.0.0]" PrivateAssets="all" />
-  </ItemGroup>
-</Project>
-""");
 
         var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
 
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
     }
 
     [Fact]
-    public void SortProjectsForPublish_PlanningExpandsPackageIdentityAndKeepsUnresolvedVersionConservatively()
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_FailsClosedForCustomNuspecWhatIf()
     {
         using var workspace = new PublishOrderWorkspace();
         var shared = workspace.AddProject("Shared");
@@ -212,240 +154,66 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <SharedPackage>Shared</SharedPackage>
+    <NuspecFile>package.nuspec</NuspecFile>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="$(SharedPackage)" Version="$(UnresolvedSharedVersion)" />
-  </ItemGroup>
 </Project>
 """);
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_RejectsFallbackAndFrameworkEdgesThatFormAGlobalCycle()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var app = workspace.AddProject("App", dependencyGroups: new Dictionary<string, string[]>
-        {
-            [string.Empty] = ["Shared"],
-            ["net8.0"] = []
-        });
-        var shared = workspace.AddProject("Shared", dependencyGroups: new Dictionary<string, string[]>
-        {
-            ["net8.0"] = ["App"]
-        });
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            new DotNetRepositoryReleaseService(new NullLogger()).SortProjectsForPublish([shared, app]));
+            new DotNetRepositoryReleaseService(new NullLogger())
+                .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release"));
 
-        Assert.Contains("dependency cycle", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("intentionally unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("artifact-based ordering", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void SortProjectsForPublish_PlanningUsesProjectPropertiesInItemConditions()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework><UseShared>false</UseShared></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" Condition="'$(UseShared)' == 'true'" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningExpandsPropertyBasedTargetFrameworks()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><SupportedFrameworks>net8.0;net472</SupportedFrameworks><TargetFrameworks>$(SupportedFrameworks)</TargetFrameworks></PropertyGroup>
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningResolvesMsBuildThisFileDirectoryImports()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        var buildDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "build"));
-        File.WriteAllText(Path.Combine(buildDirectory.FullName, "dependencies.props"), """
-<Project><ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup></Project>
-""");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="$(MSBuildThisFileDirectory)build/dependencies.props" />
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningDoesNotCreateEdgesFromPackageReferenceUpdates()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup><PackageReference Update="Shared" Version="[1.0.0]" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningNormalizesMsBuildProjectReferenceSeparators()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup><ProjectReference Include="..\Shared\Shared.csproj" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningEvaluatesImportsInline()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "shared.props"),
-            "<Project><PropertyGroup><UseShared>true</UseShared></PropertyGroup></Project>");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="shared.props" />
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework><UseShared>false</UseShared></PropertyGroup>
-  <ItemGroup Condition="'$(UseShared)' == 'true'"><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningUsesCentralPackageVersions()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared", version: "2.0.0");
-        var app = workspace.AddProject("App");
-        workspace.WriteRootFile("Directory.Packages.props", """
-<Project>
-  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
-  <ItemGroup><PackageVersion Include="Shared" Version="[1.0.0]" /></ItemGroup>
-</Project>
-""");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup><PackageReference Include="Shared" /></ItemGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_AcceptsNestedNuspecContentWhenRootManifestIsUnique()
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ExecuteNuGetPublishing_BlocksConsumersAfterDependencyFailure()
     {
         using var workspace = new PublishOrderWorkspace();
         var shared = workspace.AddProject("Shared");
         var app = workspace.AddProject("App", ["Shared"]);
-        workspace.AddArchiveText(app.Packages[0], "tools/example.nuspec", "<package />");
+        var independent = workspace.AddProject("Independent");
+        var attempts = new List<string>();
+        var root = Path.GetDirectoryName(Path.GetDirectoryName(shared.CsprojPath)!)!;
+        var feed = Directory.CreateDirectory(Path.Combine(root, "feed"));
+        var service = new DotNetRepositoryReleaseService(
+            new NullLogger(),
+            signPackages: null,
+            getCertificateSha256: null,
+            pushPackage: (packagePath, _, _, _, _, _) =>
+            {
+                var packageName = Path.GetFileName(packagePath);
+                attempts.Add(packageName);
+                return new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = packageName.StartsWith("Shared.", StringComparison.OrdinalIgnoreCase)
+                        ? DotNetRepositoryReleaseService.PackagePushOutcome.Failed
+                        : DotNetRepositoryReleaseService.PackagePushOutcome.Published,
+                    Message = "simulated push result"
+                };
+            });
+        var result = new DotNetRepositoryReleaseResult();
+        var spec = new DotNetRepositoryReleaseSpec
+        {
+            RootPath = root,
+            Configuration = "Release",
+            Publish = true,
+            PublishApiKey = "test-key",
+            PublishSource = feed.FullName,
+            PublishFailFast = false,
+            SkipDuplicate = true
+        };
 
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared]);
+        var stopped = service.ExecuteNuGetPublishing(spec, result, [app, shared, independent], root, null, null);
 
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningIgnoresItemsInsideTargets()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <Target Name="AfterClean" AfterTargets="Clean">
-    <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
-  </Target>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
-    }
-
-    [Fact]
-    public void SortProjectsForPublish_PlanningHonorsImportGroupConditions()
-    {
-        using var workspace = new PublishOrderWorkspace();
-        var shared = workspace.AddProject("Shared");
-        var app = workspace.AddProject("App");
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(app.CsprojPath)!, "debug.props"),
-            "<Project><ItemGroup><ProjectReference Include=\"../Shared/Shared.csproj\" /></ItemGroup></Project>");
-        File.WriteAllText(app.CsprojPath, """
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ImportGroup Condition="'$(Configuration)' == 'Debug'"><Import Project="debug.props" /></ImportGroup>
-</Project>
-""");
-
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
-
-        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+        Assert.False(stopped);
+        Assert.False(result.Success);
+        Assert.Contains(attempts, package => package.StartsWith("Shared.", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(attempts, package => package.StartsWith("Independent.", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(attempts, package => package.StartsWith("App.", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(app.Packages[0], result.FailedPackages, StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class PublishOrderWorkspace : IDisposable
@@ -456,12 +224,9 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
             string name,
             string[]? dependencies = null,
             string? packageId = null,
-            bool createNuspec = true,
-            string version = "1.0.0",
-            string dependencyVersion = "[1.0.0]",
-            IReadOnlyDictionary<string, string[]>? dependencyGroups = null)
+            bool createNuspec = true)
         {
-            dependencies ??= dependencyGroups?.Values.SelectMany(value => value).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? [];
+            dependencies ??= [];
             packageId ??= name;
             var directory = Path.Combine(_root, name);
             Directory.CreateDirectory(directory);
@@ -472,18 +237,16 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
                 ? string.Empty
                 : $"  <ItemGroup>{Environment.NewLine}{references}{Environment.NewLine}  </ItemGroup>{Environment.NewLine}";
             var path = Path.Combine(directory, name + ".csproj");
-            File.WriteAllText(path, $"<Project Sdk=\"Microsoft.NET.Sdk\">{Environment.NewLine}{itemGroup}</Project>");
-            var packagePath = Path.Combine(directory, packageId + "." + version + ".nupkg");
+            File.WriteAllText(path, $"<Project Sdk=\"Microsoft.NET.Sdk\">{Environment.NewLine}  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>{Environment.NewLine}{itemGroup}</Project>");
+            var packagePath = Path.Combine(directory, packageId + ".1.0.0.nupkg");
             using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
             {
                 if (createNuspec)
                 {
                     var entry = archive.CreateEntry(packageId + ".nuspec");
                     using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                    var groups = dependencyGroups ?? new Dictionary<string, string[]> { ["net8.0"] = dependencies };
-                    var dependencyXml = string.Join(string.Empty, groups.Select(group =>
-                        $"<group targetFramework=\"{group.Key}\">{string.Join(string.Empty, group.Value.Select(dependency => $"<dependency id=\"{dependency}\" version=\"{dependencyVersion}\" />"))}</group>"));
-                    writer.Write($"<package><metadata><id>{packageId}</id><version>{version}</version><dependencies>{dependencyXml}</dependencies></metadata></package>");
+                    var dependencyXml = string.Join(string.Empty, dependencies.Select(dependency => $"<dependency id=\"{dependency}\" version=\"[1.0.0]\" />"));
+                    writer.Write($"<package><metadata><id>{packageId}</id><version>1.0.0</version><dependencies><group targetFramework=\"net8.0\">{dependencyXml}</group></dependencies></metadata></package>");
                 }
             }
 
@@ -492,23 +255,9 @@ public sealed partial class DotNetRepositoryReleasePublishOrderTests
                 ProjectName = name,
                 PackageId = packageId,
                 CsprojPath = path,
-                NewVersion = version,
+                NewVersion = "1.0.0",
                 Packages = [packagePath]
             };
-        }
-
-        internal void WriteRootFile(string relativePath, string content)
-        {
-            Directory.CreateDirectory(_root);
-            File.WriteAllText(Path.Combine(_root, relativePath), content);
-        }
-
-        internal void AddArchiveText(string archivePath, string entryPath, string content)
-        {
-            using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
-            var entry = archive.CreateEntry(entryPath);
-            using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            writer.Write(content);
         }
 
         public void Dispose()

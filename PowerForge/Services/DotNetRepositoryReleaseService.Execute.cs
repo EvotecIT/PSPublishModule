@@ -43,7 +43,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (spec is null) throw new ArgumentNullException(nameof(spec));
-            spec.PlannedProjectContentsByPath = null;
+            spec.HasPendingVersionBindingChanges = false;
             if (string.IsNullOrWhiteSpace(spec.RootPath))
             {
                 result.Success = false;
@@ -79,13 +79,12 @@ public sealed partial class DotNetRepositoryReleaseService
                     var dupPaths = string.Join("; ", group.Select(g => g.Path));
                     foreach (var item in group)
                     {
-                        var isPackable = IsPackable(item.Path, spec);
                         projects.Add(new DotNetRepositoryProjectResult
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
-                            PackageId = isPackable ? ResolvePackageId(item.Path, item.Name, spec) : item.Name,
-                            IsPackable = isPackable,
+                            PackageId = ResolvePackageId(item.Path, item.Name, spec),
+                            IsPackable = IsPackable(item.Path),
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
                     }
@@ -95,13 +94,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 var entry = group.First();
-                var entryIsPackable = IsPackable(entry.Path, spec);
                 projects.Add(new DotNetRepositoryProjectResult
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
-                    PackageId = entryIsPackable ? ResolvePackageId(entry.Path, entry.Name, spec) : entry.Name,
-                    IsPackable = entryIsPackable
+                    PackageId = ResolvePackageId(entry.Path, entry.Name, spec),
+                    IsPackable = IsPackable(entry.Path)
                 });
             }
 
@@ -346,29 +344,11 @@ public sealed partial class DotNetRepositoryReleaseService
                         spec.VersionBindings,
                         plannedProjectContents)
                     : Array.Empty<ProjectVersionBindingFileUpdate>();
-
-                foreach (var plannedBinding in versionBindingPlan.Where(static item => item.HasChanges))
-                {
-                    plannedProjectContents[Path.GetFullPath(plannedBinding.Update.FilePath)] = plannedBinding.Update.UpdatedContent;
-                }
-                spec.PlannedProjectContentsByPath = spec.WhatIf && plannedProjectContents.Count > 0
-                    ? plannedProjectContents
-                    : null;
+                spec.HasPendingVersionBindingChanges = spec.WhatIf && versionBindingPlan.Any(static item => item.HasChanges);
 
                 if (spec.WhatIf)
                 {
                     versionBindingService.LogPlanned(versionBindingPlan);
-                    if (versionBindingPlan.Any(static item => item.HasChanges) &&
-                        !TryRefreshEffectiveVersionsAfterBindings(
-                            packable,
-                            result,
-                            spec,
-                            spec.VersionBindings,
-                            out var refreshError))
-                    {
-                        result.Success = false;
-                        progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, refreshError);
-                    }
                 }
                 else
                 {
@@ -404,14 +384,6 @@ public sealed partial class DotNetRepositoryReleaseService
                         result.Success = false;
                         progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, refreshError);
                     }
-                }
-
-                if (plannedProjectContents.Count > 0 &&
-                    !packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)) &&
-                    !TryRefreshEffectivePackageIds(packable, spec, out var identityError))
-                {
-                    result.Success = false;
-                    progress?.PhaseFailed(ProjectBuildProgressPhase.Versioning, identityError);
                 }
 
                 if (!packable.Any(project => !string.IsNullOrWhiteSpace(project.ErrorMessage)))

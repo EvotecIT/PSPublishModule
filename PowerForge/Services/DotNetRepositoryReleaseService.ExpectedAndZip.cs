@@ -6,7 +6,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -39,41 +38,9 @@ public sealed partial class DotNetRepositoryReleaseService {
         }
     }
 
-    private static bool IsPackable(string csprojPath, DotNetRepositoryReleaseSpec spec) {
-        if (!spec.WhatIf)
-            return IsPackable(csprojPath);
-
-        var evaluation = EvaluatePlannedProject(csprojPath, ResolvePlannedConfiguration(spec), targetFramework: null);
-        if (!evaluation.Properties.TryGetValue("IsPackable", out var value) || string.IsNullOrWhiteSpace(value))
-            return true;
-        value = ExpandPlannedProperties(value, evaluation.Properties);
-        if (!bool.TryParse(value, out var isPackable))
-            throw new InvalidOperationException($"Cannot determine whether '{csprojPath}' is packable because IsPackable '{value}' is not Boolean.");
-        return isPackable;
-    }
-
-    private string ResolvePackageId(
-        string csprojPath,
-        string fallbackProjectName,
-        DotNetRepositoryReleaseSpec spec) {
-        if (spec.WhatIf) {
-            var evaluation = EvaluatePlannedProject(
-                csprojPath,
-                ResolvePlannedConfiguration(spec),
-                targetFramework: null,
-                spec.PlannedProjectContentsByPath);
-            var plannedPackageId = ResolvePlannedPackageIdentity(
-                evaluation,
-                csprojPath,
-                fallbackProjectName,
-                spec.PlannedProjectContentsByPath);
-            if (plannedPackageId.IndexOf("$(", StringComparison.Ordinal) >= 0)
-                throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because '{plannedPackageId}' contains an unresolved MSBuild property.");
-            return plannedPackageId;
-        }
-
+    private string ResolvePackageId(string csprojPath, string fallbackProjectName, DotNetRepositoryReleaseSpec spec) {
         var projectDirectory = Path.GetDirectoryName(csprojPath) ?? spec.RootPath;
-        var configuration = ResolvePlannedConfiguration(spec);
+        var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var exitCode = RunDotnetMsBuildGetProperty(
             csprojPath,
             projectDirectory,
@@ -88,135 +55,10 @@ public sealed partial class DotNetRepositoryReleaseService {
             out _);
         if (exitCode != 0) {
             var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
-            throw new InvalidOperationException(
-                $"Cannot determine the package id for '{csprojPath}' because MSBuild PackageId evaluation failed. {detail}".Trim());
+            throw new InvalidOperationException($"Cannot determine the package id for '{csprojPath}' because MSBuild evaluation failed. {detail}".Trim());
         }
-        if (!string.IsNullOrWhiteSpace(packageId))
-            return packageId!.Trim();
-
-        exitCode = RunDotnetMsBuildGetProperty(
-            csprojPath,
-            projectDirectory,
-            configuration,
-            targetFramework: null,
-            propertyName: "AssemblyName",
-            fallbackProjectName,
-            _logger,
-            out var assemblyName,
-            out stdErr,
-            out stdOut,
-            out _);
-        if (exitCode != 0) {
-            var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
-            throw new InvalidOperationException(
-                $"Cannot determine the package id for '{csprojPath}' because MSBuild AssemblyName evaluation failed. {detail}".Trim());
-        }
-
-        return string.IsNullOrWhiteSpace(assemblyName)
-            ? fallbackProjectName
-            : assemblyName!.Trim();
+        return string.IsNullOrWhiteSpace(packageId) ? fallbackProjectName : packageId!.Trim();
     }
-
-    private bool TryRefreshEffectivePackageIds(
-        IReadOnlyList<DotNetRepositoryProjectResult> projects,
-        DotNetRepositoryReleaseSpec spec,
-        out string? error) {
-        error = null;
-        foreach (var project in projects) {
-            try {
-                var packageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
-                if (!string.Equals(project.PackageId, packageId, StringComparison.Ordinal)) {
-                    _logger.Info($"{project.ProjectName}: effective package id changed from {project.PackageId} to {packageId} after version updates.");
-                }
-                project.PackageId = packageId;
-            } catch (Exception ex) {
-                project.ErrorMessage = $"Unable to re-evaluate the effective package id after version updates: {ex.Message}";
-                error = $"{project.ProjectName}: {project.ErrorMessage}";
-                _logger.Warn(error);
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static string ResolvePlannedPackageIdentity(
-        PlannedEvaluation evaluation,
-        string csprojPath,
-        string fallbackProjectName,
-        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath) {
-        var properties = evaluation.Properties;
-        var projectIdentity = ResolvePlannedProjectIdentity(properties, fallbackProjectName);
-        return ResolvePlannedNuspecMetadataValue(
-                   evaluation,
-                   csprojPath,
-                   "id",
-                   new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["id"] = projectIdentity },
-                   plannedProjectContentsByPath)
-               ?? projectIdentity;
-    }
-
-    private static string ResolvePlannedProjectIdentity(
-        IReadOnlyDictionary<string, string> properties,
-        string fallbackProjectName) {
-        foreach (var propertyName in new[] { "PackageId", "AssemblyName", "MSBuildProjectName" }) {
-            if (!properties.TryGetValue(propertyName, out var value) || string.IsNullOrWhiteSpace(value))
-                continue;
-            return ExpandPlannedProperties(value, properties).Trim();
-        }
-        return fallbackProjectName;
-    }
-
-    private static string? ResolvePlannedNuspecMetadataValue(
-        PlannedEvaluation evaluation,
-        string csprojPath,
-        string metadataName,
-        IReadOnlyDictionary<string, string> defaultTokens,
-        IReadOnlyDictionary<string, string>? plannedProjectContentsByPath) {
-        var properties = evaluation.Properties;
-        if (!properties.TryGetValue("NuspecFile", out var nuspecFile) || string.IsNullOrWhiteSpace(nuspecFile))
-            return null;
-
-        var configuredPath = ExpandPlannedProperties(nuspecFile, properties);
-        if (configuredPath.IndexOf("$(", StringComparison.Ordinal) >= 0)
-            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because NuspecFile '{configuredPath}' is unresolved.");
-        var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(csprojPath))!;
-        var nuspecPath = ResolvePlannedPath(projectDirectory, configuredPath);
-        if (!File.Exists(nuspecPath) && (plannedProjectContentsByPath is null || !plannedProjectContentsByPath.ContainsKey(nuspecPath)))
-            throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because custom nuspec '{nuspecPath}' does not exist.");
-
-        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in properties)
-            tokens[property.Key] = property.Value;
-        foreach (var token in defaultTokens)
-            tokens[token.Key] = token.Value;
-        if (properties.TryGetValue("NuspecProperties", out var nuspecProperties))
-        {
-            foreach (var entry in SplitPlannedItems(ExpandPlannedProperties(nuspecProperties, properties)))
-            {
-                var separator = entry.IndexOf('=');
-                if (separator <= 0)
-                    throw new InvalidOperationException($"Cannot determine the planned package id for '{csprojPath}' because NuspecProperties entry '{entry}' is invalid.");
-                tokens[entry.Substring(0, separator).Trim()] = entry.Substring(separator + 1).Trim();
-            }
-        }
-
-        var nuspec = plannedProjectContentsByPath is not null && plannedProjectContentsByPath.TryGetValue(nuspecPath, out var plannedNuspecContent)
-            ? XDocument.Parse(plannedNuspecContent, LoadOptions.PreserveWhitespace)
-            : XDocument.Load(nuspecPath);
-        var rawValue = nuspec.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase))?
-            .Elements().FirstOrDefault(element => element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase))?
-            .Value.Trim();
-        if (string.IsNullOrWhiteSpace(rawValue))
-            throw new InvalidOperationException($"Cannot determine the planned package {metadataName} for '{csprojPath}' because custom nuspec '{nuspecPath}' has no package {metadataName}.");
-        var expandedValue = Regex.Replace(rawValue!, @"\$(?<name>[^$]+)\$", match =>
-            tokens.TryGetValue(match.Groups["name"].Value, out var replacement) ? replacement : match.Value);
-        if (expandedValue.IndexOf('$') >= 0)
-            throw new InvalidOperationException($"Cannot determine the planned package {metadataName} for '{csprojPath}' because custom nuspec {metadataName} '{rawValue}' contains an unresolved token.");
-        return expandedValue.Trim();
-    }
-
-    private static string ResolvePlannedConfiguration(DotNetRepositoryReleaseSpec spec)
-        => string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
 
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec) {
         var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;

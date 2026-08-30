@@ -102,11 +102,17 @@ public sealed partial class DotNetRepositoryReleaseService
             : spec.PublishSource!.Trim();
         result.PublishSource = source;
 
+        if (spec.WhatIf && spec.HasPendingVersionBindingChanges)
+        {
+            result.Success = false;
+            result.ErrorMessage = "A safe NuGet publish order cannot be planned while version-binding files have pending WhatIf changes. Apply the version changes or build the packages, then use artifact-based ordering.";
+            return true;
+        }
+
         var publishPlan = CreatePublishPlan(
             projects,
             usePlannedProjectGraph: spec.WhatIf,
-            configuration: ResolvePlannedConfiguration(spec),
-            plannedProjectContentsByPath: spec.PlannedProjectContentsByPath);
+            configuration: spec.Configuration);
         var orderedProjects = publishPlan.OrderedProjects;
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
