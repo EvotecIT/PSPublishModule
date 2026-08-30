@@ -263,6 +263,8 @@
         "redirects": { "type": "string" },
         "Shortlinks": { "type": "string" },
         "shortlinks": { "type": "string" },
+        "ShortlinkPaths": { "type": "array", "items": { "type": "string" } },
+        "shortlinkPaths": { "type": "array", "items": { "type": "string" } },
         "Ignored404": { "type": "string" },
         "ignored404": { "type": "string" },
         "Groups": { "type": "string" },

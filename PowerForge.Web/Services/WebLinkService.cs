@@ -29,7 +29,16 @@ public static partial class WebLinkService
         var missingSources = new List<string>();
 
         LoadRedirectJson(options.RedirectsPath, redirects, usedSources, missingSources);
-        LoadShortlinkJson(options.ShortlinksPath, shortlinks, usedSources, missingSources);
+        var seenShortlinkSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var shortlinkPath in new[] { options.ShortlinksPath }.Concat(options.ShortlinkPaths ?? Array.Empty<string>()))
+        {
+            if (string.IsNullOrWhiteSpace(shortlinkPath))
+                continue;
+
+            var resolved = Path.GetFullPath(shortlinkPath);
+            if (seenShortlinkSources.Add(resolved))
+                LoadShortlinkJson(resolved, shortlinks, usedSources, missingSources);
+        }
 
         foreach (var csvPath in options.RedirectCsvPaths ?? Array.Empty<string>())
         {

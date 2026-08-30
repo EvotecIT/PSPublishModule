@@ -461,6 +461,22 @@ internal static partial class WebPipelineRunner
             GetString(step, "shortlinks-path"),
             links?.Shortlinks);
 
+        var shortlinkSources = GetArrayOfStrings(step, "shortlinkSources") ??
+                               GetArrayOfStrings(step, "shortlink-sources") ??
+                               GetArrayOfStrings(step, "shortlinkOverlays") ??
+                               GetArrayOfStrings(step, "shortlink-overlays") ??
+                               Array.Empty<string>();
+        var shortlinkPaths = (links?.ShortlinkPaths ?? Array.Empty<string>())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePath(linkBaseDir, value))
+            .Concat(shortlinkSources
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => ResolvePath(baseDir, value)))
+            .OfType<string>()
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var csvSources = GetArrayOfStrings(step, "sources") ??
                          GetArrayOfStrings(step, "redirectCsvPaths") ??
                          GetArrayOfStrings(step, "redirect-csv-paths") ??
@@ -491,6 +507,7 @@ internal static partial class WebPipelineRunner
         {
             RedirectsPath = redirectsPath,
             ShortlinksPath = shortlinksPath,
+            ShortlinkPaths = shortlinkPaths,
             RedirectCsvPaths = csvPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Hosts = BuildLinksHostMap(step, links),
             LanguageRootHosts = BuildLinksLanguageRootHostMap(step, links)

@@ -97,6 +97,15 @@ internal static partial class WebCliCommandHandlers
             TryGetOptionValue(args, "--shortlinksPath"),
             links?.Shortlinks);
 
+        var shortlinkSources = ReadOptionList(args,
+            "--shortlink-source",
+            "--shortlink-sources",
+            "--shortlink-overlay",
+            "--shortlink-overlays");
+        var shortlinkPaths = (links?.ShortlinkPaths ?? Array.Empty<string>())
+            .Select(value => ResolvePathRelative(baseDir, value))
+            .Concat(shortlinkSources.Select(value => ResolvePathRelative(baseDir, value)));
+
         var csvSources = ReadOptionList(args,
             "--source",
             "--sources",
@@ -113,6 +122,10 @@ internal static partial class WebCliCommandHandlers
         {
             RedirectsPath = redirectsPath,
             ShortlinksPath = shortlinksPath,
+            ShortlinkPaths = shortlinkPaths
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
             RedirectCsvPaths = csvPaths
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -180,6 +193,7 @@ internal static partial class WebCliCommandHandlers
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinks")) ||
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinks-path")) ||
            !string.IsNullOrWhiteSpace(TryGetOptionValue(args, "--shortlinksPath")) ||
+           ReadOptionList(args, "--shortlink-source", "--shortlink-sources", "--shortlink-overlay", "--shortlink-overlays").Count > 0 ||
            ReadOptionList(args, "--source", "--sources", "--redirect-csv", "--redirect-csv-path", "--redirect-csv-paths", "--csv-source", "--csv-sources").Count > 0;
 
     private static string? ResolvePathForLinks(string baseDir, string? directValue, string? configValue)

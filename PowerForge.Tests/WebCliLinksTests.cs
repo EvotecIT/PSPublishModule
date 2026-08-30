@@ -85,6 +85,55 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
+    public void HandleSubCommand_LinksExportApache_AppendsConfiguredAndRepeatedShortlinkSources()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var configPath = WriteSiteFixture(root, duplicateRedirects: false);
+            var firstOverlay = Path.Combine(root, "managed-a.json");
+            var secondOverlay = Path.Combine(root, "managed-b.json");
+            File.WriteAllText(firstOverlay,
+                """
+                [{ "slug": "download-a", "host": "evo.yt", "targetUrl": "https://evotec.xyz/a", "owner": "control", "allowExternal": true }]
+                """);
+            File.WriteAllText(secondOverlay,
+                """
+                [{ "slug": "download-b", "host": "evo.yt", "targetUrl": "https://evotec.xyz/b", "owner": "control", "allowExternal": true }]
+                """);
+            var siteJson = File.ReadAllText(configPath);
+            File.WriteAllText(configPath, siteJson.Replace(
+                "\"shortlinks\": \"./data/links/shortlinks.json\",",
+                "\"shortlinks\": \"./data/links/shortlinks.json\",\n                \"shortlinkPaths\": [\"./managed-a.json\"],",
+                StringComparison.Ordinal));
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "links",
+                new[]
+                {
+                    "export-apache", "--config", configPath,
+                    "--shortlink-source", firstOverlay,
+                    "--shortlink-source", secondOverlay
+                },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
+
+            Assert.Equal(0, exitCode);
+            var apache = File.ReadAllText(Path.Combine(root, "deploy", "apache", "link-service-redirects.conf"));
+            Assert.Contains("RewriteRule ^/?discord/?$", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?download-a/?$", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?download-b/?$", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void EvaluateBaseline_AcceptsStableAndLegacyWarningKeys()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-baseline-" + Guid.NewGuid().ToString("N"));

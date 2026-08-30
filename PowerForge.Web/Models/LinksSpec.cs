@@ -10,6 +10,8 @@ public sealed class LinkServiceSpec
     public string? Redirects { get; set; }
     /// <summary>Path to committed shortlink rules JSON.</summary>
     public string? Shortlinks { get; set; }
+    /// <summary>Additional shortlink JSON sources loaded after the primary shortlink file.</summary>
+    public string[] ShortlinkPaths { get; set; } = Array.Empty<string>();
     /// <summary>Path to committed ignored 404 JSON.</summary>
     public string? Ignored404 { get; set; }
     /// <summary>Path to committed link group metadata JSON.</summary>
