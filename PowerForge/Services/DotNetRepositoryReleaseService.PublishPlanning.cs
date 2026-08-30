@@ -184,9 +184,46 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => Path.GetFullPath(entry.Value.CsprojPath),
             entry => entry.Key,
             pathComparer);
-        var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var useMsBuildTraversal = packStrategy == DotNetRepositoryPackStrategy.MSBuild && !string.IsNullOrWhiteSpace(packageOutputPath);
-        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
+        var dependencies = EvaluatePlannedDependencySet(
+            project,
+            selectedPackages,
+            selectedProjectPaths,
+            configuration,
+            useMsBuildTraversal,
+            includeSymbols,
+            packageOutputPath,
+            applyPlannedVersionProperties: project.HasPendingVersionUpdate);
+        if (project.HasPendingVersionUpdate)
+        {
+            var currentDependencies = EvaluatePlannedDependencySet(
+                project,
+                selectedPackages,
+                selectedProjectPaths,
+                configuration,
+                useMsBuildTraversal,
+                includeSymbols,
+                packageOutputPath,
+                applyPlannedVersionProperties: false);
+            if (!dependencies.SetEquals(currentDependencies))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its pending version update changes the evaluated package dependency graph. Apply the version update or build the packages, then use artifact-based ordering.");
+        }
+
+        return dependencies;
+    }
+
+    private SortedSet<string> EvaluatePlannedDependencySet(
+        DotNetRepositoryProjectResult project,
+        IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
+        IReadOnlyDictionary<string, string> selectedProjectPaths,
+        string? configuration,
+        bool useMsBuildTraversal,
+        bool includeSymbols,
+        string? packageOutputPath,
+        bool applyPlannedVersionProperties)
+    {
+        var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties);
         ValidatePlanningContract(project, outer, validatePackageWideProperties: true);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
@@ -196,7 +233,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
-                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties);
                 ValidatePlanningContract(project, evaluation, validatePackageWideProperties: false);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
@@ -268,7 +305,8 @@ public sealed partial class DotNetRepositoryReleaseService
         string? configuration,
         bool useMsBuildTraversal,
         bool includeSymbols,
-        string? packageOutputPath)
+        string? packageOutputPath,
+        bool applyPlannedVersionProperties)
     {
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
@@ -292,7 +330,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
         if (!string.IsNullOrWhiteSpace(targetFramework))
             arguments.Add($"-p:TargetFramework={targetFramework!.Trim()}");
-        if (!string.IsNullOrWhiteSpace(project.NewVersion))
+        if (applyPlannedVersionProperties && !string.IsNullOrWhiteSpace(project.NewVersion))
         {
             var plannedVersion = project.NewVersion!.Trim();
             var plannedNumericVersion = PackageVersionUtility.GetNumericVersion(plannedVersion);

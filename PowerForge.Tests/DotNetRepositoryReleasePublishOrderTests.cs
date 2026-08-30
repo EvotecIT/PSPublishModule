@@ -416,6 +416,7 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         var shared = workspace.AddProject("Shared");
         var app = workspace.AddProject("App");
         app.NewVersion = "2.0.0-beta.1";
+        app.HasPendingVersionUpdate = true;
         File.WriteAllText(app.CsprojPath, """
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -429,10 +430,12 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 </Project>
 """);
 
-        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
-            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new DotNetRepositoryReleaseService(new NullLogger())
+                .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release"));
 
-        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+        Assert.Contains("pending version update changes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("artifact-based ordering", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

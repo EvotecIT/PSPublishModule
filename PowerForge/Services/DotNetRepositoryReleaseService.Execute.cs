@@ -310,6 +310,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 if (!string.Equals(content, updated, StringComparison.Ordinal))
                 {
+                    project.HasPendingVersionUpdate = true;
                     pendingVersionUpdates.Add(new KeyValuePair<DotNetRepositoryProjectResult, RepositoryTextFileUpdate>(
                         project,
                         new RepositoryTextFileUpdate(project.CsprojPath, content, updated)));
@@ -365,6 +366,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     foreach (var pendingUpdate in pendingVersionUpdates)
                     {
                         var project = pendingUpdate.Key;
+                        project.PackageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
                         if (!string.IsNullOrWhiteSpace(project.OldVersion))
                             _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {project.NewVersion}");
                         else
