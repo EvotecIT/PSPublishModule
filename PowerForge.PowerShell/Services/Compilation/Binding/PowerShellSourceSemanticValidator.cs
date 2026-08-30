@@ -5,7 +5,7 @@ namespace PowerForge;
 /// <summary>Owns file-wide source contracts that must be preserved before bound-function analysis.</summary>
 internal static class PowerShellSourceSemanticValidator
 {
-    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document)
+    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId)
     {
         var diagnostics = document.SyntaxRoot
             .FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
@@ -16,11 +16,12 @@ internal static class PowerShellSourceSemanticValidator
                 $"Source '{statement.Extent.Text}' has runtime-bearing using semantics that cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 PowerShellSourceParser.GetSpan(document, statement.Extent)))
             .ToList();
-        if (document.SyntaxRoot.ScriptRequirements is not null)
+        var requirementFailure = PowerShellScriptRequirementPolicy.GetFailure(document, semanticProfileId);
+        if (requirementFailure is not null)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.RequiresDirective,
-                "Source #requires directives cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
+                requirementFailure,
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
         var typeDefinition = document.SyntaxRoot

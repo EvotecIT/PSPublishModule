@@ -105,6 +105,44 @@ public sealed class PowerShellManagementProviderTests
         Assert.True(contract.SupportsCancellation);
         Assert.True(contract.DeterministicCleanup);
         Assert.Equal("PowerForge.Management/1", contract.Serialization);
+        Assert.DoesNotContain(contract.Authentication, authentication =>
+            authentication.ToString().Equals("Certificate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TypedCimAdapterRejectsUnimplementedAuthenticationAndConflictingSessionOptionsBeforeConnecting()
+    {
+        var adapter = new PowerShellManagementProviderAdapter();
+        var invalidAuthentication = new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Enumerate,
+            ClassName = "Ignored",
+            Authentication = (PowerShellManagementAuthentication)999
+        };
+        Assert.Throws<ArgumentOutOfRangeException>(() => adapter.Execute(invalidAuthentication));
+
+        var missingCredential = new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Enumerate,
+            ClassName = "Ignored",
+            Authentication = PowerShellManagementAuthentication.Kerberos
+        };
+        Assert.Throws<ArgumentException>(() => adapter.Execute(missingCredential));
+
+        using var password = new System.Security.SecureString();
+        password.AppendChar('x');
+        password.MakeReadOnly();
+        var unsupportedDcomCombination = new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Enumerate,
+            ClassName = "Ignored",
+            Transport = PowerShellManagementTransport.Dcom,
+            Authentication = PowerShellManagementAuthentication.Basic,
+            Credential = new System.Management.Automation.PSCredential(
+                "ignored",
+                password)
+        };
+        Assert.Throws<ArgumentException>(() => adapter.Execute(unsupportedDcomCombination));
     }
 
     private sealed class CdxmlFixture : IDisposable

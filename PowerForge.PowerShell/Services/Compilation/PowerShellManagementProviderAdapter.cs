@@ -148,8 +148,7 @@ public sealed class PowerShellManagementProviderAdapter
     public PowerShellManagementResult Execute(PowerShellManagementRequest request, CancellationToken cancellationToken = default)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
-        if (request.TimeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(request.TimeoutSeconds));
-        if (request.MaximumResults <= 0) throw new ArgumentOutOfRangeException(nameof(request.MaximumResults));
+        ValidateRequest(request);
         cancellationToken.ThrowIfCancellationRequested();
         var ownedSession = request.Session is null;
         CimSession? session = request.Session;
@@ -169,6 +168,29 @@ public sealed class PowerShellManagementProviderAdapter
         {
             if (ownedSession) session?.Dispose();
         }
+    }
+
+    private static void ValidateRequest(PowerShellManagementRequest request)
+    {
+        if (!Enum.IsDefined(typeof(PowerShellManagementOperation), request.Operation))
+            throw new ArgumentOutOfRangeException(nameof(request.Operation));
+        if (!Enum.IsDefined(typeof(PowerShellManagementTransport), request.Transport))
+            throw new ArgumentOutOfRangeException(nameof(request.Transport));
+        if (!Enum.IsDefined(typeof(PowerShellManagementAuthentication), request.Authentication))
+            throw new ArgumentOutOfRangeException(nameof(request.Authentication));
+        if (request.TimeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(request.TimeoutSeconds));
+        if (request.MaximumResults <= 0) throw new ArgumentOutOfRangeException(nameof(request.MaximumResults));
+        if (request.Session is not null &&
+            (request.Credential is not null ||
+             request.Transport != PowerShellManagementTransport.Default ||
+             request.Authentication != PowerShellManagementAuthentication.Default ||
+             !string.IsNullOrWhiteSpace(request.ComputerName)))
+            throw new ArgumentException("A caller-owned CIM session cannot be combined with session-creation transport, authentication, credential, or computer options.", nameof(request));
+        if (request.Authentication != PowerShellManagementAuthentication.Default && request.Credential is null)
+            throw new ArgumentException("An explicit management authentication mechanism requires a runtime credential.", nameof(request));
+        if (request.Transport == PowerShellManagementTransport.Dcom &&
+            request.Authentication is PowerShellManagementAuthentication.Basic or PowerShellManagementAuthentication.CredSsp)
+            throw new ArgumentException($"Authentication '{request.Authentication}' is not supported with the DCOM management transport.", nameof(request));
     }
 
     private static PowerShellManagementResult Execute(

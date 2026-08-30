@@ -38,3 +38,11 @@ Run the external frontier assessment after building the CLI:
 ```
 
 The assessment runner accepts any packet that follows the checked-in schema. It supports exact-hash HTTPS files and ZIP archives, validates archive containment and portable path collisions, bounds entry count, per-entry bytes, total expansion, and compression ratio, never imports or executes the external source, and can rerun from its verified cache with `-Offline`. Use `-RefreshBaseline` only when intentionally changing the pinned packet or accepting a reviewed compiler-coverage change. Assessment success means acquisition and post-emission census completed without regression; it is not a complete-program pass.
+
+Run the separate opt-in qualification lane only when local execution of the reviewed third-party packet is acceptable:
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalQualification.ps1 -AllowExternalExecution
+```
+
+This lane builds a Hybrid artifact, verifies that the packet's named unit was emitted as CLR, imports the original and generated modules in separate clean child processes, and compares the selected command invocation. Probe text is reviewed packet metadata; it is never a compiler eligibility input. A passing qualification proves that command only, not the complete workload.

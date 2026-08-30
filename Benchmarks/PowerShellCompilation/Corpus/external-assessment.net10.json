@@ -36,7 +36,12 @@
         "url": "https://codeload.github.com/jakehildreth/locksmith2/zip/f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
         "sha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9"
       },
-      "entryPoint": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1"
+      "entryPoint": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1",
+      "qualification": {
+        "kind": "HybridModuleCommand",
+        "unitName": "Test-IsPowerShellCore",
+        "probeScript": "(Test-IsPowerShellCore).ToString()"
+      }
     },
     {
       "id": "get-windows-autopilot-info",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "038dae3254fc12780b3b905ce0eca4b08c542fae59100bb9d37a45c505696a45",
+  "packetSha256": "e069128c9100c3757af2a7dceeb7345af7ec0f8d1e18ea9af8f3cb3d1733399c",
   "recordedOn": "2026-08-30",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
@@ -32,15 +32,15 @@
       "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
       "sourceFiles": 105,
       "totalUnits": 108,
-      "emittedUnits": 0,
-      "runtimeFallbackUnits": 108,
+      "emittedUnits": 1,
+      "runtimeFallbackUnits": 107,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 100,
-      "analyzerEligibleFunctions": 0,
-      "emittedFunctions": 0,
+      "analyzerEligibleFunctions": 1,
+      "emittedFunctions": 1,
       "droppedEligibleFunctions": 0,
-      "fallbackFunctions": 100
+      "fallbackFunctions": 99
     },
     {
       "id": "get-windows-autopilot-info",

@@ -55,6 +55,53 @@ public sealed class PowerShellCompilationSemanticProfileTests
         Assert.Single(core.Emitted.Methods);
     }
 
+    [Theory]
+    [InlineData("#requires -Version 5.1\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, true)]
+    [InlineData("#requires -Version 7.6\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, false)]
+    [InlineData("#requires -Version 7.6\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, true)]
+    [InlineData("#requires -PSEdition Desktop\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, true)]
+    [InlineData("#requires -PSEdition Desktop\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, false)]
+    [InlineData("#requires -PSEdition Core\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, true)]
+    [InlineData("#requires -Modules Example.Module\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, false)]
+    [InlineData("#requires -RunAsAdministrator\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, false)]
+    [InlineData("#requires -PSSnapin Microsoft.PowerShell.Core -Version 3.0\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, false)]
+    public void SourceRequirementsAreEvaluatedAgainstTheSelectedProfile(string source, string profileId, bool accepted)
+    {
+        var document = PowerShellSourceParser.Parse(source, "requirements.ps1");
+
+        var diagnostics = PowerShellSourceSemanticValidator.Validate(document, profileId);
+
+        Assert.Equal(accepted, diagnostics.All(diagnostic => diagnostic.Code != PowerShellCompilationFeatureIds.RequiresDirective));
+    }
+
+    [Theory]
+    [InlineData("#requires -Version 5.1\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
+    [InlineData("#requires -PSEdition Core\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
+    public void AnalyzerCompilesRequirementsSatisfiedByTheSelectedProfile(string source, string profileId)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeRequiresProfileTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sourcePath = Path.Combine(root, "requirements.ps1");
+            File.WriteAllText(sourcePath, source);
+            var analyzer = new PowerShellCompilationAnalyzer(
+                Array.Empty<PowerShellCompilationCommandProviderContract>(),
+                profileId);
+
+            var plan = analyzer.Analyze(new PowerShellCompilationSpec(sourcePath, PowerShellCompilationMode.Strict));
+
+            var unit = Assert.Single(Assert.Single(plan.Files).Units);
+            Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private static PowerShellCompilationTargetContract CreateTarget(string semanticProfileId)
         => PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.Library,

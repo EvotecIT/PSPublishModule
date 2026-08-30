@@ -111,6 +111,26 @@ public sealed class PowerShellCompilationSemanticOracleTests
     }
 
     [Fact]
+    public void ExternalHostsAcceptRequirementsOwnedByTheirExactProfiles()
+    {
+        using var desktopFixture = OracleFixture.Create("#requires -Version 5.1\n#requires -PSEdition Desktop\n'Desktop'");
+        using var coreFixture = OracleFixture.Create("#requires -Version 7.6\n#requires -PSEdition Core\n'Core'");
+        var runner = new PowerShellCompilationSemanticOracleRunner();
+
+        var desktop = runner.Observe(new PowerShellCompilationSemanticOracleRequest(
+            PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId,
+            desktopFixture.ScriptPath));
+        var core = runner.Observe(new PowerShellCompilationSemanticOracleRequest(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            coreFixture.ScriptPath));
+
+        Assert.Equal("Desktop", Assert.Single(desktop.Success).Value);
+        Assert.Equal("Core", Assert.Single(core.Success).Value);
+        Assert.Empty(desktop.Errors);
+        Assert.Empty(core.Errors);
+    }
+
+    [Fact]
     public void ExternalOracleCapturesSelectedPropertiesStreamsAndIsolatedFileEffects()
     {
         using var fixture = OracleFixture.Create("""

@@ -259,7 +259,7 @@ try {
     }
     if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) { throw "Assessment baseline does not exist: $BaselinePath" }
     $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
-    $regressions = Compare-Baseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Results @($results) -SelectedIds $WorkloadId
+    $regressions = @(Compare-Baseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Results @($results) -SelectedIds $WorkloadId)
     $successful = @($results | Where-Object succeeded)
     $sourceFiles = [int] (($successful | ForEach-Object { [int] $_.sourceFiles } | Measure-Object -Sum).Sum)
     $totalUnits = [int] (($successful | ForEach-Object { [int] $_.totalUnits } | Measure-Object -Sum).Sum)

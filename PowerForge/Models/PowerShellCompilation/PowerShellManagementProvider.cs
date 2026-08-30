@@ -47,8 +47,6 @@ public enum PowerShellManagementAuthentication
     NtlmDomain,
     /// <summary>Basic authentication over a separately secured transport.</summary>
     Basic,
-    /// <summary>Client-certificate authentication.</summary>
-    Certificate,
     /// <summary>CredSSP delegated authentication.</summary>
     CredSsp
 }

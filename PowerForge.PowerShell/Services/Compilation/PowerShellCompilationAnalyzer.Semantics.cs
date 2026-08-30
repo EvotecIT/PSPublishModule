@@ -25,7 +25,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
         var sourceDiagnosticsByPath = documents.ToDictionary(
             static document => document.Path,
-            PowerShellSourceSemanticValidator.Validate,
+            document => PowerShellSourceSemanticValidator.Validate(document, semanticProfileId),
             PowerShellCompilationPathSafety.PathComparer);
         var targets = new List<SemanticUnitTarget>();
         var compilationDocuments = new List<ParsedSourceDocument>(documents);
