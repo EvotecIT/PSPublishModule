@@ -1657,6 +1657,38 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void Load_DeduplicatesCaseAliasesOnCaseInsensitiveVolumes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-case-insensitive-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "single", "host": "evo.yt", "targetUrl": "https://example.test/single", "owner": "test", "allowExternal": true }]
+                """);
+            if (!File.Exists(lowerPath))
+                return;
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = upperPath,
+                ShortlinkPaths = new[] { lowerPath }
+            });
+
+            Assert.Equal("single", Assert.Single(dataSet.Shortlinks).Slug);
+            Assert.Equal(Path.GetFullPath(upperPath), Assert.Single(dataSet.UsedSources));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Load_ValidatesConflictsAcrossPrimaryAndAdditionalShortlinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-shortlink-conflict-" + Guid.NewGuid().ToString("N"));
