@@ -290,6 +290,32 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfUsesOuterPackageIdentityForMultiTargetProjects()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <PackageId>App</PackageId>
+    <PackageId Condition="'$(TargetFramework)' != ''">App.$(TargetFramework)</PackageId>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_WhatIfHonorsSuppressedPackageDependencies()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -359,6 +385,27 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
             .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
 
         Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfIgnoresEmptyVersionOverride()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        shared.NewVersion = "2.0.0";
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="Shared" Version="[1.0.0]" VersionOverride="" /></ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
     }
 
     [Fact]

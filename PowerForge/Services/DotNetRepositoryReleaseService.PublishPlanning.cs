@@ -187,7 +187,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var useMsBuildTraversal = packStrategy == DotNetRepositoryPackStrategy.MSBuild && !string.IsNullOrWhiteSpace(packageOutputPath);
         var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
-        ValidatePlanningContract(project, outer);
+        ValidatePlanningContract(project, outer, validatePackageWideProperties: true);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
             AddPlannedDependencies(project, outer, selectedPackages, selectedProjectPaths, dependencies);
@@ -197,7 +197,7 @@ public sealed partial class DotNetRepositoryReleaseService
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
                 var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
-                ValidatePlanningContract(project, evaluation);
+                ValidatePlanningContract(project, evaluation, validatePackageWideProperties: false);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
         }
@@ -205,15 +205,21 @@ public sealed partial class DotNetRepositoryReleaseService
         return dependencies;
     }
 
-    private static void ValidatePlanningContract(DotNetRepositoryProjectResult project, PublishPlanningEvaluation evaluation)
+    private static void ValidatePlanningContract(
+        DotNetRepositoryProjectResult project,
+        PublishPlanningEvaluation evaluation,
+        bool validatePackageWideProperties)
     {
-        var packageId = evaluation.GetProperty("PackageId");
-        if (string.IsNullOrWhiteSpace(packageId))
-            packageId = evaluation.GetProperty("AssemblyName");
-        if (!string.IsNullOrWhiteSpace(packageId) && !string.Equals(packageId!.Trim(), GetEffectivePackageId(project), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{project.ProjectName}' because MSBuild evaluates package id '{packageId}', while discovery selected '{GetEffectivePackageId(project)}'. Use a stable PackageId for publish planning.");
-        if (!string.IsNullOrWhiteSpace(evaluation.GetProperty("NuspecFile")))
-            throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom NuspecFile dependency evaluation is intentionally unsupported. Build the packages and use artifact-based ordering.");
+        if (validatePackageWideProperties)
+        {
+            var packageId = evaluation.GetProperty("PackageId");
+            if (string.IsNullOrWhiteSpace(packageId))
+                packageId = evaluation.GetProperty("AssemblyName");
+            if (!string.IsNullOrWhiteSpace(packageId) && !string.Equals(packageId!.Trim(), GetEffectivePackageId(project), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{project.ProjectName}' because MSBuild evaluates package id '{packageId}', while discovery selected '{GetEffectivePackageId(project)}'. Use a stable PackageId for publish planning.");
+            if (!string.IsNullOrWhiteSpace(evaluation.GetProperty("NuspecFile")))
+                throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because custom NuspecFile dependency evaluation is intentionally unsupported. Build the packages and use artifact-based ordering.");
+        }
         if (string.Equals(evaluation.GetProperty("CentralPackageTransitivePinningEnabled"), "true", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' while CentralPackageTransitivePinningEnabled is active. Build the packages and use artifact-based ordering.");
     }
@@ -244,7 +250,13 @@ public sealed partial class DotNetRepositoryReleaseService
             var packageId = reference.Get("Identity");
             if (string.IsNullOrWhiteSpace(packageId) || !selectedPackages.TryGetValue(packageId!, out var selectedPackage))
                 continue;
-            var versionRange = reference.Get("VersionOverride") ?? reference.Get("Version") ?? evaluation.GetCentralPackageVersion(packageId!);
+            var versionOverride = reference.Get("VersionOverride");
+            var version = reference.Get("Version");
+            var versionRange = !string.IsNullOrWhiteSpace(versionOverride)
+                ? versionOverride
+                : !string.IsNullOrWhiteSpace(version)
+                    ? version
+                    : evaluation.GetCentralPackageVersion(packageId!);
             if (DependencyTargetsSelectedVersion(versionRange, selectedPackage, GetEffectivePackageId(consumer)))
                 dependencies.Add(packageId!);
         }
