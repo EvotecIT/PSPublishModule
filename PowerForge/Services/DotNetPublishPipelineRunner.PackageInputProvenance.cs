@@ -439,7 +439,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return !hasCommittedLock && hashes.Count == 0;
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
-                    committedPackageHashes,
+                    hashes,
                     archives,
                     out Dictionary<string, string> archivePathsByPackageKey))
             {

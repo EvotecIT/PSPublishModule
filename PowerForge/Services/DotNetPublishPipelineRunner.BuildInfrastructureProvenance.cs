@@ -196,7 +196,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     controlledSourceRoot,
                     controlledProjectPath!,
-                    out offlinePackageSources))
+                    out offlinePackageSources,
+                    allowSdkManagedToolchainPackages: true))
                 return CacheAll(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(

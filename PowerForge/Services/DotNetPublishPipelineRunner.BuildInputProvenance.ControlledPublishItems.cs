@@ -20,7 +20,7 @@ public sealed partial class DotNetPublishPipelineRunner
         publishInputs = Array.Empty<EvaluatedPublishInput>();
         string controlledOutputRoot = Path.Combine(
             Path.GetTempPath(),
-            "powerforge-publish-inputs-" + Guid.NewGuid().ToString("N"));
+            "pfpi-" + Guid.NewGuid().ToString("N"));
         string controlledSourceRoot = Path.Combine(controlledOutputRoot, "source");
         string? controlledGitRoot = null;
         try
@@ -70,7 +70,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         catalogSource,
                         controlledSourceRoot,
                         controlledProjectPath!,
-                        out string[] catalogSources))
+                        out string[] catalogSources,
+                        allowSdkManagedToolchainPackages: true))
                 {
                     return false;
                 }
