@@ -141,7 +141,7 @@ public sealed partial class AppStoreConnectClient
         ValidateTerritories(spec.Territories);
         var territories = spec.Territories.Select((territory, index) => new
         {
-            Id = $"territory-availability-{index + 1}",
+            Id = $"${{territory-availability-{index + 1}}}",
             Spec = territory
         }).ToArray();
         var body = new

@@ -56,11 +56,28 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.EnableRaisingEvents = true;
     }
 
-    internal void ValidateNoChanges() {
-        // macOS FSEvents delivery is asynchronous. Give the already-completed archive operation's
-        // notifications a short drain window before closing the monitor and accepting its output.
+    internal void ValidateNoChanges(Action? finalValidation = null) {
+        // Drain mutations from the completed reader first so established diagnostics retain the
+        // observed event rather than being replaced by a later identity-comparison message.
         Thread.Sleep(250);
+        ThrowIfMutationObserved();
+
+        // Keep the watcher active while the caller captures its final content and physical
+        // identities. A transient create/delete during that traversal may leave no final hash
+        // difference, so the watcher is the only evidence that the validation boundary changed.
+        finalValidation?.Invoke();
+        if (finalValidation is not null)
+        {
+            // macOS FSEvents delivery is asynchronous. Drain any mutation that occurred during
+            // final identity capture before closing the observation boundary.
+            Thread.Sleep(250);
+        }
         _watcher.EnableRaisingEvents = false;
+
+        ThrowIfMutationObserved();
+    }
+
+    private void ThrowIfMutationObserved() {
         if (_watcherError is not null) {
             throw new InvalidOperationException(
                 $"The {_scopeDescription} mutation monitor failed; its output cannot be trusted. " +

@@ -2626,9 +2626,20 @@ internal sealed partial class PowerForgeReleaseService
                 }
                 if (localExportOnly && upload.Succeeded)
                     directExportSnapshot!.BindProducedArtifact(upload.ExportArtifactPath, upload.ExportArtifactSha256);
-                uploadMutationMonitor?.ValidateNoChanges();
-                if (uploadSnapshot is not null)
-                    uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!);
+                // xcodebuild can return before its approved Info.plist sandbox scratch file is
+                // removed. Let that narrowly recognized cleanup settle while the mutation monitor
+                // remains active, so every unrelated transient archive mutation still fails closed.
+                uploadSnapshot?.WaitForExpectedXcodeExportScratchPathsToSettle();
+                if (uploadMutationMonitor is not null && uploadSnapshot is not null)
+                {
+                    uploadMutationMonitor.ValidateNoChanges(
+                        () => uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!));
+                }
+                else
+                {
+                    uploadMutationMonitor?.ValidateNoChanges();
+                    uploadSnapshot?.ValidateUnchanged(approvedArchiveSha256!);
+                }
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
