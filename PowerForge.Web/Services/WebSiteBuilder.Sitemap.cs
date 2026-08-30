@@ -60,11 +60,7 @@ public static partial class WebSiteBuilder
     private static bool ItemRendersHtml(SiteSpec spec, ContentItem item)
     {
         var formats = ResolveOutputFormats(spec, item);
-        return formats.Any(static format =>
-            format is not null &&
-            (string.Equals(format.Name, "html", StringComparison.OrdinalIgnoreCase) ||
-             string.IsNullOrWhiteSpace(format.Suffix) ||
-             string.Equals(format.Suffix, "html", StringComparison.OrdinalIgnoreCase)));
+        return formats.Any(RendersHtmlPage);
     }
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
@@ -92,14 +88,8 @@ public static partial class WebSiteBuilder
 
         foreach (var format in ResolveOutputFormats(spec, item))
         {
-            if (format is null ||
-                (!string.Equals(format.Name, "html", StringComparison.OrdinalIgnoreCase) &&
-                 !string.IsNullOrWhiteSpace(format.Suffix) &&
-                 !string.Equals(format.Suffix, "html", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(format.Suffix, "htm", StringComparison.OrdinalIgnoreCase)))
-            {
+            if (!RendersHtmlPage(format))
                 continue;
-            }
 
             var route = ResolveOutputRoute(item.OutputPath, format);
             var path = ResolveRenderedHtmlPath(outputRoot, route, format);

@@ -556,6 +556,14 @@ public static partial class WebSiteBuilder
         };
     }
 
+    internal static bool RendersHtmlPage(OutputFormatSpec format)
+    {
+        if (format is null || string.IsNullOrWhiteSpace(format.Name))
+            return false;
+
+        return format.Name.ToLowerInvariant() is not ("json" or "rss" or "atom" or "jsonfeed");
+    }
+
     private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
         var listItems = ResolveListItems(spec, item, items);

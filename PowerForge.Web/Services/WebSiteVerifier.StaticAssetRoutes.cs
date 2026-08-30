@@ -189,6 +189,9 @@ public static partial class WebSiteVerifier
         WebSitePlan plan,
         IEnumerable<CollectionRoute> contentRoutes)
     {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable())
+            yield break;
+
         var renderedItems = spec.Social is { Enabled: true, AutoGenerateCards: true }
             ? WebSiteBuilder.BuildContentItemsForVerification(spec, plan)
                 .GroupBy(static item => BuildSocialCardItemKey(item.SourcePath, item.Collection), StringComparer.OrdinalIgnoreCase)
@@ -211,7 +214,7 @@ public static partial class WebSiteVerifier
             item.TranslationKey = route.TranslationKey;
             item.Kind = route.Kind;
             item.Outputs = route.Outputs ?? Array.Empty<string>();
-            if (!WebSiteBuilder.ResolveOutputFormats(spec, item).Any(EmitsIndexHtml))
+            if (!WebSiteBuilder.ResolveOutputFormats(spec, item).Any(WebSiteBuilder.RendersHtmlPage))
                 continue;
             var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, plan.RootPath);
             if (!string.IsNullOrWhiteSpace(cardRoute))
@@ -421,7 +424,7 @@ public static partial class WebSiteVerifier
 
                     var physicalOutput = string.IsNullOrWhiteSpace(normalizedBaseRoute)
                         ? "index.html"
-                        : Uri.UnescapeDataString(normalizedBaseRoute) + "/index.html";
+                        : normalizedBaseRoute + "/index.html";
                     foreach (var physicalRoute in GetStaticAssetRoutes(physicalOutput))
                         yield return physicalRoute;
                     continue;
@@ -456,10 +459,9 @@ public static partial class WebSiteVerifier
                 var baseRoute = normalizedRoute.Equals("/404", StringComparison.OrdinalIgnoreCase)
                     ? string.Empty
                     : normalizedRoute;
-                var rawBaseRoute = Uri.UnescapeDataString(baseRoute);
-                var destination = string.IsNullOrWhiteSpace(rawBaseRoute)
+                var destination = string.IsNullOrWhiteSpace(baseRoute)
                     ? "/" + relative
-                    : rawBaseRoute + "/" + relative;
+                    : baseRoute + "/" + relative;
                 foreach (var resourceRoute in GetStaticAssetRoutes(destination))
                     yield return resourceRoute;
             }
@@ -522,8 +524,12 @@ public static partial class WebSiteVerifier
                 }
 
                 var fallbackRoute = ApplyLanguagePrefixToRoute(spec, localization, strippedRoute, language.Code);
-                if (existingRouteLanguages.Contains(language.Code + "|" + NormalizeRouteForNavigationMatch(fallbackRoute)))
+                var routeLanguageKey = language.Code + "|" + NormalizeRouteForNavigationMatch(fallbackRoute);
+                if (!existingRouteLanguages.Add(routeLanguageKey))
                     continue;
+
+                if (!string.IsNullOrWhiteSpace(source.TranslationKey))
+                    existingTranslations.Add(language.Code + "|" + source.TranslationKey.Trim());
 
                 yield return source with
                 {

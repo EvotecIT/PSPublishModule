@@ -82,6 +82,9 @@ internal static partial class WebSocialCardGenerator
         }
     }
 
+    internal static bool IsPngRenderingAvailable()
+        => !OperatingSystem.IsLinux() || ResolveExternalImageMagickCommand() is not null;
+
     private static byte[]? TryRenderPngWithExternalImageMagick(string svg, int width, int height)
     {
         if (string.IsNullOrWhiteSpace(svg))
@@ -187,7 +190,7 @@ internal static partial class WebSocialCardGenerator
             try
             {
                 var candidate = Path.Combine(directory, name);
-                if (File.Exists(candidate))
+                if (File.Exists(candidate) && IsExecutable(candidate))
                     return candidate;
             }
             catch
@@ -197,6 +200,22 @@ internal static partial class WebSocialCardGenerator
         }
 
         return null;
+    }
+
+    private static bool IsExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+            return true;
+
+        try
+        {
+            var mode = File.GetUnixFileMode(path);
+            return (mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return false;
+        }
     }
 
     internal static string RenderSvg(SocialCardRenderOptions options)

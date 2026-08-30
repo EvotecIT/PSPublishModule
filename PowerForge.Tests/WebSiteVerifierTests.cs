@@ -2722,7 +2722,8 @@ public partial class WebSiteVerifierTests
             var missingRouteWarnings = result.Warnings.Where(warning =>
                 warning.Contains($"points to '{cardRoute}'", StringComparison.Ordinal) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
-            Assert.True(missingRouteWarnings.Length == 0, string.Join(Environment.NewLine, missingRouteWarnings));
+            var cardPath = Path.Combine(outputRoot, cardRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            Assert.Equal(File.Exists(cardPath), missingRouteWarnings.Length == 0);
         }
         finally
         {
@@ -2803,9 +2804,9 @@ public partial class WebSiteVerifierTests
             foreach (var route in new[] { sectionCardRoute, paginationCardRoute })
             {
                 Assert.StartsWith("/assets/social/generated/", route, StringComparison.Ordinal);
-                Assert.DoesNotContain(result.Warnings, warning =>
-                    warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
-                    warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal(
+                    WebSocialCardGenerator.IsPngRenderingAvailable(),
+                    !HasMissingRouteWarning(result, route));
             }
         }
         finally
@@ -2877,9 +2878,9 @@ public partial class WebSiteVerifierTests
 
             var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
 
-            Assert.DoesNotContain(result.Warnings, warning =>
-                warning.Contains($"points to '{builtRoute}'", StringComparison.Ordinal) &&
-                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(
+                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                !HasMissingRouteWarning(result, builtRoute));
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains($"points to '{routeWithoutThemeTokens}'", StringComparison.Ordinal) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
@@ -2918,8 +2919,9 @@ public partial class WebSiteVerifierTests
 
             var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
 
-            var rootAssetWarnings = result.Warnings.Where(warning => warning.Contains($"points to '{withRoot}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
-            Assert.True(rootAssetWarnings.Length == 0, string.Join(Environment.NewLine, result.Warnings));
+            Assert.Equal(
+                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                !HasMissingRouteWarning(result, withRoot));
             Assert.Contains(result.Warnings, warning => warning.Contains($"points to '{withoutRoot}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
@@ -2991,8 +2993,9 @@ public partial class WebSiteVerifierTests
 
             var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
 
-            var fallbackWarnings = result.Warnings.Where(warning => warning.Contains($"points to '{builtCard}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
-            Assert.True(fallbackWarnings.Length == 0, string.Join(Environment.NewLine, result.Warnings));
+            Assert.Equal(
+                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                !HasMissingRouteWarning(result, builtCard));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

@@ -703,20 +703,26 @@ public static partial class WebSiteVerifier
                     {
                         if (!existingTermRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
                             warnings.Add($"Taxonomy term route '{termRoute}' overlaps content route '{existingTermRoute}'.");
-                        continue;
+                    }
+                    else
+                    {
+                        routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
                     }
 
-                    routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
-                    taxonomyRoutes.Add(new CollectionRoute(
-                        taxonomy.Name,
-                        termRoute,
-                        $"[taxonomy:{taxonomy.Name}:{language}:{term}]",
-                        false,
-                        language,
-                        string.Empty,
-                        PageKind.Term,
-                        taxonomy.Outputs ?? Array.Empty<string>(),
-                        term));
+                    if (!taxonomyRoutes.Any(route => route.Kind == PageKind.Term &&
+                                                     route.Route.Equals(termRoute, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        taxonomyRoutes.Add(new CollectionRoute(
+                            taxonomy.Name,
+                            termRoute,
+                            $"[taxonomy:{taxonomy.Name}:{language}:{term}]",
+                            false,
+                            language,
+                            string.Empty,
+                            PageKind.Term,
+                            taxonomy.Outputs ?? Array.Empty<string>(),
+                            term));
+                    }
                 }
             }
         }
