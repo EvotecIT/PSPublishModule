@@ -203,6 +203,7 @@ public static partial class WebSiteVerifier
             {
                 item.Title = renderedItem.Title;
                 item.Description = renderedItem.Description;
+                item.Date = renderedItem.Date;
                 item.HtmlContent = renderedItem.HtmlContent;
             }
             item.OutputPath = route.Route;
@@ -430,7 +431,10 @@ public static partial class WebSiteVerifier
                     !NormalizeRouteForNavigationMatch(outputRoute).Equals(
                         NormalizeRouteForNavigationMatch(route.Route),
                         StringComparison.OrdinalIgnoreCase))
-                    yield return outputRoute;
+                {
+                    foreach (var physicalRoute in GetStaticAssetRoutes(outputRoute))
+                        yield return physicalRoute;
+                }
             }
         }
     }

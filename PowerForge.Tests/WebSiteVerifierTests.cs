@@ -649,6 +649,8 @@ public partial class WebSiteVerifierTests
             {
                 "/blog/",
                 "/blog/index.json",
+                "/blog/index.htm",
+                "/blog/index",
                 "/404.html",
                 "/manual.pdf",
                 "/legacy.html",
@@ -672,9 +674,13 @@ public partial class WebSiteVerifierTests
                 ThemesRoot = "themes",
                 DataRoot = "./payload",
                 Features = ["search"],
+                Outputs = new OutputsSpec
+                {
+                    Formats = [new OutputFormatSpec { Name = "legacy", MediaType = "text/html", Suffix = "htm" }]
+                },
                 Collections =
                 [
-                    new CollectionSpec { Name = "blog", Input = "content/blog", Output = "/blog", AutoGenerateSectionIndex = true, Outputs = ["html", "json"] },
+                    new CollectionSpec { Name = "blog", Input = "content/blog", Output = "/blog", AutoGenerateSectionIndex = true, Outputs = ["html", "json", "legacy"] },
                     new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" },
                     new CollectionSpec { Name = "feeds", Input = "content/feeds", Output = "/feed-only", Outputs = ["json"] }
                 ],
@@ -717,6 +723,7 @@ public partial class WebSiteVerifierTests
                      {
                          Path.Combine("blog", "index.html"),
                          Path.Combine("blog", "index.json"),
+                         Path.Combine("blog", "index.htm"),
                          "404.html",
                          "manual.pdf",
                          Path.Combine("search", "index.json"),
@@ -2619,7 +2626,7 @@ public partial class WebSiteVerifierTests
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\n**Generated card route.**");
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\ndate: 2026-08-30\nslug: index\n---\n**Generated card route.**");
             File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
             var spec = new SiteSpec
             {
@@ -2634,6 +2641,7 @@ public partial class WebSiteVerifierTests
                     AutoGenerateCards = true,
                     GeneratedCardsPath = "/assets/social/generated"
                 },
+                Seo = new SeoSpec { Templates = new SeoTemplatesSpec { Description = "{date}: {description}" } },
                 Navigation = new NavigationSpec { AutoDefaults = false }
             };
             var configPath = Path.Combine(root, "site.json");
@@ -2649,6 +2657,7 @@ public partial class WebSiteVerifierTests
                 OutputPath = "/",
                 Title = "Home",
                 Description = string.Empty,
+                Date = new DateTime(2026, 8, 30),
                 Slug = "index",
                 Kind = PageKind.Home,
                 HtmlContent = "<p><strong>Generated card route.</strong></p>",
