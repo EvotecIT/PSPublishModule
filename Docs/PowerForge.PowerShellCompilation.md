@@ -562,7 +562,7 @@ powerforge powershell census `
     --baseline .\Benchmarks\PowerShellCompilation\Corpus\census-baseline.net10.json
 ```
 
-See [the corpus README](../Benchmarks/PowerShellCompilation/Corpus/README.md) for the contract split. External repositories can be added, replaced, or removed as scale workloads without changing the compiler design.
+See [the corpus README](../Benchmarks/PowerShellCompilation/Corpus/README.md) for the contract split. External repositories can be added, replaced, or removed as scale workloads without changing the compiler design. The fixed public packet remains the acceptance gate; a separate exact-hash external assessment packet records low-coverage frontier inputs without silently redefining that gate.
 
 ## Arbitrary-source eligibility
 
@@ -582,6 +582,10 @@ powerforge powershell census `
 The census records discovery, typed/fallback coverage, parse errors, analyzer duration, dependency summaries, stable missing-feature impact, and frequent co-blocker pairs. A baseline fails when an input disappears, typed coverage decreases, fallback increases, parse errors increase, or normalized source identity changes. External source trees are private, replaceable regression workloads; they are not committed compiler configuration and cannot authorize a special-case intrinsic.
 
 Low coverage is not hidden by Hybrid mode. Every fallback is reported with a diagnostic. The machine-readable `functionFrontier` separates occurrences, affected units, visible sole blockers, and complete-input candidates so roadmap priority comes from repeated generic semantic shapes rather than a named module. Strict mode remains the proof boundary for a module with no authored runtime fallback.
+
+The checked-in external assessment runner adds reproducible acquisition around the same census. Each workload supplies only evidence metadata: HTTPS payload, immutable revision or package version, SHA-256, license status, entry point, and scenario family. The runner never imports or executes the payload. Its baseline requires the same source fingerprint and discovered surface, rejects new parser errors or fallback regressions, and allows reviewed emission gains. This lane answers “what generic capability is missing next?”; it does not certify that an assessed program runs as a binary artifact.
+
+The initial six-workload assessment covers two AD CS modules, CIM/device registration, WMI/CIM/remoting/report generation, a cross-platform installer, and a Windows package bootstrapper. It discovers 154 source files, 185 executable units, and 173 authored functions with zero parser-error files. Current post-emission results are 3/185 units (1.62%) and 3/173 functions (1.73%), with zero complete-workload executions because this is a census-only lane. The ratios describe only this pinned packet. They are not PowerShell-language coverage and do not predict arbitrary-script success.
 
 ## Security and distribution limits
 

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-external-powershell-assessment-net10-v1",
+  "fixedOn": "2026-08-30",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net10.0",
+  "purpose": "Replaceable, non-acceptance coverage assessment. Workload identity is evidence metadata and never a compiler eligibility input.",
+  "workloads": [
+    {
+      "id": "locksmith",
+      "workloadKind": "Module",
+      "scenarioFamily": "active-directory-certificate-services",
+      "repositoryUrl": "https://github.com/jakehildreth/locksmith",
+      "license": "Commons Clause License Condition v1.0",
+      "licenseUrl": "https://github.com/jakehildreth/locksmith/blob/a58905638fe819c8cc11ee7fd4f0a8513b5c873a/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "a58905638fe819c8cc11ee7fd4f0a8513b5c873a",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/jakehildreth/locksmith/zip/a58905638fe819c8cc11ee7fd4f0a8513b5c873a",
+        "sha256": "fb117dbbd39cf32f3d7db347380174ea5e1576078f81536365a6c987712bb070"
+      },
+      "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1"
+    },
+    {
+      "id": "locksmith2",
+      "workloadKind": "Module",
+      "scenarioFamily": "active-directory-certificate-services",
+      "repositoryUrl": "https://github.com/jakehildreth/locksmith2",
+      "license": "Commons Clause License Condition v1.0",
+      "licenseUrl": "https://github.com/jakehildreth/locksmith2/blob/f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/jakehildreth/locksmith2/zip/f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+        "sha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9"
+      },
+      "entryPoint": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1"
+    },
+    {
+      "id": "get-windows-autopilot-info",
+      "workloadKind": "Script",
+      "scenarioFamily": "cim-device-registration-graph",
+      "repositoryUrl": "https://www.powershellgallery.com/packages/Get-WindowsAutoPilotInfo/3.9",
+      "license": "Unspecified in package metadata; payload remains external",
+      "licenseUrl": "https://www.powershellgallery.com/packages/Get-WindowsAutoPilotInfo/3.9",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "3.9",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Get-WindowsAutoPilotInfo/3.9",
+        "sha256": "c93baac868b20d93df1da81ebe6f35166feb4b62e25d56200522259d6599398a"
+      },
+      "entryPoint": "Get-WindowsAutopilotInfo.ps1"
+    },
+    {
+      "id": "getbios",
+      "workloadKind": "Module",
+      "scenarioFamily": "wmi-cim-remoting-reporting",
+      "repositoryUrl": "https://www.powershellgallery.com/packages/GetBIOS/1.3.3",
+      "license": "Unspecified in package metadata; package copyright states all rights reserved; payload remains external",
+      "licenseUrl": "https://www.powershellgallery.com/packages/GetBIOS/1.3.3",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "1.3.3",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/GetBIOS/1.3.3",
+        "sha256": "83625804e898c62516a3a37384d6f197d9ccb1b2bec1de7f8999d3d303ec4e44"
+      },
+      "entryPoint": "GetBIOS.psd1"
+    },
+    {
+      "id": "powershell-install-script",
+      "workloadKind": "Script",
+      "scenarioFamily": "cross-platform-network-process-filesystem",
+      "repositoryUrl": "https://github.com/PowerShell/PowerShell",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/PowerShell/PowerShell/blob/eb8b76e7c669423a016b5b405be5c9431849a338/LICENSE.txt",
+      "revisionKind": "GitCommit",
+      "revision": "eb8b76e7c669423a016b5b405be5c9431849a338",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/PowerShell/PowerShell/eb8b76e7c669423a016b5b405be5c9431849a338/tools/install-powershell.ps1",
+        "sha256": "e84ea7b8c429c1d474664f5601f23f88201b21152a32f0a47906866da290273c"
+      },
+      "entryPoint": "install-powershell.ps1"
+    },
+    {
+      "id": "scoop-install-script",
+      "workloadKind": "Script",
+      "scenarioFamily": "windows-package-bootstrap-security",
+      "repositoryUrl": "https://github.com/ScoopInstaller/Install",
+      "license": "Unlicense",
+      "licenseUrl": "https://github.com/ScoopInstaller/Install/blob/1e2f334083d609986d8c8bc9e31ae8e87c39fab4/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "1e2f334083d609986d8c8bc9e31ae8e87c39fab4",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/ScoopInstaller/Install/1e2f334083d609986d8c8bc9e31ae8e87c39fab4/install.ps1",
+        "sha256": "94f983b190438311e006b957db7c8422709e0ba62a6c2ac04e278164108f2512"
+      },
+      "entryPoint": "install.ps1"
+    }
+  ]
+}
