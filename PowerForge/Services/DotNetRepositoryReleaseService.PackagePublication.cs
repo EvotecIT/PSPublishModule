@@ -114,7 +114,10 @@ public sealed partial class DotNetRepositoryReleaseService
             usePlannedProjectGraph: spec.WhatIf,
             configuration: spec.Configuration,
             packStrategy: spec.PackStrategy,
-            includeSymbols: spec.IncludeSymbols);
+            includeSymbols: spec.IncludeSymbols,
+            packageOutputPath: string.IsNullOrWhiteSpace(spec.OutputPath)
+                ? null
+                : (Path.IsPathRooted(spec.OutputPath!) ? spec.OutputPath : Path.GetFullPath(Path.Combine(root, spec.OutputPath!))));
         var orderedProjects = publishPlan.OrderedProjects;
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();

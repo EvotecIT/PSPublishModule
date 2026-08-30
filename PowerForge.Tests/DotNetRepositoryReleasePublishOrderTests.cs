@@ -193,6 +193,61 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfUsesPerProjectFallbackWithoutMsBuildOutputPath()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(BuildProjectReferences)' != 'false'">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish(
+                [app, shared],
+                usePlannedProjectGraph: true,
+                configuration: "Release",
+                packStrategy: DotNetRepositoryPackStrategy.MSBuild,
+                packageOutputPath: null);
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfMatchesPackageOutputPath()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(PackageOutputPath)' != ''">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+        var outputPath = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!, "packages");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish(
+                [app, shared],
+                usePlannedProjectGraph: true,
+                configuration: "Release",
+                packStrategy: DotNetRepositoryPackStrategy.MSBuild,
+                packageOutputPath: outputPath);
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_WhatIfMatchesSymbolPackProperties()
     {
         using var workspace = new PublishOrderWorkspace();
@@ -282,6 +337,28 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
             .SortProjectsForPublish([shared, app], usePlannedProjectGraph: true, configuration: "Release");
 
         Assert.Equal(["App", "Shared"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfKeepsPackageReferenceWithProjectOnlyMetadata()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Shared" Version="[1.0.0]" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
     }
 
     [Fact]

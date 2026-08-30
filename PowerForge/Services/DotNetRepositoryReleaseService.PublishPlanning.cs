@@ -17,15 +17,17 @@ public sealed partial class DotNetRepositoryReleaseService
         bool usePlannedProjectGraph = false,
         string? configuration = null,
         DotNetRepositoryPackStrategy packStrategy = DotNetRepositoryPackStrategy.PerProject,
-        bool includeSymbols = false)
-        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy, includeSymbols).OrderedProjects;
+        bool includeSymbols = false,
+        string? packageOutputPath = null)
+        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy, includeSymbols, packageOutputPath).OrderedProjects;
 
     private PublishPlan CreatePublishPlan(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph,
         string? configuration,
         DotNetRepositoryPackStrategy packStrategy,
-        bool includeSymbols)
+        bool includeSymbols,
+        string? packageOutputPath)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -45,7 +47,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var entry in byPackageId)
         {
             var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy, includeSymbols)
+                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy, includeSymbols, packageOutputPath)
                 : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
             dependencies[entry.Key].UnionWith(selectedDependencies);
         }
@@ -169,7 +171,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
         string? configuration,
         DotNetRepositoryPackStrategy packStrategy,
-        bool includeSymbols)
+        bool includeSymbols,
+        string? packageOutputPath)
     {
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
@@ -182,7 +185,8 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => entry.Key,
             pathComparer);
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, packStrategy, includeSymbols);
+        var useMsBuildTraversal = packStrategy == DotNetRepositoryPackStrategy.MSBuild && !string.IsNullOrWhiteSpace(packageOutputPath);
+        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
         ValidatePlanningContract(project, outer);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
@@ -192,7 +196,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
-                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, packStrategy, includeSymbols);
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath);
                 ValidatePlanningContract(project, evaluation);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
@@ -226,7 +230,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         foreach (var reference in evaluation.ProjectReferences)
         {
-            if (reference.IsExcludedFromPackage())
+            if (reference.IsProjectReferenceExcludedFromPackage())
                 continue;
             var fullPath = reference.Get("FullPath");
             if (!string.IsNullOrWhiteSpace(fullPath) && selectedProjectPaths.TryGetValue(Path.GetFullPath(fullPath), out var packageId))
@@ -235,7 +239,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
         foreach (var reference in evaluation.PackageReferences)
         {
-            if (reference.IsExcludedFromPackage())
+            if (reference.IsPackageReferenceExcludedFromPackage())
                 continue;
             var packageId = reference.Get("Identity");
             if (string.IsNullOrWhiteSpace(packageId) || !selectedPackages.TryGetValue(packageId!, out var selectedPackage))
@@ -250,8 +254,9 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryProjectResult project,
         string? targetFramework,
         string? configuration,
-        DotNetRepositoryPackStrategy packStrategy,
-        bool includeSymbols)
+        bool useMsBuildTraversal,
+        bool includeSymbols,
+        string? packageOutputPath)
     {
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
@@ -264,8 +269,10 @@ public sealed partial class DotNetRepositoryReleaseService
             "-p:NoBuild=true",
             $"-p:Configuration={(string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim())}"
         };
-        if (packStrategy == DotNetRepositoryPackStrategy.MSBuild)
+        if (useMsBuildTraversal)
             arguments.Add("-p:BuildProjectReferences=false");
+        if (!string.IsNullOrWhiteSpace(packageOutputPath))
+            arguments.Add($"-p:PackageOutputPath={Path.GetFullPath(packageOutputPath!)}");
         if (includeSymbols)
         {
             arguments.Add("-p:IncludeSymbols=true");
@@ -412,10 +419,12 @@ public sealed partial class DotNetRepositoryReleaseService
         private readonly IReadOnlyDictionary<string, string> _metadata;
         internal PublishPlanningItem(IReadOnlyDictionary<string, string> metadata) => _metadata = metadata;
         internal string? Get(string name) => _metadata.TryGetValue(name, out var value) ? value : null;
-        internal bool IsExcludedFromPackage()
-            => IsFalse("ReferenceOutputAssembly") || IsFalse("BuildReference") || IsFalse("TreatAsPackageReference") ||
-               ((Get("PrivateAssets") ?? string.Empty).Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
-                   .Any(value => string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase)));
+        internal bool IsProjectReferenceExcludedFromPackage()
+            => IsFalse("ReferenceOutputAssembly") || IsFalse("BuildReference") || IsFalse("TreatAsPackageReference") || HasPrivateAssetsAll();
+        internal bool IsPackageReferenceExcludedFromPackage() => HasPrivateAssetsAll();
+        private bool HasPrivateAssetsAll()
+            => (Get("PrivateAssets") ?? string.Empty).Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(value => string.Equals(value.Trim(), "all", StringComparison.OrdinalIgnoreCase));
         private bool IsFalse(string name) => string.Equals(Get(name), "false", StringComparison.OrdinalIgnoreCase);
     }
 }
