@@ -315,7 +315,8 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToDictionary(
                 group => group.Key,
                 group => group
-                    .Select(node => node.EvaluatedProperties)
+                    .Select(node => node.Request.BuildControlledEvaluationProperties(
+                        node.EvaluatedProperties))
                     .GroupBy(
                         properties => string.Join("\n", properties.OrderBy(
                             property => property.Key,

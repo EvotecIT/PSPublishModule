@@ -63,15 +63,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 IReadOnlyDictionary<string, string>? knownEvaluatedProperties = null)
             {
                 var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (KeyValuePair<string, string> property in contextRequest.ReadEffectiveGlobalProperties())
-                {
-                    if (controlledConditionPropertyNameSet.Contains(property.Key))
-                        properties[property.Key] = property.Value;
-                }
-                foreach (KeyValuePair<string, string> property in knownEvaluatedProperties ??
-                         ReadEvaluatedProjectProperties(
-                             contextRequest,
-                             controlledConditionPropertyNames))
+                IReadOnlyDictionary<string, string> evaluatedContext =
+                    contextRequest.BuildControlledEvaluationProperties(
+                        knownEvaluatedProperties ?? ReadEvaluatedProjectProperties(
+                            contextRequest,
+                            controlledConditionPropertyNames));
+                foreach (KeyValuePair<string, string> property in evaluatedContext)
                 {
                     if (controlledConditionPropertyNameSet.Contains(property.Key))
                         properties[property.Key] = property.Value;

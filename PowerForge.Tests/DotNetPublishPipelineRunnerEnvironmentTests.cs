@@ -135,6 +135,34 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
     }
 
     [Fact]
+    public void ControlledEvaluationProperties_OmitEnvironmentValuesNotAdmittedToControlledBuild()
+    {
+        IReadOnlyDictionary<string, string> properties =
+            DotNetPublishPipelineRunner.CreateControlledEvaluationProperties(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Configuration"] = "Release",
+                    ["GLOBAL_BUILD_VALUE"] = "global-value"
+                },
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Configuration"] = "Release",
+                    ["GLOBAL_BUILD_VALUE"] = "environment-value",
+                    ["PRIVATE_BUILD_TOKEN"] = "secret-value",
+                    ["PUBLIC_BUILD_VALUE"] = "stable-value",
+                    ["ProjectProperty"] = "project-value"
+                },
+                ["GLOBAL_BUILD_VALUE", "PRIVATE_BUILD_TOKEN", "PUBLIC_BUILD_VALUE"],
+                ["PUBLIC_BUILD_VALUE"]);
+
+        Assert.Equal("Release", properties["Configuration"]);
+        Assert.Equal("global-value", properties["GLOBAL_BUILD_VALUE"]);
+        Assert.Equal("stable-value", properties["PUBLIC_BUILD_VALUE"]);
+        Assert.Equal("project-value", properties["ProjectProperty"]);
+        Assert.False(properties.ContainsKey("PRIVATE_BUILD_TOKEN"));
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenRequiredDotNetEnvironmentVariableIsMissing()
     {
         var root = CreateTempRoot();

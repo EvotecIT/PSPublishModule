@@ -16,15 +16,18 @@ public sealed partial class DotNetPublishPipelineRunner
 
         XElement? target = element.AncestorsAndSelf().FirstOrDefault(candidate =>
             candidate.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
-        if (target is null ||
-            IsDefinitelyInactiveMsBuildElement(target, evaluatedProperties, definingProjectPath))
-        {
+        if (target is null)
             return true;
-        }
+
+        bool targetIsDefinitelyInactive = IsDefinitelyInactiveMsBuildElement(
+            target,
+            evaluatedProperties,
+            definingProjectPath);
 
         HashSet<string> conditionProperties = ReadControlledBuildConditionPropertyNames(
             element,
-            target);
+            target,
+            includeTargetCondition: targetIsDefinitelyInactive);
         if (conditionProperties.Count == 0)
             return true;
 
@@ -49,13 +52,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static HashSet<string> ReadControlledBuildConditionPropertyNames(
         XElement element,
-        XElement target)
+        XElement target,
+        bool includeTargetCondition)
     {
         var propertyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         IEnumerable<string> conditions = element.AncestorsAndSelf()
             .TakeWhile(candidate => !ReferenceEquals(candidate, target))
             .Select(candidate => candidate.Attribute("Condition")?.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))!;
+        if (includeTargetCondition && !string.IsNullOrWhiteSpace(target.Attribute("Condition")?.Value))
+            conditions = conditions.Prepend(target.Attribute("Condition")!.Value);
         IEnumerable<string> precedingWhenConditions = element.AncestorsAndSelf()
             .TakeWhile(candidate => !ReferenceEquals(candidate, target))
             .Where(candidate =>

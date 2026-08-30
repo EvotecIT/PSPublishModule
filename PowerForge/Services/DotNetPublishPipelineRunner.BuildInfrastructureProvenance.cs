@@ -172,12 +172,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(controlledOutputRoot);
             IReadOnlyDictionary<string, string> effectiveGlobalProperties =
                 request.ReadEffectiveGlobalProperties();
-            var controlledEvaluationProperties = new Dictionary<string, string>(
-                StringComparer.OrdinalIgnoreCase);
-            foreach (KeyValuePair<string, string> property in effectiveGlobalProperties)
-                controlledEvaluationProperties[property.Key] = property.Value;
-            foreach (KeyValuePair<string, string> property in evaluatedProperties)
-                controlledEvaluationProperties[property.Key] = property.Value;
+            IReadOnlyDictionary<string, string> controlledEvaluationProperties =
+                request.BuildControlledEvaluationProperties(evaluatedProperties);
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
                     controlledSourceRoot,
@@ -713,6 +709,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties["TargetFramework"] = TargetFramework!;
             return properties;
         }
+
+        internal IReadOnlyDictionary<string, string> BuildControlledEvaluationProperties(
+            IReadOnlyDictionary<string, string> evaluatedProperties)
+            => CreateControlledEvaluationProperties(
+                ReadEffectiveGlobalProperties(),
+                evaluatedProperties,
+                EnvironmentVariables.Keys,
+                ControlledBuildEnvironmentVariableNames);
 
         internal ProjectEvaluationRequest ForProject(string projectPath, string? targetFramework)
             => new(

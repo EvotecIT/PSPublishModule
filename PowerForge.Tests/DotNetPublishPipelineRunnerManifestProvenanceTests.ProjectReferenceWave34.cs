@@ -90,7 +90,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.True(provenance.Dirty);
             Assert.Contains(
                 provenance.DirtyReasons,
-                reason => reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase));
+                reason => useEnvironmentVariable
+                    ? reason.Contains("MSBuild input evaluation failed", StringComparison.Ordinal)
+                    : reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
