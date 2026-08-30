@@ -331,8 +331,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 !string.Equals(publicAbi?.Sha256, spec.ExpectedPublicAbiSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The generated public ABI does not match the expected ABI SHA-256.");
 
+            var resolvedPackageLockSha256 = PrepareExactNuGetClosureLock(spec, projectPath);
             GeneratedBuildProcessResult? restore = null;
-            if (spec.UseBuildCache)
+            if (spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
             {
                 failureStage = PowerShellCompilationFailureStage.Restore;
                 restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier);
@@ -509,6 +510,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     TargetContract = targetContract,
                     Toolchain = toolchain,
                     BuildCache = buildCache,
+                    ResolvedPackageLockSha256 = resolvedPackageLockSha256,
                     IrOptimization = optimizationEvidence,
                     IrSnapshots = irSnapshotEvidence,
                     DecisionTrace = decisionTrace,

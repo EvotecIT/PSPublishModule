@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -35,6 +36,16 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         Assert.True(offline.Succeeded, string.Join(Environment.NewLine, offline.Targets.Select(static result => result.Message)));
         var build = workflow.Build(fixture.ProjectPath);
         Assert.True(build.Succeeded, string.Join(Environment.NewLine, build.Targets.Select(static result => result.Message)));
+        var environmentAfterBuild = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
+            File.ReadAllText(Path.Combine(fixture.Root, ".powerforge", "environment", "environment.json")),
+            PowerShellCompilationProjectManifestService.JsonOptions)!;
+        var builtManifest = JsonSerializer.Deserialize<PowerShellCompilationArtifactManifest>(
+            File.ReadAllText(Path.Combine(
+                fixture.Root,
+                Assert.Single(manifest.Artifacts).OutputDirectory.Replace('/', Path.DirectorySeparatorChar),
+                "GenericProject." + Assert.Single(manifest.Artifacts).Name + ".powerforge-compilation.json")),
+            PowerShellCompilationProjectManifestService.JsonOptions)!;
+        Assert.Equal(Assert.Single(environmentAfterBuild.ResolvedLocks).Sha256, builtManifest.ResolvedPackageLockSha256);
         var prematurePack = workflow.Pack(fixture.ProjectPath);
         Assert.False(prematurePack.Succeeded);
         Assert.Contains("project test", Assert.Single(prematurePack.Targets).Message, StringComparison.OrdinalIgnoreCase);
@@ -82,6 +93,32 @@ public sealed class PowerShellCompilationProjectWorkflowTests
             PowerShellCompilationProjectManifestService.JsonOptions)!;
         var package = Assert.Single(environment.Packages, static item => item.Id.Equals("Humanizer.Core", StringComparison.OrdinalIgnoreCase));
         var packageRoot = Path.Combine(environment.PackageRoot, package.Id.ToLowerInvariant(), package.Version.ToLowerInvariant());
+        var nuGetPackagePath = Path.Combine(packageRoot, package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg");
+        var archiveHashPath = nuGetPackagePath + ".sha512";
+        var originalArchive = File.ReadAllBytes(nuGetPackagePath);
+        var originalArchiveHash = File.ReadAllText(archiveHashPath);
+        try
+        {
+            using (var archive = ZipFile.Open(nuGetPackagePath, ZipArchiveMode.Update))
+            using (var writer = new StreamWriter(archive.CreateEntry("unreviewed-content.bin").Open()))
+                writer.Write("mutable sidecars must not authenticate altered package content");
+            using var hash = SHA512.Create();
+            File.WriteAllText(archiveHashPath, Convert.ToBase64String(hash.ComputeHash(File.ReadAllBytes(nuGetPackagePath))));
+            var firstAcquisition = new PowerShellCompilationProjectPackage
+            {
+                Id = package.Id,
+                Version = package.Version,
+                ContentHash = package.ContentHash
+            };
+            var canonicalException = Assert.Throws<InvalidDataException>(() =>
+                PowerShellCompilationNuGetPackageVerifier.Verify(environment.PackageRoot, firstAcquisition));
+            Assert.Contains("reviewed NuGet content hash", canonicalException.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.WriteAllBytes(nuGetPackagePath, originalArchive);
+            File.WriteAllText(archiveHashPath, originalArchiveHash);
+        }
         var extractedFile = Directory.EnumerateFiles(packageRoot, "*", SearchOption.AllDirectories)
             .First(path => !path.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) &&
                            !path.EndsWith(".nupkg.sha512", StringComparison.OrdinalIgnoreCase) &&

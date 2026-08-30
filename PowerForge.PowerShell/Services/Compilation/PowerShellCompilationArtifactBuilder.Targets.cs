@@ -149,7 +149,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationProviderLock providerLock,
         string generatedSourceSha256)
     {
-        var resolvedPackages = PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph);
+        var resolvedPackages = PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph, spec.NuGetLockFilePath);
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var sources = new[] { spec.SourcePath }.Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Select(Path.GetFullPath)
@@ -170,6 +170,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             targetContractSha256 = target.ContractSha256,
             dependencyLockSha256 = graph.LockSha256,
             providerLockSha256 = providerLock.Packages.Length == 0 ? string.Empty : providerLock.LockSha256,
+            resolvedPackageLockSha256 = string.IsNullOrWhiteSpace(spec.NuGetLockFilePath)
+                ? string.Empty
+                : ComputeSha256(spec.NuGetLockFilePath!),
             generatedSourceSha256,
             reviewedDependencyLock = spec.ExpectedDependencyLock is not null,
             reviewedProviderLock = providerLock.Packages.Length > 0 && spec.ExpectedProviderLock is not null,

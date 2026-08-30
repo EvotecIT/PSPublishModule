@@ -194,6 +194,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Optional isolated NuGet global-packages root used by generated restore and build processes.</summary>
     public string? NuGetPackageRoot { get; set; }
 
+    /// <summary>Optional exact NuGet transitive-closure lock that the generated compilation project must consume.</summary>
+    public string? NuGetLockFilePath { get; set; }
+
     /// <summary>Whether generated restore must use only packages already present in the isolated package root.</summary>
     public bool OfflineRestore { get; set; }
 
@@ -270,7 +273,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 11;
+    public int SchemaVersion { get; set; } = 12;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -301,6 +304,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Content-addressed generated-build cache result.</summary>
     public PowerShellCompilationBuildCacheEvidence? BuildCache { get; set; }
+
+    /// <summary>SHA-256 of the exact NuGet transitive-closure lock consumed by the generated project.</summary>
+    public string ResolvedPackageLockSha256 { get; set; } = string.Empty;
 
     /// <summary>Bound-IR optimization evidence for generated typed methods.</summary>
     public PowerShellCompilationOptimizationEvidence? IrOptimization { get; set; }

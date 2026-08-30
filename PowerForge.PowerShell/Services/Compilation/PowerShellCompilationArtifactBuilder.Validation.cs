@@ -62,6 +62,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
         if (spec.TimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(spec), "Build timeout must be positive.");
+        if (!string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
+        {
+            var nuGetLockPath = Path.GetFullPath(spec.NuGetLockFilePath!.Trim().Trim('"'));
+            if (!File.Exists(nuGetLockPath))
+                throw new FileNotFoundException("The exact NuGet closure lock was not found.", nuGetLockPath);
+            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
+                nuGetLockPath,
+                "The exact NuGet closure lock traverses a symbolic link or junction.");
+        }
         if (spec.SignArtifact && string.IsNullOrWhiteSpace(spec.TimeStampServer))
             throw new ArgumentException("Signing requires an RFC3161 timestamp server URL.", nameof(spec));
         if (spec.SigningTimeoutSeconds < 1)

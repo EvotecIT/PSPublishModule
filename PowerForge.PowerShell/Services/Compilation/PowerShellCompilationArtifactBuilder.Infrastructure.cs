@@ -77,6 +77,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--ignore-failed-sources");
             arguments.Add("--no-cache");
         }
+        if (!string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
+        {
+            arguments.Add("--locked-mode");
+            arguments.Add("--property:NuGetLockFilePath=" + Path.Combine(
+                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
+                "packages.lock.json"));
+        }
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier))
         {
             arguments.Add("--runtime");

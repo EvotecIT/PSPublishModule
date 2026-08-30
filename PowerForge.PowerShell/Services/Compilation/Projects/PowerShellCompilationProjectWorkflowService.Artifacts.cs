@@ -28,6 +28,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 if (!string.IsNullOrWhiteSpace(artifact.ProviderLock))
                     providerLock = ReadJson<PowerShellCompilationProviderLock>(context.Resolve(artifact.ProviderLock!));
                 var input = ResolveInput(context, artifact);
+                var resolvedLock = environment.ResolvedLocks.Single(item =>
+                    item.TargetName.Equals(artifact.Name, StringComparison.Ordinal));
                 var spec = new PowerShellCompilationBuildSpec(
                     input.SourcePath,
                     context.Resolve(artifact.OutputDirectory),
@@ -51,6 +53,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     EmitIrSnapshots = artifact.EmitIr,
                     DiagnosticsPolicy = context.Manifest.Diagnostics,
                     NuGetPackageRoot = environment.PackageRoot,
+                    NuGetLockFilePath = context.Resolve(resolvedLock.Path),
                     OfflineRestore = true,
                     GeneratedOutputDirectories = GetGeneratedOutputDirectories(context),
                     UseBuildCache = false
@@ -213,7 +216,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 throw new InvalidDataException("The isolated environment contains an invalid dependency-lock identity.");
         }
         foreach (var package in environment.Packages)
-            _ = VerifyPackage(environment.PackageRoot, package);
+            _ = PowerShellCompilationNuGetPackageVerifier.Verify(environment.PackageRoot, package);
         if (environment.ResolvedLocks.Length == 0)
             throw new InvalidDataException("The isolated environment records no exact NuGet transitive-closure locks.");
         foreach (var resolvedLock in environment.ResolvedLocks)

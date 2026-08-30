@@ -71,7 +71,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 VerifyAssetsClosure(Path.Combine(restoreRoot, "obj", "project.assets.json"), resolvedPackages, artifact.Name);
                 foreach (var package in resolvedPackages)
                 {
-                    var verified = VerifyPackage(packageRoot, package);
+                    var verified = PowerShellCompilationNuGetPackageVerifier.Verify(packageRoot, package);
                     verifiedPackages[verified.Id + "/" + verified.Version] = verified;
                 }
                 resolvedLocks.Add(new PowerShellCompilationProjectResolvedLock
@@ -195,49 +195,6 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         return projectPath;
     }
 
-    private static PowerShellCompilationProjectPackage VerifyPackage(string packageRoot, PowerShellCompilationProjectPackage package)
-    {
-        if (string.IsNullOrWhiteSpace(package.Id) || string.IsNullOrWhiteSpace(package.Version) || string.IsNullOrWhiteSpace(package.ContentHash))
-            throw new InvalidDataException("A project dependency lock contains an incomplete package identity.");
-        var versionRoot = Path.Combine(packageRoot, package.Id.ToLowerInvariant(), package.Version.ToLowerInvariant());
-        var packagePath = Path.Combine(versionRoot, package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg");
-        var hashPath = Path.Combine(versionRoot, package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg.sha512");
-        var metadataPath = Path.Combine(versionRoot, ".nupkg.metadata");
-        if (!File.Exists(packagePath) || !File.Exists(hashPath) || !File.Exists(metadataPath))
-            throw new FileNotFoundException($"Exact restored package '{package.Id}/{package.Version}' is incomplete in the isolated environment.", versionRoot);
-        PowerShellCompilationPathSafety.EnsureNoLinks(packageRoot, versionRoot, $"Restored package '{package.Id}/{package.Version}' traverses a symbolic link or junction.");
-        string actualArchiveHash;
-        using (var stream = File.OpenRead(packagePath))
-        using (var algorithm = SHA512.Create())
-        {
-            actualArchiveHash = Convert.ToBase64String(algorithm.ComputeHash(stream));
-            var recordedArchiveHash = File.ReadAllText(hashPath).Trim();
-            if (!actualArchiveHash.Equals(recordedArchiveHash, StringComparison.Ordinal))
-                throw new InvalidDataException($"Restored package archive '{package.Id}/{package.Version}' differs from its NuGet archive hash.");
-        }
-        if (!string.IsNullOrWhiteSpace(package.ArchiveSha512) &&
-            !actualArchiveHash.Equals(NormalizeNuGetContentHash(package.ArchiveSha512), StringComparison.Ordinal))
-            throw new InvalidDataException($"Restored package archive '{package.Id}/{package.Version}' differs from the isolated environment evidence.");
-        using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
-        if (!metadata.RootElement.TryGetProperty("contentHash", out var contentHashElement))
-            throw new InvalidDataException($"Restored package '{package.Id}/{package.Version}' has no NuGet content identity.");
-        var actualContentHash = contentHashElement.GetString() ?? string.Empty;
-        if (!NormalizeNuGetContentHash(actualContentHash).Equals(NormalizeNuGetContentHash(package.ContentHash), StringComparison.Ordinal))
-            throw new InvalidDataException($"Restored package '{package.Id}/{package.Version}' does not match the reviewed NuGet content hash (expected {package.ContentHash}, actual {actualContentHash}).");
-        var extractedHash = ComputeExtractedPackageSha256(versionRoot, packagePath, hashPath, metadataPath);
-        if (!string.IsNullOrWhiteSpace(package.ExtractedFilesSha256) &&
-            !package.ExtractedFilesSha256.Equals(extractedHash, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Extracted package payload '{package.Id}/{package.Version}' differs from the isolated environment evidence.");
-        return new PowerShellCompilationProjectPackage
-        {
-            Id = package.Id,
-            Version = package.Version,
-            ContentHash = NormalizeNuGetContentHash(package.ContentHash),
-            ArchiveSha512 = actualArchiveHash,
-            ExtractedFilesSha256 = extractedHash
-        };
-    }
-
     private static PowerShellCompilationProjectPackage[] ReadResolvedPackages(string lockPath)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(lockPath));
@@ -254,7 +211,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     !item.Value.TryGetProperty("contentHash", out var hashElement))
                     throw new InvalidDataException($"NuGet closure entry '{item.Name}' is missing its exact version or content hash.");
                 var version = resolvedElement.GetString() ?? string.Empty;
-                var contentHash = NormalizeNuGetContentHash(hashElement.GetString() ?? string.Empty);
+                var contentHash = PowerShellCompilationNuGetPackageVerifier.NormalizeContentHash(hashElement.GetString() ?? string.Empty);
                 var key = item.Name + "/" + version;
                 var package = new PowerShellCompilationProjectPackage { Id = item.Name, Version = version, ContentHash = contentHash };
                 if (packages.TryGetValue(key, out var existing) &&
@@ -282,7 +239,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             var key = package.Id + "/" + package.Version;
             if (!actual.TryGetValue(key, out var locked))
                 throw new InvalidDataException($"NuGet closure for '{targetName}' omitted reviewed package '{key}'.");
-            if (!NormalizeNuGetContentHash(package.ContentHash).Equals(locked.ContentHash, StringComparison.Ordinal))
+            if (!PowerShellCompilationNuGetPackageVerifier.NormalizeContentHash(package.ContentHash).Equals(locked.ContentHash, StringComparison.Ordinal))
                 throw new InvalidDataException($"NuGet closure for '{targetName}' changed the reviewed content identity of '{key}'.");
         }
     }
@@ -309,7 +266,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 {
                     Id = item.Name.Substring(0, separator),
                     Version = item.Name.Substring(separator + 1),
-                    ContentHash = NormalizeNuGetContentHash(hash)
+                    ContentHash = PowerShellCompilationNuGetPackageVerifier.NormalizeContentHash(hash)
                 };
             })
             .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
@@ -321,47 +278,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         if (actual.Length != expected.Length || actual.Where((package, index) =>
                 !package.Id.Equals(expected[index].Id, StringComparison.OrdinalIgnoreCase) ||
                 !package.Version.Equals(expected[index].Version, StringComparison.Ordinal) ||
-                !package.ContentHash.Equals(NormalizeNuGetContentHash(expected[index].ContentHash), StringComparison.Ordinal)).Any())
+                !package.ContentHash.Equals(PowerShellCompilationNuGetPackageVerifier.NormalizeContentHash(expected[index].ContentHash), StringComparison.Ordinal)).Any())
             throw new InvalidDataException($"NuGet assets closure for '{targetName}' differs from its exact packages.lock.json graph.");
-    }
-
-    private static string ComputeExtractedPackageSha256(
-        string versionRoot,
-        params string[] excludedPaths)
-    {
-        var excluded = excludedPaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        var files = Directory.EnumerateFiles(versionRoot, "*", SearchOption.AllDirectories)
-            .Where(path => !excluded.Contains(Path.GetFullPath(path)))
-            .OrderBy(path => FrameworkCompatibility.GetRelativePath(versionRoot, path), StringComparer.Ordinal)
-            .Select(path =>
-            {
-                PowerShellCompilationPathSafety.EnsureNoLinks(versionRoot, path, "Extracted package payload traverses a symbolic link or junction.");
-                return new
-                {
-                    path = FrameworkCompatibility.GetRelativePath(versionRoot, path).Replace('\\', '/'),
-                    sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(path),
-                    size = new FileInfo(path).Length
-                };
-            })
-            .ToArray();
-        var canonical = JsonSerializer.Serialize(files);
-        using var algorithm = SHA256.Create();
-        return PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(Encoding.UTF8.GetBytes(canonical)));
-    }
-
-    private static string NormalizeNuGetContentHash(string value)
-    {
-        var normalized = value?.Trim() ?? string.Empty;
-        if (normalized.StartsWith("sha512-", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(7);
-        try
-        {
-            if (Convert.FromBase64String(normalized).Length != 64) throw new FormatException();
-        }
-        catch (FormatException exception)
-        {
-            throw new InvalidDataException("NuGet content identity is not a SHA-512 digest.", exception);
-        }
-        return normalized;
     }
 
     private static void VerifyRuntimeAssets(string packageRoot, PowerShellCompilationDependencyGraph graph)

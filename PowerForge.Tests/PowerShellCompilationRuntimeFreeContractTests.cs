@@ -25,7 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var manifest = Assert.IsType<PowerShellCompilationArtifactManifest>(result.Manifest);
-        Assert.Equal(11, manifest.SchemaVersion);
+        Assert.Equal(12, manifest.SchemaVersion);
         Assert.False(manifest.DependencyLockReviewed);
         Assert.NotNull(manifest.SemanticProfile);
         Assert.Equal(PowerShellCompilationSemanticProfile.RuntimeFreeStrictName, manifest.SemanticProfile.Name);

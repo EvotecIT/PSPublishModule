@@ -44,6 +44,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationDependencyLockHasher.EnsureValid(dependencyLock, artifact.Name);
         if (!dependencyLock.LockSha256.Equals(manifest.DependencyGraph?.LockSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Built artifact dependency identity differs from the reviewed project lock.");
+        var resolvedLock = environment.ResolvedLocks.Single(item =>
+            item.TargetName.Equals(artifact.Name, StringComparison.Ordinal));
+        if (!resolvedLock.Sha256.Equals(manifest.ResolvedPackageLockSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Built artifact NuGet closure identity differs from the exact project restore lock.");
         var currentProviders = ResolveProviders(context);
         var currentInput = ResolveInput(context, artifact);
         var currentPlan = CreatePlan(context, artifact, currentInput, currentProviders.Providers, environment.PackageRoot);
