@@ -86,7 +86,8 @@ public sealed class PowerShellCompilationInputResolver
         IEnumerable<string> paths,
         PowerShellCompilationArtifactKind? kind = null,
         PowerShellCompilationMode? mode = null,
-        string? entryPointPath = null)
+        string? entryPointPath = null,
+        bool allowDynamicModuleRuntimeSources = false)
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         var requestedPaths = paths
@@ -97,7 +98,7 @@ public sealed class PowerShellCompilationInputResolver
         if (requestedPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
         if (requestedPaths.Length == 1 && string.IsNullOrWhiteSpace(entryPointPath))
-            return Resolve(requestedPaths[0], kind, mode);
+            return Resolve(requestedPaths[0], kind, mode, allowDynamicModuleRuntimeSources);
         if (kind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind.Value))
             throw new ArgumentOutOfRangeException(nameof(kind));
         if (mode.HasValue && (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode.Value) || mode.Value == PowerShellCompilationMode.Analyze))
@@ -195,7 +196,8 @@ public sealed class PowerShellCompilationInputResolver
     public PowerShellCompilationResolvedInput Resolve(
         string path,
         PowerShellCompilationArtifactKind? kind = null,
-        PowerShellCompilationMode? mode = null)
+        PowerShellCompilationMode? mode = null,
+        bool allowDynamicModuleRuntimeSources = false)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("A PowerShell script, module, manifest, or directory path is required.", nameof(path));
@@ -269,12 +271,17 @@ public sealed class PowerShellCompilationInputResolver
                 .Where(file => !runtimeHookSet.Contains(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            sourceFiles = new[] { sourcePath }
-                .Concat(runtimeHooks)
-                .Concat(conventionalSources)
-                .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies)
-                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
+                    ? new[] { sourcePath }
+                        .Concat(runtimeHooks)
+                        .Concat(conventionalSources)
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                        .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies)
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                    : PowerShellHybridDependencyResolver.DiscoverDependencies(
+                        sourcePath,
+                        runtimeHooks.Concat(conventionalSources),
+                        conventionalLoaders: conventionalDiscovery.Loaders))
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

@@ -53,7 +53,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 "dotnet",
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
-                TimeSpan.FromSeconds(spec.TimeoutSeconds)))
+                TimeSpan.FromSeconds(spec.TimeoutSeconds),
+                GetNuGetEnvironment(spec)))
             .GetAwaiter()
             .GetResult();
         var output = string.IsNullOrWhiteSpace(run.StdErr)
@@ -71,6 +72,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             "restore", projectPath, "--nologo", "--verbosity", "minimal"
         };
+        if (spec.OfflineRestore)
+        {
+            arguments.Add("--ignore-failed-sources");
+            arguments.Add("--no-cache");
+        }
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier))
         {
             arguments.Add("--runtime");
@@ -80,9 +86,22 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             "dotnet",
             Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
             arguments,
-            TimeSpan.FromSeconds(spec.TimeoutSeconds))).GetAwaiter().GetResult();
+            TimeSpan.FromSeconds(spec.TimeoutSeconds),
+            GetNuGetEnvironment(spec))).GetAwaiter().GetResult();
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
+    }
+
+    private static IReadOnlyDictionary<string, string?>? GetNuGetEnvironment(PowerShellCompilationBuildSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec.NuGetPackageRoot))
+            return null;
+        var root = Path.GetFullPath(spec.NuGetPackageRoot!.Trim().Trim('"'));
+        Directory.CreateDirectory(root);
+        return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NUGET_PACKAGES"] = root
+        };
     }
 
     private static string GetPowerShellSdkVersion(string targetFramework)

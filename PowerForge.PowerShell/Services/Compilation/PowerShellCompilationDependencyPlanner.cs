@@ -39,6 +39,16 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
         string? outputDirectory = null)
+        => Analyze(input, mode, resourceMode, includeResource, excludeResource, outputDirectory, null);
+
+    internal PowerShellCompilationDependency[] Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode? mode,
+        PowerShellCompilationResourceMode resourceMode,
+        IEnumerable<string>? includeResource,
+        IEnumerable<string>? excludeResource,
+        string? outputDirectory,
+        IEnumerable<string>? generatedOutputDirectories)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         var effectiveMode = mode ?? input.Mode;
@@ -53,7 +63,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             resourceMode,
             includeResource,
             excludeResource,
-            outputDirectory);
+            outputDirectory,
+            generatedOutputDirectories);
     }
 
     /// <summary>Builds the locked graph used by semantic analysis, artifact planning, and deployment evidence.</summary>
@@ -102,7 +113,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             spec.ResourceMode,
             spec.IncludeResource,
             spec.ExcludeResource,
-            spec.OutputDirectory);
+            spec.OutputDirectory,
+            spec.GeneratedOutputDirectories);
     }
 
     internal static PowerShellCompilationDependencyGraph AnalyzeGraph(
@@ -127,7 +139,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             spec.TargetFramework,
             spec.RuntimeIdentifier,
             includeRuntimePack: spec.Kind == PowerShellCompilationArtifactKind.Executable &&
-                                (spec.SelfContained || spec.Optimization != PowerShellCompilationExecutableOptimization.None));
+                                (spec.SelfContained || spec.Optimization != PowerShellCompilationExecutableOptimization.None),
+            nuGetPackageRoot: spec.NuGetPackageRoot);
     }
     private static PowerShellCompilationDependency[] AnalyzeCore(
         string sourcePath,
@@ -140,7 +153,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         PowerShellCompilationResourceMode resourceMode,
         IEnumerable<string>? includeResource,
         IEnumerable<string>? excludeResource,
-        string? outputDirectory)
+        string? outputDirectory,
+        IEnumerable<string>? generatedOutputDirectories)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
             throw new ArgumentOutOfRangeException(nameof(resourceMode));
@@ -213,6 +227,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             includeResource,
             excludeResource,
             outputDirectory,
+            generatedOutputDirectories,
             compilationGraph,
             results,
             localPaths);

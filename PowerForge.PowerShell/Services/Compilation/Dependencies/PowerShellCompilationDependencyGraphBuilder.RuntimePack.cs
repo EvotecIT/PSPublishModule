@@ -8,7 +8,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             throw new InvalidOperationException("A self-contained dependency lock requires an explicit target framework and runtime identifier.");
         var framework = targetFramework!.Trim().ToLowerInvariant();
         var packageId = "microsoft.netcore.app.runtime." + runtimeIdentifier!.Trim().ToLowerInvariant();
-        var packageRoot = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+        var packageRoot = _nuGetPackageRoot ?? Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         if (string.IsNullOrWhiteSpace(packageRoot))
             packageRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
         var versionsRoot = Path.Combine(Path.GetFullPath(packageRoot!), packageId);

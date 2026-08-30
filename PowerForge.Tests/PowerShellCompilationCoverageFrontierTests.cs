@@ -286,7 +286,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("False", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch"));
         Assert.Equal("True", RunModuleProof(result.ArtifactPath!, "Get-FrontierSwitch -Force"));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("param([switch] ${Force})", generated, StringComparison.Ordinal);
+        Assert.Contains("param([bool] ${__PowerForgeSwitchArgument0})", generated, StringComparison.Ordinal);
+        Assert.Contains("${Force} = [System.Management.Automation.SwitchParameter]::new([bool]${__PowerForgeSwitchArgument0})", generated, StringComparison.Ordinal);
     }
 
     [Fact]

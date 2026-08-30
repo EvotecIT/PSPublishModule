@@ -13,6 +13,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
     private readonly string _moduleRoot;
     private readonly PowerShellCompilationMode _mode;
     private readonly PowerShellCompilationArtifactKind _artifactKind;
+    private readonly string? _nuGetPackageRoot;
     private readonly Dictionary<string, PowerShellCompilationDependencyNode> _nodes = new(StringComparer.Ordinal);
     private readonly List<PowerShellCompilationDependencyEdge> _edges = new();
     private readonly Dictionary<string, string> _pathNodes = new(PowerShellCompilationPathSafety.PathComparer);
@@ -20,11 +21,13 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
     private PowerShellCompilationDependencyGraphBuilder(
         string moduleRoot,
         PowerShellCompilationMode mode,
-        PowerShellCompilationArtifactKind artifactKind)
+        PowerShellCompilationArtifactKind artifactKind,
+        string? nuGetPackageRoot)
     {
         _moduleRoot = Path.GetFullPath(moduleRoot);
         _mode = mode;
         _artifactKind = artifactKind;
+        _nuGetPackageRoot = string.IsNullOrWhiteSpace(nuGetPackageRoot) ? null : Path.GetFullPath(nuGetPackageRoot);
     }
 
     internal static PowerShellCompilationDependencyGraph Build(
@@ -37,9 +40,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         IReadOnlyCollection<PowerShellCompilationDependency> dependencies,
         string? targetFramework = null,
         string? runtimeIdentifier = null,
-        bool includeRuntimePack = false)
+        bool includeRuntimePack = false,
+        string? nuGetPackageRoot = null)
     {
-        var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind);
+        var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind, nuGetPackageRoot);
         return builder.BuildCore(
             sourcePath,
             manifestPath,

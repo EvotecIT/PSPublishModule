@@ -64,7 +64,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
             Assert.Equal(8, result.Manifest!.CompiledMethods);
             Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-            Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);
+            Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
             Assert.True(result.Manifest.AllowsPowerShellRuntimeEvaluation);
             var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
             var commandRegion = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-CommandText");

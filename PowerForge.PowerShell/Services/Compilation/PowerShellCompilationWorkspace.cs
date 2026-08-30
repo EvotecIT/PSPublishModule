@@ -20,7 +20,7 @@ internal sealed class PowerShellCompilationWorkspace : IDisposable
 
     internal string Path { get; }
 
-    internal static PowerShellCompilationWorkspace Create(bool keep)
+    internal static PowerShellCompilationWorkspace Create(bool keep, bool offlineRestore = false)
     {
         var powerForgeTempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "PowerForge");
         var workspaceRoot = System.IO.Path.Combine(powerForgeTempRoot, "powershell-compilation");
@@ -29,7 +29,7 @@ internal sealed class PowerShellCompilationWorkspace : IDisposable
 
         var path = System.IO.Path.Combine(workspaceRoot, WorkspacePrefix + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
-        PowerShellCompilationBuildIsolation.Write(path, requireSdkSelection: false);
+        PowerShellCompilationBuildIsolation.Write(path, requireSdkSelection: false, offlineRestore);
         File.WriteAllText(System.IO.Path.Combine(path, OwnershipFileName), "PowerForge PowerShell compilation workspace.");
         if (keep)
             File.WriteAllText(System.IO.Path.Combine(path, KeepFileName), "This generated workspace was retained by KeepBuildWorkspace.");

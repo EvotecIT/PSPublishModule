@@ -23,6 +23,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string>? includeResource,
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
+        IEnumerable<string>? generatedOutputDirectories,
         IEnumerable<string> compilationGraph,
         ICollection<PowerShellCompilationDependency> results,
         ISet<string> localPaths)
@@ -31,7 +32,14 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         var excludePatterns = NormalizePatterns(excludeResource, nameof(excludeResource));
         var isModuleInput = manifestPath is not null || Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase);
         var outputRoot = string.IsNullOrWhiteSpace(outputDirectory) ? null : Path.GetFullPath(outputDirectory!);
-        if (resourceMode == PowerShellCompilationResourceMode.CompleteModule && isModuleInput && outputRoot is not null && IsSameOrContained(outputRoot, moduleRoot))
+        var generatedRoots = (generatedOutputDirectories ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Concat(outputRoot is null ? Array.Empty<string>() : new[] { outputRoot })
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
+        if (resourceMode == PowerShellCompilationResourceMode.CompleteModule && isModuleInput &&
+            generatedRoots.Any(root => IsSameOrContained(root, moduleRoot)))
             throw new InvalidOperationException($"CompleteModule resource mode requires an output directory that is neither the module root '{moduleRoot}' nor one of its ancestors, so authored payload is not mistaken for generated output.");
         var inventory = new List<ResourceCandidate>();
         if (isModuleInput)
@@ -41,7 +49,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessibleOptionalPayload))
             {
                 var fullPath = Path.GetFullPath(file);
-                if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
+                if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
                 var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, fullPath).Replace('\\', '/');
                 inventory.Add(new ResourceCandidate(fullPath, relative, GetConventionDiscovery(relative)));
             }
@@ -69,7 +77,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 foreach (var file in EnumerateContainedFiles(directory, ignoreInaccessible: false))
                 {
                     var fullPath = Path.GetFullPath(file);
-                    if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
+                    if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
                     var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, fullPath).Replace('\\', '/');
                     inventory.Add(new ResourceCandidate(fullPath, relative, GetConventionDiscovery(relative)));
                 }
@@ -79,7 +87,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessible: false).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
                 {
                     var fullPath = Path.GetFullPath(file);
-                    if (outputRoot is not null && IsSameOrContained(outputRoot, fullPath)) continue;
+                    if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
                     var relative = FrameworkCompatibility.GetRelativePath(moduleRoot, fullPath).Replace('\\', '/');
                     inventory.Add(new ResourceCandidate(fullPath, relative, GetConventionDiscovery(relative)));
                 }
@@ -112,6 +120,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, candidate.FullPath, $"Resource payload '{candidate.RelativePath}' traverses a symbolic link or junction.");
             if (outputRoot is not null && IsSameOrContained(outputRoot, candidate.FullPath))
                 throw new InvalidOperationException($"Resource payload '{candidate.RelativePath}' overlaps the durable output directory '{outputRoot}'.");
+            var overlappingGeneratedRoot = generatedRoots.FirstOrDefault(root => IsSameOrContained(root, candidate.FullPath));
+            if (overlappingGeneratedRoot is not null)
+                throw new InvalidOperationException($"Resource payload '{candidate.RelativePath}' overlaps the generated output directory '{overlappingGeneratedRoot}'.");
 
             var explicitlyIncluded = includePatterns.Any(pattern => PatternMatchesCandidate(pattern, candidate));
             var explicitlyExcluded = excludePatterns.Any(pattern => PatternMatchesCandidate(pattern, candidate));

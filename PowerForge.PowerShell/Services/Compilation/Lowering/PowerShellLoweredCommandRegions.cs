@@ -44,10 +44,14 @@ internal sealed class PowerShellLoweredHostedCommandStage : PowerShellLoweredCom
 
 internal sealed class PowerShellLoweredCommandRegionArgument
 {
-    internal PowerShellLoweredCommandRegionArgument(PowerShellSymbolId symbol)
-        => Symbol = symbol;
+    internal PowerShellLoweredCommandRegionArgument(PowerShellSymbolId symbol, bool isSwitch)
+    {
+        Symbol = symbol;
+        IsSwitch = isSwitch;
+    }
 
     internal PowerShellSymbolId Symbol { get; }
+    internal bool IsSwitch { get; }
 }
 
 internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLoweredStatement

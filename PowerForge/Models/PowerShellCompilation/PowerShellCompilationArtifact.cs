@@ -191,6 +191,15 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Optional machine-local root for content-addressed generated-build cache entries.</summary>
     public string? BuildCacheDirectory { get; set; }
 
+    /// <summary>Optional isolated NuGet global-packages root used by generated restore and build processes.</summary>
+    public string? NuGetPackageRoot { get; set; }
+
+    /// <summary>Whether generated restore must use only packages already present in the isolated package root.</summary>
+    public bool OfflineRestore { get; set; }
+
+    /// <summary>Tool-owned generated roots that must never be inventoried as authored resource payload.</summary>
+    internal string[] GeneratedOutputDirectories { get; set; } = Array.Empty<string>();
+
     /// <summary>Whether generated signable files should receive Authenticode signatures before hashes are recorded.</summary>
     public bool SignArtifact { get; set; }
 
@@ -229,6 +238,9 @@ public sealed class PowerShellCompilationBuildSpec
 
     /// <summary>Optional equivalent-workload runtime boundary profile to bind into manifest evidence.</summary>
     public PowerShellCompilationBoundaryRuntimeProfile? BoundaryRuntimeProfile { get; set; }
+
+    /// <summary>Explicit portable diagnostic retention and redaction policy for artifact evidence.</summary>
+    public PowerShellCompilationDiagnosticsPolicy? DiagnosticsPolicy { get; set; }
 
     /// <summary>
     /// Explicitly permits a build to resolve the current dependency graph without a separately reviewed lock.

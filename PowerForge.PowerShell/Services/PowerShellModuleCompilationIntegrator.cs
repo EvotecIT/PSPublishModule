@@ -35,7 +35,9 @@ internal sealed class PowerShellModuleCompilationIntegrator
             var resolved = new PowerShellCompilationInputResolver().Resolve(
                 stagingPath,
                 PowerShellCompilationArtifactKind.BinaryModule,
-                configuration.Mode);
+                configuration.Mode,
+                allowDynamicModuleRuntimeSources: configuration.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                                  configuration.Mode != PowerShellCompilationMode.Strict);
             var compilationSpec = new PowerShellCompilationBuildSpec(
                 resolved.SourcePath,
                 outputRoot,

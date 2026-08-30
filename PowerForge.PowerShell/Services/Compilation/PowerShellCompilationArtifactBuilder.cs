@@ -47,7 +47,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows
         // even when the user's final artifact path is otherwise reasonable.
-        using var workspaceLease = PowerShellCompilationWorkspace.Create(spec.KeepBuildWorkspace);
+        using var workspaceLease = PowerShellCompilationWorkspace.Create(spec.KeepBuildWorkspace, spec.OfflineRestore);
         var workspace = workspaceLease.Path;
         var result = new PowerShellCompilationBuildResult { BuildWorkspace = spec.KeepBuildWorkspace ? workspace : null };
         var failureStage = PowerShellCompilationFailureStage.Input;
@@ -479,7 +479,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     publicAbi,
                     unitDispositionLedger,
                     commandProviders);
-                var diagnosticsPolicy = PowerShellCompilationDiagnosticsEvidenceBuilder.CreatePolicy();
+                var diagnosticsPolicy = spec.DiagnosticsPolicy ?? PowerShellCompilationDiagnosticsEvidenceBuilder.CreatePolicy();
                 var reproduction = PowerShellCompilationReproductionEvidenceBuilder.Create(
                     plan,
                     spec.Kind,

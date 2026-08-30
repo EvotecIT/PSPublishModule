@@ -43,6 +43,18 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
         PowerShellCompilationTargetContract? targetContract)
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, targetContract, null);
+
+    internal PowerShellCompilationPlan Analyze(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationMode mode,
+        string? targetFramework,
+        PowerShellCompilationResourceMode resourceMode,
+        IEnumerable<string>? includeResource,
+        IEnumerable<string>? excludeResource,
+        string? outputDirectory,
+        PowerShellCompilationTargetContract? targetContract,
+        IEnumerable<string>? generatedOutputDirectories)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -72,7 +84,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             resourceMode,
             includeResource,
             excludeResource,
-            outputDirectory);
+            outputDirectory,
+            generatedOutputDirectories);
         var dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
             input.SourcePath,
             input.ModuleManifestPath,

@@ -645,3 +645,74 @@ New-BenchmarkSuite 'powershell-compilation-typed-local-calls' -OutputRoot $outpu
     }
     Add-BenchmarkComparison -Dimension Engine -Baseline PowerShellFile -Metric MedianMs -TieTolerance 0.05
 }
+
+New-BenchmarkSuite 'powershell-compilation-build-cost' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Reviewed dependency planning and typed library build'
+    Set-BenchmarkPolicy -Warmup $(if ($quick) { 0 } else { 1 }) -Iterations $(if ($quick) { 2 } else { 5 }) -Order Rotated -MemoryCleanup BeforeIteration -OutlierMode None
+    Add-BenchmarkCase Build @{}
+
+    Add-BenchmarkEngine Compiler {
+        Add-BenchmarkOperation Build {
+            param($case, $run)
+            $process = [System.Diagnostics.Process]::GetCurrentProcess()
+            $process.Refresh()
+            [long] $workingSetBefore = $process.WorkingSet64
+            [long] $allocatedBefore = [GC]::GetTotalAllocatedBytes($false)
+            $spec = [PowerForge.PowerShellCompilationBuildSpec]::new(
+                $workloadPath,
+                (Join-Path $run.OutputDirectory 'artifact'),
+                'PowerForge.CompilationBudget.Library',
+                [PowerForge.PowerShellCompilationArtifactKind]::Library,
+                [PowerForge.PowerShellCompilationMode]::Strict)
+            $spec.TargetFramework = 'net8.0'
+            $spec.UseBuildCache = $false
+            $run.Result = Invoke-ReviewedCompilationBuild -Spec $spec
+            $process.Refresh()
+            $run.ManagedAllocatedBytes = [Math]::Max(0L, [GC]::GetTotalAllocatedBytes($false) - $allocatedBefore)
+            $run.ProcessWorkingSetDeltaBytes = [Math]::Max(0L, $process.WorkingSet64 - $workingSetBefore)
+            $run.PrimaryArtifactBytes = if ($run.Result.Succeeded) { (Get-Item -LiteralPath $run.Result.ArtifactPath).Length } else { 0L }
+        }
+    }
+
+    Add-BenchmarkValidation {
+        param($case, $run)
+        if (-not $run.Result.Succeeded) { throw "Reviewed build failed: $($run.Result.Error)" }
+        $identity = [System.Reflection.AssemblyName]::GetAssemblyName($run.Result.ArtifactPath)
+        Assert-BenchmarkValue -Actual $identity.Name -Expected 'PowerForge.CompilationBudget.Library'
+    }
+    Add-BenchmarkMetric ManagedAllocatedBytes { param($case, $run) [double] $run.ManagedAllocatedBytes }
+    Add-BenchmarkMetric ProcessWorkingSetDeltaBytes { param($case, $run) [double] $run.ProcessWorkingSetDeltaBytes }
+    Add-BenchmarkMetric PrimaryArtifactBytes { param($case, $run) [double] $run.PrimaryArtifactBytes }
+}
+
+New-BenchmarkSuite 'powershell-compilation-import-cost' -OutputRoot $outputRoot {
+    Add-BenchmarkMetadata Workload 'Generated binary module import and first validated call'
+    Add-BenchmarkMetadata BinaryModuleSha256 $moduleHash
+    Set-BenchmarkPolicy -Warmup $warmup -Iterations $iterations -Order Rotated -MemoryCleanup BeforeIteration -OutlierMode ExcludeMinMax
+    Add-BenchmarkCase Import @{ Expected = 150.0 }
+
+    Set-BenchmarkSetup {
+        Remove-Module -Name $moduleQualifier -Force -ErrorAction SilentlyContinue
+    }
+    Add-BenchmarkEngine BinaryModule {
+        Add-BenchmarkOperation Import {
+            param($case, $run)
+            $process = [System.Diagnostics.Process]::GetCurrentProcess()
+            $process.Refresh()
+            [long] $workingSetBefore = $process.WorkingSet64
+            [long] $allocatedBefore = [GC]::GetTotalAllocatedBytes($false)
+            $run.Result = Import-Module -Name $moduleResult.ArtifactPath -Global -Force -PassThru -ErrorAction Stop
+            $process.Refresh()
+            $run.ManagedAllocatedBytes = [Math]::Max(0L, [GC]::GetTotalAllocatedBytes($false) - $allocatedBefore)
+            $run.ProcessWorkingSetDeltaBytes = [Math]::Max(0L, $process.WorkingSet64 - $workingSetBefore)
+        }
+    }
+    Add-BenchmarkValidation {
+        param($case, $run)
+        if ($null -eq $run.Result) { throw 'Generated module import returned no module evidence.' }
+        $actual = & "$moduleQualifier\Get-AllowedAverageMs" 100.0 0.5 30.0
+        Assert-BenchmarkValue -Actual ([double] $actual) -Expected ([double] $case.Expected)
+    }
+    Add-BenchmarkMetric ManagedAllocatedBytes { param($case, $run) [double] $run.ManagedAllocatedBytes }
+    Add-BenchmarkMetric ProcessWorkingSetDeltaBytes { param($case, $run) [double] $run.ProcessWorkingSetDeltaBytes }
+}

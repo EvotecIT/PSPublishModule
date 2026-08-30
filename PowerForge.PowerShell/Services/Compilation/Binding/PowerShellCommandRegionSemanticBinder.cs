@@ -12,7 +12,7 @@ internal static class PowerShellCommandRegionSemanticBinder
         PowerShellCommandSemanticRegistry commandRegistry)
     {
         var arguments = BindArguments(statements, symbols, parameters);
-        var source = CreateParameterBlock(arguments) + Environment.NewLine +
+        var source = CreateParameterBlock(arguments, statements) + Environment.NewLine +
                      string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
         var span = PowerShellSourceParser.GetSpan(document, statements[0].Extent);
         if (statements.Count > 1)
@@ -34,7 +34,7 @@ internal static class PowerShellCommandRegionSemanticBinder
         var target = symbols[targetSyntax.VariablePath.UserPath];
         var referenced = new Ast[] { assignment.Right };
         var arguments = BindArguments(referenced, symbols, parameters);
-        var source = CreateParameterBlock(arguments) + Environment.NewLine + assignment.Right.Extent.Text;
+        var source = CreateParameterBlock(arguments, referenced) + Environment.NewLine + assignment.Right.Extent.Text;
         return new PowerShellBoundCommandCaptureStatement(
             PowerShellSourceParser.GetSpan(document, assignment.Extent),
             target.Symbol,
@@ -57,9 +57,40 @@ internal static class PowerShellCommandRegionSemanticBinder
             .Select(name => new PowerShellBoundCommandRegionArgument(symbols[name].Symbol, parameters.TryGetValue(name, out var parameter) && parameter.Contract.IsSwitch))
             .ToArray();
 
-    private static string CreateParameterBlock(IEnumerable<PowerShellBoundCommandRegionArgument> arguments)
-        => "param(" + string.Join(", ", arguments.Select(argument =>
-            (argument.IsSwitch ? "[switch] " : string.Empty) + EmitBracedVariable(argument.Symbol.Name))) + ")";
+    private static string CreateParameterBlock(
+        IEnumerable<PowerShellBoundCommandRegionArgument> arguments,
+        IEnumerable<Ast> syntax)
+    {
+        var materialized = arguments.ToArray();
+        var reservedNames = syntax
+            .SelectMany(static item => item.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true))
+            .Cast<VariableExpressionAst>()
+            .Select(static variable => variable.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parameters = new string[materialized.Length];
+        var switchInitializers = new List<string>();
+        for (var index = 0; index < materialized.Length; index++)
+        {
+            var argument = materialized[index];
+            if (!argument.IsSwitch)
+            {
+                parameters[index] = EmitBracedVariable(argument.Symbol.Name);
+                continue;
+            }
+
+            var temporaryName = "__PowerForgeSwitchArgument" + index;
+            while (!reservedNames.Add(temporaryName)) temporaryName += "_";
+            var temporary = EmitBracedVariable(temporaryName);
+            parameters[index] = "[bool] " + temporary;
+            switchInitializers.Add(
+                $"{EmitBracedVariable(argument.Symbol.Name)} = [System.Management.Automation.SwitchParameter]::new([bool]{temporary})");
+        }
+
+        var parameterBlock = "param(" + string.Join(", ", parameters) + ")";
+        return switchInitializers.Count == 0
+            ? parameterBlock
+            : parameterBlock + Environment.NewLine + string.Join(Environment.NewLine, switchInitializers);
+    }
 
     private static string EmitBracedVariable(string name)
         => "${" + name.Replace("`", "``").Replace("}", "`}") + "}";

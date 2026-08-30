@@ -446,7 +446,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.HostedFallbackSource,
-                region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
+                region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
                 LowerCommandStages(region.Stages)),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
@@ -722,7 +722,7 @@ internal sealed partial class PowerShellTypedLowerer
             capture.TargetType,
             localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
             capture.HostedFallbackSource,
-            capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol)).ToArray(),
+            capture.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
             LowerCommandStages(capture.Stages));
 
     private static PowerShellLoweredCommandStage[] LowerCommandStages(IEnumerable<PowerShellBoundCommandStage> stages)

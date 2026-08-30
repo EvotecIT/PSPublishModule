@@ -150,7 +150,9 @@ internal static partial class Program
         var resolved = new PowerShellCompilationInputResolver().Resolve(
             request.Path,
             request.Kind,
-            request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode);
+            request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,
+            allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                              request.Mode != PowerShellCompilationMode.Strict);
         return new PowerShellCompilationAnalyzer().Analyze(
             resolved,
             request.Mode,
@@ -168,7 +170,9 @@ internal static partial class Program
         var resolved = new PowerShellCompilationInputResolver().Resolve(
             request.Path,
             request.Kind,
-            request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode);
+            request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,
+            allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                              request.Mode != PowerShellCompilationMode.Strict);
         var plan = new PowerShellCompilationAnalyzer().Analyze(
             resolved,
             request.Mode,

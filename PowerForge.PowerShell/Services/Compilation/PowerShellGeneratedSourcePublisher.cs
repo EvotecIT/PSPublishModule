@@ -40,7 +40,7 @@ internal static class PowerShellGeneratedSourcePublisher
             foreach (var dependency in Directory.EnumerateFiles(embeddedDependencies, "*", SearchOption.TopDirectoryOnly))
                 File.Copy(dependency, Path.Combine(targetDependencies, Path.GetFileName(dependency)), overwrite: false);
         }
-        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true);
+        PowerShellCompilationBuildIsolation.Write(sourceDirectory, requireSdkSelection: true, spec.OfflineRestore);
         WriteSourceMap(sourceDirectory, spec, methods);
         return sourceDirectory;
     }

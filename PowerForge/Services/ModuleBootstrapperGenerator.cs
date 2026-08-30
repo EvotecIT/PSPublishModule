@@ -41,7 +41,7 @@ internal static partial class ModuleBootstrapperGenerator
         var libRoot = Path.Combine(root, "Lib");
         var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
-        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, exportAssemblyFileNames, SearchOption.AllDirectories);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, exportAssemblyFileNames);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
@@ -102,7 +102,7 @@ internal static partial class ModuleBootstrapperGenerator
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
         var assemblyReferences = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
-        var hasLib = ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, assemblyReferences, SearchOption.AllDirectories);
+        var hasLib = ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, assemblyReferences);
         return ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader: false, forceBootstrapperWrite);
     }
 

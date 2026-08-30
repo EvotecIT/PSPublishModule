@@ -127,12 +127,6 @@ public sealed class PowerShellCompilationBuildCacheEvidence
 /// <summary>Canonical target-contract construction and validation.</summary>
 public static class PowerShellCompilationTargetContractService
 {
-    private static readonly HashSet<string> SupportedStrictExecutableRuntimeIdentifiers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "linux-x64",
-        "win-x64"
-    };
-
     /// <summary>Creates the target implied by compatibility build fields.</summary>
     public static PowerShellCompilationTargetContract Create(
         PowerShellCompilationArtifactKind kind,
@@ -221,14 +215,7 @@ public static class PowerShellCompilationTargetContractService
         string targetFramework,
         string? runtimeIdentifier)
     {
-        if (string.IsNullOrWhiteSpace(runtimeIdentifier)) return "PortableManaged";
-        return kind == PowerShellCompilationArtifactKind.Executable &&
-               mode == PowerShellCompilationMode.Strict &&
-               targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) &&
-               deployment is PowerShellCompilationDeploymentModel.FrameworkDependent or PowerShellCompilationDeploymentModel.NativeAot &&
-               SupportedStrictExecutableRuntimeIdentifiers.Contains(runtimeIdentifier!)
-            ? "Supported"
-            : "Experimental";
+        return PowerShellCompilationSupportMatrixService.Evaluate(kind, mode, deployment, targetFramework, runtimeIdentifier);
     }
 
     /// <summary>Computes the canonical target-contract hash.</summary>

@@ -44,7 +44,9 @@ internal sealed class PowerShellModuleCompilationReleaseContract
         var sourceInput = new PowerShellCompilationInputResolver().Resolve(
             plan.BuildSpec.SourcePath,
             PowerShellCompilationArtifactKind.BinaryModule,
-            compilation.Mode);
+            compilation.Mode,
+            allowDynamicModuleRuntimeSources: compilation.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                              compilation.Mode != PowerShellCompilationMode.Strict);
         var sourceInputSha256 = CreateSourceInputSha256(
             sourceInput,
             compilation);

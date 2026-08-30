@@ -1,6 +1,6 @@
 # PowerShell Compilation
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory into three different artifact shapes:
 
@@ -60,6 +60,40 @@ PowerShell 5.1 compatibility currently means a `net472` generated binary module 
 Code signing establishes publisher identity and artifact integrity; it does not make arbitrary generated programs inherently trustworthy to antivirus products. Use a certificate only for code owned and distributed by that certificate's publisher. Do not submit private packaged executables to public malware-analysis services unless sharing the embedded source and dependencies with that service is acceptable.
 
 ## Use the CLI
+
+### Reproducible project workflow
+
+For a repeatable artifact matrix, create one portable project manifest instead of repeating command switches in a repository-specific build script:
+
+```powershell
+powerforge powershell project init .\src\Sample.psd1 `
+    --project .\powerforge.psproject.json `
+    --name Sample
+
+powerforge powershell project analyze   .\powerforge.psproject.json
+powerforge powershell project explain   .\powerforge.psproject.json
+powerforge powershell project recommend .\powerforge.psproject.json
+powerforge powershell project lock      .\powerforge.psproject.json
+powerforge powershell project restore   .\powerforge.psproject.json
+powerforge powershell project restore   .\powerforge.psproject.json --offline
+powerforge powershell project build     .\powerforge.psproject.json
+powerforge powershell project test      .\powerforge.psproject.json
+powerforge powershell project diagnose  .\powerforge.psproject.json
+powerforge powershell project pack      .\powerforge.psproject.json
+powerforge powershell project install   .\powerforge.psproject.json
+```
+
+The manifest maps source/resource policy, one named semantic profile, provider packages and trust, an exact artifact matrix, dependency/provider lock paths, an optional ABI baseline, and diagnostic/IR policy onto the existing compiler contracts. Each target must have a unique kind/mode/TFM/RID/architecture/deployment identity. No source or module identity changes compiler behavior.
+
+`restore` acquires exact NuGet identities into `.powerforge/environment/packages`, records the reviewed dependency locks in environment evidence, and verifies both NuGet's canonical content identity and the downloaded archive bytes. `restore --offline` clears package sources and proves the already acquired environment can satisfy the lock. `build` then rejects project drift, environment-evidence drift, missing target locks, modified package archives, provider-lock drift, or any dependency change. Tool-owned `.powerforge` state and declared artifact roots are supplied as generated-output roots, so restore packages and previous outputs cannot become authored resource input.
+
+`pack` produces a deterministic qualified ZIP whose name and descriptor include the exact target, semantic profile, dependency/provider locks, ABI, SBOM, provenance, and artifact hash. `install` extracts it into an immutable project-local content-addressed root, compares every installed byte with the archive, verifies the primary artifact identity, and executes the declared EXE, clean module import, or CLR metadata test. Existing matching installations are reusable; a collision or tampered file fails closed.
+
+`recommend` is advisory only. Without a supplied boundary profile it reports static eligibility and suggests the next measurement. With `--boundary-profile <profile.json>`, it can recommend coarsening an expensive typed/hosted boundary, retaining hosted execution, or evaluating a Strict candidate. It never edits source, changes the project target, or describes eligible units as PowerShell language coverage.
+
+Use `powerforge powershell support --output json` for the canonical qualified support matrix. The current toolchain channel is `Preview`: portable managed outputs and the target-host-qualified Windows/Linux x64 Strict profiles are advertised, while macOS, Arm64, self-contained, and trimmed exact profiles remain experimental until their own semantic, lock, install, target-host, and performance packet passes.
+
+Project, target-contract, dependency-lock, provider-lock, compiler-manifest, explanation, diagnostic, cache, and ABI evidence carry explicit schema or semantic-profile identities. Unknown schema versions fail instead of being guessed. During preview, an intentional incompatible change requires a new schema or semantic profile plus migration guidance. A stable toolchain will accept an older schema through at least two minor release trains before removal, unless retaining it would violate a security or correctness invariant. Additive diagnostic fields do not change a semantic or ABI identity; changed behavior does. Public package publication, upgrade, and rollback proof remain a separate explicitly authorized release lane and are never inferred from a source checkout.
 
 For the common case, point PowerForge at the module directory. It selects the matching top-level manifest and root module, infers a hybrid binary-module build, and writes to the module's `artifacts` directory:
 

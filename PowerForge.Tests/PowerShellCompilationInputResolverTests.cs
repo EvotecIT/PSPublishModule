@@ -369,6 +369,26 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_CompleteHybridModuleMayRetainDynamicLoaderAsPackagedRuntimeSource()
+    {
+        using var fixture = ResolverFixture.Create("DynamicCompleteModule");
+        fixture.Write("DynamicCompleteModule.psd1", "@{ RootModule = 'DynamicCompleteModule.psm1' }");
+        var root = fixture.Write(
+            "DynamicCompleteModule.psm1",
+            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-RuntimeProof.ps1", "function Get-RuntimeProof { return 1 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(
+            fixture.Root,
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowDynamicModuleRuntimeSources: true);
+
+        Assert.Equal(new[] { root }, resolved.CompilationSourceFiles);
+        Assert.Equal(new[] { root }, resolved.SourceFiles);
+    }
+
+    [Fact]
     public void Resolve_UsesPowerShellCharacterClassSemanticsForConventionalGlob()
     {
         using var fixture = ResolverFixture.Create("CharacterClassModule");

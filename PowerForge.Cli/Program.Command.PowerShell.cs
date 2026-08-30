@@ -27,6 +27,10 @@ internal static partial class Program
 
         if (!argv[0].Equals("analyze", StringComparison.OrdinalIgnoreCase))
         {
+            if (argv[0].Equals("project", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellProject(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("support", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellSupport(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("build", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("compile", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellBuild(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("census", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("matrix", StringComparison.OrdinalIgnoreCase))
@@ -109,7 +113,13 @@ internal static partial class Program
             var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
             var entryPoint = TryGetOptionValue(args, "--entry-point");
             var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPaths, kindOverride, modeOverride, fullEntryPoint);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(
+                fullPaths,
+                kindOverride,
+                modeOverride,
+                fullEntryPoint,
+                allowDynamicModuleRuntimeSources: resourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                                  modeOverride != PowerShellCompilationMode.Strict);
             var outputDirectory = TryGetOptionValue(args, "--out") ?? TryGetOptionValue(args, "--output-directory") ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved);
             var artifactName = TryGetOptionValue(args, "--name") ?? resolved.ArtifactName;
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? nameof(PowerShellCompilationExecutableOptimization.None);
@@ -452,7 +462,7 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, supportUsage = PowerShellSupportUsage })
             });
         }
         else
@@ -462,6 +472,8 @@ internal static partial class Program
             Console.WriteLine(PowerShellBuildUsage);
             Console.WriteLine(PowerShellCensusUsage);
             Console.WriteLine(PowerShellDiagnoseUsage);
+            Console.WriteLine(PowerShellProjectUsage);
+            Console.WriteLine(PowerShellSupportUsage);
         }
     }
 
