@@ -112,7 +112,8 @@ public sealed partial class DotNetRepositoryReleaseService
         var publishPlan = CreatePublishPlan(
             projects,
             usePlannedProjectGraph: spec.WhatIf,
-            configuration: spec.Configuration);
+            configuration: spec.Configuration,
+            packStrategy: spec.PackStrategy);
         var orderedProjects = publishPlan.OrderedProjects;
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();

@@ -15,13 +15,15 @@ public sealed partial class DotNetRepositoryReleaseService
     internal IReadOnlyList<DotNetRepositoryProjectResult> SortProjectsForPublish(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph = false,
-        string? configuration = null)
-        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration).OrderedProjects;
+        string? configuration = null,
+        DotNetRepositoryPackStrategy packStrategy = DotNetRepositoryPackStrategy.PerProject)
+        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy).OrderedProjects;
 
     private PublishPlan CreatePublishPlan(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph,
-        string? configuration)
+        string? configuration,
+        DotNetRepositoryPackStrategy packStrategy)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -41,7 +43,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var entry in byPackageId)
         {
             var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration)
+                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy)
                 : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
             dependencies[entry.Key].UnionWith(selectedDependencies);
         }
@@ -163,7 +165,8 @@ public sealed partial class DotNetRepositoryReleaseService
     private IReadOnlyCollection<string> ReadPlannedProjectDependencies(
         DotNetRepositoryProjectResult project,
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
-        string? configuration)
+        string? configuration,
+        DotNetRepositoryPackStrategy packStrategy)
     {
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
@@ -176,7 +179,7 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => entry.Key,
             pathComparer);
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration);
+        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, packStrategy);
         ValidatePlanningContract(project, outer);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
@@ -186,7 +189,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
-                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration);
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, packStrategy);
                 ValidatePlanningContract(project, evaluation);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
@@ -243,7 +246,8 @@ public sealed partial class DotNetRepositoryReleaseService
     private PublishPlanningEvaluation EvaluatePublishPlanningItems(
         DotNetRepositoryProjectResult project,
         string? targetFramework,
-        string? configuration)
+        string? configuration,
+        DotNetRepositoryPackStrategy packStrategy)
     {
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
@@ -254,9 +258,10 @@ public sealed partial class DotNetRepositoryReleaseService
             "-getProperty:CentralPackageTransitivePinningEnabled", "-getProperty:SuppressDependenciesWhenPacking",
             "-getItem:ProjectReference", "-getItem:PackageReference", "-getItem:PackageVersion",
             "-p:NoBuild=true",
-            "-p:BuildProjectReferences=false",
             $"-p:Configuration={(string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim())}"
         };
+        if (packStrategy == DotNetRepositoryPackStrategy.MSBuild)
+            arguments.Add("-p:BuildProjectReferences=false");
         if (!string.IsNullOrWhiteSpace(targetFramework))
             arguments.Add($"-p:TargetFramework={targetFramework!.Trim()}");
         if (!string.IsNullOrWhiteSpace(project.NewVersion))
