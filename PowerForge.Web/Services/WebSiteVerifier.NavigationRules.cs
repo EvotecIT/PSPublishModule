@@ -198,7 +198,7 @@ public static partial class WebSiteVerifier
         List<string> warnings,
         bool validateAllLocalRoutes = false,
         IEnumerable<string>? staticRoutes = null,
-        IEnumerable<string>? exactRoutes = null)
+        IEnumerable<RedirectSpec>? redirects = null)
     {
         if (spec is null || plan is null || routes is null || warnings is null) return;
         var nav = spec.Navigation;
@@ -218,14 +218,10 @@ public static partial class WebSiteVerifier
             .Select(NormalizeStaticRouteForNavigationMatch)
             .Where(route => !string.IsNullOrWhiteSpace(route))
             .ToHashSet(StringComparer.Ordinal);
-        var knownExactRoutes = (exactRoutes ?? Array.Empty<string>())
-            .Where(route => !string.IsNullOrWhiteSpace(route))
-            .Select(NormalizeExactRouteForNavigationMatch)
-            .Where(route => !string.IsNullOrWhiteSpace(route))
-            .ToHashSet(StringComparer.Ordinal);
+        var knownRedirectRoutes = BuildNavigationRedirectRoutes(redirects);
         var knownPatternRoutes = knownRoutes
             .Concat(knownStaticRoutes)
-            .Concat(knownExactRoutes)
+            .Concat(knownRedirectRoutes.PatternRoutes)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -259,12 +255,12 @@ public static partial class WebSiteVerifier
             var menuContext = $"Navigation.Menus['{menu.Name}']";
             ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
             var menuLanguage = ResolveNavigationMenuLanguage(menu.Name, localization);
-            ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes, knownExactRoutes);
+            ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes, knownRedirectRoutes);
         }
 
-        ValidateMenuItemsForLint(nav.Actions ?? Array.Empty<MenuItemSpec>(), "Navigation.Actions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, knownStaticRoutes: knownStaticRoutes, knownExactRoutes: knownExactRoutes);
-        ValidateNavigationRegions(nav.Regions ?? Array.Empty<NavigationRegionSpec>(), baseMenuNames, "Navigation.Regions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownExactRoutes);
-        ValidateNavigationFooter(nav.Footer, baseMenuNames, "Navigation.Footer", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownExactRoutes);
+        ValidateMenuItemsForLint(nav.Actions ?? Array.Empty<MenuItemSpec>(), "Navigation.Actions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, knownStaticRoutes: knownStaticRoutes, knownRedirectRoutes: knownRedirectRoutes);
+        ValidateNavigationRegions(nav.Regions ?? Array.Empty<NavigationRegionSpec>(), baseMenuNames, "Navigation.Regions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownRedirectRoutes);
+        ValidateNavigationFooter(nav.Footer, baseMenuNames, "Navigation.Footer", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownRedirectRoutes);
 
         var profiles = nav.Profiles ?? Array.Empty<NavigationProfileSpec>();
         var profileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -335,12 +331,12 @@ public static partial class WebSiteVerifier
                 var menuContext = $"{profileContext}.Menus['{menu.Name}']";
                 ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
                 var menuLanguage = ResolveNavigationMenuLanguage(menu.Name, localization);
-                ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes, knownExactRoutes);
+                ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes, knownRedirectRoutes);
             }
 
-            ValidateMenuItemsForLint(profile.Actions ?? Array.Empty<MenuItemSpec>(), profileContext + ".Actions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, knownStaticRoutes: knownStaticRoutes, knownExactRoutes: knownExactRoutes);
-            ValidateNavigationRegions(profile.Regions ?? Array.Empty<NavigationRegionSpec>(), visibleMenus, profileContext + ".Regions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownExactRoutes);
-            ValidateNavigationFooter(profile.Footer, visibleMenus, profileContext + ".Footer", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownExactRoutes);
+            ValidateMenuItemsForLint(profile.Actions ?? Array.Empty<MenuItemSpec>(), profileContext + ".Actions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, knownStaticRoutes: knownStaticRoutes, knownRedirectRoutes: knownRedirectRoutes);
+            ValidateNavigationRegions(profile.Regions ?? Array.Empty<NavigationRegionSpec>(), visibleMenus, profileContext + ".Regions", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownRedirectRoutes);
+            ValidateNavigationFooter(profile.Footer, visibleMenus, profileContext + ".Footer", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes, knownRedirectRoutes);
         }
     }
 
@@ -384,7 +380,7 @@ public static partial class WebSiteVerifier
         Dictionary<string, string> itemIdLocations,
         List<string> warnings,
         IReadOnlySet<string> knownStaticRoutes,
-        IReadOnlySet<string> knownExactRoutes)
+        NavigationRedirectRoutes knownRedirectRoutes)
     {
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var index = 0;
@@ -423,7 +419,7 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Navigation lint: {regionContext} is empty (no menus, no items, IncludeActions=false).");
             }
 
-            ValidateMenuItemsForLint(region.Items ?? Array.Empty<MenuItemSpec>(), regionContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownExactRoutes: knownExactRoutes);
+            ValidateMenuItemsForLint(region.Items ?? Array.Empty<MenuItemSpec>(), regionContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownRedirectRoutes: knownRedirectRoutes);
             index++;
         }
     }
@@ -440,7 +436,7 @@ public static partial class WebSiteVerifier
         Dictionary<string, string> itemIdLocations,
         List<string> warnings,
         IReadOnlySet<string> knownStaticRoutes,
-        IReadOnlySet<string> knownExactRoutes)
+        NavigationRedirectRoutes knownRedirectRoutes)
     {
         if (footer is null)
             return;
@@ -471,10 +467,10 @@ public static partial class WebSiteVerifier
             }
 
             var columnName = string.IsNullOrWhiteSpace(column.Name) ? $"column#{i + 1}" : column.Name;
-            ValidateMenuItemsForLint(column.Items ?? Array.Empty<MenuItemSpec>(), $"{context}.Columns['{columnName}'].Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownExactRoutes: knownExactRoutes);
+            ValidateMenuItemsForLint(column.Items ?? Array.Empty<MenuItemSpec>(), $"{context}.Columns['{columnName}'].Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownRedirectRoutes: knownRedirectRoutes);
         }
 
-        ValidateMenuItemsForLint(footer.Legal ?? Array.Empty<MenuItemSpec>(), context + ".Legal", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownExactRoutes: knownExactRoutes);
+        ValidateMenuItemsForLint(footer.Legal ?? Array.Empty<MenuItemSpec>(), context + ".Legal", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, knownStaticRoutes: knownStaticRoutes, knownRedirectRoutes: knownRedirectRoutes);
     }
 
 
@@ -490,7 +486,7 @@ public static partial class WebSiteVerifier
         ResolvedLocalizationConfig? localization = null,
         string? navigationLanguage = null,
         IReadOnlySet<string>? knownStaticRoutes = null,
-        IReadOnlySet<string>? knownExactRoutes = null)
+        NavigationRedirectRoutes? knownRedirectRoutes = null)
     {
         var index = 0;
         foreach (var item in items)
@@ -503,7 +499,7 @@ public static partial class WebSiteVerifier
 
             var itemLabel = !string.IsNullOrWhiteSpace(item.Title) ? item.Title : $"item#{index + 1}";
             var itemContext = $"{context}['{itemLabel}']";
-            ValidateMenuItemForLint(item, itemContext, knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, knownExactRoutes);
+            ValidateMenuItemForLint(item, itemContext, knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, knownRedirectRoutes);
             index++;
         }
     }
@@ -521,7 +517,7 @@ public static partial class WebSiteVerifier
         ResolvedLocalizationConfig? localization = null,
         string? navigationLanguage = null,
         IReadOnlySet<string>? knownStaticRoutes = null,
-        IReadOnlySet<string>? knownExactRoutes = null)
+        NavigationRedirectRoutes? knownRedirectRoutes = null)
     {
         if (string.IsNullOrWhiteSpace(item.Title))
             warnings.Add($"Navigation lint: {context} is missing 'Title'.");
@@ -538,9 +534,12 @@ public static partial class WebSiteVerifier
             }
         }
 
-        var knownPatternRoutes = knownStaticRoutes is { Count: > 0 }
-            ? knownRoutes.Concat(knownStaticRoutes).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-            : knownRoutes;
+        var redirectRoutes = knownRedirectRoutes ?? NavigationRedirectRoutes.Empty;
+        var knownPatternRoutes = knownRoutes
+            .Concat(knownStaticRoutes?.AsEnumerable() ?? Enumerable.Empty<string>())
+            .Concat(redirectRoutes.PatternRoutes)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         ValidateVisibilityPatterns(item.Visibility, context + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
 
         if (!string.IsNullOrWhiteSpace(item.Url))
@@ -556,14 +555,14 @@ public static partial class WebSiteVerifier
                 {
                     warnings.Add($"Navigation lint: {context} points to '{item.Url}' but its language is configured with renderAtRoot=true. Use the public route '{suggestedPublicUrl}' and let preview/runtime map it locally.");
                 }
-                else if ((knownRoutes.Length > 0 || knownStaticRoutes is { Count: > 0 }) &&
+                else if ((knownRoutes.Length > 0 || knownStaticRoutes is { Count: > 0 } || redirectRoutes.HasRoutes) &&
                          ShouldValidateRouteCoverage(trimmedUrl, routeScopedPrefixes) &&
                          !trimmedUrl.Contains('{', StringComparison.Ordinal) &&
                          !trimmedUrl.Contains('}', StringComparison.Ordinal) &&
                          string.IsNullOrWhiteSpace(item.Match) &&
                          (item.Items?.Length ?? 0) == 0 &&
                          (item.Sections?.Length ?? 0) == 0 &&
-                         !MatchesNavigationUrlRoute(trimmedUrl, knownRoutes, navigationLanguage, localization, knownStaticRoutes, knownExactRoutes))
+                         !MatchesNavigationUrlRoute(trimmedUrl, knownRoutes, navigationLanguage, localization, knownStaticRoutes, redirectRoutes))
                 {
                     warnings.Add($"Navigation lint: {context} points to '{item.Url}' which does not match any generated route.");
                 }
@@ -584,7 +583,7 @@ public static partial class WebSiteVerifier
             warnings.Add($"Navigation lint: {context}.Match '{item.Match}' does not match any generated route.");
         }
 
-        ValidateMenuItemsForLint(item.Items ?? Array.Empty<MenuItemSpec>(), context + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, knownExactRoutes);
+        ValidateMenuItemsForLint(item.Items ?? Array.Empty<MenuItemSpec>(), context + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, redirectRoutes);
 
         var sections = item.Sections ?? Array.Empty<MenuSectionSpec>();
         for (var i = 0; i < sections.Length; i++)
@@ -595,7 +594,7 @@ public static partial class WebSiteVerifier
 
             var sectionLabel = !string.IsNullOrWhiteSpace(section.Title) ? section.Title : $"section#{i + 1}";
             var sectionContext = $"{context}.Sections['{sectionLabel}']";
-            ValidateMenuItemsForLint(section.Items ?? Array.Empty<MenuItemSpec>(), sectionContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, knownExactRoutes);
+            ValidateMenuItemsForLint(section.Items ?? Array.Empty<MenuItemSpec>(), sectionContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, redirectRoutes);
 
             var columns = section.Columns ?? Array.Empty<MenuColumnSpec>();
             for (var j = 0; j < columns.Length; j++)
@@ -604,7 +603,7 @@ public static partial class WebSiteVerifier
                 if (column is null)
                     continue;
                 var columnLabel = !string.IsNullOrWhiteSpace(column.Name) ? column.Name : $"column#{j + 1}";
-                ValidateMenuItemsForLint(column.Items ?? Array.Empty<MenuItemSpec>(), $"{sectionContext}.Columns['{columnLabel}'].Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, knownExactRoutes);
+                ValidateMenuItemsForLint(column.Items ?? Array.Empty<MenuItemSpec>(), $"{sectionContext}.Columns['{columnLabel}'].Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, navigationLanguage, knownStaticRoutes, redirectRoutes);
             }
         }
     }
@@ -615,12 +614,12 @@ public static partial class WebSiteVerifier
         string? navigationLanguage,
         ResolvedLocalizationConfig? localization,
         IReadOnlySet<string>? knownStaticRoutes,
-        IReadOnlySet<string>? knownExactRoutes)
+        NavigationRedirectRoutes knownRedirectRoutes)
     {
         if (PatternMatchesAnyRoute(url, knownRoutes))
             return true;
 
-        if (MatchesExactNavigationRoute(url, knownExactRoutes))
+        if (MatchesGeneratedRedirectRoute(url, knownRedirectRoutes))
             return true;
 
         if (TryEvaluateStaticNavigationRoute(url, knownStaticRoutes, out var staticMatch))
@@ -644,15 +643,82 @@ public static partial class WebSiteVerifier
         if (PatternMatchesAnyRoute(generatedRoute, knownRoutes))
             return true;
 
-        if (MatchesExactNavigationRoute(generatedRoute, knownExactRoutes))
+        if (MatchesGeneratedRedirectRoute(generatedRoute, knownRedirectRoutes))
             return true;
 
         return TryEvaluateStaticNavigationRoute(generatedRoute, knownStaticRoutes, out staticMatch) && staticMatch;
     }
 
-    private static bool MatchesExactNavigationRoute(string url, IReadOnlySet<string>? knownExactRoutes)
-        => knownExactRoutes is { Count: > 0 } &&
-           knownExactRoutes.Contains(NormalizeExactRouteForNavigationMatch(url));
+    private static NavigationRedirectRoutes BuildNavigationRedirectRoutes(IEnumerable<RedirectSpec>? redirects)
+    {
+        var rules = (redirects ?? Array.Empty<RedirectSpec>())
+            .Where(static redirect =>
+                redirect is not null &&
+                redirect.MatchType != RedirectMatchType.Regex &&
+                !string.IsNullOrWhiteSpace(redirect.From) &&
+                !string.IsNullOrWhiteSpace(redirect.To))
+            .ToArray();
+        if (rules.Length == 0)
+            return NavigationRedirectRoutes.Empty;
+
+        var patternRoutes = rules
+            .Select(ProjectRedirectPatternRoute)
+            .Where(static route => !string.IsNullOrWhiteSpace(route))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return new NavigationRedirectRoutes(rules, patternRoutes);
+    }
+
+    private static string ProjectRedirectPatternRoute(RedirectSpec redirect)
+    {
+        if (redirect.MatchType == RedirectMatchType.Exact)
+            return NormalizeExactRouteForNavigationMatch(redirect.From);
+
+        var prefix = NormalizeRedirectPrefix(redirect.From);
+        return prefix == "/" ? "/*" : prefix + "/*";
+    }
+
+    private static bool MatchesGeneratedRedirectRoute(string url, NavigationRedirectRoutes redirects)
+    {
+        if (!redirects.HasRoutes)
+            return false;
+
+        var route = NormalizeExactRouteForNavigationMatch(url);
+        foreach (var redirect in redirects.Rules)
+        {
+            if (redirect.MatchType == RedirectMatchType.Exact)
+            {
+                if (string.Equals(
+                        NormalizeExactRouteForNavigationMatch(redirect.From),
+                        route,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+                continue;
+            }
+
+            var prefix = NormalizeRedirectPrefix(redirect.From);
+            if (prefix == "/" ||
+                string.Equals(prefix, route, StringComparison.Ordinal) ||
+                route.StartsWith(prefix + "/", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeRedirectPrefix(string? source)
+    {
+        var prefix = NormalizeExactRouteForNavigationMatch(source);
+        var starIndex = prefix.IndexOf('*');
+        if (starIndex >= 0)
+            prefix = prefix[..starIndex];
+        prefix = prefix.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(prefix) ? "/" : prefix;
+    }
 
     private static bool TryEvaluateStaticNavigationRoute(
         string url,
@@ -890,6 +956,7 @@ public static partial class WebSiteVerifier
                 continue;
 
             var route = knownRoute.Trim();
+            var routeHasWildcard = route.Contains('*', StringComparison.Ordinal);
             if (hasWildcard)
             {
                 if (GlobMatch(normalizedPattern, route) ||
@@ -901,9 +968,22 @@ public static partial class WebSiteVerifier
             {
                 return true;
             }
+
+            if (routeHasWildcard &&
+                (GlobMatch(route, normalizedPattern) ||
+                 GlobMatch(route, normalizedStaticPattern)))
+            {
+                return true;
+            }
         }
 
         return false;
+    }
+
+    private sealed record NavigationRedirectRoutes(RedirectSpec[] Rules, string[] PatternRoutes)
+    {
+        internal static NavigationRedirectRoutes Empty { get; } = new(Array.Empty<RedirectSpec>(), Array.Empty<string>());
+        internal bool HasRoutes => Rules.Length > 0;
     }
 
 

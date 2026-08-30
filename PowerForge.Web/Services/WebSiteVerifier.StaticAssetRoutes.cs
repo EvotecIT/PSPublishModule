@@ -217,12 +217,12 @@ public static partial class WebSiteVerifier
             yield return route;
     }
 
-    private static IEnumerable<string> DiscoverGeneratedRedirectRoutes(IEnumerable<RedirectSpec> redirects)
+    private static IEnumerable<RedirectSpec> DiscoverGeneratedNavigationRedirects(IEnumerable<RedirectSpec> redirects)
     {
         foreach (var redirect in redirects ?? Array.Empty<RedirectSpec>())
         {
             if (redirect is null ||
-                redirect.MatchType != RedirectMatchType.Exact ||
+                redirect.MatchType == RedirectMatchType.Regex ||
                 string.IsNullOrWhiteSpace(redirect.From) ||
                 string.IsNullOrWhiteSpace(redirect.To) ||
                 IsExternalNavigationUrl(redirect.From))
@@ -232,7 +232,7 @@ public static partial class WebSiteVerifier
 
             var status = redirect.Status <= 0 ? 301 : redirect.Status;
             if (status is >= 300 and < 400)
-                yield return redirect.From;
+                yield return redirect;
         }
     }
 

@@ -67,7 +67,7 @@ public static partial class WebSiteVerifier
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
             var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
-            var staticOnlyRedirectRoutes = DiscoverGeneratedRedirectRoutes(builderState.Redirects).ToArray();
+            var staticOnlyRedirects = DiscoverGeneratedNavigationRedirects(builderState.Redirects).ToArray();
             var staticOnlyFileRoutes = staticOnlyRoutes
                 .Concat(DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath))
                 .Concat(DiscoverGeneratedSiteDataRoutes(spec))
@@ -79,9 +79,9 @@ public static partial class WebSiteVerifier
                 plan,
                 Array.Empty<string>(),
                 warnings,
-                HasStaticAssetInputs(spec, plan.RootPath) || staticOnlyFileRoutes.Length > 0 || staticOnlyRedirectRoutes.Length > 0,
+                HasStaticAssetInputs(spec, plan.RootPath) || staticOnlyFileRoutes.Length > 0 || staticOnlyRedirects.Length > 0,
                 staticOnlyFileRoutes,
-                staticOnlyRedirectRoutes);
+                staticOnlyRedirects);
             return new WebVerifyResult
             {
                 Success = true,
@@ -333,7 +333,7 @@ public static partial class WebSiteVerifier
             publishableRoutes);
         var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
-        var generatedRedirectRoutes = DiscoverGeneratedRedirectRoutes(builderState.Redirects).ToArray();
+        var generatedRedirects = DiscoverGeneratedNavigationRedirects(builderState.Redirects).ToArray();
         var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(spec, plan, builderState.Items);
         var fileRoutes = staticRoutes
             .Concat(generatedFeatureRoutes.Where(static route => !route.EndsWith("/", StringComparison.Ordinal)))
@@ -349,16 +349,20 @@ public static partial class WebSiteVerifier
             .Where(route => EmitsIndexHtml(spec, route))
             .Where(static route => !IsBuiltNotFoundRoute(route.Route))
             .Select(static route => route.Route)
-            .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)));
+            .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)))
+            .ToArray();
         ValidateNavigationLint(
             spec,
             localization,
             plan,
             navigationRoutes,
             warnings,
-            HasStaticAssetInputs(spec, plan.RootPath) || generatedRedirectRoutes.Length > 0,
+            HasStaticAssetInputs(spec, plan.RootPath) ||
+            navigationRoutes.Length > 0 ||
+            fileRoutes.Length > 0 ||
+            generatedRedirects.Length > 0,
             fileRoutes,
-            generatedRedirectRoutes);
+            generatedRedirects);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

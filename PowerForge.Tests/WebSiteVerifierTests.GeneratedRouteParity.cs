@@ -273,6 +273,131 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_ProjectsNonRegexRedirectMatchersAcrossNavigationPatterns()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-redirect-matchers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var spec = new SiteSpec
+            {
+                Name = "Generated redirect matcher routes",
+                BaseUrl = "https://example.test",
+                Redirects =
+                [
+                    new RedirectSpec { From = "/old/", To = "/", MatchType = RedirectMatchType.Exact },
+                    new RedirectSpec { From = "/legacy", To = "/archive/{path}", MatchType = RedirectMatchType.Prefix },
+                    new RedirectSpec { From = "/downloads/*", To = "/files/{path}", MatchType = RedirectMatchType.Wildcard },
+                    new RedirectSpec { From = "^/regex/(.*)$", To = "/archive/{path}", MatchType = RedirectMatchType.Regex }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec
+                                {
+                                    Title = "Exact pattern",
+                                    Url = "/old/",
+                                    Match = "/old/",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/old/"] }
+                                },
+                                new MenuItemSpec { Title = "Prefix base", Url = "/legacy" },
+                                new MenuItemSpec
+                                {
+                                    Title = "Prefix descendant pattern",
+                                    Url = "/legacy/guide",
+                                    Match = "/legacy/*",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/legacy/guide"] }
+                                },
+                                new MenuItemSpec { Title = "Wildcard descendant", Url = "/downloads/tool" },
+                                new MenuItemSpec { Title = "Invalid prefix neighbor", Url = "/legacyish/guide" },
+                                new MenuItemSpec { Title = "Invalid wildcard neighbor", Url = "/download/tool" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.False(HasMissingRouteWarning(result, "/legacy"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/downloads/tool"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Exact pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Prefix descendant pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.True(HasMissingRouteWarning(result, "/legacyish/guide"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/download/tool"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ValidatesGeneratedRootDataWithoutStaticMappings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-root-data-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "guide.md"), "---\ntitle: Guide\n---\nGuide");
+            var spec = new SiteSpec
+            {
+                Name = "Generated root data coverage",
+                BaseUrl = "https://example.test",
+                DataRoot = "./payload",
+                Collections = [new CollectionSpec { Name = "docs", Input = "content", Output = "/docs" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Guide", Url = "/docs/guide/" },
+                                new MenuItemSpec { Title = "Navigation data", Url = "/payload/site-nav.json" },
+                                new MenuItemSpec { Title = "Missing root data", Url = "/payload/missing.json" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "payload", "site-nav.json")));
+            Assert.False(HasMissingRouteWarning(result, "/payload/site-nav.json"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/payload/missing.json"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ProjectsPaginationForDistinctTaxonomyTermsWithCollidingSlugs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-slug-collision-" + Guid.NewGuid().ToString("N"));
