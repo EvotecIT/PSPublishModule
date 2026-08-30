@@ -2761,4 +2761,80 @@ public partial class WebSiteVerifierTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Verify_UsesThemeTokensForGeneratedSocialCardRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-theme-tokens-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        Directory.CreateDirectory(Path.Combine(root, "themes", "token-theme"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"),
+                "---\ntitle: Home\ndescription: Theme-aware card route.\nslug: index\n---\n\nHome");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            File.WriteAllText(Path.Combine(root, "themes", "token-theme", "theme.json"),
+                "{\"name\":\"token-theme\",\"tokens\":{\"color\":{\"accent\":\"#336699\"}}}");
+
+            var spec = new SiteSpec
+            {
+                Name = "Theme-aware social route",
+                BaseUrl = "https://example.test",
+                DefaultTheme = "token-theme",
+                ThemesRoot = "themes",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec
+                {
+                    Enabled = true,
+                    SiteName = "Theme-aware social route",
+                    AutoGenerateCards = true,
+                    GeneratedCardsPath = "/assets/social/generated"
+                },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var item = new ContentItem
+            {
+                SourcePath = Path.Combine(root, "content", "index.md"),
+                Collection = "pages",
+                OutputPath = "/",
+                Title = "Home",
+                Description = "Theme-aware card route.",
+                Slug = "index",
+                Kind = PageKind.Home,
+                Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            };
+            var routeWithoutThemeTokens = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item);
+            var builtRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, root);
+            Assert.NotEqual(routeWithoutThemeTokens, builtRoute);
+            spec.Navigation.Menus =
+            [
+                new MenuSpec
+                {
+                    Name = "main",
+                    Items =
+                    [
+                        new MenuItemSpec { Title = "Built theme-aware card", Url = builtRoute },
+                        new MenuItemSpec { Title = "Incorrect token-free card", Url = routeWithoutThemeTokens }
+                    ]
+                }
+            ];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains($"points to '{builtRoute}'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains($"points to '{routeWithoutThemeTokens}'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
 }

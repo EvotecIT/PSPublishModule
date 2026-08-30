@@ -308,6 +308,7 @@ public static partial class WebSiteVerifier
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
         var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(
             spec,
+            plan.RootPath,
             publishableRoutes.Concat(generatedPaginationRoutes));
         var fileRoutes = staticRoutes
             .Concat(generatedFeatureRoutes.Where(static route => !route.EndsWith("/", StringComparison.Ordinal)))

@@ -186,6 +186,7 @@ public static partial class WebSiteVerifier
 
     private static IEnumerable<string> DiscoverGeneratedSocialCardRoutes(
         SiteSpec spec,
+        string rootPath,
         IEnumerable<CollectionRoute> contentRoutes)
     {
         foreach (var route in contentRoutes.Where(static route => route is not null && !route.Draft && route.SocialCardItem is not null))
@@ -196,7 +197,7 @@ public static partial class WebSiteVerifier
             item.TranslationKey = route.TranslationKey;
             item.Kind = route.Kind;
             item.Outputs = route.Outputs ?? Array.Empty<string>();
-            var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item);
+            var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, rootPath);
             if (!string.IsNullOrWhiteSpace(cardRoute))
                 yield return cardRoute;
         }

@@ -96,7 +96,7 @@ public static partial class WebSiteBuilder
         return "/" + plan.RelativePath.Replace('\\', '/');
     }
 
-    internal static string ResolveGeneratedSocialCardRoute(SiteSpec spec, ContentItem item)
+    internal static string ResolveGeneratedSocialCardRoute(SiteSpec spec, ContentItem item, string? rootPath = null)
     {
         if (spec?.Social is null || item is null || !spec.Social.Enabled || !spec.Social.AutoGenerateCards)
             return string.Empty;
@@ -114,7 +114,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(description))
             description = ResolveMetaDescription(spec, item);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
-        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName);
+        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName, rootPath);
         return plan is null ? string.Empty : "/" + plan.RelativePath.Replace('\\', '/');
     }
 
@@ -123,7 +123,8 @@ public static partial class WebSiteBuilder
         ContentItem item,
         string title,
         string description,
-        string siteName)
+        string siteName,
+        string? rootPath = null)
     {
         if (spec.Social is null)
             return null;
@@ -149,7 +150,7 @@ public static partial class WebSiteBuilder
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
             : string.Empty;
         var metrics = ResolveSocialCardMetrics(spec, item, cardTheme);
-        var themeTokens = MergeSocialCardThemeTokens(BuildRenderCacheScope.Value?.Manifest?.Tokens, cardTheme?.Tokens);
+        var themeTokens = MergeSocialCardThemeTokens(ResolveSocialCardSiteThemeTokens(spec, rootPath), cardTheme?.Tokens);
         var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var metricsFingerprint = ComputeSocialCardMetricsFingerprint(metrics);
         var hashInput = string.Join("|", new[]
@@ -192,6 +193,20 @@ public static partial class WebSiteBuilder
             Metrics = metrics
         };
         return new SocialCardGenerationPlan(relativePath, renderOptions);
+    }
+
+    private static Dictionary<string, object?>? ResolveSocialCardSiteThemeTokens(SiteSpec spec, string? rootPath)
+    {
+        var scopedTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
+        if (scopedTokens is not null || string.IsNullOrWhiteSpace(rootPath))
+            return scopedTokens;
+
+        var themeRoot = ResolveThemeRoot(spec, rootPath);
+        if (string.IsNullOrWhiteSpace(themeRoot) || !Directory.Exists(themeRoot))
+            return null;
+
+        var manifest = new ThemeLoader().Load(themeRoot, ResolveThemesRoot(spec, rootPath));
+        return manifest?.Tokens;
     }
 
     private sealed record SocialCardGenerationPlan(
