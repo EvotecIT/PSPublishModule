@@ -11,7 +11,7 @@ Creates a configuration manifest for a PowerShell module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationManifest -ModuleVersion <string> -Guid <string> -Author <string> [-CompatiblePSEditions <string[]>] [-CompanyName <string>] [-Copyright <string>] [-Description <string>] [-PowerShellVersion <string>] [-Tags <string[]>] [-IconUri <string>] [-ProjectUri <string>] [-DotNetFrameworkVersion <string>] [-LicenseUri <string>] [-RequireLicenseAcceptance] [-Prerelease <string>] [-FunctionsToExport <string[]>] [-CmdletsToExport <string[]>] [-AliasesToExport <string[]>] [-FormatsToProcess <string[]>] [<CommonParameters>]
+New-ConfigurationManifest -ModuleVersion <string> -Guid <string> -Author <string> [-CompatiblePSEditions <string[]>] [-CompanyName <string>] [-Copyright <string>] [-Description <string>] [-PowerShellVersion <string>] [-ProcessorArchitecture <string>] [-Tags <string[]>] [-IconUri <string>] [-ProjectUri <string>] [-DotNetFrameworkVersion <string>] [-LicenseUri <string>] [-RequireLicenseAcceptance] [-Prerelease <string>] [-FunctionsToExport <string[]>] [-CmdletsToExport <string[]>] [-AliasesToExport <string[]>] [-FormatsToProcess <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -284,6 +284,22 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: PrereleaseTag
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProcessorArchitecture
+Specifies the processor architecture required to import the module.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: None, MSIL, X86, IA64, Amd64, Arm
 
 Required: False
 Position: named

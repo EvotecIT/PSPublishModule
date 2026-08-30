@@ -53,6 +53,11 @@ public sealed class NewConfigurationManifestCommand : PSCmdlet
     /// <summary>Specifies the minimum version of PowerShell this module requires.</summary>
     [Parameter] public string PowerShellVersion { get; set; } = "5.1";
 
+    /// <summary>Specifies the processor architecture required to import the module.</summary>
+    [Parameter]
+    [ValidateSet("None", "MSIL", "X86", "IA64", "Amd64", "Arm")]
+    public string? ProcessorArchitecture { get; set; }
+
     /// <summary>Specifies tags for the module.</summary>
     [Parameter] public string[]? Tags { get; set; }
 
@@ -103,6 +108,7 @@ public sealed class NewConfigurationManifestCommand : PSCmdlet
                 Copyright = Copyright,
                 Description = Description,
                 PowerShellVersion = PowerShellVersion,
+                ProcessorArchitecture = ProcessorArchitecture,
                 Tags = Tags,
                 IconUri = IconUri,
                 ProjectUri = ProjectUri,

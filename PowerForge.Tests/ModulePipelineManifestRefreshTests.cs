@@ -48,6 +48,7 @@ public sealed class ModulePipelineManifestRefreshTests
 
             Assert.Contains(manifestMutator.TopLevelVersionWrites, static write => write.NewVersion == "3.0.0");
             Assert.Contains(manifestMutator.TopLevelStringWrites, static write => write.Key == "RootModule" && write.Value == "TestModule.psm1");
+            Assert.Contains(manifestMutator.TopLevelStringWrites, static write => write.Key == "ProcessorArchitecture" && write.Value == "Amd64");
             Assert.Contains(manifestMutator.RequiredModulesWrites, static write => write.Modules.Length == 0);
             Assert.Contains(manifestMutator.RemovedTopLevelKeys, static key => string.Equals(key, "CommandModuleDependencies", StringComparison.Ordinal));
         }
@@ -91,6 +92,7 @@ public sealed class ModulePipelineManifestRefreshTests
                             Copyright = null,
                             Description = "Fresh description",
                             PowerShellVersion = "5.1",
+                            ProcessorArchitecture = "None",
                             Tags = null,
                             IconUri = null,
                             ProjectUri = "https://new.example/project",
@@ -119,6 +121,8 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.Equal("Fresh description", description);
             Assert.True(ManifestEditor.TryGetTopLevelString(manifestPath, "PowerShellVersion", out var psVersion));
             Assert.Equal("5.1", psVersion);
+            Assert.True(ManifestEditor.TryGetTopLevelString(manifestPath, "ProcessorArchitecture", out var processorArchitecture));
+            Assert.Equal("None", processorArchitecture);
 
             Assert.False(ManifestEditor.TryGetTopLevelString(manifestPath, "CompanyName", out _));
             Assert.False(ManifestEditor.TryGetTopLevelString(manifestPath, "Copyright", out _));
@@ -306,6 +310,7 @@ public sealed class ModulePipelineManifestRefreshTests
             var manifestPath = result.BuildResult.ManifestPath;
 
             Assert.False(ManifestEditor.TryGetTopLevelString(manifestPath, "Prerelease", out _));
+            Assert.False(ManifestEditor.TryGetTopLevelString(manifestPath, "ProcessorArchitecture", out _));
             Assert.True(ManifestEditor.TryGetPsDataStringArray(manifestPath, "Prerelease", out var prerelease));
             Assert.NotNull(prerelease);
             Assert.Equal(new[] { "preview2" }, prerelease);
@@ -534,6 +539,7 @@ public sealed class ModulePipelineManifestRefreshTests
             "    Copyright = 'Old Copyright'" + Environment.NewLine +
             "    Description = 'Old description'" + Environment.NewLine +
             "    PowerShellVersion = '2.0'" + Environment.NewLine +
+            "    ProcessorArchitecture = 'Amd64'" + Environment.NewLine +
             "    DotNetFrameworkVersion = '4.0'" + Environment.NewLine +
             "    Prerelease = 'preview1'" + Environment.NewLine +
             "    CommandModuleDependencies = @{ 'Old.Module' = @('Get-Old') }" + Environment.NewLine +
