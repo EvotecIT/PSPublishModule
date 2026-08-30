@@ -14,76 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-
-function Get-PathComparison {
-    if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
-        return [System.StringComparison]::OrdinalIgnoreCase
-    }
-    return [System.StringComparison]::Ordinal
-}
-
-function Assert-ContainedPath {
-    param([string] $Root, [string] $Path, [string] $Label)
-
-    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $pathFull = [IO.Path]::GetFullPath($Path)
-    $prefix = $rootFull + [IO.Path]::DirectorySeparatorChar
-    if (-not $pathFull.StartsWith($prefix, (Get-PathComparison))) {
-        throw "$Label escapes its declared root: $pathFull"
-    }
-    return $pathFull
-}
-
-function Write-Utf8Json {
-    param([string] $Path, [object] $Value, [int] $Depth = 100)
-
-    $parent = Split-Path -Parent $Path
-    if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    $json = $Value | ConvertTo-Json -Depth $Depth
-    [IO.File]::WriteAllText($Path, $json + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-}
-
-function Invoke-OwnedProcess {
-    param(
-        [string] $FileName,
-        [string[]] $Arguments,
-        [string] $WorkingDirectory,
-        [hashtable] $Environment,
-        [int] $TimeoutSeconds = 600
-    )
-
-    $start = [Diagnostics.ProcessStartInfo]::new()
-    $start.FileName = $FileName
-    $start.UseShellExecute = $false
-    $start.RedirectStandardOutput = $true
-    $start.RedirectStandardError = $true
-    $start.CreateNoWindow = $true
-    $start.WorkingDirectory = $WorkingDirectory
-    $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
-    $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
-    foreach ($argument in $Arguments) { [void] $start.ArgumentList.Add($argument) }
-    foreach ($key in @($Environment.Keys)) { $start.Environment[$key] = [string] $Environment[$key] }
-
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    $process = [Diagnostics.Process]::Start($start)
-    try {
-        $stdout = $process.StandardOutput.ReadToEndAsync()
-        $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            try { $process.Kill($true) } catch { }
-            throw "Owned process '$FileName' exceeded $TimeoutSeconds seconds."
-        }
-        $clock.Stop()
-        return [pscustomobject]@{
-            ExitCode = $process.ExitCode
-            StandardOutput = $stdout.GetAwaiter().GetResult()
-            StandardError = $stderr.GetAwaiter().GetResult()
-            DurationMilliseconds = $clock.ElapsedMilliseconds
-        }
-    } finally {
-        $process.Dispose()
-    }
-}
+. (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 
 function Invoke-PowerForgeJson {
     param([string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutSeconds = 900)
@@ -105,80 +36,27 @@ function Invoke-PowerForgeJson {
 function Get-VerifiedPackage {
     param([object] $Entry, [string] $PackageCache)
 
-    $packagePath = Join-Path $PackageCache ($Entry.sha256 + '.nupkg')
-    if (-not (Test-Path -LiteralPath $packagePath)) {
-        if ($Offline) { throw "Offline package cache miss for $($Entry.id) $($Entry.version)." }
-        $temporaryPath = $packagePath + '.' + [guid]::NewGuid().ToString('N') + '.download'
-        Assert-ContainedPath -Root $PackageCache -Path $temporaryPath -Label 'Package download' | Out-Null
-        try {
-            Invoke-WebRequest -Uri $Entry.packageUrl -OutFile $temporaryPath
-            $actual = (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $Entry.sha256) {
-                throw "Package hash mismatch for $($Entry.id) $($Entry.version): expected $($Entry.sha256), received $actual."
-            }
-            Move-Item -LiteralPath $temporaryPath -Destination $packagePath
-        } finally {
-            if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force }
-        }
-    }
-    $cachedHash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($cachedHash -ne $Entry.sha256) {
-        throw "Cached package hash mismatch for $($Entry.id) $($Entry.version): $packagePath"
-    }
-    return $packagePath
+    return Get-VerifiedCorpusPayload `
+        -Uri ([Uri] $Entry.packageUrl) `
+        -Sha256 $Entry.sha256 `
+        -CacheRoot $PackageCache `
+        -CacheExtension '.nupkg' `
+        -Label "package $($Entry.id) $($Entry.version)" `
+        -OfflineMode:$Offline `
+        -AllowedUrlPattern '^https://www\.powershellgallery\.com/api/v2/package/'
 }
 
 function Expand-VerifiedPackage {
     param([object] $Entry, [string] $PackagePath, [string] $ExtractCache)
 
     $target = Join-Path $ExtractCache $Entry.sha256
-    if (Test-Path -LiteralPath $target) {
-        Assert-ContainedPath -Root $ExtractCache -Path $target -Label 'Cached package extraction' | Out-Null
-        $targetItem = Get-Item -LiteralPath $target -Force
-        if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Cached package extraction is a symbolic link or junction and will not be trusted: $target"
-        }
-        Remove-Item -LiteralPath $target -Recurse -Force
-    }
-
-    $staging = Join-Path $ExtractCache ($Entry.sha256 + '.' + [guid]::NewGuid().ToString('N') + '.extracting')
-    Assert-ContainedPath -Root $ExtractCache -Path $staging -Label 'Package extraction' | Out-Null
-    New-Item -ItemType Directory -Path $staging | Out-Null
-    try {
-        $archive = [IO.Compression.ZipFile]::OpenRead($PackagePath)
-        try {
-            $destinations = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($archiveEntry in $archive.Entries) {
-                $unixType = (($archiveEntry.ExternalAttributes -shr 16) -band 0xF000)
-                if ($unixType -eq 0xA000) { throw "Package contains a symbolic link: $($archiveEntry.FullName)" }
-                $relative = $archiveEntry.FullName.Replace('/', [IO.Path]::DirectorySeparatorChar)
-                if ([IO.Path]::IsPathRooted($relative)) { throw "Package contains a rooted entry: $relative" }
-                $destination = Assert-ContainedPath -Root $staging -Path (Join-Path $staging $relative) -Label 'Package entry'
-                if (-not $destinations.Add($destination)) { throw "Package contains a portable path collision: $relative" }
-                if ([string]::IsNullOrEmpty($archiveEntry.Name)) {
-                    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                    continue
-                }
-                New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-                $source = $archiveEntry.Open()
-                $destinationStream = [IO.File]::Create($destination)
-                try { $source.CopyTo($destinationStream) }
-                finally { $destinationStream.Dispose(); $source.Dispose() }
-            }
-        } finally {
-            $archive.Dispose()
-        }
-        Write-Utf8Json -Path (Join-Path $staging '.powerforge-corpus-package.json') -Value ([ordered]@{
-            schemaVersion = 1
-            id = $Entry.id
-            version = $Entry.version
-            sha256 = $Entry.sha256
-        })
-        Move-Item -LiteralPath $staging -Destination $target
-    } catch {
-        if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
-        throw
-    }
+    Expand-VerifiedCorpusArchive -PayloadPath $PackagePath -Target $target -ContainmentRoot $ExtractCache -Label "package $($Entry.id)"
+    Write-Utf8Json -Path (Join-Path $target '.powerforge-corpus-package.json') -Value ([ordered]@{
+        schemaVersion = 1
+        id = $Entry.id
+        version = $Entry.version
+        sha256 = $Entry.sha256
+    })
     return $target
 }
 
@@ -245,11 +123,11 @@ function Get-LedgerSummary {
 }
 
 function New-TargetContract {
-    param([string] $Rid, [string] $TargetFramework, [string] $Path)
+    param([string] $Rid, [string] $TargetFramework, [string] $SemanticProfileId, [string] $Path)
 
     $parts = $Rid.Split('-')
     Write-Utf8Json -Path $Path -Value ([ordered]@{
-        schemaVersion = 2
+        schemaVersion = 3
         artifactKind = 'Executable'
         mode = 'Strict'
         targetFramework = $TargetFramework
@@ -262,6 +140,7 @@ function New-TargetContract {
         allowsPowerShellRuntimeEvaluation = $false
         explicit = $true
         supportLevel = 'Supported'
+        semanticProfileId = $SemanticProfileId
         contractSha256 = ''
     })
 }
@@ -350,7 +229,7 @@ try {
     if (-not $SkipStrictPrograms) {
         if ($RuntimeIdentifier -notin @($packet.strictRuntimeIdentifiers)) { throw "Strict packet RID '$RuntimeIdentifier' is not selected by the fixed packet." }
         $targetContractPath = Join-Path $runRoot ('contracts/strict-' + $RuntimeIdentifier + '.json')
-        New-TargetContract -Rid $RuntimeIdentifier -TargetFramework $packet.strictTargetFramework -Path $targetContractPath
+        New-TargetContract -Rid $RuntimeIdentifier -TargetFramework $packet.strictTargetFramework -SemanticProfileId $packet.semanticProfile -Path $targetContractPath
         foreach ($program in @($packet.strictPrograms)) {
             Write-Host "[$($program.id)] analyze, lock, build, execute on $RuntimeIdentifier"
             try {

@@ -17,188 +17,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-
-function Get-PathComparison {
-    if ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) {
-        return [StringComparison]::OrdinalIgnoreCase
-    }
-    return [StringComparison]::Ordinal
-}
-
-function Assert-ContainedPath {
-    param([string] $Root, [string] $Path, [string] $Label)
-
-    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $pathFull = [IO.Path]::GetFullPath($Path)
-    if (-not $pathFull.StartsWith($rootFull + [IO.Path]::DirectorySeparatorChar, (Get-PathComparison))) {
-        throw "$Label escapes its declared root: $pathFull"
-    }
-    return $pathFull
-}
-
-function Test-LooksLikeRootedPath {
-    param([string] $Path)
-
-    return [IO.Path]::IsPathRooted($Path) -or
-        $Path.StartsWith('\\', [StringComparison]::Ordinal) -or
-        $Path.StartsWith('//', [StringComparison]::Ordinal) -or
-        ($Path.Length -ge 2 -and [char]::IsLetter($Path[0]) -and $Path[1] -eq ':')
-}
-
-function Write-Utf8Json {
-    param([string] $Path, [object] $Value, [int] $Depth = 100)
-
-    $parent = Split-Path -Parent $Path
-    if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth $Depth) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
-}
-
-function Invoke-OwnedProcess {
-    param([string] $FileName, [string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutSeconds = 900)
-
-    $start = [Diagnostics.ProcessStartInfo]::new()
-    $start.FileName = $FileName
-    $start.UseShellExecute = $false
-    $start.RedirectStandardOutput = $true
-    $start.RedirectStandardError = $true
-    $start.CreateNoWindow = $true
-    $start.WorkingDirectory = $WorkingDirectory
-    $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
-    $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
-    foreach ($argument in $Arguments) { [void] $start.ArgumentList.Add($argument) }
-
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    $process = [Diagnostics.Process]::Start($start)
-    try {
-        $stdout = $process.StandardOutput.ReadToEndAsync()
-        $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            try { $process.Kill($true) } catch { Write-Verbose "Failed to terminate timed-out process '$FileName': $($_.Exception.Message)" }
-            throw "Owned process '$FileName' exceeded $TimeoutSeconds seconds."
-        }
-        $clock.Stop()
-        return [pscustomobject]@{
-            ExitCode = $process.ExitCode
-            StandardOutput = $stdout.GetAwaiter().GetResult()
-            StandardError = $stderr.GetAwaiter().GetResult()
-            DurationMilliseconds = $clock.ElapsedMilliseconds
-        }
-    } finally {
-        $process.Dispose()
-    }
-}
+. (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 
 function Get-VerifiedPayload {
     param([object] $Entry, [string] $PayloadCache, [switch] $OfflineMode)
 
-    $uri = [Uri] $Entry.acquisition.url
-    if ($uri.Scheme -ne 'https') { throw "Assessment payload URL must use HTTPS: $uri" }
-    if ($Entry.acquisition.sha256 -notmatch '^[0-9a-f]{64}$') { throw "Invalid SHA-256 for $($Entry.id)." }
     if ($Entry.acquisition.kind -notin @('File', 'ZipArchive')) { throw "Unsupported acquisition kind for $($Entry.id): $($Entry.acquisition.kind)" }
-
-    $payloadPath = Join-Path $PayloadCache ($Entry.acquisition.sha256 + '.payload')
-    if (-not (Test-Path -LiteralPath $payloadPath)) {
-        if ($OfflineMode) { throw "Offline payload cache miss for $($Entry.id)." }
-        $temporaryPath = $payloadPath + '.' + [guid]::NewGuid().ToString('N') + '.download'
-        Assert-ContainedPath -Root $PayloadCache -Path $temporaryPath -Label 'Assessment download' | Out-Null
-        try {
-            Invoke-WebRequest -Uri $uri -OutFile $temporaryPath
-            $actual = (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $Entry.acquisition.sha256) {
-                throw "Payload hash mismatch for $($Entry.id): expected $($Entry.acquisition.sha256), received $actual."
-            }
-            Move-Item -LiteralPath $temporaryPath -Destination $payloadPath
-        } finally {
-            if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force }
-        }
-    }
-
-    $cachedHash = (Get-FileHash -LiteralPath $payloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($cachedHash -ne $Entry.acquisition.sha256) { throw "Cached payload hash mismatch for $($Entry.id): $payloadPath" }
-    return $payloadPath
-}
-
-function Expand-VerifiedArchive {
-    param(
-        [string] $PayloadPath,
-        [string] $Target,
-        [int] $EntryLimit,
-        [long] $EntryByteLimit,
-        [long] $TotalByteLimit,
-        [double] $CompressionRatioLimit
-    )
-
-    $staging = $Target + '.' + [guid]::NewGuid().ToString('N') + '.extracting'
-    New-Item -ItemType Directory -Path $staging | Out-Null
-    try {
-        $archive = [IO.Compression.ZipFile]::OpenRead($PayloadPath)
-        try {
-            if ($archive.Entries.Count -gt $EntryLimit) {
-                throw "Payload contains $($archive.Entries.Count) entries; limit is $EntryLimit."
-            }
-            $destinations = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            [long] $declaredTotalBytes = 0
-            [long] $actualTotalBytes = 0
-            foreach ($archiveEntry in $archive.Entries) {
-                $unixType = (($archiveEntry.ExternalAttributes -shr 16) -band 0xF000)
-                if ($unixType -eq 0xA000) { throw "Payload contains a symbolic link: $($archiveEntry.FullName)" }
-                $portableName = $archiveEntry.FullName.Replace('\', '/')
-                if (Test-LooksLikeRootedPath $portableName) { throw "Payload contains a rooted entry: $portableName" }
-                $segments = @($portableName.Split('/', [StringSplitOptions]::RemoveEmptyEntries))
-                if ($segments.Count -eq 0 -or @($segments | Where-Object { $_ -in @('.', '..') -or $_.Contains(':') }).Count -gt 0) {
-                    throw "Payload contains an invalid portable path: $portableName"
-                }
-                $portableRelative = $segments -join '/'
-                $portableCollisionKey = @($segments | ForEach-Object { $_.Normalize([Text.NormalizationForm]::FormC).TrimEnd([char[]] @(' ', '.')) }) -join '/'
-                if ($portableCollisionKey.Split('/') -contains '') { throw "Payload contains a non-portable path: $portableName" }
-                if (-not $destinations.Add($portableCollisionKey)) { throw "Payload contains a portable path collision: $portableName" }
-                $relative = $portableRelative.Replace('/', [IO.Path]::DirectorySeparatorChar)
-                $destination = Assert-ContainedPath -Root $staging -Path (Join-Path $staging $relative) -Label 'Assessment archive entry'
-                if ($portableName.EndsWith('/', [StringComparison]::Ordinal)) {
-                    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                    continue
-                }
-                if ($archiveEntry.Length -gt $EntryByteLimit) {
-                    throw "Payload entry '$portableName' declares $($archiveEntry.Length) bytes; per-entry limit is $EntryByteLimit."
-                }
-                if ($archiveEntry.Length -gt $TotalByteLimit - $declaredTotalBytes) {
-                    throw "Payload declares more than the $TotalByteLimit-byte expansion limit."
-                }
-                $declaredTotalBytes += $archiveEntry.Length
-                if ($archiveEntry.Length -gt 0) {
-                    if ($archiveEntry.CompressedLength -le 0) { throw "Payload entry '$portableName' has an invalid compressed length." }
-                    $compressionRatio = [double] $archiveEntry.Length / [double] $archiveEntry.CompressedLength
-                    if ($compressionRatio -gt $CompressionRatioLimit) {
-                        throw "Payload entry '$portableName' has compression ratio $([Math]::Round($compressionRatio, 2)); limit is $CompressionRatioLimit."
-                    }
-                }
-                New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-                $source = $archiveEntry.Open()
-                $destinationStream = [IO.File]::Create($destination)
-                try {
-                    $buffer = [byte[]]::new(81920)
-                    [long] $entryBytes = 0
-                    while (($read = $source.Read($buffer, 0, $buffer.Length)) -gt 0) {
-                        if ($read -gt $EntryByteLimit - $entryBytes) { throw "Payload entry '$portableName' exceeded the per-entry expansion limit." }
-                        if ($read -gt $TotalByteLimit - $actualTotalBytes) { throw "Payload exceeded the total expansion limit." }
-                        $destinationStream.Write($buffer, 0, $read)
-                        $entryBytes += $read
-                        $actualTotalBytes += $read
-                    }
-                    if ($entryBytes -ne $archiveEntry.Length) {
-                        throw "Payload entry '$portableName' expanded to $entryBytes bytes instead of its declared $($archiveEntry.Length)."
-                    }
-                }
-                finally { $destinationStream.Dispose(); $source.Dispose() }
-            }
-        } finally {
-            $archive.Dispose()
-        }
-        Move-Item -LiteralPath $staging -Destination $Target
-    } catch {
-        if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
-        throw
-    }
+    return Get-VerifiedCorpusPayload `
+        -Uri ([Uri] $Entry.acquisition.url) `
+        -Sha256 $Entry.acquisition.sha256 `
+        -CacheRoot $PayloadCache `
+        -CacheExtension '.payload' `
+        -Label "assessment payload $($Entry.id)" `
+        -OfflineMode:$OfflineMode
 }
 
 function Get-AssessmentSourceRoot {
@@ -213,18 +44,15 @@ function Get-AssessmentSourceRoot {
     )
 
     $target = Join-Path $ExtractCache $Entry.acquisition.sha256
-    Assert-ContainedPath -Root $ExtractCache -Path $target -Label 'Assessment extraction' | Out-Null
-    if (Test-Path -LiteralPath $target) {
-        $targetItem = Get-Item -LiteralPath $target -Force
-        if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Assessment extraction is a symbolic link or junction: $target"
-        }
-        Remove-Item -LiteralPath $target -Recurse -Force
-    }
-
     if ($Entry.acquisition.kind -eq 'ZipArchive') {
-        Expand-VerifiedArchive -PayloadPath $PayloadPath -Target $target -EntryLimit $ArchiveEntryLimit -EntryByteLimit $ArchiveEntryByteLimit -TotalByteLimit $ArchiveTotalByteLimit -CompressionRatioLimit $ArchiveCompressionRatioLimit
+        Expand-VerifiedCorpusArchive -PayloadPath $PayloadPath -Target $target -ContainmentRoot $ExtractCache -Label "assessment payload $($Entry.id)" -EntryLimit $ArchiveEntryLimit -EntryByteLimit $ArchiveEntryByteLimit -TotalByteLimit $ArchiveTotalByteLimit -CompressionRatioLimit $ArchiveCompressionRatioLimit
     } else {
+        Assert-ContainedPath -Root $ExtractCache -Path $target -Label 'Assessment extraction' | Out-Null
+        if (Test-Path -LiteralPath $target) {
+            $targetItem = Get-Item -LiteralPath $target -Force
+            if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Assessment extraction is a symbolic link or junction: $target" }
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
         New-Item -ItemType Directory -Path $target | Out-Null
         $destination = Assert-ContainedPath -Root $target -Path (Join-Path $target $Entry.entryPoint) -Label 'Assessment file entry point'
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null

@@ -10,6 +10,7 @@ This checked-in corpus is the portable, product-neutral acceptance surface for P
 - `public-corpus-baseline.net8.json` records the bounded Windows Hybrid and Windows/Linux Strict outcomes. Its percentages are packet measurements, never estimates of PowerShell-language coverage.
 - `external-assessment.net10.json` is a separate, replaceable frontier packet. It pins repository archives, gallery packages, and standalone files by immutable revision and SHA-256, but it does not turn their names or behavior into compiler configuration.
 - `external-assessment-baseline.net10.json` records post-emission census results for the pinned frontier. Its gate protects source identity, parser health, and existing emission from regression; low coverage remains visible and is not treated as successful compilation or execution.
+- `Corpus.Runner.Common.ps1` owns exact-hash HTTPS acquisition, offline cache verification, contained archive extraction, expansion limits, and owned child-process execution for both packets.
 
 Run the portable coverage gate from the repository root:
 
@@ -28,7 +29,7 @@ Run the fixed public packet after building the CLI:
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1
 ```
 
-The runner downloads only the exact declared package URLs, verifies SHA-256 before extraction, rejects escaping paths, portable case collisions, and links, writes one reviewed dependency lock per input, builds without the compiler build cache, and probes each generated module in a clean child PowerShell process. Use `-Offline` after the first acquisition to prove that the packet no longer depends on a package feed. Strict programs are executed directly for the selected RID; run them on the actual target host rather than treating cross-publish as execution proof.
+The runner downloads only the exact declared package URLs, verifies SHA-256 before extraction, rejects escaping paths, portable case collisions, and links, and enforces entry-count, per-entry, total-expansion, and compression-ratio limits. It writes one reviewed dependency lock per input, builds without the compiler build cache, and probes each generated module in a clean child PowerShell process. Use `-Offline` after the first acquisition to prove that the packet no longer depends on a package feed. Strict programs are executed directly for the selected RID; run them on the actual target host rather than treating cross-publish as execution proof.
 
 Run the external frontier assessment after building the CLI:
 
