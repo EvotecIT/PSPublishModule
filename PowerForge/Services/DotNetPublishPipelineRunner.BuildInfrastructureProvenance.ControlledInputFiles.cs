@@ -154,11 +154,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 var controlledValues = document.DescendantNodes()
                     .OfType<XText>()
                     .Select(text => (
+                        Node: (XObject)text,
                         Value: text.Value,
                         BaseDirectory: Path.GetDirectoryName(path)!,
                         ProjectReferenceOperation: false,
                         OverwrittenIntermediateProperty: IsControlledIntermediateOutputProperty(text)))
                     .Concat(document.Descendants().Attributes().Select(attribute => (
+                        Node: (XObject)attribute,
                         Value: attribute.Value,
                         BaseDirectory: IsProjectReferenceItemOperationAttribute(attribute)
                             ? normalizedTaskInputBaseDirectory
@@ -180,7 +182,12 @@ public sealed partial class DotNetPublishPipelineRunner
                               checkoutRoot) ||
                           ContainsUncontrolledEnvironmentReference(entry.Value) ||
                           ContainsUncontrolledAmbientPropertyFunction(entry.Value) ||
-                          ContainsUncontrolledFileSystemPropertyFunction(entry.Value)))
+                          ContainsUncontrolledFileSystemPropertyFunction(entry.Value)) ||
+                        IsDefinitelyInactiveControlledBuildValue(
+                            entry.Node,
+                            path,
+                            evaluatedGlobalProperties,
+                            evaluatedProjectContexts))
                     {
                         continue;
                     }
@@ -191,9 +198,7 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach ((XDocument document, string path) in executableDocuments)
             {
                 if (ContainsControlledBuildPropertyEscape(document))
-                {
                     return false;
-                }
                 IReadOnlyDictionary<string, string>[] propertyContexts =
                     evaluatedProjectContexts is not null &&
                     evaluatedProjectContexts.TryGetValue(
@@ -216,9 +221,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             properties,
                             outputProjectPath,
                             readLines: ReadControlledCheckoutTextInput)))
-                {
                     return false;
-                }
             }
 
             return !controlledDocuments.Any(document =>
@@ -231,6 +234,69 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static bool IsDefinitelyInactiveControlledBuildValue(
+        XObject node,
+        string declaringPath,
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts)
+    {
+        if (node is not XText text || text.Parent is null)
+            return false;
+
+        XAttribute[] conditions = text.Parent
+            .AncestorsAndSelf()
+            .SelectMany(element => element.Attributes())
+            .Where(attribute => attribute.Name.LocalName.Equals(
+                "Condition",
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (conditions.Length == 0)
+            return false;
+
+        IReadOnlyDictionary<string, string>[] contexts;
+        if (evaluatedProjectContexts is not null &&
+            evaluatedProjectContexts.TryGetValue(
+                Path.GetFullPath(declaringPath),
+                out IReadOnlyDictionary<string, string>[]? projectContexts))
+        {
+            contexts = projectContexts;
+        }
+        else if (evaluatedProjectContexts is not null)
+        {
+            contexts = evaluatedProjectContexts.Values
+                .SelectMany(value => value)
+                .ToArray();
+        }
+        else if (evaluatedGlobalProperties is not null)
+        {
+            contexts = [evaluatedGlobalProperties];
+        }
+        else
+        {
+            return false;
+        }
+
+        if (evaluatedGlobalProperties is not null && evaluatedProjectContexts is not null)
+        {
+            contexts = contexts.Select(context =>
+            {
+                var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+                    merged[property.Key] = property.Value;
+                foreach (KeyValuePair<string, string> property in context)
+                    merged[property.Key] = property.Value;
+                return (IReadOnlyDictionary<string, string>)merged;
+            }).ToArray();
+        }
+
+        if (contexts.Length == 0)
+            return false;
+
+        return contexts.All(properties => conditions.Any(condition =>
+            TryEvaluateSimpleMsBuildCondition(condition.Value, properties, out bool active) &&
+            !active));
     }
 
     private static bool IsProjectReferenceItemOperationAttribute(XAttribute attribute)
@@ -366,11 +432,14 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         }
 
-        return ContainsUncontrolledImportActivation(reachableDocument) ||
-               ContainsUncontrolledTaskInputPropertyFunction(reachableDocument, reachableDocuments) ||
-               ContainsUncontrolledSdkTaskExecutionOverride(reachableDocument) ||
-               ContainsUncontrolledCompilerOptionOverride(reachableDocument) ||
-               reachableDocument.Descendants().Any(element =>
+        bool importActivation = ContainsUncontrolledImportActivation(reachableDocument);
+        bool taskPropertyFunction = ContainsUncontrolledTaskInputPropertyFunction(
+            reachableDocument,
+            reachableDocuments,
+            evaluatedProperties);
+        bool sdkOverride = ContainsUncontrolledSdkTaskExecutionOverride(reachableDocument);
+        bool compilerOverride = ContainsUncontrolledCompilerOptionOverride(reachableDocument);
+        XElement? uncontrolledElement = reachableDocument.Descendants().FirstOrDefault(element =>
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
              (!IsModeledControlledBuildTask(element.Name.LocalName) ||
@@ -386,6 +455,8 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+        return importActivation || taskPropertyFunction || sdkOverride || compilerOverride ||
+               uncontrolledElement is not null;
     }
 
     private static bool ContainsUncontrolledTaskExecutionOverride(XElement task)
@@ -704,6 +775,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "MSBuildProjectExtensionsPath",
             "IntermediateOutputPath",
             "NuGetLockFilePath",
+            "PowerForgeSdkPackageLockFile",
             "NuGetAudit",
             "RunAnalyzers",
             "RunAnalyzersDuringBuild",

@@ -21,7 +21,19 @@ public sealed partial class DotNetPublishPipelineRunner
                          "Condition",
                          StringComparison.OrdinalIgnoreCase)))
         {
+            if (evaluatedGlobalProperties is not null &&
+                conditionAttribute.Parent is not null &&
+                IsDefinitelyInactiveControlledBuildOperation(
+                    conditionAttribute.Parent,
+                    evaluatedGlobalProperties,
+                    declaringPath,
+                    relatedDocuments.Select(related => related.Document)))
+            {
+                continue;
+            }
             string condition = DecodeMsBuildEscapes(conditionAttribute.Value);
+            if (!TryReadExistsConditionOperands(condition, out string[] declaredOperands))
+                return false;
             if (!TryExpandControlledTaskInputValues(
                     condition,
                     declaringPath,
@@ -31,11 +43,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     out string[] expandedConditions,
                     consumingElement: conditionAttribute.Parent))
             {
+                // Conditions without an Exists call do not consume file-system state.
+                // Preserve ordinary unevaluated feature conditions, but fail closed when
+                // a declared Exists operand could not be expanded safely.
+                if (declaredOperands.Length == 0)
+                    continue;
                 return false;
             }
             foreach (string expandedCondition in expandedConditions)
             {
-                if (!TryReadExistsConditionOperands(expandedCondition, out string[] operands))
+                if (!TryReadReachableExistsConditionOperands(expandedCondition, out string[] operands))
                     return false;
                 foreach (string operand in operands)
                 {
@@ -48,9 +65,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             out string[] expandedValues,
                             consumingElement: conditionAttribute.Parent) ||
                         expandedValues.Length == 0)
-                    {
                         return false;
-                    }
 
                     foreach (string expandedValue in expandedValues)
                     {
@@ -66,9 +81,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 declaringAllowedRoot,
                                 taskInputAllowedRoot,
                                 out string inputPath))
-                        {
                             return false;
-                        }
 
                         if (isControlledInput?.Invoke(inputPath) is true)
                             continue;
@@ -77,15 +90,73 @@ public sealed partial class DotNetPublishPipelineRunner
                             : taskInputAllowedRoot;
                         if ((File.Exists(inputPath) || Directory.Exists(inputPath)) &&
                             isControlledInput is not null)
-                        {
                             return false;
-                        }
                         if (HasReparsePointInExistingAncestors(inputPath, allowedRoot))
                             return false;
                     }
                 }
             }
         }
+        return true;
+    }
+
+    private static bool TryReadReachableExistsConditionOperands(
+        string expression,
+        out string[] operands)
+    {
+        var values = new List<string>();
+        bool success = TryReadReachableExistsConditionOperands(expression, values, 0);
+        operands = success ? values.ToArray() : Array.Empty<string>();
+        return success;
+    }
+
+    private static bool TryReadReachableExistsConditionOperands(
+        string expression,
+        ICollection<string> operands,
+        int depth)
+    {
+        if (depth >= 64)
+            return false;
+
+        expression = TrimOuterConditionParentheses(expression.Trim());
+        if (TrySplitTopLevelCondition(expression, "or", out string[] orParts))
+        {
+            foreach (string part in orParts)
+            {
+                if (!TryReadReachableExistsConditionOperands(part, operands, depth + 1))
+                    return false;
+                if (TryEvaluateSimpleMsBuildBooleanExpression(part, out bool value) && value)
+                    break;
+            }
+
+            return true;
+        }
+
+        if (TrySplitTopLevelCondition(expression, "and", out string[] andParts))
+        {
+            foreach (string part in andParts)
+            {
+                if (!TryReadReachableExistsConditionOperands(part, operands, depth + 1))
+                    return false;
+                if (TryEvaluateSimpleMsBuildBooleanExpression(part, out bool value) && !value)
+                    break;
+            }
+
+            return true;
+        }
+
+        if (expression.StartsWith("!", StringComparison.Ordinal))
+        {
+            return TryReadReachableExistsConditionOperands(
+                expression.Substring(1),
+                operands,
+                depth + 1);
+        }
+
+        if (!TryReadExistsConditionOperands(expression, out string[] values))
+            return false;
+        foreach (string value in values)
+            operands.Add(value);
         return true;
     }
 

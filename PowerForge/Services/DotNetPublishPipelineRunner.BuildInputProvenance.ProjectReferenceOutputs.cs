@@ -428,8 +428,23 @@ public sealed partial class DotNetPublishPipelineRunner
                 outputItemType,
                 msBuildToolsPath,
                 msBuildSdksPath,
-                declaredOutputs!) ||
-            !TryReadEvaluatedProjectReferences(
+                declaredOutputs!))
+        {
+            return false;
+        }
+
+        // ResolveReferences reports the future target output for explicitly declared
+        // analyzer and embedded-resource ProjectReferences even before the child build.
+        // A safely absent generated path is not a current provenance input. Existing
+        // outputs still require a controlled rebuild, while absent paths beneath links
+        // remain fail closed.
+        if (!File.Exists(fullPath) &&
+            !HasUnsafeAbsentProjectReferenceOutputPath(fullPath, declaringProjectPath))
+        {
+            return true;
+        }
+
+        if (!TryReadEvaluatedProjectReferences(
                 item,
                 declaringProjectPath,
                 "MSBuildSourceProjectFile",

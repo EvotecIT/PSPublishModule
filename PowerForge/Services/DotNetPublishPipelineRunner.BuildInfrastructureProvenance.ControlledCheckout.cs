@@ -9,6 +9,21 @@ public sealed partial class DotNetPublishPipelineRunner
         out IReadOnlyDictionary<string, string?> controlledEnvironment)
         => TryCreateControlledBuildEnvironment(
             environmentVariables,
+            Array.Empty<string>(),
+            gitRoot,
+            controlledSourceRoot,
+            gitRoot,
+            out controlledEnvironment);
+
+    internal static bool TryCreateControlledBuildEnvironment(
+        IReadOnlyDictionary<string, string?> environmentVariables,
+        IReadOnlyCollection<string> controlledEnvironmentVariableNames,
+        string gitRoot,
+        string controlledSourceRoot,
+        out IReadOnlyDictionary<string, string?> controlledEnvironment)
+        => TryCreateControlledBuildEnvironment(
+            environmentVariables,
+            controlledEnvironmentVariableNames,
             gitRoot,
             controlledSourceRoot,
             gitRoot,
@@ -16,6 +31,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryCreateControlledBuildEnvironment(
         IReadOnlyDictionary<string, string?> environmentVariables,
+        IReadOnlyCollection<string> controlledEnvironmentVariableNames,
         string gitRoot,
         string controlledSourceRoot,
         string buildInputBaseDirectory,
@@ -47,6 +63,9 @@ public sealed partial class DotNetPublishPipelineRunner
         values["TMP"] = temporaryRoot;
         values["TMPDIR"] = temporaryRoot;
         values["NUGET_PACKAGES"] = packageRoot;
+        var controlledNames = new HashSet<string>(
+            controlledEnvironmentVariableNames,
+            StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, string?> variable in environmentVariables)
         {
             if (IsUncontrolledRuntimeInjectionEnvironmentVariable(variable.Key))
@@ -54,9 +73,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledEnvironment = values;
                 return false;
             }
-            // The controlled proof is offline and intentionally does not replay
-            // ordinary plan variables such as private-feed credentials. Values
-            // needed by the proof are assigned below from trusted inputs.
+            if (!controlledNames.Contains(variable.Key) || variable.Value is null)
+                continue;
+            if (!TryRemapControlledBuildValue(
+                    variable.Value,
+                    gitRoot,
+                    controlledSourceRoot,
+                    buildInputBaseDirectory,
+                    out string controlledValue))
+            {
+                controlledEnvironment = values;
+                return false;
+            }
+            values[variable.Key] = controlledValue;
         }
         if (!TryResolveTrustedBuildTool("dotnet", out string dotNetPath))
         {
@@ -230,7 +259,31 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 continue;
             }
-            string candidate = value.Substring(index).TrimStart('\'', '"');
+            int candidateStart = index;
+            char quote = '\0';
+            if (value[index] == '\'' || value[index] == '"')
+            {
+                quote = value[index];
+                candidateStart++;
+            }
+            else if (index > 0 && (value[index - 1] == '\'' || value[index - 1] == '"'))
+            {
+                quote = value[index - 1];
+            }
+
+            string candidate = value.Substring(candidateStart);
+            if (quote != '\0')
+            {
+                int closingQuote = candidate.IndexOf(quote);
+                if (closingQuote >= 0)
+                    candidate = candidate.Substring(0, closingQuote);
+            }
+            if (candidate.Length == 1 &&
+                (candidate[0] == Path.DirectorySeparatorChar ||
+                 candidate[0] == Path.AltDirectorySeparatorChar))
+            {
+                continue;
+            }
             if (Path.IsPathRooted(candidate))
                 return true;
         }
@@ -445,9 +498,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.IsNullOrWhiteSpace(gitRoot) ||
                 string.IsNullOrWhiteSpace(revision) ||
                 !IsSameOrBelowBuildInputPath(projectPath, gitRoot!))
-            {
                 return false;
-            }
 
             string relativeProjectPath = FrameworkCompatibility.GetRelativePath(
                 Path.GetFullPath(gitRoot!),
@@ -473,9 +524,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2),
                 BuildControlledGitConfiguration(filterNames));
             if (checkout.ExitCode != 0 || checkout.TimedOut || !File.Exists(controlledProjectPath))
-            {
                 return false;
-            }
             if (!TryVerifyControlledGitConfiguration(
                     gitRoot!,
                     revision!,
@@ -484,14 +533,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     checkoutRoot,
                     revision!,
                     filterNames))
-            {
                 return false;
-            }
 
             if (!TryInitializeControlledSubmodules(checkoutRoot, filterNames))
-            {
                 return false;
-            }
 
             var controlledBuildInputs = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
@@ -529,6 +574,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (File.Exists(controlledInput))
                     controlledMsBuildInputs.Add(controlledInput);
             }
+            var controlledPropertyNames = new HashSet<string>(
+                ReadControlledBuildPropertyNames(controlledMsBuildInputs),
+                StringComparer.OrdinalIgnoreCase);
 
             var controlledGlobalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
@@ -539,9 +587,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         checkoutRoot,
                         projectDirectory,
                         out string controlledValue))
-                {
                     return false;
-                }
                 controlledGlobalProperties[property.Key] = controlledValue;
             }
 
@@ -555,17 +601,13 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string fullProjectPath = Path.GetFullPath(project.Key);
                 if (!IsSameOrBelowBuildInputPath(fullProjectPath, gitRoot!))
-                {
                     return false;
-                }
                 string controlledContextProjectPath = Path.GetFullPath(Path.Combine(
                     checkoutRoot,
                     FrameworkCompatibility.GetRelativePath(gitRoot!, fullProjectPath)));
                 if (!IsSameOrBelowBuildInputPath(controlledContextProjectPath, checkoutRoot) ||
                     !controlledMsBuildInputs.Contains(controlledContextProjectPath))
-                {
                     return false;
-                }
 
                 var contexts = new List<IReadOnlyDictionary<string, string>>();
                 foreach (IReadOnlyDictionary<string, string> context in project.Value)
@@ -573,15 +615,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     var controlledContext = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     foreach (KeyValuePair<string, string> property in context)
                     {
+                        if (!controlledPropertyNames.Contains(property.Key))
+                            continue;
                         if (!TryRemapControlledBuildValue(
                                 property.Value,
                                 gitRoot!,
                                 checkoutRoot,
                                 Path.GetDirectoryName(fullProjectPath)!,
                                 out string controlledValue))
-                        {
                             return false;
-                        }
                         controlledContext[property.Key] = controlledValue;
                     }
                     contexts.Add(controlledContext);
@@ -597,9 +639,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(controlledProjectPath!)!,
                     controlledProjectPath,
                     controlledProjectContexts))
-            {
                 return false;
-            }
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
             if (!TryVerifyControlledGitConfiguration(

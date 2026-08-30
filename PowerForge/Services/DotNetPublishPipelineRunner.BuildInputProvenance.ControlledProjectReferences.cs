@@ -31,7 +31,57 @@ public sealed partial class DotNetPublishPipelineRunner
         try
         {
             Directory.CreateDirectory(controlledOutputRoot);
-            IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]> projectContexts =
+            string? contextGitRoot = ReadGitText(
+                Path.GetDirectoryName(request.ProjectPath)!,
+                "rev-parse --show-toplevel");
+            if (string.IsNullOrWhiteSpace(contextGitRoot))
+                return false;
+            string? trackedInputList = ReadGitRawText(contextGitRoot!, "ls-files -z");
+            if (trackedInputList is null)
+                return false;
+            var trackedInputPaths = new HashSet<string>(
+                trackedInputList.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(path => path.Replace('\\', '/').TrimStart('/')),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string[] controlledConditionPropertyNames = ReadControlledBuildPropertyNames(
+                executableMsBuildInputs
+                    .Where(path =>
+                    {
+                        string? relativePath = ToGitRelativeExclusion(
+                            contextGitRoot!,
+                            contextGitRoot!,
+                            path);
+                        return relativePath is not null &&
+                               trackedInputPaths.Contains(relativePath.Replace('\\', '/'));
+                    })
+                    .Append(request.ProjectPath));
+            var controlledConditionPropertyNameSet = new HashSet<string>(
+                controlledConditionPropertyNames,
+                StringComparer.OrdinalIgnoreCase);
+            IReadOnlyDictionary<string, string> BuildProjectContext(
+                ProjectEvaluationRequest contextRequest,
+                IReadOnlyDictionary<string, string>? knownEvaluatedProperties = null)
+            {
+                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                IReadOnlyDictionary<string, string> evaluatedContext =
+                    contextRequest.BuildControlledEvaluationProperties(
+                        knownEvaluatedProperties ?? ReadEvaluatedProjectProperties(
+                            contextRequest,
+                            controlledConditionPropertyNames));
+                foreach (KeyValuePair<string, string> property in evaluatedContext)
+                {
+                    if (controlledConditionPropertyNameSet.Contains(property.Key))
+                        properties[property.Key] = property.Value;
+                }
+                if (!properties.ContainsKey("TargetFramework") &&
+                    contextRequest.HasExplicitTargetFramework)
+                {
+                    properties["TargetFramework"] = contextRequest.TargetFramework!;
+                }
+                return properties;
+            }
+
+            Dictionary<string, IReadOnlyDictionary<string, string>[]> projectContexts =
                 evaluatedProjectReferences
                     .Where(reference => File.Exists(reference.ProjectPath))
                     .GroupBy(
@@ -42,18 +92,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         group => group
                             .Select(reference =>
                             {
-                                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                                foreach (KeyValuePair<string, string> property in
-                                         request.ForProject(reference).ReadEffectiveGlobalProperties())
-                                {
-                                    properties[property.Key] = property.Value;
-                                }
-                                if (!properties.ContainsKey("TargetFramework") &&
-                                    request.HasExplicitTargetFramework)
-                                {
-                                    properties["TargetFramework"] = request.TargetFramework!;
-                                }
-                                return (IReadOnlyDictionary<string, string>)properties;
+                                ProjectEvaluationRequest contextRequest = request.ForProject(reference);
+                                return BuildProjectContext(contextRequest);
                             })
                             .GroupBy(
                                 properties => string.Join("\n", properties.OrderBy(
@@ -64,6 +104,24 @@ public sealed partial class DotNetPublishPipelineRunner
                             .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                             .ToArray(),
                         IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            string rootProjectPath = Path.GetFullPath(request.ProjectPath);
+            IReadOnlyDictionary<string, string> rootContext = BuildProjectContext(
+                request,
+                evaluatedConditionProperties);
+            projectContexts[rootProjectPath] = projectContexts.TryGetValue(
+                    rootProjectPath,
+                    out IReadOnlyDictionary<string, string>[]? existingRootContexts)
+                ? existingRootContexts
+                    .Append(rootContext)
+                    .GroupBy(
+                        properties => string.Join("\n", properties.OrderBy(
+                            property => property.Key,
+                            StringComparer.OrdinalIgnoreCase).Select(property =>
+                                property.Key + "=" + property.Value)),
+                        StringComparer.Ordinal)
+                    .Select(context => (IReadOnlyDictionary<string, string>)context.First())
+                    .ToArray()
+                : [rootContext];
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
                     controlledSourceRoot,
@@ -73,11 +131,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     projectContexts,
                     out originalGitRoot,
                     out string? controlledProjectPath))
-            {
                 return false;
-            }
             if (!TryCreateControlledBuildEnvironment(
                     request.EnvironmentVariables,
+                    request.ControlledBuildEnvironmentVariableNames,
                     originalGitRoot!,
                     controlledSourceRoot,
                     Path.GetDirectoryName(request.ProjectPath)!,
@@ -183,8 +240,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 "msbuild",
                 controlledProjectPath!,
                 "-nologo",
-                "-maxCpuCount:1",
-                "-nodeReuse:false",
                 "-verbosity:quiet",
                 "-restore",
                 "-target:ResolveReferences",
@@ -234,9 +289,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledEnvironment,
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
-            {
                 return false;
-            }
 
             int itemsMarker = process.StdOut.LastIndexOf("\"Items\"", StringComparison.Ordinal);
             int jsonStart = itemsMarker < 0
@@ -244,15 +297,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 : process.StdOut.LastIndexOf('{', itemsMarker);
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
-            {
                 return false;
-            }
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items))
-            {
                 return false;
-            }
             if (!controlledEnvironment.TryGetValue("NUGET_PACKAGES", out string? controlledPackageRoot) ||
                 string.IsNullOrWhiteSpace(controlledPackageRoot))
             {
@@ -268,9 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledPackageRoot!,
                     verifiedPackages,
                     out resolvedItemsJson))
-            {
                 return false;
-            }
             using JsonDocument mappedDocument = JsonDocument.Parse(resolvedItemsJson);
             if (!TryReadControlledProjectReferences(
                     mappedDocument.RootElement,
@@ -281,9 +328,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskWidePropertyRemovals,
                     allowAmbiguousEvaluatedAssignments,
                     out EvaluatedProjectReference[] controlledReferences))
-            {
                 return false;
-            }
             references = controlledReferences
                 .GroupBy(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal)
                 .Select(group => group.First())

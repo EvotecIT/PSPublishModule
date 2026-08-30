@@ -87,6 +87,33 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ControlledBuildEnvironment_ReplaysOnlyAdmittedNonSecretPlanValues()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string controlledRoot = Directory.CreateDirectory(Path.Combine(root, "controlled")).FullName;
+        try
+        {
+            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledBuildEnvironment(
+                new Dictionary<string, string?>
+                {
+                    ["DETERMINISTIC_BUILD_VALUE"] = "2026-08-29T20:00:00Z",
+                    ["PRIVATE_BUILD_TOKEN"] = "private-token"
+                },
+                ["DETERMINISTIC_BUILD_VALUE"],
+                root,
+                controlledRoot,
+                out IReadOnlyDictionary<string, string?> environment));
+
+            Assert.Equal("2026-08-29T20:00:00Z", environment["DETERMINISTIC_BUILD_VALUE"]);
+            Assert.False(environment.ContainsKey("PRIVATE_BUILD_TOKEN"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void ReadSourceProvenance_RecoversPropertyFunctionTaskOutputItemName()
     {
         DotNetPublishPipelineRunner.SourceProvenance provenance = ReadProjectReferencePropertyRecoveryFixture(
