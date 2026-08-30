@@ -28,7 +28,7 @@ public static class PowerShellCompilationSemanticOracleCatalog
             .OrderBy(static profile => profile.ProfileId, StringComparer.Ordinal)
             .ToArray());
 
-    /// <summary>Promoted semantic-family provenance, cross-joined with every named host profile.</summary>
+    /// <summary>Promoted semantic-family provenance linked to applicable native executable cases.</summary>
     public static IReadOnlyList<PowerShellCompilationSemanticFeatureProvenance> FeatureProvenance { get; } =
         new ReadOnlyCollection<PowerShellCompilationSemanticFeatureProvenance>(CreateFeatureProvenance()
             .OrderBy(static evidence => evidence.FeatureId, StringComparer.Ordinal)
@@ -126,36 +126,41 @@ public static class PowerShellCompilationSemanticOracleCatalog
     {
         var families = new[]
         {
-            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterType, "Binding/PowerShellParameterBinder.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterDefault, "Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterMetadata, "Binding/PowerShellParameterSemanticValidator.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterBinding, "Binding/PowerShellParameterSemanticValidator.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_parameter_binding"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.Conversion, "Binding/PowerShellSemanticBinder.Expressions.cs", "test/powershell/Language/Scripting/TypeConversion/TypeConversion.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_type_conversion"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.ExpandableString, "Binding/PowerShellSemanticBinder.Expressions.cs", "test/powershell/Language/Parser/Parsing.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_quoting_rules"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.AssignmentTarget, "Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Operators/AssignmentOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_assignment_operators"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.SwitchFlags, "Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Flow-Control/Switch.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_switch"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.CatchFilter, "Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Scripting/ExceptionHandling/ExceptionHandling.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_try_catch_finally"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.PipelineLifecycle, "Lowering/PowerShellTypedLowerer.cs", "test/powershell/Language/Scripting/AdvancedFunctions/AdvancedFunction.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_methods"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.FunctionGraph, "Binding/PowerShellSemanticCallGraph.cs", "test/powershell/Language/Parser/Function.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.CommentBasedHelp, "PowerShellCompiledHelpWriter.cs", "test/powershell/Host/Help/HelpSystem.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_comment_based_help"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.RequiresDirective, "Binding/PowerShellScriptRequirementPolicy.cs", "test/powershell/Language/Parser/Requires.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_requires"),
-            new SemanticFamily(PowerShellCompilationFeatureIds.DictionaryFlow, "Binding/PowerShellSemanticBinder.Expressions.cs", "test/powershell/Language/Scripting/HashTable.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_hash_tables"),
-            new SemanticFamily("operator.arithmetic", "Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/ArithmeticOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_arithmetic_operators"),
-            new SemanticFamily("operator.comparison", "Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/ComparisonOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_comparison_operators"),
-            new SemanticFamily("operator.logical", "Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/LogicalOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_logical_operators"),
-            new SemanticFamily("pipeline.enumeration", "BoundTree/PowerShellBoundPipeline.cs", "test/powershell/Language/Scripting/Pipeline/Pipeline.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_pipelines"),
-            new SemanticFamily("runtime.read-only-state", "Binding/PowerShellRuntimeStateIntrinsicPolicy.cs", "test/powershell/Language/Scripting/AutomaticVariables/AutomaticVariables.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_automatic_variables")
+            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterType, "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterDefault, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellParameterContractBinder.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterMetadata, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellParameterSemanticValidator.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_parameters"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.ParameterBinding, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellParameterContractBinder.cs", "test/powershell/Language/Scripting/ParameterBinding/ParameterBinding.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_parameter_binding"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.Conversion, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs", "test/powershell/Language/Scripting/TypeConversion/TypeConversion.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_type_conversion"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.ExpandableString, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellStringSemanticBinder.cs", "test/powershell/Language/Parser/Parsing.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_quoting_rules"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.AssignmentTarget, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellMutationSemanticBinder.cs", "test/powershell/Language/Operators/AssignmentOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_assignment_operators"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.SwitchFlags, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Flow-Control/Switch.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_switch"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.CatchFilter, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Scripting/ExceptionHandling/ExceptionHandling.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_try_catch_finally"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.PipelineLifecycle, "PowerForge.PowerShell/Services/Compilation/FrontEnd/PowerShellLifecycleSourceBinder.cs", "test/powershell/Language/Scripting/AdvancedFunctions/AdvancedFunction.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions_advanced_methods"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.FunctionGraph, "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.CallGraph.cs", "test/powershell/Language/Parser/Function.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_functions"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.CommentBasedHelp, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommentHelpBinder.cs", "test/powershell/Host/Help/HelpSystem.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_comment_based_help"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.RequiresDirective, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellScriptRequirementPolicy.cs", "test/powershell/Language/Parser/Requires.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_requires"),
+            new SemanticFamily(PowerShellCompilationFeatureIds.DictionaryFlow, "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs", "test/powershell/Language/Scripting/HashTable.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_hash_tables"),
+            new SemanticFamily("operator.arithmetic", "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/ArithmeticOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_arithmetic_operators"),
+            new SemanticFamily("operator.comparison", "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/ComparisonOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_comparison_operators"),
+            new SemanticFamily("operator.logical", "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOperatorSemanticBinder.cs", "test/powershell/Language/Operators/LogicalOperator.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_logical_operators"),
+            new SemanticFamily("pipeline.enumeration", "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs", "test/powershell/Language/Scripting/Pipeline/Pipeline.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_pipelines"),
+            new SemanticFamily("runtime.read-only-state", "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellRuntimeStateSemanticBinder.cs", "test/powershell/Language/Scripting/AutomaticVariables/AutomaticVariables.Tests.ps1", "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_automatic_variables")
         };
 
         foreach (var family in families)
         foreach (var profile in Profiles)
         {
+            var caseIds = PowerShellCompilationSemanticOracleCaseCatalog.Cases
+                .Where(item => item.FeatureId.Equals(family.FeatureId, StringComparison.Ordinal) && item.ProfileIds.Contains(profile.ProfileId))
+                .Select(static item => item.CaseId)
+                .ToArray();
             yield return new PowerShellCompilationSemanticFeatureProvenance(
                 family.FeatureId,
                 profile.ProfileId,
                 profile.UpstreamCommit,
                 new[] { family.UpstreamTest },
                 new[] { family.DocumentationUri },
+                caseIds,
                 expectedVersionDifference: family.FeatureId == PowerShellCompilationFeatureIds.PipelineLifecycle && profile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
                     ? "PowerShell 5.1 does not expose the clean lifecycle block; the profile rejects or hosts that shape explicitly."
                     : string.Empty,

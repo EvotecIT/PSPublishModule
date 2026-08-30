@@ -116,7 +116,7 @@ public sealed class PowerShellCompilationSemanticOracleProfile
 /// <summary>Authoritative evidence used to implement one feature in one semantic profile.</summary>
 public sealed class PowerShellCompilationSemanticFeatureProvenance
 {
-    /// <summary>Creates immutable per-feature provenance.</summary>
+    /// <summary>Creates immutable per-feature provenance without linked minimized cases.</summary>
     public PowerShellCompilationSemanticFeatureProvenance(
         string featureId,
         string profileId,
@@ -126,12 +126,38 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
         string expectedVersionDifference = "",
         string contractVersion = "1.0",
         string owningComponent = "PowerForge.SemanticPipeline")
+        : this(
+            featureId,
+            profileId,
+            upstreamCommit,
+            (upstreamTests ?? throw new ArgumentNullException(nameof(upstreamTests))).ToArray(),
+            (documentationUris ?? throw new ArgumentNullException(nameof(documentationUris))).ToArray(),
+            Array.Empty<string>(),
+            expectedVersionDifference,
+            contractVersion,
+            owningComponent)
+    {
+    }
+
+    /// <summary>Creates immutable per-feature provenance.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationSemanticFeatureProvenance(
+        string featureId,
+        string profileId,
+        string upstreamCommit,
+        IReadOnlyList<string> upstreamTests,
+        IReadOnlyList<string> documentationUris,
+        IReadOnlyList<string> caseIds,
+        string expectedVersionDifference = "",
+        string contractVersion = "1.0",
+        string owningComponent = "PowerForge.SemanticPipeline")
     {
         FeatureId = Require(featureId, nameof(featureId));
         ProfileId = Require(profileId, nameof(profileId));
         UpstreamCommit = upstreamCommit?.Trim() ?? string.Empty;
         UpstreamTests = Normalize(upstreamTests, nameof(upstreamTests));
         DocumentationUris = Normalize(documentationUris, nameof(documentationUris));
+        CaseIds = Normalize(caseIds ?? Array.Empty<string>(), nameof(caseIds));
         ExpectedVersionDifference = expectedVersionDifference?.Trim() ?? string.Empty;
         ContractVersion = Require(contractVersion, nameof(contractVersion));
         OwningComponent = Require(owningComponent, nameof(owningComponent));
@@ -151,6 +177,9 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
 
     /// <summary>Authoritative documentation references.</summary>
     public IReadOnlyList<string> DocumentationUris { get; }
+
+    /// <summary>Minimized executable cases that directly exercise this feature/profile contract.</summary>
+    public IReadOnlyList<string> CaseIds { get; }
 
     /// <summary>Named and justified host-version difference, or empty when no difference is expected.</summary>
     public string ExpectedVersionDifference { get; }

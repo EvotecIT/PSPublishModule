@@ -30,8 +30,9 @@ public sealed class PowerShellCompilationSemanticOracleTests
     }
 
     [Fact]
-    public void CatalogCarriesOwnedPinnedProvenanceForEveryPromotedFamilyAndProfile()
+    public void CatalogCarriesOwnedPinnedProvenanceAndRealCasesForEveryPromotedFamilyAndProfile()
     {
+        var repositoryRoot = FindRepositoryRoot();
         var evidence = PowerShellCompilationSemanticOracleCatalog.FeatureProvenance;
         var families = evidence.Select(static item => item.FeatureId).Distinct(StringComparer.Ordinal).ToArray();
 
@@ -43,10 +44,92 @@ public sealed class PowerShellCompilationSemanticOracleTests
         {
             Assert.Equal("1.0", item.ContractVersion);
             Assert.NotEmpty(item.OwningComponent);
+            Assert.True(
+                File.Exists(Path.Combine(repositoryRoot, item.OwningComponent.Replace('/', Path.DirectorySeparatorChar))),
+                $"Semantic owner '{item.OwningComponent}' does not resolve from the repository root.");
             Assert.NotEmpty(item.UpstreamTests);
             Assert.NotEmpty(item.DocumentationUris);
+            Assert.NotEmpty(item.CaseIds);
             Assert.Contains(PowerShellCompilationSemanticOracleCatalog.Profiles, profile => profile.ProfileId == item.ProfileId);
+            Assert.All(item.CaseIds, caseId =>
+            {
+                var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get(caseId);
+                Assert.Equal(item.FeatureId, semanticCase.FeatureId);
+                Assert.Contains(item.ProfileId, semanticCase.ProfileIds);
+                Assert.False(string.IsNullOrWhiteSpace(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(caseId)));
+            });
         });
+    }
+
+    [Fact]
+    public void FeatureProvenancePreservesLegacyConstructorContract()
+    {
+        var signature = new[]
+        {
+            typeof(string), typeof(string), typeof(string), typeof(IEnumerable<string>),
+            typeof(IEnumerable<string>), typeof(string), typeof(string), typeof(string)
+        };
+        Assert.NotNull(typeof(PowerShellCompilationSemanticFeatureProvenance).GetConstructor(signature));
+
+        var legacy = new PowerShellCompilationSemanticFeatureProvenance(
+            "feature",
+            "profile",
+            "commit",
+            new[] { "upstream-test" },
+            new[] { "https://example.test/docs" },
+            expectedVersionDifference: "expected",
+            contractVersion: "1.0",
+            owningComponent: "owner");
+        Assert.Empty(legacy.CaseIds);
+
+        const string legacyJson = """
+        {
+          "FeatureId": "feature",
+          "ProfileId": "profile",
+          "UpstreamCommit": "commit",
+          "UpstreamTests": ["upstream-test"],
+          "DocumentationUris": ["https://example.test/docs"],
+          "ExpectedVersionDifference": "expected",
+          "ContractVersion": "1.0",
+          "OwningComponent": "owner"
+        }
+        """;
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<PowerShellCompilationSemanticFeatureProvenance>(legacyJson);
+        Assert.NotNull(deserialized);
+        Assert.Empty(deserialized.CaseIds);
+    }
+
+    [Fact]
+    public void MinimizedCasesExecuteOnConfiguredExactPowerShellProfiles()
+    {
+        var runner = new PowerShellCompilationSemanticOracleRunner();
+        var profiles = new List<(string ProfileId, string? HostPath)>
+        {
+            (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, null),
+            (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, null)
+        };
+        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
+        if (!string.IsNullOrWhiteSpace(powerShell74Path))
+            profiles.Add((PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path));
+
+        foreach (var semanticCase in PowerShellCompilationSemanticOracleCaseCatalog.Cases)
+        foreach (var profile in profiles.Where(item => semanticCase.ProfileIds.Contains(item.ProfileId)))
+        {
+            using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
+            var observation = runner.Observe(new PowerShellCompilationSemanticOracleRequest(profile.ProfileId, fixture.ScriptPath)
+            {
+                Arguments = semanticCase.Arguments.ToArray(),
+                ObservedPropertyNames = semanticCase.ObservedPropertyNames.ToArray(),
+                Culture = "en-US",
+                HostExecutablePath = profile.HostPath
+            });
+            var value = Assert.Single(observation.Success);
+            Assert.True(
+                semanticCase.ExpectedValue.Equals(value.Value, StringComparison.Ordinal) &&
+                semanticCase.ExpectedTypeName.Equals(value.TypeName, StringComparison.Ordinal),
+                $"Case '{semanticCase.CaseId}' under '{profile.ProfileId}' returned '{value.Value}' ({value.TypeName}).");
+            Assert.Empty(observation.ErrorRecords);
+        }
     }
 
     [Fact]
@@ -425,6 +508,18 @@ Write-Error 'error-five' -ErrorId 'PowerForge.Semantic.Test' -Category InvalidDa
                 }
             }
         };
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        throw new InvalidOperationException("Unable to locate repository root.");
+    }
 
     private static PowerShellCompilationSemanticOracleEnvelope PromotableEnvelope(
         string executionSurface,

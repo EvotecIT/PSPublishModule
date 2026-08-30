@@ -66,6 +66,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Scripts\\**\\*.ps1"
                       LogicalName="PowerForge.$([System.String]::Copy('%(Identity)').Replace('\', '.').Replace('/', '.'))" />
+    <EmbeddedResource Include="Resources\\PowerShellCompilation\\SemanticOracle\\Cases\\*.ps1"
+                      LogicalName="PowerForge.PowerShellCompilation.SemanticOracle.Cases.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\\Module\\Data\\Example-*.*"
                       Link="Templates\\ModuleScaffold\\%(Filename)%(Extension)"
                       LogicalName="PowerForge.Templates.ModuleScaffold.%(Filename)%(Extension)" />
