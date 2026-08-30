@@ -72,6 +72,12 @@ public sealed class ConfigurationProjectRelease
     public bool SkipBuild { get; set; }
 
     /// <summary>
+    /// When true, each <c>dotnet publish</c> invocation performs its own authoritative build
+    /// instead of consuming outputs from a separate prebuild step.
+    /// </summary>
+    public bool BuildDuringPublish { get; set; }
+
+    /// <summary>
     /// Optional release-level output selection defaults.
     /// </summary>
     public ConfigurationProjectReleaseOutputType[] ToolOutput { get; set; } = Array.Empty<ConfigurationProjectReleaseOutputType>();

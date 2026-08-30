@@ -18,6 +18,7 @@ public sealed class PowerForgeProjectConfigurationJsonServiceTests
                     Configuration = "Release",
                     PublishToolGitHub = true,
                     SkipRestore = true,
+                    BuildDuringPublish = true,
                     ToolOutput = new[] { ConfigurationProjectReleaseOutputType.Portable }
                 },
                 Signing = new ConfigurationProjectSigning
@@ -52,6 +53,7 @@ public sealed class PowerForgeProjectConfigurationJsonServiceTests
             Assert.Equal("Release", loaded.Release.Configuration);
             Assert.True(loaded.Release.PublishToolGitHub);
             Assert.True(loaded.Release.SkipRestore);
+            Assert.True(loaded.Release.BuildDuringPublish);
             Assert.Single(loaded.Release.ToolOutput);
             Assert.Equal(ConfigurationProjectReleaseOutputType.Portable, loaded.Release.ToolOutput[0]);
             Assert.Single(loaded.Targets);

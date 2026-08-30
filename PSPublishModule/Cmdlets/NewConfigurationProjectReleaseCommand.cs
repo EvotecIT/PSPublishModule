@@ -37,6 +37,13 @@ public sealed class NewConfigurationProjectReleaseCommand : PSCmdlet
     public SwitchParameter SkipBuild { get; set; }
 
     /// <summary>
+    /// Lets each <c>dotnet publish</c> invocation perform its own authoritative build instead of
+    /// consuming outputs from a separate prebuild step.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter BuildDuringPublish { get; set; }
+
+    /// <summary>
     /// Optional default release output selection.
     /// </summary>
     [Parameter]
@@ -59,6 +66,7 @@ public sealed class NewConfigurationProjectReleaseCommand : PSCmdlet
             PublishToolGitHub = PublishToolGitHub.IsPresent,
             SkipRestore = SkipRestore.IsPresent,
             SkipBuild = SkipBuild.IsPresent,
+            BuildDuringPublish = BuildDuringPublish.IsPresent,
             ToolOutput = ToolOutput?.Distinct().ToArray() ?? Array.Empty<ConfigurationProjectReleaseOutputType>(),
             SkipToolOutput = SkipToolOutput?.Distinct().ToArray() ?? Array.Empty<ConfigurationProjectReleaseOutputType>()
         });
