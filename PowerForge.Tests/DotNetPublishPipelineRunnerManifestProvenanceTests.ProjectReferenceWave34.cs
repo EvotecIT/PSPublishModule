@@ -101,7 +101,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void ReadSourceProvenance_RemapPreservesTrackedAbsolutePropertyInput()
+    public void ReadSourceProvenance_RemapPreservesTrackedAbsoluteGlobalPropertyTaskInput()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -129,8 +129,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                   <Target Name="ReplaceOutputFromTrackedProperty"
-                          AfterTargets="Build"
-                          Condition="Exists('$(PayloadPath)')">
+                          AfterTargets="Build">
                     <Copy SourceFiles="$(PayloadPath)" DestinationFiles="$(TargetPath)" />
                   </Target>
                 </Project>

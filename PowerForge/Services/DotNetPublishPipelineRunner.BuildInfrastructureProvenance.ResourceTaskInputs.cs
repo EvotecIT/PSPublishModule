@@ -18,6 +18,16 @@ public sealed partial class DotNetPublishPipelineRunner
                      IsControlledBuildTaskElement(element) &&
                      element.Name.LocalName.Equals("GenerateResource", StringComparison.OrdinalIgnoreCase)))
         {
+            if (evaluatedGlobalProperties is not null &&
+                IsDefinitelyInactiveControlledBuildOperation(
+                    task,
+                    evaluatedGlobalProperties,
+                    declaringPath,
+                    relatedDocuments.Select(related => related.Document)))
+            {
+                continue;
+            }
+
             XAttribute? sources = task.Attributes().FirstOrDefault(attribute =>
                 attribute.Name.LocalName.Equals("Sources", StringComparison.OrdinalIgnoreCase));
             if (sources is null || string.IsNullOrWhiteSpace(sources.Value))

@@ -80,20 +80,17 @@ public sealed partial class DotNetPublishPipelineRunner
         if (propertyNames.Count == 0)
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        var arguments = new List<string>
+        var commonArguments = new List<string>
         {
             "msbuild",
             request.ProjectPath,
             "-nologo",
-            "-verbosity:quiet",
-            "-getProperty:MSBuildProjectFullPath"
+            "-verbosity:quiet"
         };
-        foreach (string propertyName in propertyNames)
-            arguments.Add("-getProperty:" + propertyName);
         if (request.Configuration is not null)
-            arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
+            commonArguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(request.Configuration));
         if (request.HasExplicitTargetFramework)
-            arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
+            commonArguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(request.TargetFramework));
         foreach (KeyValuePair<string, string> property in request.GlobalProperties.OrderBy(
                      entry => entry.Key,
                      StringComparer.OrdinalIgnoreCase))
@@ -104,35 +101,44 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
+            commonArguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
         try
         {
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
-                Path.GetDirectoryName(request.ProjectPath)!,
-                arguments,
-                request.EnvironmentVariables,
-                TimeSpan.FromMinutes(2));
-            if (process.ExitCode != 0 || process.TimedOut)
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            int jsonStart = process.StdOut.IndexOf('{');
-            int jsonEnd = process.StdOut.LastIndexOf('}');
-            if (jsonStart < 0 || jsonEnd < jsonStart)
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            using JsonDocument document = JsonDocument.Parse(
-                process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
-            if (!document.RootElement.TryGetProperty("Properties", out JsonElement properties))
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string propertyName in propertyNames)
+            foreach (string[] propertyBatch in BuildEvaluatedPropertyQueryBatches(
+                         commonArguments,
+                         propertyNames))
             {
-                string? value = ReadItemText(properties, propertyName);
-                if (value is not null)
-                    result[propertyName] = value;
+                string[] arguments = commonArguments
+                    .Concat(new[] { "-getProperty:MSBuildProjectFullPath" })
+                    .Concat(propertyBatch.Select(propertyName => "-getProperty:" + propertyName))
+                    .ToArray();
+                var process = RunBuildInputEvaluationProcess(
+                    "dotnet",
+                    Path.GetDirectoryName(request.ProjectPath)!,
+                    arguments,
+                    request.EnvironmentVariables,
+                    TimeSpan.FromMinutes(2));
+                if (process.ExitCode != 0 || process.TimedOut)
+                    return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                int jsonStart = process.StdOut.IndexOf('{');
+                int jsonEnd = process.StdOut.LastIndexOf('}');
+                if (jsonStart < 0 || jsonEnd < jsonStart)
+                    return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                using JsonDocument document = JsonDocument.Parse(
+                    process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
+                if (!document.RootElement.TryGetProperty("Properties", out JsonElement properties))
+                    return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (string propertyName in propertyBatch)
+                {
+                    string? value = ReadItemText(properties, propertyName);
+                    if (value is not null)
+                        result[propertyName] = value;
+                }
             }
             return result;
         }
@@ -140,6 +146,36 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    internal static string[][] BuildEvaluatedPropertyQueryBatches(
+        IReadOnlyCollection<string> commonArguments,
+        IEnumerable<string> propertyNames,
+        int maximumCommandLength = 24000)
+    {
+        int commonLength = commonArguments.Sum(argument => argument.Length + 3) +
+                           "-getProperty:MSBuildProjectFullPath".Length + 3;
+        var batches = new List<string[]>();
+        var current = new List<string>();
+        int currentLength = commonLength;
+        foreach (string propertyName in propertyNames
+                     .Where(name => !string.IsNullOrWhiteSpace(name))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
+        {
+            int argumentLength = "-getProperty:".Length + propertyName.Length + 3;
+            if (current.Count > 0 && currentLength + argumentLength > maximumCommandLength)
+            {
+                batches.Add(current.ToArray());
+                current.Clear();
+                currentLength = commonLength;
+            }
+            current.Add(propertyName);
+            currentLength += argumentLength;
+        }
+        if (current.Count > 0)
+            batches.Add(current.ToArray());
+        return batches.ToArray();
     }
 
     private static void AddConditionPropertyNames(string condition, ISet<string> names)
@@ -249,14 +285,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? value
                 : match.Value,
             RegexOptions.CultureInvariant);
-        if (expanded.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-            expanded.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-            expanded.IndexOf("%(", StringComparison.Ordinal) >= 0)
-        {
-            result = false;
-            return false;
-        }
-
         return TryEvaluateSimpleMsBuildBooleanExpression(expanded, out result);
     }
 
@@ -322,6 +350,13 @@ public sealed partial class DotNetPublishPipelineRunner
             "^\\s*(['\\\"])(.*?)\\1\\s*(==|!=)\\s*(['\\\"])(.*?)\\4\\s*$",
             RegexOptions.CultureInvariant);
         if (!comparison.Success)
+        {
+            result = false;
+            return false;
+        }
+
+        if (ContainsUnresolvedBuildExpression(comparison.Groups[2].Value) ||
+            ContainsUnresolvedBuildExpression(comparison.Groups[5].Value))
         {
             result = false;
             return false;

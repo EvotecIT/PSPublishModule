@@ -557,6 +557,22 @@ public sealed partial class DotNetPublishPipelineRunner
             sourceRevision.Any(character => !Uri.IsHexDigit(character)))
             sourceRevision = string.Empty;
 
+        Dictionary<string, DotNetPublishEnvironmentVariable> normalizedEnvironmentVariables =
+            CloneEnvironmentVariables(spec.DotNet.EnvironmentVariables) ??
+            new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string?> resolvedEnvironmentVariables = ResolveDotNetEnvironmentVariables(
+            normalizedEnvironmentVariables,
+            projectRoot,
+            enforceRequiredEnvironmentVariables);
+        string[] controlledBuildEnvironmentVariableNames =
+            normalizedEnvironmentVariables
+            .Where(entry =>
+                entry.Value?.Secret == false &&
+                resolvedEnvironmentVariables.ContainsKey(entry.Key))
+            .Select(entry => entry.Key)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var plan = new DotNetPublishPlan
         {
             ProjectRoot = projectRoot,
@@ -577,10 +593,8 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
             MsBuildProperties = msbuildProps,
-            EnvironmentVariables = ResolveDotNetEnvironmentVariables(
-                spec.DotNet.EnvironmentVariables,
-                projectRoot,
-                enforceRequiredEnvironmentVariables),
+            EnvironmentVariables = resolvedEnvironmentVariables,
+            ControlledBuildEnvironmentVariableNames = controlledBuildEnvironmentVariableNames,
             Targets = targets.ToArray(),
             Bundles = bundles,
             Installers = installers,

@@ -4,6 +4,36 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static string[] ReadControlledBuildPropertyNames(IEnumerable<string> projectPaths)
+    {
+        string[] paths = projectPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToArray();
+        var names = new HashSet<string>(
+            ReadProjectReferenceConditionPropertyNames(paths),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (string path in paths)
+        {
+            try
+            {
+                XDocument document = XDocument.Load(path, LoadOptions.None);
+                foreach (string value in document.DescendantNodes()
+                             .OfType<XText>()
+                             .Select(text => text.Value)
+                             .Concat(document.Descendants().Attributes().Select(attribute => attribute.Value)))
+                {
+                    AddConditionPropertyNames(value, names);
+                }
+            }
+            catch
+            {
+                // Unknown controlled inputs stay fail closed during the later document scan.
+            }
+        }
+        return names.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private static string[] ReadProjectReferenceConditionPropertyNames(IEnumerable<string> projectPaths)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -27,6 +57,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         propertyDefinitions[property.Name.LocalName] = definitions;
                     }
                     definitions.Add(property);
+                }
+
+                foreach (string condition in document.Descendants()
+                             .Attributes()
+                             .Where(attribute => attribute.Name.LocalName.Equals(
+                                 "Condition",
+                                 StringComparison.OrdinalIgnoreCase))
+                             .Select(attribute => attribute.Value))
+                {
+                    AddConditionPropertyNames(condition, names);
                 }
 
                 foreach (XElement projectReference in document.Descendants().Where(element =>

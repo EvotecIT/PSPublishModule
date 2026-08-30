@@ -19,6 +19,16 @@ public sealed partial class DotNetPublishPipelineRunner
                      element.Ancestors().Any(ancestor =>
                          ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
         {
+            if (evaluatedGlobalProperties is not null &&
+                IsDefinitelyInactiveControlledBuildOperation(
+                    task,
+                    evaluatedGlobalProperties,
+                    declaringPath,
+                    relatedDocuments.Select(related => related.Document)))
+            {
+                continue;
+            }
+
             string? fileValue = task.Attributes()
                 .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
                     "File",

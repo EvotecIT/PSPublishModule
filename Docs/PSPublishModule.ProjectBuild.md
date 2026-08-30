@@ -29,8 +29,13 @@ PowerShell-authored project release objects
   - `-PublishToolGitHub`
   - `-SkipRestore`
   - `-SkipBuild`
+  - `-BuildDuringPublish`
   - `-ToolOutput <Tool|Portable|Installer|Store>`
   - `-SkipToolOutput <...>`
+- By default, PowerForge runs a separate build and publishes with `--no-build`. Use
+  `-BuildDuringPublish` for runtime matrices where each authoritative `dotnet publish` invocation
+  should perform its own build. This removes the separate prebuild step; it does not skip compilation
+  or replace MSBuild evaluation. `-SkipBuild` remains the explicit choice for consuming existing outputs.
 - Project objects can now round-trip through JSON:
   - `Export-ConfigurationProject -Project $project -OutputPath '.\Build\project.release.json'`
   - `Import-ConfigurationProject -Path '.\Build\project.release.json'`

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using NuGet.Packaging;
 using NuGet.Packaging.Signing;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
@@ -127,6 +128,17 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(evaluatedLockFile))
             AddBuildControlCandidate(
                 evaluatedLockFile!,
+                inputs,
+                sourceInputs,
+                new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
+
+        string? sdkPackageLockFile = ReadEvaluatedPath(
+            properties,
+            "PowerForgeSdkPackageLockFile",
+            projectDirectory);
+        if (!string.IsNullOrWhiteSpace(sdkPackageLockFile))
+            AddBuildControlCandidate(
+                sdkPackageLockFile!,
                 inputs,
                 sourceInputs,
                 new HashSet<string>(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal));
@@ -424,6 +436,25 @@ public sealed partial class DotNetPublishPipelineRunner
             bool hasCommittedLock = TryReadLockedPackageHashes(
                 lockFilePath,
                 out Dictionary<string, string> hashes);
+            string? sdkPackageLockFile = ReadEvaluatedPath(
+                properties,
+                "PowerForgeSdkPackageLockFile",
+                projectDirectory);
+            var sdkPackageLockHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(sdkPackageLockFile) &&
+                !TryReadPowerForgeSdkPackageHashes(sdkPackageLockFile!, out sdkPackageLockHashes))
+            {
+                return false;
+            }
+            foreach (KeyValuePair<string, string> package in sdkPackageLockHashes)
+            {
+                if (hashes.TryGetValue(package.Key, out string? existing) &&
+                    !string.Equals(existing, package.Value, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+                hashes[package.Key] = package.Value;
+            }
             var committedPackageHashes = new Dictionary<string, string>(
                 hashes,
                 StringComparer.OrdinalIgnoreCase);
@@ -592,6 +623,60 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 return hashes.Count > 0;
+            }
+            catch
+            {
+                hashes.Clear();
+                return false;
+            }
+        }
+
+        private static bool TryReadPowerForgeSdkPackageHashes(
+            string lockFilePath,
+            out Dictionary<string, string> hashes)
+        {
+            hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(lockFilePath));
+                if (!document.RootElement.TryGetProperty("version", out JsonElement version) ||
+                    version.ValueKind != JsonValueKind.Number ||
+                    !version.TryGetInt32(out int schemaVersion) ||
+                    schemaVersion != 1 ||
+                    !document.RootElement.TryGetProperty(
+                        "sdkManagedPackages",
+                        out JsonElement packages) ||
+                    packages.ValueKind != JsonValueKind.Object)
+                {
+                    return false;
+                }
+
+                foreach (JsonProperty package in packages.EnumerateObject())
+                {
+                    if (string.IsNullOrWhiteSpace(package.Name) ||
+                        package.Name.IndexOf('|') >= 0 ||
+                        package.Value.ValueKind != JsonValueKind.Object ||
+                        !package.Value.TryGetProperty("version", out JsonElement packageVersion) ||
+                        packageVersion.ValueKind != JsonValueKind.String ||
+                        !NuGetVersion.TryParse(packageVersion.GetString(), out NuGetVersion? parsedVersion) ||
+                        !package.Value.TryGetProperty("contentHash", out JsonElement contentHash) ||
+                        contentHash.ValueKind != JsonValueKind.String ||
+                        string.IsNullOrWhiteSpace(contentHash.GetString()))
+                    {
+                        hashes.Clear();
+                        return false;
+                    }
+
+                    string key = package.Name + "|" + parsedVersion!.ToNormalizedString();
+                    if (hashes.ContainsKey(key))
+                    {
+                        hashes.Clear();
+                        return false;
+                    }
+                    hashes.Add(key, contentHash.GetString()!);
+                }
+
+                return true;
             }
             catch
             {

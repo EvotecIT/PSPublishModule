@@ -49,6 +49,120 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
     }
 
     [Fact]
+    public void Plan_AdmitsOnlyExplicitNonSecretEnvironmentVariablesToControlledBuilds()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var projectPath = CreateProject(root);
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                new DotNetPublishSpec
+                {
+                    DotNet = new DotNetPublishDotNetOptions
+                    {
+                        ProjectRoot = root,
+                        Restore = false,
+                        Build = false,
+                        Runtimes = new[] { "win-x64" },
+                        EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["DETERMINISTIC_BUILD_VALUE"] = new()
+                            {
+                                Value = "2026-08-29T20:00:00Z",
+                                Secret = false
+                            },
+                            ["PRIVATE_BUILD_TOKEN"] = new()
+                            {
+                                Value = "private-token",
+                                Secret = true
+                            }
+                        }
+                    },
+                    Targets = new[] { NewTarget(projectPath) }
+                },
+                configPath: null);
+
+            Assert.Contains("DETERMINISTIC_BUILD_VALUE", plan.ControlledBuildEnvironmentVariableNames);
+            Assert.DoesNotContain("PRIVATE_BUILD_TOKEN", plan.ControlledBuildEnvironmentVariableNames);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_UsesNormalizedWinningEnvironmentDefinitionForControlledBuildAdmission()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var projectPath = CreateProject(root);
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                new DotNetPublishSpec
+                {
+                    DotNet = new DotNetPublishDotNetOptions
+                    {
+                        ProjectRoot = root,
+                        Restore = false,
+                        Build = false,
+                        Runtimes = new[] { "win-x64" },
+                        EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.Ordinal)
+                        {
+                            [" BUILD_TOKEN "] = new()
+                            {
+                                Value = "public-value",
+                                Secret = false
+                            },
+                            ["BUILD_TOKEN"] = new()
+                            {
+                                Value = "secret-value",
+                                Secret = true
+                            }
+                        }
+                    },
+                    Targets = new[] { NewTarget(projectPath) }
+                },
+                configPath: null);
+
+            Assert.Equal("secret-value", plan.EnvironmentVariables["BUILD_TOKEN"]);
+            Assert.DoesNotContain("BUILD_TOKEN", plan.ControlledBuildEnvironmentVariableNames);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledEvaluationProperties_OmitEnvironmentValuesNotAdmittedToControlledBuild()
+    {
+        IReadOnlyDictionary<string, string> properties =
+            DotNetPublishPipelineRunner.CreateControlledEvaluationProperties(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Configuration"] = "Release",
+                    ["GLOBAL_BUILD_VALUE"] = "global-value"
+                },
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Configuration"] = "Release",
+                    ["GLOBAL_BUILD_VALUE"] = "environment-value",
+                    ["PRIVATE_BUILD_TOKEN"] = "secret-value",
+                    ["PUBLIC_BUILD_VALUE"] = "stable-value",
+                    ["ProjectProperty"] = "project-value"
+                },
+                ["GLOBAL_BUILD_VALUE", "PRIVATE_BUILD_TOKEN", "PUBLIC_BUILD_VALUE"],
+                ["PUBLIC_BUILD_VALUE"]);
+
+        Assert.Equal("Release", properties["Configuration"]);
+        Assert.Equal("global-value", properties["GLOBAL_BUILD_VALUE"]);
+        Assert.Equal("stable-value", properties["PUBLIC_BUILD_VALUE"]);
+        Assert.Equal("project-value", properties["ProjectProperty"]);
+        Assert.False(properties.ContainsKey("PRIVATE_BUILD_TOKEN"));
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenRequiredDotNetEnvironmentVariableIsMissing()
     {
         var root = CreateTempRoot();

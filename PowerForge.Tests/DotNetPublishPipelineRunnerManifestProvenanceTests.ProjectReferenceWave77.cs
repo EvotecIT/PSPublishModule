@@ -82,6 +82,121 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void GeneratedProjectReferenceContext_SelectsOneResolvedEvaluationForTheSourceProject()
+    {
+        string project = Path.GetFullPath(Path.Combine("src", "Library.csproj"));
+
+        Assert.True(DotNetPublishPipelineRunner.TrySelectSingleResolvedGeneratedProjectReferenceEvaluationKey(
+            project,
+            [
+                new KeyValuePair<string, string>(project, "resolved-key"),
+                new KeyValuePair<string, string>(project, "resolved-key")
+            ],
+            out string key));
+        Assert.Equal("resolved-key", key);
+    }
+
+    [Fact]
+    public void GeneratedProjectReferenceContext_RejectsAmbiguousResolvedEvaluations()
+    {
+        string project = Path.GetFullPath(Path.Combine("src", "Library.csproj"));
+
+        Assert.False(DotNetPublishPipelineRunner.TrySelectSingleResolvedGeneratedProjectReferenceEvaluationKey(
+            project,
+            [
+                new KeyValuePair<string, string>(project, "first-key"),
+                new KeyValuePair<string, string>(project, "second-key")
+            ],
+            out string key));
+        Assert.Equal(string.Empty, key);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_IgnoresAbsentCrossTargetEmbeddedProjectReferenceOutput()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "Library")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="../Library/Library.csproj" />
+                    <ProjectReference Include="../Library/Library.csproj"
+                                      SetTargetFramework="TargetFramework=net8.0"
+                                      ReferenceOutputAssembly="false"
+                                      OutputItemType="EmbeddedResource"
+                                      LogicalName="App.Payloads.Library.net8.0.dll" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
+                Path.Combine(appDirectory, "Program.cs"),
+                "internal static class Program { private static void Main() { _ = Library.Value; } }");
+            File.WriteAllText(
+                Path.Combine(libraryDirectory, "Library.cs"),
+                "public static class Library { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source and dependency graph\"");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net10.0",
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.Empty(provenance.DirtyPaths);
+            Assert.False(File.Exists(Path.Combine(
+                libraryDirectory,
+                "bin",
+                "Release",
+                "net8.0",
+                "Library.dll")));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void DotNetExecutionEnvironment_ClearsAmbientRuntimeInjectionVariables()
     {
         IReadOnlyDictionary<string, string?> environment =
@@ -117,6 +232,33 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Equal("0", environment["DOTNET_MULTILEVEL_LOOKUP"]);
         Assert.Equal("false", environment["ImportUserLocationsByWildcardBeforeMicrosoftCommonProps"]);
         Assert.Equal("false", environment["ImportUserLocationsByWildcardAfterMicrosoftCommonTargets"]);
+    }
+
+    [Fact]
+    public void DotNetExecutionEnvironment_UsesResolvedChildForRuntimeRoot()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string resolvedDotNet = Path.Combine(
+                root,
+                OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+            File.WriteAllText(resolvedDotNet, "resolved child");
+
+            IReadOnlyDictionary<string, string?> environment =
+                DotNetPublishPipelineRunner.CreateSafeDotNetChildEnvironment(
+                    environmentVariables: null,
+                    resolvedDotNetExecutablePath: resolvedDotNet);
+
+            Assert.Equal(
+                root,
+                environment["DOTNET_ROOT"],
+                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
     }
 
     [Theory]

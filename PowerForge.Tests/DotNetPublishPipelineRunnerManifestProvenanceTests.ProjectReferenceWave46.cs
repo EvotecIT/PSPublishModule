@@ -137,5 +137,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             "isolated.lock.json");
 
         Assert.Contains("-noAutoResponse", arguments);
+        Assert.Contains("-maxCpuCount:1", arguments);
+        Assert.Contains("-nodeReuse:false", arguments);
     }
 }
