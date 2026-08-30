@@ -134,6 +134,12 @@ public sealed class ModuleBuilder
         public bool DoNotCopyLibrariesRecursively { get; set; }
 
         /// <summary>
+        /// When true, preserves binary assets emitted beneath the publish output's <c>runtimes</c> tree,
+        /// including project-generated assets that are not declared in <c>deps.json</c>.
+        /// </summary>
+        public bool HandleRuntimes { get; set; }
+
+        /// <summary>
         /// Explicit binary-build settings that require a resolvable .csproj path for this build.
         /// When populated and <see cref="CsprojPath"/> is empty, the builder fails instead of reusing an existing Lib payload.
         /// </summary>
@@ -197,7 +203,10 @@ public sealed class ModuleBuilder
                         target,
                         tfm,
                         exportAssemblyFileNames,
-                        new PublishCopyOptions(opts.ExcludeLibraryFilter, opts.DoNotCopyLibrariesRecursively));
+                        new PublishCopyOptions(
+                            opts.ExcludeLibraryFilter,
+                            opts.DoNotCopyLibrariesRecursively,
+                            opts.HandleRuntimes));
                     File.WriteAllText(
                         Path.Combine(target, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
                         tfm);
@@ -601,6 +610,7 @@ public sealed class ModuleBuilder
     {
         public HashSet<string> RootFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> RuntimeTargetRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> DeclaredRuntimeRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> DeclaredTopLevelBinaryFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -608,11 +618,21 @@ public sealed class ModuleBuilder
     {
         public IReadOnlyList<string> ExcludeLibraryFilters { get; }
         public bool DoNotCopyLibrariesRecursively { get; }
+        public bool HandleRuntimes { get; }
 
         public PublishCopyOptions(IReadOnlyList<string>? excludeLibraryFilters, bool doNotCopyLibrariesRecursively)
+            : this(excludeLibraryFilters, doNotCopyLibrariesRecursively, handleRuntimes: false)
+        {
+        }
+
+        public PublishCopyOptions(
+            IReadOnlyList<string>? excludeLibraryFilters,
+            bool doNotCopyLibrariesRecursively,
+            bool handleRuntimes)
         {
             ExcludeLibraryFilters = excludeLibraryFilters ?? Array.Empty<string>();
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursively;
+            HandleRuntimes = handleRuntimes;
         }
     }
 
@@ -1217,13 +1237,59 @@ public sealed class ModuleBuilder
         if (plan is not null)
         {
             IncludeTopLevelBinaryFiles(plan.RootFileNames, publishDir, options, plan.DeclaredTopLevelBinaryFileNames);
+            IncludePublishedRuntimeFiles(
+                plan.RuntimeTargetRelativePaths,
+                plan.DeclaredRuntimeRelativePaths,
+                publishDir,
+                options);
             return plan;
         }
 
         // Fallback: copy top-level binaries, excluding known PowerShell host assemblies.
         var fallback = new PublishCopyPlan();
         IncludeTopLevelBinaryFiles(fallback.RootFileNames, publishDir, options);
+        IncludePublishedRuntimeFiles(
+            fallback.RuntimeTargetRelativePaths,
+            fallback.DeclaredRuntimeRelativePaths,
+            publishDir,
+            options);
         return fallback;
+    }
+
+    private static void IncludePublishedRuntimeFiles(
+        HashSet<string> relativePaths,
+        ISet<string> declaredRuntimeRelativePaths,
+        string publishDir,
+        PublishCopyOptions options)
+    {
+        if (!options.HandleRuntimes || options.DoNotCopyLibrariesRecursively)
+        {
+            return;
+        }
+
+        var runtimeRoot = Path.Combine(publishDir, "runtimes");
+        if (!Directory.Exists(runtimeRoot))
+        {
+            return;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(runtimeRoot, "*", SearchOption.AllDirectories))
+        {
+            var fileName = Path.GetFileName(file);
+            if (!IsBinaryFileName(fileName))
+            {
+                continue;
+            }
+
+            var relative = FrameworkCompatibility.GetRelativePath(publishDir, file);
+            if (declaredRuntimeRelativePaths.Contains(relative) ||
+                IsExcludedRuntimeBinary(fileName, relative, options.ExcludeLibraryFilters))
+            {
+                continue;
+            }
+
+            relativePaths.Add(relative);
+        }
     }
 
     private PublishCopyPlan? TryCreateCopyPlanFromDeps(string publishDir, string tfm, PublishCopyOptions options)
@@ -1260,13 +1326,20 @@ public sealed class ModuleBuilder
                     AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "runtime");
                     AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "native");
                     AddDeclaredBinaryFileNames(plan.DeclaredTopLevelBinaryFileNames, lib.Value, "runtimeTargets");
+                    AddDeclaredRuntimePaths(plan.DeclaredRuntimeRelativePaths, lib.Value, "runtime");
+                    AddDeclaredRuntimePaths(plan.DeclaredRuntimeRelativePaths, lib.Value, "native");
+                    AddDeclaredRuntimePaths(plan.DeclaredRuntimeRelativePaths, lib.Value, "runtimeTargets");
 
                     if (excluded.Contains(lib.Name)) continue;
 
                     AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "runtime", options.ExcludeLibraryFilters);
                     AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "native", options.ExcludeLibraryFilters);
                     if (!options.DoNotCopyLibrariesRecursively)
-                        AddRuntimeTargetPaths(plan.RuntimeTargetRelativePaths, lib.Name, lib.Value, options.ExcludeLibraryFilters);
+                    {
+                        AddRuntimeAssetPaths(plan.RuntimeTargetRelativePaths, lib.Name, lib.Value, "runtime", options.ExcludeLibraryFilters);
+                        AddRuntimeAssetPaths(plan.RuntimeTargetRelativePaths, lib.Name, lib.Value, "native", options.ExcludeLibraryFilters);
+                        AddRuntimeAssetPaths(plan.RuntimeTargetRelativePaths, lib.Name, lib.Value, "runtimeTargets", options.ExcludeLibraryFilters);
+                    }
                 }
             }
 
@@ -1457,23 +1530,77 @@ public sealed class ModuleBuilder
         }
     }
 
-    private static void AddRuntimeTargetPaths(
-        HashSet<string> relativePaths,
-        string libraryKey,
+    private static void AddDeclaredRuntimePaths(
+        HashSet<string> declaredPaths,
         JsonElement libEntry,
-        IReadOnlyCollection<string> filters)
+        string propertyName)
     {
-        if (!libEntry.TryGetProperty("runtimeTargets", out var assets) || assets.ValueKind != JsonValueKind.Object)
+        if (!libEntry.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Object)
             return;
 
         foreach (var asset in assets.EnumerateObject())
         {
-            var relative = asset.Name.Replace('/', Path.DirectorySeparatorChar);
+            if (!TryNormalizeRuntimeRelativePath(asset.Name, out var relative) || !IsBinaryFileName(relative))
+                continue;
+
+            declaredPaths.Add(relative);
+        }
+    }
+
+    private static void AddRuntimeAssetPaths(
+        HashSet<string> relativePaths,
+        string libraryKey,
+        JsonElement libEntry,
+        string propertyName,
+        IReadOnlyCollection<string> filters)
+    {
+        if (!libEntry.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var asset in assets.EnumerateObject())
+        {
+            if (!TryNormalizeRuntimeRelativePath(asset.Name, out var relative))
+            {
+                continue;
+            }
+
             var fileName = Path.GetFileName(relative);
-            if (!IsBinaryFileName(fileName)) continue;
-            if (MatchesAnyFilter(libraryKey, asset.Name, filters) || MatchesAnyFilter(libraryKey, relative, filters)) continue;
+            if (!IsBinaryFileName(fileName))
+            {
+                continue;
+            }
+
+            if (IsExcludedRuntimeBinary(fileName, relative, filters) ||
+                MatchesAnyFilter(libraryKey, asset.Name, filters))
+            {
+                continue;
+            }
+
             relativePaths.Add(relative);
         }
+    }
+
+    private static bool TryNormalizeRuntimeRelativePath(string assetPath, out string relativePath)
+    {
+        relativePath = string.Empty;
+        if (string.IsNullOrWhiteSpace(assetPath) || Path.IsPathRooted(assetPath))
+        {
+            return false;
+        }
+
+        var segments = assetPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2 || !segments[0].Equals("runtimes", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (segments.Any(static segment => segment is "." or ".."))
+        {
+            return false;
+        }
+
+        relativePath = Path.Combine(segments);
+        return true;
     }
 
     private static bool IsApplicationRootLibrary(JsonElement libEntry, string libraryId, string? appAssemblyName)
@@ -1534,6 +1661,20 @@ public sealed class ModuleBuilder
         return false;
     }
 
+    private static bool IsExcludedRuntimeBinary(
+        string fileName,
+        string relativePath,
+        IReadOnlyCollection<string>? customFilters)
+    {
+        if (AlwaysExcludedRootFiles.Contains(fileName))
+            return true;
+
+        var libraryName = Path.GetFileNameWithoutExtension(fileName);
+        return MatchesAnyPattern(fileName, DefaultExcludedLibraryRootPatterns) ||
+               MatchesAnyPattern(libraryName, DefaultExcludedLibraryRootPatterns) ||
+               MatchesAnyFilter(fileName, relativePath, customFilters);
+    }
+
     private static bool MatchesFilter(string value, string pattern)
     {
         if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(pattern))
@@ -1556,7 +1697,11 @@ public sealed class ModuleBuilder
         var ext = Path.GetExtension(fileNameOrPath);
         return ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
                ext.Equals(".so", StringComparison.OrdinalIgnoreCase) ||
-               ext.Equals(".dylib", StringComparison.OrdinalIgnoreCase);
+               ext.Equals(".dylib", StringComparison.OrdinalIgnoreCase) ||
+               Regex.IsMatch(
+                   Path.GetFileName(fileNameOrPath),
+                   @"\.so(?:\.[0-9]+)+$",
+                   RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     internal sealed class BinaryConflictAdvisorySummary

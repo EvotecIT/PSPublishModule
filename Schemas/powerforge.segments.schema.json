@@ -15,6 +15,10 @@
         "Copyright": { "type": ["string", "null"] },
         "Description": { "type": ["string", "null"] },
         "PowerShellVersion": { "type": "string" },
+        "ProcessorArchitecture": {
+          "type": ["string", "null"],
+          "enum": ["None", "MSIL", "X86", "IA64", "Amd64", "Arm", null]
+        },
         "Tags": { "type": ["array", "null"], "items": { "type": "string" } },
         "IconUri": { "type": ["string", "null"] },
         "ProjectUri": { "type": ["string", "null"] },

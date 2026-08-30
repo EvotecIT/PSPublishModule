@@ -21,20 +21,21 @@ internal static partial class ModuleBootstrapperGenerator
             .ToArray();
         var assemblyFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var references = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        var managedCandidates = new List<string>(candidates.Length);
         foreach (string fileName in candidates)
         {
             if (!TryReadAssemblyMetadata(Path.Combine(directory, fileName), out string? assemblyName, out string[] assemblyReferences))
             {
-                references[fileName] = Array.Empty<string>();
                 continue;
             }
 
+            managedCandidates.Add(fileName);
             assemblyFiles[assemblyName!] = fileName;
             references[fileName] = assemblyReferences;
         }
 
-        var remaining = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
-        var ordered = new List<string>(candidates.Length);
+        var remaining = new HashSet<string>(managedCandidates, StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<string>(managedCandidates.Count);
         while (remaining.Count > 0)
         {
             string? next = remaining

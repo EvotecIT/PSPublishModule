@@ -92,4 +92,11 @@
         $ParameterHelp.Name | Should -Be 'ExecutableIdentity'
         ($ParameterHelp.Description.Text -join ' ') | Should -Match 'signed product or assembly identity'
     }
+
+    It 'Ships external help for the processor architecture manifest parameter' {
+        $ParameterHelp = Get-Help -Name 'New-ConfigurationManifest' -Parameter 'ProcessorArchitecture'
+
+        $ParameterHelp.Name | Should -Be 'ProcessorArchitecture'
+        ($ParameterHelp.Description.Text -join ' ') | Should -Match 'processor architecture required to import the module'
+    }
 }

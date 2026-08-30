@@ -41,7 +41,7 @@ internal static partial class ModuleBootstrapperGenerator
         var libRoot = Path.Combine(root, "Lib");
         var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
-        var hasLib = ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, exportAssemblyFileNames);
+        var hasLib = ContainsConfiguredOrSelectablePayload(libRoot, exportAssemblies, exportAssemblyFileNames);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
@@ -102,8 +102,19 @@ internal static partial class ModuleBootstrapperGenerator
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
         var assemblyReferences = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
-        var hasLib = ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, assemblyReferences);
+        var hasLib = ContainsConfiguredOrSelectablePayload(libRoot, exportAssemblies, assemblyReferences);
         return ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader: false, forceBootstrapperWrite);
+    }
+
+    private static bool ContainsConfiguredOrSelectablePayload(
+        string libRoot,
+        IReadOnlyList<string>? configuredAssemblies,
+        IReadOnlyList<string> resolvedAssemblyReferences)
+    {
+        var hasExplicitAssembly = configuredAssemblies?.Any(static entry => !string.IsNullOrWhiteSpace(entry)) == true;
+        return hasExplicitAssembly
+            ? ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, resolvedAssemblyReferences, SearchOption.AllDirectories)
+            : ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, resolvedAssemblyReferences);
     }
 
     private static bool ShouldWriteBootstrapper(

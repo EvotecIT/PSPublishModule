@@ -7,7 +7,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModuleBuilderDependencyCopyTests
+public sealed partial class ModuleBuilderDependencyCopyTests
 {
     [Fact]
     public void ComputeExcludedLibraries_DoesNotCascadeIntoNonPowerShellDependencies()
@@ -605,6 +605,94 @@ public sealed class ModuleBuilderDependencyCopyTests
             {
                 if (Directory.Exists(root))
                     Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // best effort cleanup
+            }
+        }
+    }
+
+    [Fact]
+    public void CopyPublishOutputBinaries_PreservesUndeclaredRuntimeFiles_WhenHandleRuntimes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        var publishDir = Path.Combine(root, "publish");
+        var targetDir = Path.Combine(root, "target");
+        var runtimeRelativePath = Path.Combine("runtimes", "win-x64", "native", "e_sqlite3.dll");
+        var versionedSoRelativePath = Path.Combine("runtimes", "linux-x64", "native", "libe_sqlite3.so.1.2");
+        var excludedRelativePath = Path.Combine("runtimes", "win", "lib", "net8.0", "System.Management.Automation.dll");
+        var customExcludedRelativePath = Path.Combine("runtimes", "win-x64", "native", "Contoso.Blocked.dll");
+
+        Directory.CreateDirectory(Path.Combine(publishDir, "runtimes", "win-x64", "native"));
+        Directory.CreateDirectory(Path.Combine(publishDir, "runtimes", "linux-x64", "native"));
+        Directory.CreateDirectory(Path.Combine(publishDir, "runtimes", "win", "lib", "net8.0"));
+        Directory.CreateDirectory(targetDir);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(publishDir, "TestModule.dll"), "module");
+            File.WriteAllText(Path.Combine(publishDir, runtimeRelativePath), "native");
+            File.WriteAllText(Path.Combine(publishDir, versionedSoRelativePath), "versioned-native");
+            File.WriteAllText(Path.Combine(publishDir, excludedRelativePath), "host");
+            File.WriteAllText(Path.Combine(publishDir, customExcludedRelativePath), "custom");
+            File.WriteAllText(Path.Combine(publishDir, "TestModule.deps.json"), """
+                {
+                  "targets": {
+                    ".NETStandard,Version=v2.1": {
+                      "TestModule/1.0.0": {
+                        "runtime": {
+                          "TestModule.dll": {}
+                        }
+                      },
+                      "System.Management.Automation/7.4.0": {
+                        "runtimeTargets": {
+                          "runtimes/win/lib/net8.0/System.Management.Automation.dll": {
+                            "rid": "win",
+                            "assetType": "runtime"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """);
+
+            var builder = ModuleBuilderTestDependencies.Create();
+            var copyMethod = typeof(ModuleBuilder).GetMethod(
+                "CopyPublishOutputBinaries",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var optionsType = typeof(ModuleBuilder).GetNestedType("PublishCopyOptions", BindingFlags.NonPublic);
+
+            Assert.NotNull(copyMethod);
+            Assert.NotNull(optionsType);
+
+            var options = Activator.CreateInstance(
+                optionsType!,
+                new object[] { new[] { "Contoso.Blocked*" }, false, true });
+
+            copyMethod!.Invoke(builder, new object[]
+            {
+                publishDir,
+                targetDir,
+                "netstandard2.1",
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                options!
+            });
+
+            Assert.Equal("native", File.ReadAllText(Path.Combine(targetDir, runtimeRelativePath)));
+            Assert.Equal("versioned-native", File.ReadAllText(Path.Combine(targetDir, versionedSoRelativePath)));
+            Assert.False(File.Exists(Path.Combine(targetDir, excludedRelativePath)));
+            Assert.False(File.Exists(Path.Combine(targetDir, customExcludedRelativePath)));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
             }
             catch
             {

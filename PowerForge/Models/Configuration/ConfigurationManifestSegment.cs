@@ -43,6 +43,9 @@ public sealed class ManifestConfiguration
     /// <summary>Specifies the minimum version of PowerShell this module requires.</summary>
     public string PowerShellVersion { get; set; } = "5.1";
 
+    /// <summary>Specifies the processor architecture required to import the module.</summary>
+    public string? ProcessorArchitecture { get; set; }
+
     /// <summary>Specifies tags for the module.</summary>
     public string[]? Tags { get; set; }
 
@@ -76,4 +79,3 @@ public sealed class ManifestConfiguration
     /// <summary>Specifies formatting files (.ps1xml) that run when the module is imported.</summary>
     public string[]? FormatsToProcess { get; set; }
 }
-

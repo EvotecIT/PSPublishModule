@@ -54,6 +54,7 @@ public sealed partial class ModulePipelineRunner
             SetOrRemoveTopLevelString(manifestPath, "Copyright", manifest.Copyright, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "Description", manifest.Description, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "PowerShellVersion", manifest.PowerShellVersion, removeWhenEmpty: true);
+            SetOrRemoveTopLevelString(manifestPath, "ProcessorArchitecture", manifest.ProcessorArchitecture, removeWhenEmpty: true);
             SetOrRemoveTopLevelString(manifestPath, "DotNetFrameworkVersion", manifest.DotNetFrameworkVersion, removeWhenEmpty: true);
             SetOrRemovePsDataString(manifestPath, "Prerelease", plan.PreRelease, removeWhenEmpty: true);
 
