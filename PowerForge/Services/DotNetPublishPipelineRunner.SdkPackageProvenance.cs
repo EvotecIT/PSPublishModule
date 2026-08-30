@@ -124,8 +124,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryWriteSdkEvidenceNuGetConfig(
                     configPath,
                     verifiedPackageSource,
-                    committedArchivePaths.Keys,
-                    Array.Empty<string>()))
+                    usePublicSource: false))
             {
                 return false;
             }
@@ -142,7 +141,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-p:RestoreGraphOutputPath=" + EscapeMsBuildPropertyValue(graphPath)
             };
             AppendSdkEvidenceProperties(graphArguments, properties, effectiveGlobalProperties);
-            AppendSdkEvidenceOwnedProperties(graphArguments, intermediateRoot, configPath);
+            AppendSdkEvidenceOwnedProperties(
+                graphArguments,
+                intermediateRoot,
+                configPath,
+                verifiedPackageSource);
 
             var graphProcess = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -156,15 +159,48 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             document = JsonDocument.Parse(File.ReadAllText(graphPath));
-            if (!TryReadSdkEvidencePackageIds(
+            if (!TryReadSdkEvidencePackageKeys(
                     document.RootElement,
                     projectPath,
-                    out HashSet<string> sdkPackageIds) ||
-                !TryWriteSdkEvidenceNuGetConfig(
+                    out HashSet<string> sdkPackageKeys))
+            {
+                return false;
+            }
+            if (!TryPrimeSdkEvidencePackages(
+                    temporaryRoot,
+                    isolatedPackageRoot,
+                    verifiedPackageSource,
+                    configPath,
+                    committedArchivePaths.Keys,
+                    "verified-lock",
+                    Path.GetDirectoryName(projectPath)!,
+                    environmentVariables))
+            {
+                return false;
+            }
+            if (!TryWriteSdkEvidenceNuGetConfig(
                     configPath,
                     verifiedPackageSource,
-                    committedArchivePaths.Keys,
-                    sdkPackageIds))
+                    usePublicSource: true))
+            {
+                return false;
+            }
+            if (!TryPrimeSdkEvidencePackages(
+                    temporaryRoot,
+                    isolatedPackageRoot,
+                    SdkEvidenceNuGetOrgSource,
+                    configPath,
+                    sdkPackageKeys,
+                    "sdk-packages",
+                    Path.GetDirectoryName(projectPath)!,
+                    environmentVariables))
+            {
+                return false;
+            }
+            if (!TryWriteSdkEvidenceNuGetConfig(
+                    configPath,
+                    verifiedPackageSource,
+                    usePublicSource: false))
             {
                 return false;
             }
@@ -182,7 +218,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 configPath
             };
             AppendSdkEvidenceProperties(restoreArguments, properties, effectiveGlobalProperties);
-            AppendSdkEvidenceOwnedProperties(restoreArguments, intermediateRoot, configPath);
+            AppendSdkEvidenceOwnedProperties(
+                restoreArguments,
+                intermediateRoot,
+                configPath,
+                verifiedPackageSource);
             restoreArguments.Add("-p:RestorePackagesWithLockFile=true");
             restoreArguments.Add("-p:RestoreLockedMode=false");
             restoreArguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(lockPath));
@@ -273,10 +313,12 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AppendSdkEvidenceOwnedProperties(
         ICollection<string> arguments,
         string intermediateRoot,
-        string configPath)
+        string configPath,
+        string restoreSource)
     {
         arguments.Add("-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(intermediateRoot));
         arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(configPath));
+        arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(restoreSource));
         arguments.Add("-p:RestoreFallbackFolders=");
         arguments.Add("-p:RestoreAdditionalProjectFallbackFolders=");
         arguments.Add("-p:RestoreAdditionalProjectSources=");
@@ -291,12 +333,12 @@ public sealed partial class DotNetPublishPipelineRunner
             char.IsLetterOrDigit(character) || character == '_' || character == '-' || character == '.');
     }
 
-    private static bool TryReadSdkEvidencePackageIds(
+    private static bool TryReadSdkEvidencePackageKeys(
         JsonElement root,
         string projectPath,
-        out HashSet<string> packageIds)
+        out HashSet<string> packageKeys)
     {
-        packageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        packageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!TryReadRestoreGraphProject(root, projectPath, out JsonElement project) ||
             !project.TryGetProperty("frameworks", out JsonElement frameworks) ||
             frameworks.ValueKind != JsonValueKind.Object)
@@ -314,7 +356,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (dependency.Value.TryGetProperty("autoReferenced", out JsonElement autoReferenced) &&
                         autoReferenced.ValueKind == JsonValueKind.True)
                     {
-                        packageIds.Add(dependency.Name);
+                        if (!TryAddSdkEvidencePackageKey(
+                                dependency.Name,
+                                dependency.Value,
+                                packageKeys))
+                        {
+                            return false;
+                        }
                     }
                 }
             }
@@ -326,75 +374,138 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             foreach (JsonElement download in downloads.EnumerateArray())
             {
-                if (download.TryGetProperty("name", out JsonElement name) &&
-                    name.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(name.GetString()))
+                if (!download.TryGetProperty("name", out JsonElement name) ||
+                    name.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(name.GetString()) ||
+                    !TryAddSdkEvidencePackageKey(name.GetString()!, download, packageKeys))
                 {
-                    packageIds.Add(name.GetString()!);
+                    return false;
                 }
             }
         }
+        return packageKeys.Count > 0;
+    }
+
+    private static bool TryAddSdkEvidencePackageKey(
+        string packageId,
+        JsonElement package,
+        ISet<string> packageKeys)
+    {
+        if (!package.TryGetProperty("version", out JsonElement versionElement) ||
+            versionElement.ValueKind != JsonValueKind.String ||
+            !VersionRange.TryParse(versionElement.GetString()!, out VersionRange? range) ||
+            range.MinVersion is null ||
+            !range.IsMinInclusive)
+        {
+            return false;
+        }
+
+        packageKeys.Add(packageId + "|" + range.MinVersion.ToNormalizedString());
         return true;
     }
 
     private static bool TryWriteSdkEvidenceNuGetConfig(
         string configPath,
         string verifiedPackageSource,
-        IEnumerable<string> committedPackageKeys,
-        IEnumerable<string> sdkPackageIds)
+        bool usePublicSource)
     {
         try
         {
-            var committedIds = new HashSet<string>(
-                committedPackageKeys.Select(key =>
-                {
-                    int separator = key.LastIndexOf('|');
-                    return separator > 0 ? key.Substring(0, separator) : string.Empty;
-                }).Where(id => !string.IsNullOrWhiteSpace(id)),
-                StringComparer.OrdinalIgnoreCase);
-            var publicSdkIds = new HashSet<string>(
-                sdkPackageIds.Where(id => !committedIds.Contains(id)),
-                StringComparer.OrdinalIgnoreCase);
-
+            string source = usePublicSource ? SdkEvidenceNuGetOrgSource : verifiedPackageSource;
             var packageSources = new XElement(
                 "packageSources",
                 new XElement("clear"),
-                new XElement("add", new XAttribute("key", "verified-lock"), new XAttribute("value", verifiedPackageSource)),
                 new XElement(
                     "add",
-                    new XAttribute("key", "nuget.org"),
-                    new XAttribute("value", SdkEvidenceNuGetOrgSource),
-                    new XAttribute("protocolVersion", "3")));
+                    new XAttribute("key", usePublicSource ? "nuget.org" : "verified-lock"),
+                    new XAttribute("value", source),
+                    usePublicSource ? new XAttribute("protocolVersion", "3") : null));
             var root = new XElement(
                 "configuration",
                 packageSources,
                 new XElement("fallbackPackageFolders", new XElement("clear")),
                 new XElement("disabledPackageSources", new XElement("clear")));
-
-            if (committedIds.Count > 0 || publicSdkIds.Count > 0)
-            {
-                var mappings = new XElement("packageSourceMapping");
-                if (committedIds.Count > 0)
-                {
-                    mappings.Add(new XElement(
-                        "packageSource",
-                        new XAttribute("key", "verified-lock"),
-                        committedIds.OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-                            .Select(id => new XElement("package", new XAttribute("pattern", id)))));
-                }
-                if (publicSdkIds.Count > 0)
-                {
-                    mappings.Add(new XElement(
-                        "packageSource",
-                        new XAttribute("key", "nuget.org"),
-                        publicSdkIds.OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-                            .Select(id => new XElement("package", new XAttribute("pattern", id)))));
-                }
-                root.Add(mappings);
-            }
-
             new XDocument(root).Save(configPath);
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryPrimeSdkEvidencePackages(
+        string temporaryRoot,
+        string isolatedPackageRoot,
+        string restoreSource,
+        string configPath,
+        IEnumerable<string> packageKeys,
+        string projectName,
+        string workingDirectory,
+        IReadOnlyDictionary<string, string?>? environmentVariables)
+    {
+        try
+        {
+            var packages = packageKeys
+                .Select(key =>
+                {
+                    int separator = key.LastIndexOf('|');
+                    return separator > 0 && separator < key.Length - 1
+                        ? (Id: key.Substring(0, separator), Version: key.Substring(separator + 1))
+                        : default;
+                })
+                .Where(package => !string.IsNullOrWhiteSpace(package.Id) &&
+                                  !string.IsNullOrWhiteSpace(package.Version))
+                .Distinct()
+                .OrderBy(package => package.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (packages.Length == 0)
+                return true;
+
+            string projectPath = Path.Combine(temporaryRoot, projectName + ".csproj");
+            string intermediateRoot = Directory.CreateDirectory(
+                Path.Combine(temporaryRoot, projectName + "-obj")).FullName + Path.DirectorySeparatorChar;
+            new XDocument(
+                new XElement(
+                    "Project",
+                    new XAttribute("Sdk", "Microsoft.NET.Sdk"),
+                    new XElement(
+                        "PropertyGroup",
+                        new XElement("TargetFramework", "net8.0")),
+                    new XElement(
+                        "ItemGroup",
+                        packages.Select(package => new XElement(
+                            "PackageDownload",
+                            new XAttribute("Include", package.Id),
+                            new XAttribute("Version", "[" + package.Version + "]"))))))
+                .Save(projectPath);
+
+            var arguments = new List<string>
+            {
+                "restore",
+                projectPath,
+                "--force-evaluate",
+                "--no-cache",
+                "--nologo",
+                "--packages",
+                isolatedPackageRoot,
+                "--configfile",
+                configPath
+            };
+            AppendSdkEvidenceOwnedProperties(
+                arguments,
+                intermediateRoot,
+                configPath,
+                restoreSource);
+            arguments.Add("-p:NuGetAudit=false");
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                workingDirectory,
+                arguments,
+                environmentVariables,
+                TimeSpan.FromMinutes(2));
+            return process.ExitCode == 0 && !process.TimedOut;
         }
         catch
         {

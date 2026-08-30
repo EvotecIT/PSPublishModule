@@ -139,13 +139,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         MethodInfo append = typeof(DotNetPublishPipelineRunner).GetMethod(
             "AppendSdkEvidenceProperties",
             BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo appendOwned = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "AppendSdkEvidenceOwnedProperties",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
 
         append.Invoke(null, [arguments, properties.RootElement, effectiveProperties]);
+        appendOwned.Invoke(
+            null,
+            [arguments, "C:\\isolated\\obj\\", "C:\\isolated\\NuGet.Config", "C:\\isolated\\verified"]);
 
         Assert.Contains("-p:EnableWindowsTargeting=true", arguments);
         Assert.Contains("-p:TargetLatestRuntimePatch=false", arguments);
         Assert.Contains("-p:TargetFramework=net10.0", arguments);
-        Assert.DoesNotContain(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("-p:RestoreSources=C:\\isolated\\verified", arguments);
     }
 
     [Fact]
