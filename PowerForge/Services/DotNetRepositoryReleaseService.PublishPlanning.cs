@@ -294,8 +294,16 @@ public sealed partial class DotNetRepositoryReleaseService
             arguments.Add($"-p:TargetFramework={targetFramework!.Trim()}");
         if (!string.IsNullOrWhiteSpace(project.NewVersion))
         {
-            arguments.Add($"-p:Version={project.NewVersion!.Trim()}");
-            arguments.Add($"-p:PackageVersion={project.NewVersion!.Trim()}");
+            var plannedVersion = project.NewVersion!.Trim();
+            var plannedNumericVersion = PackageVersionUtility.GetNumericVersion(plannedVersion);
+            var plannedPrereleaseVersion = PackageVersionUtility.GetPrereleaseVersion(plannedVersion);
+            arguments.Add($"-p:Version={plannedVersion}");
+            arguments.Add($"-p:PackageVersion={plannedVersion}");
+            arguments.Add($"-p:InformationalVersion={plannedVersion}");
+            arguments.Add($"-p:VersionPrefix={plannedNumericVersion}");
+            arguments.Add($"-p:AssemblyVersion={plannedNumericVersion}");
+            arguments.Add($"-p:FileVersion={plannedNumericVersion}");
+            arguments.Add($"-p:VersionSuffix={plannedPrereleaseVersion}");
         }
 
         var startInfo = new ProcessStartInfo

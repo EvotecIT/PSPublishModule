@@ -410,6 +410,33 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfUsesPlannedVersionPrefixAndSuffix()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        app.NewVersion = "2.0.0-beta.1";
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix>old</VersionSuffix>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(VersionPrefix)' == '2.0.0' and '$(VersionSuffix)' == 'beta.1'">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish([app, shared], usePlannedProjectGraph: true, configuration: "Release");
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_UsesOnlyRootPackageManifest()
     {
         using var workspace = new PublishOrderWorkspace();
