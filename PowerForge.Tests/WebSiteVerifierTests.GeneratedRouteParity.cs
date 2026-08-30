@@ -122,6 +122,65 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_ProjectsTermPaginationForLaterTaxonomyTermWithCollidingSlug()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-term-slug-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "csharp.md"), "---\ntitle: C sharp\ntags: [\"C#\"]\n---\nC sharp");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-one.md"), "---\ntitle: C plus plus one\ntags: [\"C++\"]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-two.md"), "---\ntitle: C plus plus two\ntags: [\"C++\"]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-three.md"), "---\ntitle: C plus plus three\ntags: [\"C++\"]\n---\nThree");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string pageTwoRoute = "/tags/c/page/2/";
+            const string pageThreeRoute = "/tags/c/page/3/";
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy term slug collision pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Tag page 2", Url = pageTwoRoute },
+                                new MenuItemSpec { Title = "Tag page 3", Url = pageThreeRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "c", "page", "2", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "c", "page", "3", "index.html")));
+            Assert.False(HasMissingRouteWarning(result, pageTwoRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, pageThreeRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ProjectsEmittedTaxonomySocialCardsIncludingPagination()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-social-cards-" + Guid.NewGuid().ToString("N"));

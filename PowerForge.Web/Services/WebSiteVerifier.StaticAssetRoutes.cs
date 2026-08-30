@@ -363,13 +363,20 @@ public static partial class WebSiteVerifier
     {
         if (string.IsNullOrWhiteSpace(route.TaxonomyTerm) ||
             !taxonomyTermCountsByLanguage.TryGetValue(route.Collection, out var countsByLanguage) ||
-            !countsByLanguage.TryGetValue(route.Language, out var counts) ||
-            !counts.TryGetValue(route.TaxonomyTerm, out var count))
+            !countsByLanguage.TryGetValue(route.Language, out var counts))
         {
             return 0;
         }
 
-        return count;
+        var routeSlug = WebSiteBuilder.Slugify(route.TaxonomyTerm);
+        if (string.IsNullOrWhiteSpace(routeSlug))
+            return 0;
+
+        return counts
+            .Where(pair => WebSiteBuilder.Slugify(pair.Key).Equals(routeSlug, StringComparison.OrdinalIgnoreCase))
+            .Select(static pair => pair.Value)
+            .DefaultIfEmpty(0)
+            .Max();
     }
 
     private static int ResolveTaxonomyTermTotal(
