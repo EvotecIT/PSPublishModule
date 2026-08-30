@@ -241,6 +241,19 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        var task = GetString(step, "task") ?? string.Empty;
+        if (task.StartsWith("links-", StringComparison.OrdinalIgnoreCase))
+        {
+            var linkOptions = BuildLinkLoadOptions(step, baseDir);
+            foreach (var path in new[] { linkOptions.RedirectsPath, linkOptions.ShortlinksPath }
+                         .Concat(linkOptions.ShortlinkPaths)
+                         .Concat(linkOptions.RedirectCsvPaths)
+                         .Where(static path => !string.IsNullOrWhiteSpace(path)))
+            {
+                yield return Path.GetFullPath(path!);
+            }
+        }
+
         if (string.Equals(GetString(step, "task"), "audit", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
         {

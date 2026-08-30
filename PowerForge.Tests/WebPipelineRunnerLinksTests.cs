@@ -48,6 +48,7 @@ public sealed class WebPipelineRunnerLinksTests
                   "links": {
                     "redirects": "./data/links/redirects.json",
                     "shortlinks": "./data/links/shortlinks.json",
+                    "shortlinkPaths": ["./data/links/managed-shortlinks.json"],
                     "hosts": {
                       "short": "evo.yt"
                     },
@@ -101,7 +102,6 @@ public sealed class WebPipelineRunnerLinksTests
                     {
                       "task": "links-export-apache",
                       "config": "./site.json",
-                      "shortlinkSources": ["./data/links/managed-shortlinks.json"],
                       "includeErrorDocument404": true,
                       "summaryPath": "./Build/links-summary.json"
                     }
@@ -136,8 +136,7 @@ public sealed class WebPipelineRunnerLinksTests
                   "steps": [
                     {
                       "task": "links-export-apache",
-                      "config": "./site.json",
-                      "shortlinkSources": ["./data/links/managed-shortlinks.json"]
+                      "config": "./site.json"
                     }
                   ]
                 }
