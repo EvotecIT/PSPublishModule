@@ -5,18 +5,24 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private static void AddSdkManagedPackageHashes(
+    private static string? AddSdkManagedPackageHashes(
         string projectPath,
         JsonElement properties,
-        IEnumerable<string> packageRoots,
-        IReadOnlyDictionary<string, string> committedPackageHashes,
+        ICollection<string> packageRoots,
         Dictionary<string, string> hashes,
-        HashSet<string> sdkManagedPackageKeys)
+        HashSet<string> sdkManagedPackageKeys,
+        IReadOnlyDictionary<string, string>? effectiveGlobalProperties)
     {
-        if (!TryReadTrustedSdkRestoreGraph(projectPath, properties, out JsonDocument? document) ||
+        if (!TryReadTrustedSdkRestoreGraph(
+                projectPath,
+                properties,
+                effectiveGlobalProperties,
+                out JsonDocument? document,
+                out string? evidenceRoot,
+                out string? isolatedPackageRoot) ||
             document is null)
         {
-            return;
+            return null;
         }
 
         using (document)
@@ -25,7 +31,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 !project.TryGetProperty("frameworks", out JsonElement frameworks) ||
                 frameworks.ValueKind != JsonValueKind.Object)
             {
-                return;
+                TryDeleteSdkEvidenceRoot(evidenceRoot);
+                return null;
             }
 
             var downloads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -35,9 +42,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     dependencies.ValueKind == JsonValueKind.Object)
                 {
                     foreach (JsonProperty dependency in dependencies.EnumerateObject())
-                        AddTrustedAutoReferencedPackageKeys(
+                        AddTrustedAutoReferencedPackageKey(
                             dependency,
-                            committedPackageHashes,
+                            isolatedPackageRoot!,
+                            hashes,
                             sdkManagedPackageKeys);
                 }
 
@@ -45,16 +53,24 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             foreach (string download in downloads)
-                AddSdkDownloadPackageHash(download, packageRoots, hashes);
+                AddSdkDownloadPackageHash(download, new[] { isolatedPackageRoot! }, hashes);
+
+            packageRoots.Add(isolatedPackageRoot!);
+            return evidenceRoot;
         }
     }
 
     private static bool TryReadTrustedSdkRestoreGraph(
         string projectPath,
         JsonElement properties,
-        out JsonDocument? document)
+        IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+        out JsonDocument? document,
+        out string? evidenceRoot,
+        out string? isolatedPackageRoot)
     {
         document = null;
+        evidenceRoot = null;
+        isolatedPackageRoot = null;
         string temporaryRoot = Path.Combine(
             Path.GetTempPath(),
             "pf-rg-" + Guid.NewGuid().ToString("N"));
@@ -62,8 +78,11 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string intermediateRoot = Directory.CreateDirectory(
                 Path.Combine(temporaryRoot, "obj")).FullName + Path.DirectorySeparatorChar;
+            isolatedPackageRoot = Directory.CreateDirectory(
+                Path.Combine(temporaryRoot, "packages")).FullName;
             string graphPath = Path.Combine(temporaryRoot, "restore-graph.json");
-            var arguments = new List<string>
+            string lockPath = Path.Combine(temporaryRoot, "restore.lock.json");
+            var graphArguments = new List<string>
             {
                 "msbuild",
                 projectPath,
@@ -76,41 +95,48 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-p:RestoreGraphOutputPath=" + EscapeMsBuildPropertyValue(graphPath),
                 "-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(intermediateRoot)
             };
-            foreach (string propertyName in new[]
-                     {
-                         "Configuration",
-                         "TargetFramework",
-                         "RuntimeIdentifier",
-                         "RuntimeIdentifiers",
-                         "SelfContained",
-                         "UseAppHost",
-                         "UseWPF",
-                         "UseWindowsForms",
-                         "PublishSingleFile",
-                         "PublishTrimmed",
-                         "PublishAot",
-                         "PublishReadyToRun"
-                     })
-            {
-                if (properties.TryGetProperty(propertyName, out JsonElement value) &&
-                    value.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(value.GetString()))
-                {
-                    arguments.Add(
-                        "-p:" + propertyName + "=" + EscapeMsBuildPropertyValue(value.GetString()!));
-                }
-            }
+            AppendSdkEvidenceProperties(graphArguments, properties, effectiveGlobalProperties);
 
-            var process = RunBuildInputEvaluationProcess(
+            var graphProcess = RunBuildInputEvaluationProcess(
                 "dotnet",
                 Path.GetDirectoryName(projectPath)!,
-                arguments,
+                graphArguments,
                 environmentVariables: null,
                 TimeSpan.FromMinutes(2));
-            if (process.ExitCode != 0 || process.TimedOut || !File.Exists(graphPath))
+            if (graphProcess.ExitCode != 0 || graphProcess.TimedOut || !File.Exists(graphPath))
+            {
                 return false;
+            }
+
+            var restoreArguments = new List<string>
+            {
+                "restore",
+                projectPath,
+                "--force-evaluate",
+                "--no-cache",
+                "--nologo",
+                "--packages",
+                isolatedPackageRoot,
+                "-p:RestorePackagesWithLockFile=true",
+                "-p:RestoreLockedMode=false",
+                "-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(lockPath),
+                "-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(intermediateRoot),
+                "-p:NuGetAudit=false"
+            };
+            AppendSdkEvidenceProperties(restoreArguments, properties, effectiveGlobalProperties);
+            var restoreProcess = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(projectPath)!,
+                restoreArguments,
+                environmentVariables: null,
+                TimeSpan.FromMinutes(5));
+            if (restoreProcess.ExitCode != 0 || restoreProcess.TimedOut)
+            {
+                return false;
+            }
 
             document = JsonDocument.Parse(File.ReadAllText(graphPath));
+            evidenceRoot = temporaryRoot;
             return true;
         }
         catch
@@ -121,15 +147,61 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         finally
         {
-            try
+            if (evidenceRoot is null)
+                TryDeleteSdkEvidenceRoot(temporaryRoot);
+        }
+    }
+
+    private static void AppendSdkEvidenceProperties(
+        ICollection<string> arguments,
+        JsonElement properties,
+        IReadOnlyDictionary<string, string>? effectiveGlobalProperties)
+    {
+        foreach (string propertyName in new[]
+                 {
+                     "Configuration",
+                     "TargetFramework",
+                     "RuntimeIdentifier",
+                     "RuntimeIdentifiers",
+                     "SelfContained",
+                     "UseAppHost",
+                     "UseWPF",
+                     "UseWindowsForms",
+                     "PublishSingleFile",
+                     "PublishTrimmed",
+                     "PublishAot",
+                     "PublishReadyToRun"
+                 })
+        {
+            string? value = effectiveGlobalProperties is not null &&
+                            effectiveGlobalProperties.TryGetValue(propertyName, out string? globalValue)
+                ? globalValue
+                : properties.TryGetProperty(propertyName, out JsonElement evaluatedValue) &&
+                  evaluatedValue.ValueKind == JsonValueKind.String
+                    ? evaluatedValue.GetString()
+                    : null;
+            if (!string.IsNullOrWhiteSpace(value))
+                arguments.Add("-p:" + propertyName + "=" + EscapeMsBuildPropertyValue(value!));
+        }
+    }
+
+    private static void TryDeleteSdkEvidenceRoot(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        try
+        {
+            string fullPath = Path.GetFullPath(path!);
+            string tempPath = Path.GetFullPath(Path.GetTempPath());
+            if (IsSameOrBelowBuildInputPath(fullPath, tempPath) &&
+                Path.GetFileName(fullPath).StartsWith("pf-rg-", StringComparison.Ordinal))
             {
-                if (Directory.Exists(temporaryRoot))
-                    Directory.Delete(temporaryRoot, recursive: true);
+                Directory.Delete(fullPath, recursive: true);
             }
-            catch
-            {
-                // A leftover temporary restore graph cannot make a package trusted.
-            }
+        }
+        catch
+        {
+            // Temporary SDK evidence cleanup is best effort only.
         }
     }
 
@@ -169,9 +241,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static void AddTrustedAutoReferencedPackageKeys(
+    private static void AddTrustedAutoReferencedPackageKey(
         JsonProperty dependency,
-        IReadOnlyDictionary<string, string> committedPackageHashes,
+        string isolatedPackageRoot,
+        Dictionary<string, string> hashes,
         HashSet<string> sdkManagedPackageKeys)
     {
         if (!dependency.Value.TryGetProperty("autoReferenced", out JsonElement autoReferenced) ||
@@ -183,19 +256,24 @@ public sealed partial class DotNetPublishPipelineRunner
             return;
         }
 
-        foreach (KeyValuePair<string, string> package in committedPackageHashes)
+        string packageDirectory = Path.Combine(
+            isolatedPackageRoot,
+            dependency.Name.ToLowerInvariant());
+        if (!Directory.Exists(packageDirectory) || HasReparsePointBelowRoot(packageDirectory, isolatedPackageRoot))
+            return;
+        string[] candidates = Directory.EnumerateDirectories(packageDirectory, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => NuGetVersion.TryParse(Path.GetFileName(path), out NuGetVersion? version) &&
+                           range.Satisfies(version))
+            .ToArray();
+        if (candidates.Length != 1)
+            return;
+        string resolvedVersion = Path.GetFileName(candidates[0]);
+        string packageKey = dependency.Name + "|" + resolvedVersion;
+        AddSdkDownloadPackageHash(packageKey, new[] { isolatedPackageRoot }, hashes);
+        if (hashes.TryGetValue(packageKey, out string? contentHash) &&
+            !string.IsNullOrWhiteSpace(contentHash))
         {
-            int separator = package.Key.LastIndexOf('|');
-            if (separator <= 0 || separator == package.Key.Length - 1 ||
-                !package.Key.Substring(0, separator).Equals(
-                    dependency.Name,
-                    StringComparison.OrdinalIgnoreCase) ||
-                !NuGetVersion.TryParse(package.Key.Substring(separator + 1), out NuGetVersion? resolved) ||
-                !range.Satisfies(resolved))
-            {
-                continue;
-            }
-            sdkManagedPackageKeys.Add(package.Key);
+            sdkManagedPackageKeys.Add(packageKey);
         }
     }
 

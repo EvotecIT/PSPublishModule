@@ -399,6 +399,21 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             VerifiedPackageArchiveCache archives,
             out VerifiedPackageInputCatalog? catalog)
+            => TryCreateForEvaluation(
+                projectPath,
+                properties,
+                packageRoots,
+                archives,
+                effectiveGlobalProperties: null,
+                out catalog);
+
+        internal static bool TryCreateForEvaluation(
+            string projectPath,
+            JsonElement properties,
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            out VerifiedPackageInputCatalog? catalog)
         {
             catalog = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
@@ -430,51 +445,58 @@ public sealed partial class DotNetPublishPipelineRunner
             var sdkDownloadPackageHashes = new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase);
             var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            AddSdkManagedPackageHashes(
+            string? sdkEvidenceRoot = AddSdkManagedPackageHashes(
                 projectPath,
                 properties,
                 allRoots,
-                committedPackageHashes,
                 sdkDownloadPackageHashes,
-                sdkManagedPackageKeys);
-            if (allRoots.Count == 0)
-                return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
-            if (!TryPrimeLockedPackageArchives(
-                    allRoots,
-                    committedPackageHashes,
-                    archives,
-                    out Dictionary<string, string> archivePathsByPackageKey))
+                sdkManagedPackageKeys,
+                effectiveGlobalProperties);
+            try
             {
-                return false;
-            }
-            if (!TryPrimeLockedPackageArchives(
-                    allRoots,
-                    sdkDownloadPackageHashes,
-                    archives,
-                    out Dictionary<string, string> sdkDownloadArchivePaths))
-            {
-                return false;
-            }
-            foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
-            {
-                if (archivePathsByPackageKey.TryGetValue(entry.Key, out string? existingPath) &&
-                    !Path.GetFullPath(existingPath).Equals(
-                        Path.GetFullPath(entry.Value),
-                        IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                if (allRoots.Count == 0)
+                    return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
+                if (!TryPrimeLockedPackageArchives(
+                        allRoots,
+                        committedPackageHashes,
+                        archives,
+                        out Dictionary<string, string> archivePathsByPackageKey))
                 {
                     return false;
                 }
-                archivePathsByPackageKey[entry.Key] = entry.Value;
+                if (!TryPrimeLockedPackageArchives(
+                        allRoots,
+                        sdkDownloadPackageHashes,
+                        archives,
+                        out Dictionary<string, string> sdkDownloadArchivePaths))
+                {
+                    return false;
+                }
+                foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
+                {
+                    if (archivePathsByPackageKey.TryGetValue(entry.Key, out string? existingPath) &&
+                        !Path.GetFullPath(existingPath).Equals(
+                            Path.GetFullPath(entry.Value),
+                            IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                    archivePathsByPackageKey[entry.Key] = entry.Value;
+                }
+                foreach (KeyValuePair<string, string> entry in sdkDownloadPackageHashes)
+                    AddPackageHash(entry.Key, entry.Value, hashes);
+                catalog = new VerifiedPackageInputCatalog(
+                    allRoots,
+                    hashes,
+                    archives,
+                    archivePathsByPackageKey,
+                    sdkManagedPackageKeys);
+                return true;
             }
-            foreach (KeyValuePair<string, string> entry in sdkDownloadPackageHashes)
-                AddPackageHash(entry.Key, entry.Value, hashes);
-            catalog = new VerifiedPackageInputCatalog(
-                allRoots,
-                hashes,
-                archives,
-                archivePathsByPackageKey,
-                sdkManagedPackageKeys);
-            return true;
+            finally
+            {
+                TryDeleteSdkEvidenceRoot(sdkEvidenceRoot);
+            }
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)

@@ -28,9 +28,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <PropertyGroup>
                     <OutputType>Exe</OutputType>
                     <TargetFramework>{{targetFramework}}</TargetFramework>
-                    <RuntimeIdentifier>{{runtime}}</RuntimeIdentifier>
-                    <PublishSingleFile>true</PublishSingleFile>
-                    <SelfContained>true</SelfContained>
                     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
                     {{platformProperty}}
                   </PropertyGroup>
@@ -45,7 +42,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "commit -m \"approved source\"");
             RunDotNet(
                 root,
-                $"build \"{projectPath}\" -c Release -f {targetFramework} -r {runtime} --no-restore --nologo");
+                $"build \"{projectPath}\" -c Release -f {targetFramework} -r {runtime} --no-restore --nologo " +
+                "-p:SelfContained=true -p:PublishSingleFile=true");
 
             var plan = new DotNetPublishPlan
             {
