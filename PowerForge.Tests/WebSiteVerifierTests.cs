@@ -581,6 +581,7 @@ public partial class WebSiteVerifierTests
                                 new MenuItemSpec { Title = "Search", Url = "/search/" },
                                 new MenuItemSpec { Title = "Search index", Url = "/search/index" },
                                 new MenuItemSpec { Title = "Search file", Url = "/search/index.html" },
+                                new MenuItemSpec { Title = "Invalid search index directory", Url = "/search/index/" },
                                 new MenuItemSpec { Title = "Invalid search file directory", Url = "/search/index.html/" }
                             ]
                         }
@@ -603,6 +604,9 @@ public partial class WebSiteVerifierTests
                 (warning.Contains("points to '/search/'", StringComparison.OrdinalIgnoreCase) ||
                  warning.Contains("points to '/search/index'", StringComparison.OrdinalIgnoreCase) ||
                  warning.Contains("points to '/search/index.html'", StringComparison.OrdinalIgnoreCase)) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(withSearchableContent.Warnings, warning =>
+                warning.Contains("/search/index/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(withSearchableContent.Warnings, warning =>
                 warning.Contains("/search/index.html/", StringComparison.OrdinalIgnoreCase) &&
@@ -1094,6 +1098,64 @@ public partial class WebSiteVerifierTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_PreservesScalarCustomTaxonomyValuesContainingSeparators()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-scalar-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"),
+                "---\ntitle: Home\nslug: index\nseries: \"Alpha, Beta\"\n---\n\nHome");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+
+            var spec = new SiteSpec
+            {
+                Name = "Scalar custom taxonomy",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "series", BasePath = "/series" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Combined series", Url = "/series/alpha-beta/" },
+                                new MenuItemSpec { Title = "Incorrect split alpha", Url = "/series/alpha/" },
+                                new MenuItemSpec { Title = "Incorrect split beta", Url = "/series/beta/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/series/alpha-beta/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/series/alpha/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/series/beta/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
 
@@ -2609,6 +2671,90 @@ public partial class WebSiteVerifierTests
                 warning.Contains($"points to '{cardRoute}'", StringComparison.Ordinal) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
             Assert.True(missingRouteWarnings.Length == 0, string.Join(Environment.NewLine, missingRouteWarnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersGeneratedSectionAndPaginationSocialCardRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-social-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "blog"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "blog", "first.md"),
+                "---\ntitle: First\ndate: 2026-01-02\n---\n\nFirst");
+            File.WriteAllText(Path.Combine(root, "content", "blog", "second.md"),
+                "---\ntitle: Second\ndate: 2026-01-01\n---\n\nSecond");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+
+            var collection = new CollectionSpec
+            {
+                Name = "blog",
+                Input = "content/blog",
+                Output = "/blog",
+                AutoGenerateSectionIndex = true,
+                AutoSectionTitle = "News",
+                AutoSectionDescription = "Generated listing.",
+                PageSize = 1
+            };
+            var spec = new SiteSpec
+            {
+                Name = "Generated social routes",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [collection],
+                Pagination = new PaginationSpec { Enabled = true, PathSegment = "page", DefaultPageSize = 1 },
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec
+                {
+                    Enabled = true,
+                    SiteName = "Generated social routes",
+                    AutoGenerateCards = true,
+                    GeneratedCardsPath = "/assets/social/generated"
+                },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var sectionItem = WebSiteBuilder.CreateAutoGeneratedSectionIndexItem(
+                collection,
+                "/blog/",
+                "en",
+                projectSlug: null);
+            var paginatedItem = WebSiteBuilder.CloneContentItem(sectionItem);
+            paginatedItem.OutputPath = "/blog/page/2/";
+            paginatedItem.Outputs = ["html"];
+            paginatedItem.TranslationKey = "blog:_index:page:2";
+            var sectionCardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, sectionItem);
+            var paginationCardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, paginatedItem);
+            Assert.NotEqual(sectionCardRoute, paginationCardRoute);
+            spec.Navigation.Menus =
+            [
+                new MenuSpec
+                {
+                    Name = "main",
+                    Items =
+                    [
+                        new MenuItemSpec { Title = "Section card", Url = sectionCardRoute },
+                        new MenuItemSpec { Title = "Page 2 card", Url = paginationCardRoute }
+                    ]
+                }
+            ];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            foreach (var route in new[] { sectionCardRoute, paginationCardRoute })
+            {
+                Assert.StartsWith("/assets/social/generated/", route, StringComparison.Ordinal);
+                Assert.DoesNotContain(result.Warnings, warning =>
+                    warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
+                    warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            }
         }
         finally
         {

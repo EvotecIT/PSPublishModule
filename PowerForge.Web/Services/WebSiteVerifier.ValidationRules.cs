@@ -537,6 +537,13 @@ public static partial class WebSiteVerifier
         if (matter is null)
             return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
+        var item = new ContentItem
+        {
+            Tags = matter.Tags ?? Array.Empty<string>(),
+            Categories = matter.Categories ?? Array.Empty<string>(),
+            Meta = matter.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        };
+
         static void AddValues(
             Dictionary<string, HashSet<string>> target,
             string name,
@@ -557,25 +564,14 @@ public static partial class WebSiteVerifier
 
         AddValues(resolved, "tags", matter.Tags);
         AddValues(resolved, "categories", matter.Categories);
-        if (matter.Meta is not null)
-        {
-            if (matter.Meta.TryGetValue("categories", out var categoriesValue) &&
-                TryGetMetaValues(categoriesValue, out var categories))
-                AddValues(resolved, "categories", categories);
-        }
+        AddValues(resolved, "categories", WebSiteBuilder.GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }));
 
         foreach (var taxonomy in taxonomies ?? Array.Empty<TaxonomySpec>())
         {
             if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || matter.Meta is null)
                 continue;
 
-            if (!matter.Meta.TryGetValue(taxonomy.Name, out var metaValue))
-                continue;
-
-            if (!TryGetMetaValues(metaValue, out var values))
-                continue;
-
-            AddValues(resolved, taxonomy.Name, values);
+            AddValues(resolved, taxonomy.Name, WebSiteBuilder.GetTaxonomyValues(item, taxonomy));
         }
 
         return resolved.ToDictionary(
@@ -636,38 +632,6 @@ public static partial class WebSiteVerifier
         }
 
         counts[term] = counts.TryGetValue(term, out var count) ? count + 1 : 1;
-    }
-
-    private static bool TryGetMetaValues(object? value, out string[] values)
-    {
-        values = Array.Empty<string>();
-        if (value is null)
-            return false;
-
-        if (value is string text && !string.IsNullOrWhiteSpace(text))
-        {
-            values = text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .ToArray();
-            return values.Length > 0;
-        }
-
-        if (value is IEnumerable<object?> list)
-        {
-            values = list
-                .Select(item => item?.ToString() ?? string.Empty)
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Select(item => item.Trim())
-                .ToArray();
-            return values.Length > 0;
-        }
-
-        var scalar = value.ToString();
-        if (string.IsNullOrWhiteSpace(scalar))
-            return false;
-
-        values = new[] { scalar.Trim() };
-        return true;
     }
 
     private static void AddSyntheticTaxonomyRoutes(
