@@ -1,4 +1,6 @@
+using System.Text.Json;
 using PowerForge.Web;
+using PowerForge.Web.Cli;
 
 public partial class WebSiteVerifierTests
 {
@@ -203,6 +205,61 @@ public partial class WebSiteVerifierTests
             Assert.True(File.Exists(Path.Combine(outputRoot, "projects", "demo", "included", "index.json")));
             Assert.False(File.Exists(Path.Combine(outputRoot, "projects", "demo", "excluded", "index.json")));
             Assert.True(HasMissingRouteWarning(result, excludedJsonRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_UsesBuildSerializerForProjectSpecs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-project-serializer-" + Guid.NewGuid().ToString("N"));
+        var projectRoot = Path.Combine(root, "projects", "demo");
+        Directory.CreateDirectory(projectRoot);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(projectRoot, "project.json"),
+                """
+                {
+                  "name": "Demo",
+                  "slug": "demo",
+                  "redirects": [
+                    { "from": "/legacy", "to": "/", "matchType": "prefix" }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string redirectedRoute = "/legacy/guide";
+            var spec = new SiteSpec
+            {
+                Name = "Project serializer parity",
+                BaseUrl = "https://example.test",
+                ProjectsRoot = "projects",
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Legacy", Url = redirectedRoute }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var strictPropertyOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = false };
+            WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site-strict"), strictPropertyOptions);
+            var strictResult = WebSiteVerifier.Verify(spec, plan, strictPropertyOptions);
+
+            Assert.True(HasMissingRouteWarning(strictResult, redirectedRoute), string.Join(Environment.NewLine, strictResult.Warnings));
+
+            WebSiteBuilder.Build(spec, plan, Path.Combine(root, "_site-cli"), WebCliJson.Options);
+            var cliResult = WebSiteVerifier.Verify(spec, plan, WebCliJson.Options);
+
+            Assert.False(HasMissingRouteWarning(cliResult, redirectedRoute), string.Join(Environment.NewLine, cliResult.Warnings));
         }
         finally
         {

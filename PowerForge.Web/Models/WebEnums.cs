@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace PowerForge.Web;
 
 /// <summary>Controls trailing slash handling for generated URLs.</summary>
@@ -21,6 +24,7 @@ public enum SortOrder
 }
 
 /// <summary>Redirect match strategy.</summary>
+[JsonConverter(typeof(RedirectMatchTypeJsonConverter))]
 public enum RedirectMatchType
 {
     /// <summary>Exact path match.</summary>
@@ -31,6 +35,16 @@ public enum RedirectMatchType
     Wildcard,
     /// <summary>Regular expression match.</summary>
     Regex
+}
+
+/// <summary>Serializes redirect match strategies using site-spec camelCase values.</summary>
+public sealed class RedirectMatchTypeJsonConverter : JsonStringEnumConverter<RedirectMatchType>
+{
+    /// <summary>Initializes a camelCase redirect match strategy converter.</summary>
+    public RedirectMatchTypeJsonConverter()
+        : base(JsonNamingPolicy.CamelCase, allowIntegerValues: true)
+    {
+    }
 }
 
 /// <summary>Analytics provider selection.</summary>

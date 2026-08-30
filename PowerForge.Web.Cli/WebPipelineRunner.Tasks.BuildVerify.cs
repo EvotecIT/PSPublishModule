@@ -84,7 +84,7 @@ internal static partial class WebPipelineRunner
         var baselinePath = GetString(step, "baseline") ?? GetString(step, "baselinePath");
         var failOnNewWarnings = GetBool(step, "failOnNewWarnings") ?? GetBool(step, "failOnNew") ?? false;
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-        var verify = WebSiteVerifier.Verify(spec, plan);
+        var verify = WebSiteVerifier.Verify(spec, plan, WebCliJson.Options);
         var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
 
         if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePath))

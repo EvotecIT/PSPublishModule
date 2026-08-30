@@ -359,7 +359,8 @@ public static partial class WebSiteVerifier
                     var normalizedBaseRoute = NormalizeRouteForNavigationMatch(route.Route).Trim('/');
                     if (normalizedBaseRoute.Equals("404", StringComparison.OrdinalIgnoreCase))
                     {
-                        yield return "/404.html";
+                        foreach (var physicalRoute in GetStaticAssetRoutes("404.html"))
+                            yield return physicalRoute;
                         continue;
                     }
 

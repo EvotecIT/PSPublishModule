@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
@@ -41,7 +42,15 @@ public static partial class WebSiteVerifier
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
     /// <returns>Verification result.</returns>
-    public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan)
+    public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan) =>
+        Verify(spec, plan, WebJson.Options);
+
+    /// <summary>Validates the site spec against discovered content using the build's serializer contract.</summary>
+    /// <param name="spec">Site configuration.</param>
+    /// <param name="plan">Resolved site plan.</param>
+    /// <param name="options">Optional JSON serializer options shared with the corresponding site build.</param>
+    /// <returns>Verification result.</returns>
+    public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan, JsonSerializerOptions? options)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -49,7 +58,7 @@ public static partial class WebSiteVerifier
         var errors = new List<string>();
         var warnings = new List<string>();
         var localization = ResolveLocalizationConfig(spec, warnings);
-        var builderState = WebSiteBuilder.BuildVerificationState(spec, plan);
+        var builderState = WebSiteBuilder.BuildVerificationState(spec, plan, options ?? WebJson.Options);
         var builderProjectContentSources = builderState.Items
             .Where(static item =>
                 item is not null &&

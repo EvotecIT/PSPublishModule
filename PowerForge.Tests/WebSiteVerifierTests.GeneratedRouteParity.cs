@@ -312,6 +312,8 @@ public partial class WebSiteVerifierTests
                                 },
                                 new MenuItemSpec { Title = "Exact path with arbitrary query", Url = "/old/?id=anything" },
                                 new MenuItemSpec { Title = "Exact query", Url = "/query?id=1" },
+                                new MenuItemSpec { Title = "Exact query with optional slash", Url = "/query/?id=1" },
+                                new MenuItemSpec { Title = "Exact query with repeated slash", Url = "/query//?id=1" },
                                 new MenuItemSpec { Title = "Wrong exact query", Url = "/query?id=2" },
                                 new MenuItemSpec { Title = "Missing exact query", Url = "/query" },
                                 new MenuItemSpec { Title = "Prefix base", Url = "/legacy" },
@@ -348,6 +350,8 @@ public partial class WebSiteVerifierTests
             Assert.False(HasMissingRouteWarning(result, "/downloads/tool"), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, "/old/?id=anything"), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, "/query?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/query/?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/query//?id=1"), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, "/campaign/guide?source=old"), string.Join(Environment.NewLine, result.Warnings));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("Exact pattern", StringComparison.OrdinalIgnoreCase) &&
@@ -603,6 +607,7 @@ public partial class WebSiteVerifierTests
             File.WriteAllText(Path.Combine(root, "content", "404.md"), "---\ntitle: Not found\n---\nMissing");
             File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
             const string fileRoute = "/404.html";
+            const string extensionlessRoute = "/404";
             const string invalidDirectoryRoute = "/404.html/";
             var spec = new SiteSpec
             {
@@ -622,6 +627,7 @@ public partial class WebSiteVerifierTests
                             Items =
                             [
                                 new MenuItemSpec { Title = "Not found file", Url = fileRoute },
+                                new MenuItemSpec { Title = "Not found extensionless alias", Url = extensionlessRoute },
                                 new MenuItemSpec { Title = "Invalid not found directory", Url = invalidDirectoryRoute }
                             ]
                         }
@@ -638,6 +644,7 @@ public partial class WebSiteVerifierTests
 
             Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
             Assert.False(HasMissingRouteWarning(result, fileRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, extensionlessRoute), string.Join(Environment.NewLine, result.Warnings));
             Assert.True(HasMissingRouteWarning(result, invalidDirectoryRoute), string.Join(Environment.NewLine, result.Warnings));
         }
         finally

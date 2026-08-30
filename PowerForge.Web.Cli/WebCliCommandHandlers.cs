@@ -237,7 +237,7 @@ internal static partial class WebCliCommandHandlers
         if (runAudit && (string.IsNullOrWhiteSpace(siteRoot) || !Directory.Exists(siteRoot)))
             return Fail("Doctor audit requires an existing site root. Use --out with --build or pass --site-root.", outputJson, logger, "web.doctor");
 
-        var verify = runVerify ? WebSiteVerifier.Verify(spec, plan) : null;
+        var verify = runVerify ? WebSiteVerifier.Verify(spec, plan, WebCliJson.Options) : null;
         var filteredVerifyWarnings = verify is null
             ? Array.Empty<string>()
             : WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);

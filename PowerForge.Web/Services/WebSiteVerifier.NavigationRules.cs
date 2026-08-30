@@ -688,13 +688,17 @@ public static partial class WebSiteVerifier
         var hasRouteQuery = TryGetNavigationRouteQuery(url, out var routeQuery);
         foreach (var redirect in redirects.Rules)
         {
+            var hasSourceQuery = TryGetNavigationRouteQuery(redirect.From, out var sourceQuery);
             var pathMatches = false;
             if (redirect.MatchType == RedirectMatchType.Exact)
             {
+                var sourceRoute = NormalizeExactRouteForNavigationMatch(redirect.From);
                 pathMatches = string.Equals(
-                    NormalizeExactRouteForNavigationMatch(redirect.From),
+                    sourceRoute,
                     route,
                     StringComparison.Ordinal);
+                if (!pathMatches && hasSourceQuery)
+                    pathMatches = MatchesOptionalTrailingSlash(sourceRoute, route);
             }
             else
             {
@@ -707,12 +711,25 @@ public static partial class WebSiteVerifier
             if (!pathMatches)
                 continue;
 
-            if (!TryGetNavigationRouteQuery(redirect.From, out var sourceQuery))
+            if (!hasSourceQuery)
                 return true;
 
             if (hasRouteQuery && string.Equals(sourceQuery, routeQuery, StringComparison.Ordinal))
                 return true;
         }
+
+        return false;
+    }
+
+    private static bool MatchesOptionalTrailingSlash(string left, string right)
+    {
+        if (string.Equals(left, right, StringComparison.Ordinal))
+            return true;
+
+        if (left.Length > 1 && left.EndsWith("/", StringComparison.Ordinal))
+            return string.Equals(left[..^1], right, StringComparison.Ordinal);
+        if (right.Length > 1 && right.EndsWith("/", StringComparison.Ordinal))
+            return string.Equals(left, right[..^1], StringComparison.Ordinal);
 
         return false;
     }

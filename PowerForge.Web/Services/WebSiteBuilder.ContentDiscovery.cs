@@ -265,7 +265,8 @@ public static partial class WebSiteBuilder
     /// <summary>Builds the complete render and redirect state used by a site build for artifact verification.</summary>
     internal static (IReadOnlyList<ContentItem> Items, IReadOnlyList<RedirectSpec> Redirects) BuildVerificationState(
         SiteSpec spec,
-        WebSitePlan plan)
+        WebSitePlan plan,
+        JsonSerializerOptions? options = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -282,7 +283,7 @@ public static partial class WebSiteBuilder
             if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
             if (spec.Redirects is { Length: > 0 }) redirects.AddRange(spec.Redirects);
 
-            var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, WebJson.Options).ToList();
+            var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, options ?? WebJson.Options).ToList();
             foreach (var project in projectSpecs)
             {
                 if (project.Redirects is { Length: > 0 })
