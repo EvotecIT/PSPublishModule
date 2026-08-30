@@ -8,14 +8,33 @@ internal static class AppleBuildProvenance
 {
     internal const string XcodeBuildSetting = "POWERFORGE_SOURCE_REVISION";
 
-    internal sealed record Snapshot(string RootPath, string Revision);
+    internal sealed class Snapshot
+    {
+        internal Snapshot(string rootPath, string revision)
+        {
+            RootPath = rootPath;
+            Revision = revision;
+        }
+
+        internal string RootPath { get; }
+
+        internal string Revision { get; }
+    }
 
     internal static string? ResolveLocalSourceRevision(string projectRoot)
     {
         if (string.IsNullOrWhiteSpace(projectRoot) || !Directory.Exists(projectRoot))
             return null;
 
-        var git = new GitClient(defaultTimeout: TimeSpan.FromSeconds(10));
+        var git = GitClient.CreateTrustedSystemClient(
+            defaultTimeout: TimeSpan.FromSeconds(10));
+        return ResolveLocalSourceRevision(projectRoot, git);
+    }
+
+    internal static string? ResolveLocalSourceRevision(
+        string projectRoot,
+        GitClient git)
+    {
         var head = git.RunRawAsync(projectRoot, ["rev-parse", "HEAD"])
             .GetAwaiter()
             .GetResult();
@@ -28,9 +47,44 @@ internal static class AppleBuildProvenance
                 ["status", "--porcelain=v1", "--untracked-files=normal"])
             .GetAwaiter()
             .GetResult();
-        return status.Succeeded && string.IsNullOrWhiteSpace(status.StdOut)
+        if (!status.Succeeded)
+            return null;
+        return string.IsNullOrWhiteSpace(status.StdOut)
             ? revision
             : revision + "-dirty";
+    }
+
+    internal static void RejectIgnoredBuildInputs(string sourceRoot)
+    {
+        var root = Path.GetFullPath(sourceRoot);
+        var git = GitClient.CreateTrustedSystemClient(
+            defaultTimeout: TimeSpan.FromSeconds(10));
+        var ignored = git.RunRawAsync(
+                root,
+                ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"])
+            .GetAwaiter()
+            .GetResult();
+        if (!ignored.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Unable to verify ignored Apple build inputs. " +
+                (string.IsNullOrWhiteSpace(ignored.StdErr)
+                    ? "git ls-files failed."
+                    : ignored.StdErr.Trim()));
+        }
+
+        var unexpected = ignored.StdOut
+            .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(path => !IsExcludedGeneratedPath(path))
+            .Take(5)
+            .ToArray();
+        if (unexpected.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Apple build inputs include Git-ignored files that are not bound by the source revision: " +
+            string.Join(", ", unexpected) +
+            ". Track them, remove them, or move generated output under .build, .swiftpm, build, or DerivedData before building.");
     }
 
     internal static Snapshot Capture(string sourceRoot)
@@ -101,7 +155,7 @@ internal static class AppleBuildProvenance
             return null;
 
         var commit = normalized!.EndsWith("-dirty", StringComparison.Ordinal)
-            ? normalized[..^"-dirty".Length]
+            ? normalized.Substring(0, normalized.Length - "-dirty".Length)
             : normalized;
         if (!GitObjectId.IsFull(commit))
         {
@@ -125,5 +179,15 @@ internal static class AppleBuildProvenance
             Path.DirectorySeparatorChar,
             Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return fullCandidate.StartsWith(prefix, comparison);
+    }
+
+    private static bool IsExcludedGeneratedPath(string path)
+    {
+        var segments = path.Replace('\\', '/').Split('/');
+        return segments.Any(segment =>
+            segment.Equals(".build", StringComparison.Ordinal) ||
+            segment.Equals(".swiftpm", StringComparison.Ordinal) ||
+            segment.Equals("build", StringComparison.Ordinal) ||
+            segment.Equals("DerivedData", StringComparison.Ordinal));
     }
 }

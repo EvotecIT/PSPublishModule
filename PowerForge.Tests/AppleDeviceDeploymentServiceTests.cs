@@ -155,6 +155,114 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task BuildAsync_rejects_a_project_outside_the_declared_build_root_before_tools_run()
+    {
+        var projectRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.Project", Guid.NewGuid().ToString("N")));
+        var buildRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.BuildRoot", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            File.WriteAllText(Path.Combine(buildRoot.FullName, "tracked.txt"), "fixture");
+            InitializeGitRepository(buildRoot.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = buildRoot.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("must be contained", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { projectRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { buildRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_project_reached_through_a_symbolic_link()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.BuildRoot", Guid.NewGuid().ToString("N")));
+        var external = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.ExternalProject", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var externalProject = Directory.CreateDirectory(Path.Combine(external.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(externalProject.FullName, "project.pbxproj"), string.Empty);
+            var linkedProject = Path.Combine(root.FullName, "CasaRay.xcodeproj");
+            Directory.CreateSymbolicLink(linkedProject, externalProject.FullName);
+            File.WriteAllText(Path.Combine(root.FullName, "tracked.txt"), "fixture");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = linkedProject,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { external.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_ignored_build_inputs_before_rsync_or_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "Local.xcconfig\n");
+            InitializeGitRepository(root.FullName);
+            File.WriteAllText(Path.Combine(root.FullName, "Local.xcconfig"), "SETTING = local");
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("Local.xcconfig", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_binds_source_revision_without_allowing_an_argument_override()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

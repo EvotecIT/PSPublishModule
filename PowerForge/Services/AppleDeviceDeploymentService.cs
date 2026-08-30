@@ -108,6 +108,7 @@ public sealed class AppleDeviceDeploymentService
         var workingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
         string? mirrorPath = null;
         var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
+        EnsurePathWithinBuildRoot(projectPath, sourceRoot);
         AppleBuildProvenance.Snapshot sourceSnapshot;
         AppleReleaseSourceMutationMonitor buildInputMonitor;
 
@@ -121,6 +122,7 @@ public sealed class AppleDeviceDeploymentService
                 ignoredMutation: args =>
                     AppleBuildProvenance.IsGitMetadataMutation(args, sourceRoot));
             sourceSnapshot = AppleBuildProvenance.Capture(sourceRoot);
+            AppleBuildProvenance.RejectIgnoredBuildInputs(sourceRoot);
             var mirror = await MirrorBuildRootAsync(projectPath, request, cancellationToken).ConfigureAwait(false);
             if (!mirror.ProcessResult.Succeeded)
             {
@@ -146,7 +148,7 @@ public sealed class AppleDeviceDeploymentService
         }
         else
         {
-            buildInputMonitor = new AppleReleaseSourceMutationMonitor(
+            var sourceMonitor = new AppleReleaseSourceMutationMonitor(
                 sourceRoot,
                 "local Apple source",
                 "xcodebuild",
@@ -155,7 +157,17 @@ public sealed class AppleDeviceDeploymentService
                     AppleBuildProvenance.IsGitMetadataMutation(args, sourceRoot) ||
                     AppleBuildProvenance.IsPathMutation(args, derivedDataPath) ||
                     AppleBuildProvenance.IsPathMutation(args, appPath));
-            sourceSnapshot = AppleBuildProvenance.Capture(sourceRoot);
+            try
+            {
+                sourceSnapshot = AppleBuildProvenance.Capture(sourceRoot);
+                AppleBuildProvenance.RejectIgnoredBuildInputs(sourceRoot);
+                buildInputMonitor = sourceMonitor;
+            }
+            catch
+            {
+                sourceMonitor.Dispose();
+                throw;
+            }
         }
         using var buildInputMonitorLease = buildInputMonitor;
 
@@ -444,7 +456,7 @@ public sealed class AppleDeviceDeploymentService
         var mirrorPath = ResolveBuildMirrorPath(request);
         var normalizedSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
         var normalizedMirrorPath = EnsureTrailingDirectorySeparator(Path.GetFullPath(mirrorPath));
-        if (normalizedMirrorPath.StartsWith(normalizedSourceRoot, StringComparison.Ordinal))
+        if (normalizedMirrorPath.StartsWith(normalizedSourceRoot, GetPathComparison()))
             throw new InvalidOperationException("BuildMirrorPath must not be inside the mirrored build root.");
 
         Directory.CreateDirectory(mirrorPath);
@@ -602,11 +614,42 @@ public sealed class AppleDeviceDeploymentService
     {
         var fullPath = Path.GetFullPath(path);
         var fullSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        if (!fullPath.StartsWith(fullSourceRoot, StringComparison.Ordinal))
+        if (!fullPath.StartsWith(fullSourceRoot, GetPathComparison()))
             return fullPath;
 
         var relative = fullPath.Substring(fullSourceRoot.Length);
         return Path.Combine(mirrorPath, relative);
+    }
+
+    private static void EnsurePathWithinBuildRoot(string projectPath, string sourceRoot)
+    {
+        var fullProjectPath = Path.GetFullPath(projectPath);
+        var fullSourceRoot = Path.GetFullPath(sourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = GetPathComparison();
+        var prefix = EnsureTrailingDirectorySeparator(fullSourceRoot);
+        if (!fullProjectPath.Equals(fullSourceRoot, comparison) &&
+            !fullProjectPath.StartsWith(prefix, comparison))
+        {
+            throw new InvalidOperationException(
+                $"ProjectPath '{fullProjectPath}' must be contained by BuildRoot '{fullSourceRoot}'.");
+        }
+
+        var current = fullProjectPath;
+        while (true)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"ProjectPath must not traverse a symbolic link or reparse point: '{current}'.");
+            }
+            if (current.Equals(fullSourceRoot, comparison))
+                break;
+            current = Path.GetDirectoryName(current)
+                ?? throw new InvalidOperationException(
+                    $"Unable to verify ProjectPath '{fullProjectPath}' against BuildRoot '{fullSourceRoot}'.");
+        }
     }
 
     private static bool MatchesDevice(AppleDeviceInfo device, string filter)
@@ -669,6 +712,11 @@ public sealed class AppleDeviceDeploymentService
 
         return path + Path.DirectorySeparatorChar;
     }
+
+    private static StringComparison GetPathComparison()
+        => Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
 
     private sealed class MirrorResult
     {
