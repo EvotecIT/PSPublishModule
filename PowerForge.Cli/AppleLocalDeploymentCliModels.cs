@@ -24,6 +24,8 @@ internal sealed class AppleLocalDeploymentCliResult
 
     public string DerivedDataPath { get; set; } = string.Empty;
 
+    public string? SourceRevision { get; set; }
+
     public string? Device { get; set; }
 
     public string? InstallRoot { get; set; }

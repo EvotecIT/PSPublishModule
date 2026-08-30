@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,6 +71,9 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var derived = Path.Combine(root.FullName, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
+            var revision = AppleBuildProvenance.RequireLocalSourceRevision(
+                root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -99,12 +103,254 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 "-derivedDataPath",
                 derived,
                 "-allowProvisioningUpdates",
-                "build"
+                "build",
+                $"POWERFORGE_SOURCE_REVISION={revision}"
             }, request.Arguments);
         }
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_non_git_source_before_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        DerivedDataPath = Path.Combine(
+                            Path.GetTempPath(),
+                            "PowerForge.Tests.DerivedData",
+                            Guid.NewGuid().ToString("N")),
+                        XcodeBuildExecutable = "xcodebuild-test",
+                        BuildRoot = root.FullName
+                    }));
+
+            Assert.Contains("provenance is required", exception.Message);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_binds_source_revision_without_allowing_an_argument_override()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(root.FullName, ".gitignore"),
+                "DerivedData/\nOtherDerivedData/\n");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+            var service = new AppleDeviceDeploymentService(runner);
+            var revision = AppleBuildProvenance.RequireLocalSourceRevision(
+                root.FullName);
+
+            var result = await service.BuildAsync(new AppleAppBuildRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
+                DerivedDataPath = Path.Combine(root.FullName, "DerivedData"),
+                XcodeBuildExecutable = "xcodebuild-test",
+                BuildRoot = root.FullName
+            });
+
+            Assert.True(result.Succeeded);
+            Assert.Contains($"POWERFORGE_SOURCE_REVISION={revision}", runner.Requests[0].Arguments);
+            Assert.Equal(revision, result.SourceRevision);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.BuildAsync(new AppleAppBuildRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
+                DerivedDataPath = Path.Combine(root.FullName, "OtherDerivedData"),
+                XcodeBuildExecutable = "xcodebuild-test",
+                BuildRoot = root.FullName,
+                AdditionalArguments = [$"POWERFORGE_SOURCE_REVISION={new string('b', 40)}"]
+            }));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_clean_source_that_changes_during_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            var projectFile = Path.Combine(project.FullName, "project.pbxproj");
+            File.WriteAllText(projectFile, "clean");
+            File.WriteAllText(
+                Path.Combine(root.FullName, ".gitignore"),
+                "DerivedData/\n");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ =>
+            {
+                File.WriteAllText(projectFile, "changed while building");
+                return Success("ok");
+            });
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        DerivedDataPath = Path.Combine(
+                            root.FullName,
+                            "DerivedData"),
+                        XcodeBuildExecutable = "xcodebuild-test",
+                        BuildRoot = root.FullName
+                    }));
+
+            Assert.Contains("source changed", exception.Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_transient_source_write_restored_during_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            var projectFile = Path.Combine(project.FullName, "project.pbxproj");
+            File.WriteAllText(projectFile, "clean");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ =>
+            {
+                File.WriteAllText(projectFile, "transient");
+                File.WriteAllText(projectFile, "clean");
+                return Success("ok");
+            });
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        DerivedDataPath = Path.Combine(
+                            Path.GetTempPath(),
+                            "PowerForge.Tests.DerivedData",
+                            Guid.NewGuid().ToString("N")),
+                        XcodeBuildExecutable = "xcodebuild-test",
+                        BuildRoot = root.FullName
+                    }));
+
+            Assert.Contains("changed", exception.Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_transient_mirror_write_during_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var mirrorRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Mirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                "clean");
+            InitializeGitRepository(root.FullName);
+            var mirror = Path.Combine(mirrorRoot.FullName, "mirror");
+            var processIndex = 0;
+            var runner = new CapturingProcessRunner(_ =>
+            {
+                processIndex++;
+                if (processIndex == 2)
+                {
+                    var transientPath = Path.Combine(mirror, "transient");
+                    File.WriteAllText(transientPath, "unapproved");
+                    File.Delete(transientPath);
+                }
+                return Success("ok");
+            });
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = Path.Combine(
+                            Path.GetTempPath(),
+                            "PowerForge.Tests.DerivedData",
+                            Guid.NewGuid().ToString("N")),
+                        UseBuildMirror = true,
+                        BuildRoot = root.FullName,
+                        BuildMirrorPath = mirror,
+                        RsyncExecutable = "rsync-test",
+                        XcodeBuildExecutable = "xcodebuild-test"
+                    }));
+
+            Assert.Contains("changed", exception.Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
 
@@ -119,6 +365,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var derived = Path.Combine(root.FullName, "DerivedData");
             var actualApp = Directory.CreateDirectory(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "Tactra.app"));
             var service = new AppleDeviceDeploymentService(new CapturingProcessRunner(_ => Success("ok")));
+            InitializeGitRepository(root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -150,6 +397,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var derived = Path.Combine(root.FullName, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -181,6 +429,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var derived = Path.Combine(root.FullName, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -215,6 +464,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var derived = Path.Combine(root.FullName, "DerivedData");
             var runner = new CapturingProcessRunner(_ => Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -300,6 +550,7 @@ App installed:
                 return Success("ok");
             });
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
             {
@@ -344,6 +595,7 @@ App installed:
                 return Success("ok");
             });
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
             {
@@ -380,6 +632,7 @@ App installed:
                 ? Success("App installed:\n• bundleID: com.evotecit.casaray\n")
                 : Success("ok"));
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
             {
@@ -444,6 +697,7 @@ App installed:
                 return Success("ok");
             });
             var service = new AppleDeviceDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleAppDeviceDeploymentRequest
             {
@@ -473,6 +727,43 @@ App installed:
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
+
+    private static void InitializeGitRepository(string workingDirectory)
+    {
+        RunGit(workingDirectory, "init");
+        RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
+        RunGit(
+            workingDirectory,
+            "config",
+            "user.email",
+            "powerforge-tests@example.invalid");
+        RunGit(workingDirectory, "add", ".");
+        RunGit(workingDirectory, "commit", "-m", "fixture");
+    }
+
+    private static void RunGit(
+        string workingDirectory,
+        params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+        foreach (var argument in arguments)
+            process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException(standardError);
+    }
 
     private sealed class CapturingProcessRunner : IProcessRunner
     {

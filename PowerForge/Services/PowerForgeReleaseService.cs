@@ -2510,7 +2510,10 @@ internal sealed partial class PowerForgeReleaseService
                             detail),
                         AppStoreConnectApiKeyPath = directArchive ? null : plan.AppStoreConnectApiKeyPath,
                         AppStoreConnectApiKeyId = directArchive ? null : plan.AppStoreConnectApiKeyId,
-                        AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId
+                        AppStoreConnectApiIssuerId = directArchive ? null : plan.AppStoreConnectApiIssuerId,
+                        AdditionalArguments = AppleBuildProvenance.AppendXcodeBuildSetting(
+                            null,
+                            plan.SourceCommit).ToArray()
                     });
                     result.Archive = archive;
                     sourceMutationMonitor?.ValidateNoChanges();

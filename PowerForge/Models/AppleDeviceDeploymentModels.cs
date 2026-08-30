@@ -130,6 +130,9 @@ public sealed class AppleAppBuildResult
     /// <summary>Mirror path used for the build, if any.</summary>
     public string? BuildMirrorPath { get; set; }
 
+    /// <summary>Source revision PowerForge bound to the Xcode build.</summary>
+    public string SourceRevision { get; set; } = string.Empty;
+
     /// <summary>Build process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);
 

@@ -90,6 +90,9 @@ internal static partial class Program
                 ProjectPath = projectPath,
                 Scheme = scheme,
                 DerivedDataPath = derivedDataPath,
+                SourceRevision = planOnly
+                    ? AppleBuildProvenance.RequireLocalSourceRevision(projectRoot)
+                    : null,
                 Device = deviceIdentifier ?? device,
                 InstallRoot = requestedPlatform == ApplePlatform.macOS ? Path.GetFullPath(installRoot) : null,
                 Launch = launch,
@@ -152,6 +155,7 @@ internal static partial class Program
             };
             var deployment = new AppleMacAppDeploymentService().DeployAsync(request).GetAwaiter().GetResult();
             cliResult.AppPath = deployment.Build.AppPath;
+            cliResult.SourceRevision = deployment.Build.SourceRevision;
             cliResult.InstalledAppPath = deployment.Install?.InstalledAppPath;
             cliResult.BuildSucceeded = deployment.Build.Succeeded;
             cliResult.InstallSucceeded = deployment.Install?.Succeeded ?? false;
@@ -190,6 +194,7 @@ internal static partial class Program
         };
         var deviceDeployment = new AppleDeviceDeploymentService().DeployAsync(deviceRequest).GetAwaiter().GetResult();
         cliResult.AppPath = deviceDeployment.Build.AppPath;
+        cliResult.SourceRevision = deviceDeployment.Build.SourceRevision;
         cliResult.DeviceIdentifier = deviceDeployment.Install?.DeviceIdentifier;
         cliResult.BuildSucceeded = deviceDeployment.Build.Succeeded;
         cliResult.InstallSucceeded = deviceDeployment.Install?.Succeeded ?? false;
@@ -296,6 +301,8 @@ internal static partial class Program
         logger.Info($"Target: {result.Target} ({result.Platform}, {result.Configuration})");
         if (!string.IsNullOrWhiteSpace(result.Profile))
             logger.Info($"Profile: {result.Profile}");
+        if (!string.IsNullOrWhiteSpace(result.SourceRevision))
+            logger.Info($"Source: {result.SourceRevision}");
         if (result.Planned)
         {
             logger.Success("Apple local deployment plan is valid.");

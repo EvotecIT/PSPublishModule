@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -34,6 +35,7 @@ public sealed class AppleMacAppDeploymentServiceTests
                 return Success("ok");
             });
             var service = new AppleMacAppDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -98,6 +100,7 @@ public sealed class AppleMacAppDeploymentServiceTests
                 }
                 return Success("ok");
             });
+            InitializeGitRepository(root.FullName);
 
             var result = await new AppleMacAppDeploymentService(runner).DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -143,6 +146,7 @@ public sealed class AppleMacAppDeploymentServiceTests
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                 return Success("ok");
             });
+            InitializeGitRepository(root.FullName);
 
             var result = await new AppleMacAppDeploymentService(runner).DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -187,6 +191,43 @@ public sealed class AppleMacAppDeploymentServiceTests
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
+
+    private static void InitializeGitRepository(string workingDirectory)
+    {
+        RunGit(workingDirectory, "init");
+        RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
+        RunGit(
+            workingDirectory,
+            "config",
+            "user.email",
+            "powerforge-tests@example.invalid");
+        RunGit(workingDirectory, "add", ".");
+        RunGit(workingDirectory, "commit", "-m", "fixture");
+    }
+
+    private static void RunGit(
+        string workingDirectory,
+        params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+        foreach (var argument in arguments)
+            process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException(standardError);
+    }
 
     private sealed class CapturingProcessRunner : IProcessRunner
     {

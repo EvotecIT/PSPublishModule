@@ -17,10 +17,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.Upload = true;
             spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            AppleAppArchiveRequest? archiveRequest = null;
             var result = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Archive checkpoint must not query App Store Connect."),
                     archiveAppleApp: request =>
                     {
+                        archiveRequest = request;
                         var archive = Directory.CreateDirectory(request.ArchivePath!);
                         File.WriteAllText(Path.Combine(archive.FullName, "payload"), "signed archive");
                         return CreateSuccessfulArchive(request);
@@ -33,6 +35,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(
+                $"POWERFORGE_SOURCE_REVISION={sourceCommit}",
+                Assert.IsType<AppleAppArchiveRequest>(archiveRequest)
+                    .AdditionalArguments);
             Assert.False(result.AppleAppPlan!.Archive);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
             Assert.True(receipt.PlanOnly);

@@ -65,6 +65,11 @@ public sealed class PowerForgeCliAppleDeployTests
               }
             }
             """);
+            InitializeGitRepository(tempRoot);
+            var expectedRevision = RunGit(
+                tempRoot,
+                "rev-parse",
+                "HEAD").Trim().ToLowerInvariant();
 
             var ios = await RunCliAsync(repoRoot, $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
             Assert.Equal(0, ios.ExitCode);
@@ -76,7 +81,16 @@ public sealed class PowerForgeCliAppleDeployTests
                 Assert.Equal("Plus", result.GetProperty("profile").GetString());
                 Assert.Equal("EvoPhone", result.GetProperty("device").GetString());
                 Assert.Equal("Debug", result.GetProperty("configuration").GetString());
+                Assert.Equal(
+                    expectedRevision,
+                    result.GetProperty("sourceRevision").GetString());
             }
+
+            var textPlan = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan");
+            Assert.Equal(0, textPlan.ExitCode);
+            Assert.Contains($"Source: {expectedRevision}", textPlan.StdOut);
 
             var mac = await RunCliAsync(repoRoot, $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --platform macOS --profile Free --plan --output json");
             Assert.Equal(0, mac.ExitCode);
@@ -130,5 +144,44 @@ public sealed class PowerForgeCliAppleDeployTests
 
     private static string GetCliPath(string repoRoot)
         => Path.Combine(repoRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
+
+    private static void InitializeGitRepository(string workingDirectory)
+    {
+        RunGit(workingDirectory, "init");
+        RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
+        RunGit(
+            workingDirectory,
+            "config",
+            "user.email",
+            "powerforge-tests@example.invalid");
+        RunGit(workingDirectory, "add", ".");
+        RunGit(workingDirectory, "commit", "-m", "fixture");
+    }
+
+    private static string RunGit(
+        string workingDirectory,
+        params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+        foreach (var argument in arguments)
+            process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException(standardError);
+        return standardOutput;
+    }
 
 }
