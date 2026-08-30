@@ -280,6 +280,20 @@ public sealed class GitHubWebsiteRunWorkflowTests
     }
 
     [Fact]
+    public void WebsiteRunWorkflow_ShouldNormalizeRepositoryRootReportPaths()
+    {
+        var repoRoot = FindRepoRoot();
+        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
+        var workflowYaml = File.ReadAllText(workflowPath);
+
+        Assert.Contains("inputs.website_root == '.' && '_reports/**'", workflowYaml, StringComparison.Ordinal);
+        Assert.Contains("inputs.website_root == '.' && '_site/_reports/**'", workflowYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("./${{ inputs.website_root }}/_reports/**", workflowYaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("./${{ inputs.website_root }}/_site/_reports/**", workflowYaml, StringComparison.Ordinal);
+        Assert.NotNull(new YamlDotNet.Serialization.DeserializerBuilder().Build().Deserialize<object>(workflowYaml));
+    }
+
+    [Fact]
     public void WebsiteDeployWorkflow_ShouldCarryExactBuildManifestIntoPostDeploy()
     {
         var repoRoot = FindRepoRoot();

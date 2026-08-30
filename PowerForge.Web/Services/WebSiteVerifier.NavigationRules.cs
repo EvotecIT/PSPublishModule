@@ -190,7 +190,13 @@ public static partial class WebSiteVerifier
     }
 
 
-    private static void ValidateNavigationLint(SiteSpec spec, ResolvedLocalizationConfig localization, WebSitePlan plan, IEnumerable<string> routes, List<string> warnings)
+    private static void ValidateNavigationLint(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        WebSitePlan plan,
+        IEnumerable<string> routes,
+        List<string> warnings,
+        bool validateAllLocalRoutes = false)
     {
         if (spec is null || plan is null || routes is null || warnings is null) return;
         var nav = spec.Navigation;
@@ -210,11 +216,13 @@ public static partial class WebSiteVerifier
             .Select(collection => collection!.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var routeScopedPrefixes = (spec.Collections ?? Array.Empty<CollectionSpec>())
-            .Select(collection => NormalizeRouteForNavigationMatch(collection?.Output))
-            .Where(prefix => !string.IsNullOrWhiteSpace(prefix) && !string.Equals(prefix, "/", StringComparison.Ordinal))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var routeScopedPrefixes = validateAllLocalRoutes
+            ? ["/"]
+            : (spec.Collections ?? Array.Empty<CollectionSpec>())
+                .Select(collection => NormalizeRouteForNavigationMatch(collection?.Output))
+                .Where(prefix => !string.IsNullOrWhiteSpace(prefix) && !string.Equals(prefix, "/", StringComparison.Ordinal))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         var knownProjects = (plan.Projects ?? Array.Empty<WebProjectPlan>())
             .Where(project => !string.IsNullOrWhiteSpace(project?.Slug))

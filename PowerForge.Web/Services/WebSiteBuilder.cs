@@ -386,7 +386,7 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static void RejectLinkedAsset(FileSystemInfo entry)
+    internal static void RejectLinkedAsset(FileSystemInfo entry)
     {
         if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
         {
@@ -453,7 +453,7 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
+    internal static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
     {
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return false;

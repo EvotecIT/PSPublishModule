@@ -53,7 +53,18 @@ public static partial class WebSiteVerifier
         if (spec.Collections is null || spec.Collections.Length == 0)
         {
             warnings.Add("No collections defined.");
-            return new WebVerifyResult { Success = true, Warnings = warnings.ToArray(), Errors = Array.Empty<string>() };
+            ValidateNavigationDefaults(spec, warnings);
+            var staticOnlyRoutes = DiscoverStaticHtmlRoutes(spec, plan.RootPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            ValidateNavigationLint(spec, localization, plan, staticOnlyRoutes, warnings, staticOnlyRoutes.Length > 0);
+            return new WebVerifyResult
+            {
+                Success = true,
+                Warnings = warnings
+                    .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+                    .Select(NormalizeWarningCode)
+                    .ToArray(),
+                Errors = Array.Empty<string>()
+            };
         }
 
         var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -176,7 +187,9 @@ public static partial class WebSiteVerifier
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
-        ValidateNavigationLint(spec, localization, plan, routes.Keys, warnings);
+        var staticRoutes = DiscoverStaticHtmlRoutes(spec, plan.RootPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var navigationRoutes = routes.Keys.Concat(staticRoutes);
+        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

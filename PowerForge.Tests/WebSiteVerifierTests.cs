@@ -3,6 +3,229 @@ using PowerForge.Web;
 public partial class WebSiteVerifierTests
 {
     [Fact]
+    public void Verify_UsesMappedStaticHtmlFilesAsNavigationRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<h1>Home</h1>");
+            File.WriteAllText(Path.Combine(root, "apps.html"), "<h1>Apps</h1>");
+            var content = Path.Combine(root, "content");
+            Directory.CreateDirectory(content);
+            File.WriteAllText(Path.Combine(content, "pipeline.md"), "---\ntitle: Pipeline\nslug: pipeline\n---\n\nPipeline");
+            var staticDocs = Path.Combine(root, "static-docs");
+            Directory.CreateDirectory(staticDocs);
+            File.WriteAllText(Path.Combine(staticDocs, "INDEX.HTML"), "<h1>Docs</h1>");
+            var conventional = Path.Combine(root, "static", "ingestion", "conventional");
+            Directory.CreateDirectory(conventional);
+            File.WriteAllText(Path.Combine(conventional, "INDEX.HTML"), "<h1>Conventional</h1>");
+
+            var spec = new SiteSpec
+            {
+                Name = "Static Navigation Test",
+                BaseUrl = "https://example.test",
+                Collections =
+                [
+                    new CollectionSpec { Name = "pages", Input = "content", Output = "/ingestion" }
+                ],
+                StaticAssets =
+                [
+                    new StaticAssetSpec { Source = "index.html", Destination = "index.html" },
+                    new StaticAssetSpec { Source = "apps.html", Destination = "ingestion/apps.html" },
+                    new StaticAssetSpec { Source = "static-docs", Destination = "ingestion/docs" }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Apps", Url = "/ingestion/apps.html" },
+                                new MenuItemSpec { Title = "Docs", Url = "/ingestion/docs/" },
+                                new MenuItemSpec { Title = "Conventional", Url = "/ingestion/conventional/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/ingestion/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/ingestion/docs/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/ingestion/conventional/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            var allMappings = spec.StaticAssets;
+            spec.StaticAssets = allMappings.Where(mapping => mapping.Source != "apps.html").ToArray();
+            var resultWithoutApps = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutApps.Warnings, warning =>
+                warning.Contains("/ingestion/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            spec.StaticAssets = allMappings.Where(mapping => mapping.Source != "static-docs").ToArray();
+            var resultWithoutDocs = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutDocs.Warnings, warning =>
+                warning.Contains("/ingestion/docs/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            File.Delete(Path.Combine(conventional, "INDEX.HTML"));
+            spec.StaticAssets = allMappings;
+            var resultWithoutConventional = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutConventional.Warnings, warning =>
+                warning.Contains("/ingestion/conventional/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            File.WriteAllText(Path.Combine(conventional, "INDEX.HTML"), "<h1>Conventional</h1>");
+            spec.StaticAssets = spec.StaticAssets.Where(mapping => mapping.Source != "index.html").ToArray();
+            var resultWithoutStaticHome = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutStaticHome.Warnings, warning =>
+                warning.Contains("points to '/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_UsesStaticHtmlRoutesWhenNoCollectionsAreConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<h1>Home</h1>");
+            File.WriteAllText(Path.Combine(root, "apps.html"), "<h1>Apps</h1>");
+            var spec = new SiteSpec
+            {
+                Name = "Static-only Navigation Test",
+                BaseUrl = "https://example.test",
+                StaticAssets =
+                [
+                    new StaticAssetSpec { Source = "index.html", Destination = "index.html" },
+                    new StaticAssetSpec { Source = "apps.html", Destination = "apps.html" }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Apps", Url = "/apps.html" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            spec.StaticAssets = spec.StaticAssets.Where(mapping => mapping.Source != "index.html").ToArray();
+            var resultWithoutHome = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutHome.Warnings, warning =>
+                warning.Contains("points to '/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            spec.StaticAssets =
+            [
+                new StaticAssetSpec { Source = "index.html", Destination = "index.html" }
+            ];
+            var resultWithoutApps = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutApps.Warnings, warning =>
+                warning.Contains("/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RejectsLinkedDirectoriesInStaticAssetMappings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-link-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assets = Path.Combine(root, "assets");
+            var outside = Path.Combine(root, "outside");
+            Directory.CreateDirectory(assets);
+            Directory.CreateDirectory(outside);
+            File.WriteAllText(Path.Combine(outside, "index.html"), "<h1>Outside</h1>");
+            Directory.CreateSymbolicLink(Path.Combine(assets, "linked"), outside);
+
+            var spec = new SiteSpec
+            {
+                Name = "Linked Static Asset Test",
+                BaseUrl = "https://example.test",
+                StaticAssets = [new StaticAssetSpec { Source = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "Home", Url = "/" }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath)));
+
+            Assert.Contains("symbolic link", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_FailsWhenFrontMatterIsCollapsedOntoSingleLine()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-collapsed-frontmatter-" + Guid.NewGuid().ToString("N"));
