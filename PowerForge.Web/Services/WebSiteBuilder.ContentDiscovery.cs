@@ -258,7 +258,7 @@ public static partial class WebSiteBuilder
         return items;
     }
 
-    /// <summary>Builds the same rendered base content items used by a site build for artifact verification.</summary>
+    /// <summary>Builds the same complete render queue used by a site build for artifact verification.</summary>
     internal static IReadOnlyList<ContentItem> BuildContentItemsForVerification(SiteSpec spec, WebSitePlan plan)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
@@ -292,7 +292,7 @@ public static partial class WebSiteBuilder
                 .Where(static project => project.Content is not null && !string.IsNullOrWhiteSpace(project.Slug))
                 .ToDictionary(static project => project.Slug, static project => project.Content!, StringComparer.OrdinalIgnoreCase);
 
-            return BuildContentItems(
+            var items = BuildContentItems(
                 spec,
                 plan,
                 redirects,
@@ -300,6 +300,9 @@ public static partial class WebSiteBuilder
                 projectMap,
                 projectContentMap,
                 ResolveCacheRoot(spec, plan.RootPath));
+            items = MaterializeLocalizedFallbackPages(spec, items);
+            items.AddRange(BuildTaxonomyItems(spec, items));
+            return BuildPaginatedItems(spec, items);
         }
         finally
         {

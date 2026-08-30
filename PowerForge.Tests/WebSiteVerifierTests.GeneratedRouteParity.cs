@@ -122,6 +122,75 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_ProjectsEmittedTaxonomySocialCardsIncludingPagination()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-social-cards-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "one.md"),
+                "---\ntitle: One\nblog: [alpha, shared]\n---\nOne");
+            File.WriteAllText(
+                Path.Combine(root, "content", "two.md"),
+                "---\ntitle: Two\nblog: [shared]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy social card projection",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "blog", BasePath = "/topics", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var generatedCardsRoot = Path.Combine(outputRoot, "assets", "social", "generated");
+            var taxonomyCards = Directory.Exists(generatedCardsRoot)
+                ? Directory.GetFiles(generatedCardsRoot, "topics-*.png", SearchOption.TopDirectoryOnly)
+                : Array.Empty<string>();
+            Assert.Equal(WebSocialCardGenerator.IsPngRenderingAvailable() ? 5 : 0, taxonomyCards.Length);
+            if (taxonomyCards.Length == 0)
+                return;
+
+            var cardRoutes = taxonomyCards
+                .Select(path => "/assets/social/generated/" + Path.GetFileName(path))
+                .OrderBy(static route => route, StringComparer.Ordinal)
+                .ToArray();
+            spec.Navigation.Menus =
+            [
+                new MenuSpec
+                {
+                    Name = "main",
+                    Items = cardRoutes
+                        .Select((route, index) => new MenuItemSpec { Title = $"Taxonomy card {index + 1}", Url = route })
+                        .ToArray()
+                }
+            ];
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "page", "2", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "shared", "page", "2", "index.html")));
+            Assert.All(cardRoutes, route =>
+                Assert.False(HasMissingRouteWarning(result, route), string.Join(Environment.NewLine, result.Warnings)));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_KeepsNotFoundFileOutOfDirectoryRouteMatching()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-not-found-file-route-" + Guid.NewGuid().ToString("N"));
