@@ -45,10 +45,27 @@ public sealed partial class DotNetRepositoryReleaseService
                 properties[name] = environmentProperty.Value.ToString() ?? string.Empty;
             }
         }
+        var suppliedGlobalProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (configuration is not null)
+        {
+            properties["Configuration"] = configuration;
+            suppliedGlobalProperties.Add("Configuration");
+        }
+        else if (!properties.ContainsKey("Configuration"))
+        {
+            properties["Configuration"] = string.Empty;
+        }
+        if (targetFramework is not null)
+        {
+            properties["TargetFramework"] = targetFramework;
+            suppliedGlobalProperties.Add("TargetFramework");
+        }
+        else if (!properties.ContainsKey("TargetFramework"))
+        {
+            properties["TargetFramework"] = string.Empty;
+        }
         foreach (var globalProperty in new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Configuration"] = configuration ?? string.Empty,
-            ["TargetFramework"] = targetFramework ?? (properties.TryGetValue("TargetFramework", out var environmentTargetFramework) ? environmentTargetFramework : string.Empty),
             ["TargetFrameworkIdentifier"] = string.Empty,
             ["TargetFrameworkVersion"] = string.Empty,
             ["TargetFrameworkProfile"] = string.Empty,
@@ -77,22 +94,22 @@ public sealed partial class DotNetRepositoryReleaseService
         var localProperties = ReadPlannedLocalProperties(projectRoot);
         ResolvePlannedSdkImports(projectRoot, projectDirectory, properties, out var sdkProps, out var sdkTargets);
         foreach (var sdkPropsPath in sdkProps)
-            EvaluatePlannedFile(sdkPropsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(sdkPropsPath, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         var buildProps = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.props", "ImportDirectoryBuildProps", "DirectoryBuildPropsPath", properties);
         if (buildProps is not null)
-            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(buildProps, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         var projectExtensionsDirectory = ResolvePlannedProjectExtensionsDirectory(projectDirectory, properties);
-        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "props", "ImportProjectExtensionProps", fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "props", "ImportProjectExtensionProps", fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         var packagesProps = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Packages.props", "ImportDirectoryPackagesProps", "DirectoryPackagesPropsPath", properties);
         if (packagesProps is not null)
-            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
-        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
-        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "targets", "ImportProjectExtensionTargets", fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(packagesProps, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
+        EvaluatePlannedFile(fullProjectPath, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
+        EvaluatePlannedProjectExtensionFiles(projectExtensionsDirectory, projectFile, "targets", "ImportProjectExtensionTargets", fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         var buildTargets = ResolvePlannedDirectoryBuildFile(directory, projectDirectory, "Directory.Build.targets", "ImportDirectoryBuildTargets", "DirectoryBuildTargetsPath", properties);
         if (buildTargets is not null)
-            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(buildTargets, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         foreach (var sdkTargetsPath in sdkTargets)
-            EvaluatePlannedFile(sdkTargetsPath, fullProjectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(sdkTargetsPath, fullProjectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         return new PlannedEvaluation(properties, items);
     }
 
@@ -127,6 +144,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
         ISet<string> localProperties,
+        ISet<string> suppliedGlobalProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (properties.TryGetValue(importPropertyName, out var importValue))
@@ -143,7 +161,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var path in Directory.EnumerateFiles(extensionsDirectory, projectFile + ".*." + extension, SearchOption.TopDirectoryOnly)
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
-            EvaluatePlannedFile(path, projectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(path, projectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         }
     }
 
@@ -346,6 +364,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
         ISet<string> localProperties,
+        ISet<string> suppliedGlobalProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var fullPath = Path.GetFullPath(path);
@@ -376,7 +395,7 @@ public sealed partial class DotNetRepositoryReleaseService
         properties["MSBuildThisFileName"] = Path.GetFileNameWithoutExtension(fullPath);
         try
         {
-            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedElements(root.Elements(), projectPath, directory, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
         }
         finally
         {
@@ -399,6 +418,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
         ISet<string> localProperties,
+        ISet<string> suppliedGlobalProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         var projectDirectory = Path.GetDirectoryName(projectPath)!;
@@ -414,14 +434,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 foreach (var property in element.Elements())
                 {
                     var propertyName = property.Name.LocalName;
-                    var isSuppliedGlobal =
-                        (propertyName.Equals("Configuration", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(properties["Configuration"])) ||
-                        (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(properties["TargetFrameworkIdentifier"]));
+                    var isSuppliedGlobal = suppliedGlobalProperties.Contains(propertyName);
                     if ((!isSuppliedGlobal || localProperties.Contains(propertyName)) && ConditionMatches(property.Attribute("Condition")?.Value, properties, sourceDirectory))
                     {
                         var assignedValue = ExpandPlannedProperties(property.Value.Trim(), properties);
                         properties[propertyName] = assignedValue;
-                        if (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) && localProperties.Contains(propertyName))
+                        if (propertyName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
                             SetDerivedTargetFrameworkProperties(properties, assignedValue);
                     }
                 }
@@ -460,7 +478,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             if (name.Equals("Import", StringComparison.OrdinalIgnoreCase))
             {
-                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+                EvaluatePlannedImport(element, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("ImportGroup", StringComparison.OrdinalIgnoreCase))
@@ -468,7 +486,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 if (!ConditionMatches(element.Attribute("Condition")?.Value, properties, sourceDirectory))
                     continue;
                 foreach (var import in element.Elements().Where(child => child.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
-                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+                    EvaluatePlannedImport(import, projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
                 continue;
             }
             if (name.Equals("Choose", StringComparison.OrdinalIgnoreCase))
@@ -476,7 +494,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 var selected = element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) && ConditionMatches(branch.Attribute("Condition")?.Value, properties, sourceDirectory))
                                ?? element.Elements().FirstOrDefault(branch => branch.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase));
                 if (selected is not null)
-                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+                    EvaluatePlannedElements(selected.Elements(), projectPath, sourceDirectory, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
             }
         }
     }
@@ -555,6 +573,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IDictionary<string, Dictionary<string, string>> definitions,
         ISet<string> visited,
         ISet<string> localProperties,
+        ISet<string> suppliedGlobalProperties,
         IReadOnlyDictionary<string, string>? plannedProjectContentsByPath)
     {
         if (!ConditionMatches(import.Attribute("Condition")?.Value, properties, sourceDirectory))
@@ -569,7 +588,7 @@ public sealed partial class DotNetRepositoryReleaseService
         if (importedPaths.Count == 0 && importedPath.IndexOfAny(new[] { '*', '?' }) < 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because imported project '{ResolvePlannedPath(sourceDirectory, importedPath)}' does not exist.");
         foreach (var resolvedPath in importedPaths)
-            EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited, localProperties, plannedProjectContentsByPath);
+            EvaluatePlannedFile(resolvedPath, projectPath, properties, items, definitions, visited, localProperties, suppliedGlobalProperties, plannedProjectContentsByPath);
     }
 
     private static IReadOnlyList<string> ResolvePlannedImportPaths(string sourceDirectory, string importedPath)
@@ -600,7 +619,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var suffix = separatorIndex >= 0 ? combinedPattern.Substring(separatorIndex + 1) : combinedPattern;
         var canonicalPattern = Path.Combine(searchRoot, suffix);
         return Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories)
-            .Where(path => PlannedItemSpecMatches(canonicalPattern, path, searchRoot))
+            .Where(path => PlannedItemSpecMatches(canonicalPattern, path, searchRoot, useFileSystemComparison: true))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -608,25 +627,27 @@ public sealed partial class DotNetRepositoryReleaseService
     private static IReadOnlyList<PlannedItem> ApplyPlannedItemOperations(IEnumerable<PlannedItem> source, string itemType)
     {
         var result = new List<PlannedItem>();
+        var useFileSystemComparison = !itemType.Equals("PackageReference", StringComparison.OrdinalIgnoreCase) &&
+                                      !itemType.Equals("PackageVersion", StringComparison.OrdinalIgnoreCase);
         foreach (var item in source.Where(item => item.ItemType.Equals(itemType, StringComparison.OrdinalIgnoreCase)))
         {
             if (!string.IsNullOrWhiteSpace(item.Remove))
             {
                 var removals = SplitPlannedItems(item.Remove).ToArray();
-                result.RemoveAll(existing => existing.Include is not null && removals.Any(removal => PlannedItemSpecMatches(removal, existing.Include, item.BaseDirectory)));
+                result.RemoveAll(existing => existing.Include is not null && removals.Any(removal => PlannedItemSpecMatches(removal, existing.Include, item.BaseDirectory, useFileSystemComparison)));
             }
             if (!string.IsNullOrWhiteSpace(item.Update))
             {
                 var updates = SplitPlannedItems(item.Update).ToArray();
                 for (var index = 0; index < result.Count; index++)
                 {
-                    if (result[index].Include is { } include && updates.Any(update => PlannedItemSpecMatches(update, include, item.BaseDirectory)))
+                    if (result[index].Include is { } include && updates.Any(update => PlannedItemSpecMatches(update, include, item.BaseDirectory, useFileSystemComparison)))
                         result[index] = result[index].WithMetadata(item.Metadata, item.RemoveMetadata, item.KeepMetadata);
                 }
             }
             foreach (var include in ExpandPlannedItemIncludes(item, itemType))
             {
-                if (!SplitPlannedItems(item.Exclude).Any(exclude => PlannedItemSpecMatches(exclude, include, item.BaseDirectory)))
+                if (!SplitPlannedItems(item.Exclude).Any(exclude => PlannedItemSpecMatches(exclude, include, item.BaseDirectory, useFileSystemComparison)))
                     result.Add(item.WithInclude(include));
             }
         }
@@ -650,11 +671,11 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static bool PlannedItemSpecMatches(string pattern, string value, string? baseDirectory = null)
+    private static bool PlannedItemSpecMatches(string pattern, string value, string? baseDirectory = null, bool useFileSystemComparison = false)
     {
         var normalizedPattern = NormalizePlannedItemSpec(pattern);
         var normalizedValue = NormalizePlannedItemSpec(value);
-        var comparison = LooksLikePlannedPathSpec(normalizedPattern) || LooksLikePlannedPathSpec(normalizedValue)
+        var comparison = useFileSystemComparison
             ? FrameworkCompatibility.GetPathStringComparisonForPath(
                 Path.IsPathRooted(value) ? value : Path.Combine(baseDirectory ?? string.Empty, value))
             : StringComparison.OrdinalIgnoreCase;
@@ -669,12 +690,6 @@ public sealed partial class DotNetRepositoryReleaseService
                       (comparison == StringComparison.OrdinalIgnoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
         return Regex.IsMatch(normalizedValue, regex, options);
     }
-
-    private static bool LooksLikePlannedPathSpec(string value)
-        => value.IndexOfAny(new[] { '/', '\\' }) >= 0 ||
-           value.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ||
-           value.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ||
-           value.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizePlannedItemSpec(string value) => UnescapePlannedItemSpec(value).Trim().Replace('\\', '/');
 
