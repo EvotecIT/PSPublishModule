@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string] $PacketPath = (Join-Path $PSScriptRoot 'public-corpus.net8.json'),
+    [string] $BaselinePath = (Join-Path $PSScriptRoot 'public-corpus-baseline.net8.json'),
     [string] $CliAssemblyPath,
     [string] $WorkspacePath,
     [string] $EvidencePath,
@@ -145,6 +146,106 @@ function New-TargetContract {
     })
 }
 
+function Get-Sum {
+    param([object[]] $Values)
+    return [int] (($Values | Measure-Object -Sum).Sum)
+}
+
+function Compare-PublicBaseline {
+    param(
+        [object] $Baseline,
+        [object] $Packet,
+        [string] $PacketSha256,
+        [object[]] $Modules,
+        [object[]] $StrictPrograms,
+        [string] $Rid,
+        [bool] $CompareModules,
+        [bool] $CompareStrict
+    )
+
+    $regressions = [Collections.Generic.List[object]]::new()
+    foreach ($identity in @(
+        @{ Metric = 'schemaVersion'; Expected = 1; Actual = $Baseline.schemaVersion },
+        @{ Metric = 'packetId'; Expected = $Packet.packetId; Actual = $Baseline.packetId },
+        @{ Metric = 'packetSha256'; Expected = $PacketSha256; Actual = $Baseline.packetSha256 },
+        @{ Metric = 'semanticProfile'; Expected = $Packet.semanticProfile; Actual = $Baseline.semanticProfile }
+    )) {
+        if ($identity.Actual -ne $identity.Expected) {
+            $regressions.Add([ordered]@{ scope = 'identity'; metric = $identity.Metric; expected = $identity.Expected; actual = $identity.Actual })
+        }
+    }
+    if ($regressions.Count -gt 0) { return @($regressions) }
+
+    if ($CompareModules) {
+        if ($Rid -ne $Baseline.hybrid.runtimeIdentifier) {
+            $regressions.Add([ordered]@{ scope = 'hybrid'; metric = 'runtimeIdentifier'; expected = $Baseline.hybrid.runtimeIdentifier; actual = $Rid })
+        }
+        $successful = @($Modules | Where-Object succeeded)
+        $metrics = [ordered]@{
+            modulesPassed = $successful.Count
+            modulesTotal = $Modules.Count
+            scenarioFamilies = @($successful.scenarioFamily | Sort-Object -Unique).Count
+            cleanImportedCommands = Get-Sum @($successful.exportedCommands)
+            analyzedUnits = Get-Sum @($successful.counts.analyzedUnits)
+            boundUnits = Get-Sum @($successful.counts.boundUnits)
+            emittedClrUnits = Get-Sum @($successful.counts.emittedClrUnits)
+            exportedCmdletUnits = Get-Sum @($successful.counts.exportedCmdletUnits)
+            hostedRegions = Get-Sum @($successful.counts.hostedRegions)
+            retainedSourceUnits = Get-Sum @($successful.counts.retainedSourceUnits)
+            semanticFallbackUnits = Get-Sum @($successful.counts.semanticFallbackUnits)
+            shapingFallbackUnits = Get-Sum @($successful.counts.shapingFallbackUnits)
+            runtimeRoutedUnits = Get-Sum @($successful.counts.runtimeRoutedUnits)
+            omittedUnits = Get-Sum @($successful.counts.omittedUnits)
+            rejectedUnits = Get-Sum @($successful.counts.rejectedUnits)
+        }
+        foreach ($metric in @('modulesPassed', 'modulesTotal', 'scenarioFamilies', 'cleanImportedCommands', 'analyzedUnits')) {
+            if ([int] $metrics[$metric] -ne [int] $Baseline.hybrid.$metric) {
+                $regressions.Add([ordered]@{ scope = 'hybrid'; metric = $metric; expected = $Baseline.hybrid.$metric; actual = $metrics[$metric] })
+            }
+        }
+        foreach ($metric in @('boundUnits', 'emittedClrUnits', 'exportedCmdletUnits')) {
+            if ([int] $metrics[$metric] -lt [int] $Baseline.hybrid.$metric) {
+                $regressions.Add([ordered]@{ scope = 'hybrid'; metric = $metric; expectedMinimum = $Baseline.hybrid.$metric; actual = $metrics[$metric] })
+            }
+        }
+        foreach ($metric in @('hostedRegions', 'retainedSourceUnits', 'semanticFallbackUnits', 'shapingFallbackUnits', 'runtimeRoutedUnits', 'omittedUnits', 'rejectedUnits')) {
+            if ([int] $metrics[$metric] -gt [int] $Baseline.hybrid.$metric) {
+                $regressions.Add([ordered]@{ scope = 'hybrid'; metric = $metric; expectedMaximum = $Baseline.hybrid.$metric; actual = $metrics[$metric] })
+            }
+        }
+    }
+
+    if ($CompareStrict) {
+        $targetHost = @($Baseline.strict.targetHosts | Where-Object runtimeIdentifier -eq $Rid)
+        if ($targetHost.Count -ne 1) {
+            $regressions.Add([ordered]@{ scope = 'strict'; metric = 'targetHost'; expected = $Rid; actual = @($Baseline.strict.targetHosts.runtimeIdentifier) -join ',' })
+        } else {
+            $successful = @($StrictPrograms | Where-Object succeeded)
+            $metrics = [ordered]@{
+                programs = $StrictPrograms.Count
+                programsPassed = $successful.Count
+                analyzedUnits = Get-Sum @($successful.counts.analyzedUnits)
+                boundUnits = Get-Sum @($successful.counts.boundUnits)
+                emittedClrUnits = Get-Sum @($successful.counts.emittedClrUnits)
+            }
+            foreach ($metric in @('programs', 'analyzedUnits')) {
+                if ([int] $metrics[$metric] -ne [int] $Baseline.strict.$metric) {
+                    $regressions.Add([ordered]@{ scope = 'strict'; metric = $metric; expected = $Baseline.strict.$metric; actual = $metrics[$metric] })
+                }
+            }
+            foreach ($metric in @('boundUnits', 'emittedClrUnits')) {
+                if ([int] $metrics[$metric] -lt [int] $Baseline.strict.$metric) {
+                    $regressions.Add([ordered]@{ scope = 'strict'; metric = $metric; expectedMinimum = $Baseline.strict.$metric; actual = $metrics[$metric] })
+                }
+            }
+            if ($metrics.programsPassed -ne $targetHost[0].programsPassed -or $metrics.programs -ne $targetHost[0].programsTotal) {
+                $regressions.Add([ordered]@{ scope = 'strict'; metric = 'targetHostPrograms'; expected = "$($targetHost[0].programsPassed)/$($targetHost[0].programsTotal)"; actual = "$($metrics.programsPassed)/$($metrics.programs)" })
+            }
+        }
+    }
+    return @($regressions)
+}
+
 function Get-CurrentRuntimeIdentifier {
     $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
     if ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) { return "win-$architecture" }
@@ -153,6 +254,7 @@ function Get-CurrentRuntimeIdentifier {
 }
 
 $PacketPath = [IO.Path]::GetFullPath($PacketPath)
+$BaselinePath = [IO.Path]::GetFullPath($BaselinePath)
 $packet = Get-Content -LiteralPath $PacketPath -Raw | ConvertFrom-Json
 if ($packet.schemaVersion -ne 1) { throw "Unsupported public-corpus schema $($packet.schemaVersion)." }
 if (@($packet.modules).Count -lt 10) { throw 'The fixed public packet must contain at least ten modules.' }
@@ -267,10 +369,16 @@ try {
 
     $failedModules = @($moduleResults | Where-Object { -not $_.succeeded }).Count
     $failedStrict = @($strictResults | Where-Object { -not $_.succeeded }).Count
+    if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) { throw "Public corpus baseline does not exist: $BaselinePath" }
+    $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+    $packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $compareModules = -not $SkipModules -and -not $ModuleId
+    $compareStrict = -not $SkipStrictPrograms
+    $regressions = @(Compare-PublicBaseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Modules @($moduleResults) -StrictPrograms @($strictResults) -Rid $RuntimeIdentifier -CompareModules $compareModules -CompareStrict $compareStrict)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
-        packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        packetSha256 = $packetSha256
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
         semanticProfile = $packet.semanticProfile
         host = [ordered]@{
@@ -282,18 +390,21 @@ try {
         }
         modules = @($moduleResults)
         strictPrograms = @($strictResults)
+        regressions = $regressions
+        baselineScope = [ordered]@{ hybrid = if ($compareModules) { 'Full' } else { 'IdentityOnly' }; strict = if ($compareStrict) { 'Full' } else { 'IdentityOnly' } }
         summary = [ordered]@{
             modulesPassed = @($moduleResults | Where-Object succeeded).Count
             modulesTotal = $moduleResults.Count
             strictProgramsPassed = @($strictResults | Where-Object succeeded).Count
             strictProgramsTotal = $strictResults.Count
             failures = $failedModules + $failedStrict
+            regressions = $regressions.Count
         }
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Host "Evidence: $EvidencePath"
     Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
-    if ($evidence.summary.failures -gt 0) { exit 1 }
+    if ($evidence.summary.failures -gt 0 -or $evidence.summary.regressions -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {
         Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Corpus run cleanup' | Out-Null

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packetId": "powerforge-public-powershell-modules-net8-v1",
-  "packetSha256": "55fa38fe09c6b066dd7c2125623eb06d0bf596fa1563d9336bdc2509f22596bf",
+  "packetSha256": "35d66efc84de456cd65cea606d2b466c9ee21374ccb8d1d38b15e48e8cc636db",
   "recordedOn": "2026-08-30",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "hybrid": {
@@ -25,22 +25,22 @@
     "emittedClrUnitPercentage": 0.0
   },
   "strict": {
-    "programs": 3,
-    "analyzedUnits": 7,
-    "boundUnits": 7,
-    "emittedClrUnits": 7,
+    "programs": 4,
+    "analyzedUnits": 18,
+    "boundUnits": 18,
+    "emittedClrUnits": 18,
     "completeProgramPassPercentage": 100.0,
     "emittedClrUnitPercentage": 100.0,
     "targetHosts": [
       {
         "runtimeIdentifier": "win-x64",
-        "programsPassed": 3,
-        "programsTotal": 3
+        "programsPassed": 4,
+        "programsTotal": 4
       },
       {
         "runtimeIdentifier": "linux-x64",
-        "programsPassed": 3,
-        "programsTotal": 3
+        "programsPassed": 4,
+        "programsTotal": 4
       }
     ]
   },

@@ -172,6 +172,12 @@
       "entryPoint": "StrictSwitch/Main.ps1",
       "expectedOutput": "20",
       "scenarioFamily": "switch-control-flow"
+    },
+    {
+      "id": "strict-multifile-application",
+      "entryPoint": "StrictApplication/Main.ps1",
+      "expectedOutput": "READY|42|15|3|high",
+      "scenarioFamily": "multifile-domain-aggregation-reporting"
     }
   ]
 }

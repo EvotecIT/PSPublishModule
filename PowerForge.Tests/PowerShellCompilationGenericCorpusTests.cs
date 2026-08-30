@@ -98,6 +98,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [InlineData("StrictProgram", "8", 3)]
     [InlineData("StrictCollections", "2", 2)]
     [InlineData("StrictSwitch", "20", 2)]
+    [InlineData("StrictApplication", "READY|42|15|3|high", 11)]
     public void Corpus_StrictProgramsBuildAndRunWithoutPowerShellRuntime(
         string programDirectory,
         string expectedOutput,
