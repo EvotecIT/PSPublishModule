@@ -272,7 +272,7 @@ public sealed partial class DotNetRepositoryReleaseService
         if (useMsBuildTraversal)
             arguments.Add("-p:BuildProjectReferences=false");
         if (!string.IsNullOrWhiteSpace(packageOutputPath))
-            arguments.Add($"-p:PackageOutputPath={Path.GetFullPath(packageOutputPath!)}");
+            arguments.Add($"-p:PackageOutputPath={EscapeMsBuildPropertyValue(Path.GetFullPath(packageOutputPath!))}");
         if (includeSymbols)
         {
             arguments.Add("-p:IncludeSymbols=true");

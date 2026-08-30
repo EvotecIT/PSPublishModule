@@ -106,6 +106,35 @@ public sealed partial class DotNetRepositoryReleaseService
         out string stdErr,
         out string stdOut,
         out TimeSpan duration)
+        => RunDotnetMsBuildGetProperty(
+            csproj,
+            workingDirectory,
+            configuration,
+            targetFramework,
+            runtimeIdentifier,
+            globalProperties: null,
+            propertyName,
+            projectName,
+            logger,
+            out value,
+            out stdErr,
+            out stdOut,
+            out duration);
+
+    private static int RunDotnetMsBuildGetProperty(
+        string csproj,
+        string workingDirectory,
+        string configuration,
+        string? targetFramework,
+        string? runtimeIdentifier,
+        IReadOnlyDictionary<string, string>? globalProperties,
+        string propertyName,
+        string projectName,
+        ILogger logger,
+        out string? value,
+        out string stdErr,
+        out string stdOut,
+        out TimeSpan duration)
     {
         value = null;
         stdErr = string.Empty;
@@ -135,6 +164,15 @@ public sealed partial class DotNetRepositoryReleaseService
             args.Add($"-p:TargetFramework={targetFramework!.Trim()}");
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
             args.Add($"-p:RuntimeIdentifier={runtimeIdentifier!.Trim()}");
+        if (globalProperties is not null)
+        {
+            foreach (var property in globalProperties)
+            {
+                if (string.IsNullOrWhiteSpace(property.Key) || string.IsNullOrWhiteSpace(property.Value))
+                    continue;
+                args.Add($"-p:{property.Key.Trim()}={EscapeMsBuildPropertyValue(property.Value.Trim())}");
+            }
+        }
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);

@@ -41,11 +41,27 @@ public sealed partial class DotNetRepositoryReleaseService {
     private string ResolvePackageId(string csprojPath, string fallbackProjectName, DotNetRepositoryReleaseSpec spec) {
         var projectDirectory = Path.GetDirectoryName(csprojPath) ?? spec.RootPath;
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var packProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+            ["NoBuild"] = "true"
+        };
+        if (spec.IncludeSymbols) {
+            packProperties["IncludeSymbols"] = "true";
+            packProperties["SymbolPackageFormat"] = "snupkg";
+        }
+        if (!string.IsNullOrWhiteSpace(spec.OutputPath)) {
+            packProperties["PackageOutputPath"] = Path.IsPathRooted(spec.OutputPath)
+                ? Path.GetFullPath(spec.OutputPath)
+                : Path.GetFullPath(Path.Combine(spec.RootPath, spec.OutputPath));
+            if (spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild)
+                packProperties["BuildProjectReferences"] = "false";
+        }
         var exitCode = RunDotnetMsBuildGetProperty(
             csprojPath,
             projectDirectory,
             configuration,
             targetFramework: null,
+            runtimeIdentifier: null,
+            packProperties,
             propertyName: "PackageId",
             fallbackProjectName,
             _logger,

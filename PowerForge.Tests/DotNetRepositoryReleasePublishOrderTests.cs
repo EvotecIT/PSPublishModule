@@ -225,15 +225,15 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
         using var workspace = new PublishOrderWorkspace();
         var shared = workspace.AddProject("Shared");
         var app = workspace.AddProject("App");
+        var outputPath = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!, "packages;%=$@");
         File.WriteAllText(app.CsprojPath, """
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup Condition="'$(PackageOutputPath)' != ''">
+  <ItemGroup Condition="'$(PackageOutputPath)' == '__PACKAGE_OUTPUT_PATH__'">
     <ProjectReference Include="../Shared/Shared.csproj" />
   </ItemGroup>
 </Project>
-""");
-        var outputPath = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(app.CsprojPath)!)!, "packages");
+""".Replace("__PACKAGE_OUTPUT_PATH__", outputPath));
 
         var ordered = new DotNetRepositoryReleaseService(new NullLogger())
             .SortProjectsForPublish(

@@ -12,6 +12,52 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseServiceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Execute_UsesSymbolPackPropertiesWhenResolvingPackageId()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "ConditionalPackage"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "ConditionalPackage.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId Condition="'$(IncludeSymbols)' == 'true' and '$(SymbolPackageFormat)' == 'snupkg'">Sample.Symbols</PackageId>
+    <PackageId Condition="'$(PackageId)' == ''">Sample.Default</PackageId>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+</Project>
+""");
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Class1.cs"), "namespace ConditionalPackage; public static class Class1 { }");
+            var outputPath = Path.Combine(root.FullName, "packages");
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = outputPath,
+                Pack = true,
+                IncludeSymbols = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("Sample.Symbols", project.PackageId);
+            Assert.Contains(project.Packages, path => Path.GetFileName(path).Equals("Sample.Symbols.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(project.SymbolPackages, path => Path.GetFileName(path).Equals("Sample.Symbols.1.0.0.snupkg", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_preserves_one_argument_public_overload()
     {
         var overload = typeof(DotNetRepositoryReleaseService)
