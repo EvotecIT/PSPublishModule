@@ -49,18 +49,21 @@ public static partial class WebSiteVerifier
         var errors = new List<string>();
         var warnings = new List<string>();
         var localization = ResolveLocalizationConfig(spec, warnings);
+        var builderState = WebSiteBuilder.BuildVerificationState(spec, plan);
 
         if (spec.Collections is null || spec.Collections.Length == 0)
         {
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
             var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
+            var staticOnlyRedirectRoutes = DiscoverGeneratedRedirectRoutes(builderState.Redirects);
             var staticOnlyFileRoutes = staticOnlyRoutes
                 .Concat(DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath))
                 .Concat(DiscoverGeneratedSiteDataRoutes(spec))
+                .Concat(staticOnlyRedirectRoutes)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-            ValidateNavigationLint(spec, localization, plan, Array.Empty<string>(), warnings, staticOnlyRoutes.Length > 0, staticOnlyFileRoutes);
+            ValidateNavigationLint(spec, localization, plan, Array.Empty<string>(), warnings, staticOnlyFileRoutes.Length > 0, staticOnlyFileRoutes);
             return new WebVerifyResult
             {
                 Success = true,
@@ -306,7 +309,8 @@ public static partial class WebSiteVerifier
             publishableRoutes.Concat(generatedPaginationRoutes));
         var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
-        var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(spec, plan);
+        var generatedRedirectRoutes = DiscoverGeneratedRedirectRoutes(builderState.Redirects).ToArray();
+        var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(spec, plan, builderState.Items);
         var fileRoutes = staticRoutes
             .Concat(generatedFeatureRoutes.Where(static route => !route.EndsWith("/", StringComparison.Ordinal)))
             .Concat(generatedOutputRoutes)
@@ -315,6 +319,7 @@ public static partial class WebSiteVerifier
             .Concat(generatedThemeAssetRoutes)
             .Concat(generatedSiteDataRoutes)
             .Concat(generatedSocialCardRoutes)
+            .Concat(generatedRedirectRoutes)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var navigationRoutes = publishableRoutes

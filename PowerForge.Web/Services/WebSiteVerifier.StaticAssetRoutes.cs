@@ -184,9 +184,29 @@ public static partial class WebSiteVerifier
             yield return route;
     }
 
+    private static IEnumerable<string> DiscoverGeneratedRedirectRoutes(IEnumerable<RedirectSpec> redirects)
+    {
+        foreach (var redirect in redirects ?? Array.Empty<RedirectSpec>())
+        {
+            if (redirect is null ||
+                redirect.MatchType != RedirectMatchType.Exact ||
+                string.IsNullOrWhiteSpace(redirect.From) ||
+                string.IsNullOrWhiteSpace(redirect.To) ||
+                IsExternalNavigationUrl(redirect.From))
+            {
+                continue;
+            }
+
+            var status = redirect.Status <= 0 ? 301 : redirect.Status;
+            if (status is >= 300 and < 400)
+                yield return redirect.From;
+        }
+    }
+
     private static IEnumerable<string> DiscoverGeneratedSocialCardRoutes(
         SiteSpec spec,
-        WebSitePlan plan)
+        WebSitePlan plan,
+        IEnumerable<ContentItem> contentItems)
     {
         if (!WebSocialCardGenerator.IsPngRenderingAvailable())
             yield break;
@@ -194,8 +214,7 @@ public static partial class WebSiteVerifier
         if (spec.Social is not { Enabled: true, AutoGenerateCards: true })
             yield break;
 
-        foreach (var item in WebSiteBuilder.BuildContentItemsForVerification(spec, plan)
-                     .Where(static item => item is not null && !item.Draft))
+        foreach (var item in contentItems.Where(static item => item is not null && !item.Draft))
         {
             if (!WebSiteBuilder.ResolveOutputFormats(spec, item).Any(WebSiteBuilder.RendersHtmlPage))
                 continue;

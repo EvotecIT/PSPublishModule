@@ -79,6 +79,195 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Build_TrustsRenderedNoIndexForArbitraryHtmlFormatSuffix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-custom-html-noindex-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "guide.md"),
+                "---\ntitle: Guide\n---\n<meta name=\"robots\" content=\"noindex\">\nGuide");
+            var spec = new SiteSpec
+            {
+                Name = "Custom HTML noindex",
+                BaseUrl = "https://example.test",
+                Outputs = new OutputsSpec
+                {
+                    Formats = [new OutputFormatSpec { Name = "legacy", MediaType = "text/html", Suffix = "xhtml" }]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/", Outputs = ["legacy"] }]
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            var renderedPath = Path.Combine(outputRoot, "guide", "index.xhtml");
+            Assert.True(File.Exists(renderedPath));
+            using var metadata = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(outputRoot, "_powerforge", "sitemap-entries.json")));
+            var entry = Assert.Single(metadata.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("/guide/index.xhtml", entry.GetProperty("path").GetString());
+            Assert.True(entry.GetProperty("noIndex").GetBoolean());
+
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot,
+                BaseUrl = spec.BaseUrl,
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false
+            });
+            Assert.DoesNotContain("guide/index.xhtml", File.ReadAllText(sitemap.OutputPath), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersEveryExactGeneratedRedirectSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome");
+            File.WriteAllText(
+                Path.Combine(root, "content", "guide.md"),
+                "---\ntitle: Guide\naliases: [\"/legacy-guide/\"]\n---\nGuide");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var redirectRoutes = new[]
+            {
+                "/configured-old/",
+                "/legacy-file.html",
+                "/legacy-guide/",
+                "/docs/latest/",
+                "/docs/stable/",
+                "/guide/amp/"
+            };
+            const string invalidFileRedirectDirectory = "/legacy-file.html/";
+            var spec = new SiteSpec
+            {
+                Name = "Generated redirect navigation routes",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                EnableLegacyAmpRedirects = true,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Redirects =
+                [
+                    new RedirectSpec { From = "/configured-old/", To = "/guide/" },
+                    new RedirectSpec { From = "/legacy-file.html", To = "/guide/" }
+                ],
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    GenerateAliasRedirects = true,
+                    Versions =
+                    [
+                        new VersionSpec
+                        {
+                            Name = "v2",
+                            Url = "/docs/v2/",
+                            Latest = true,
+                            Aliases = ["stable"]
+                        }
+                    ]
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = redirectRoutes
+                                .Prepend("/")
+                                .Append(invalidFileRedirectDirectory)
+                                .Select((route, index) => new MenuItemSpec { Title = $"Redirect {index}", Url = route })
+                                .ToArray()
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var netlifyRedirects = File.ReadAllText(Path.Combine(outputRoot, "_redirects"));
+
+            Assert.All(redirectRoutes, route =>
+            {
+                Assert.Contains(route.TrimEnd('/'), netlifyRedirects, StringComparison.OrdinalIgnoreCase);
+                Assert.False(HasMissingRouteWarning(result, route), string.Join(Environment.NewLine, result.Warnings));
+            });
+            Assert.True(
+                HasMissingRouteWarning(result, invalidFileRedirectDirectory),
+                string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersExactGeneratedRedirectSourcesWithoutCollections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-only-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var spec = new SiteSpec
+            {
+                Name = "Static-only redirect navigation routes",
+                BaseUrl = "https://example.test",
+                Redirects = [new RedirectSpec { From = "/legacy-file.html", To = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Legacy", Url = "/legacy-file.html" },
+                                new MenuItemSpec { Title = "Invalid directory", Url = "/legacy-file.html/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, "/legacy-file.html"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/legacy-file.html/"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ProjectsPaginationForDistinctTaxonomyTermsWithCollidingSlugs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-slug-collision-" + Guid.NewGuid().ToString("N"));

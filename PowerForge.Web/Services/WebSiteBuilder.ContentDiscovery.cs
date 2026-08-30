@@ -259,7 +259,13 @@ public static partial class WebSiteBuilder
     }
 
     /// <summary>Builds the same complete render queue used by a site build for artifact verification.</summary>
-    internal static IReadOnlyList<ContentItem> BuildContentItemsForVerification(SiteSpec spec, WebSitePlan plan)
+    internal static IReadOnlyList<ContentItem> BuildContentItemsForVerification(SiteSpec spec, WebSitePlan plan) =>
+        BuildVerificationState(spec, plan).Items;
+
+    /// <summary>Builds the complete render and redirect state used by a site build for artifact verification.</summary>
+    internal static (IReadOnlyList<ContentItem> Items, IReadOnlyList<RedirectSpec> Redirects) BuildVerificationState(
+        SiteSpec spec,
+        WebSitePlan plan)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -302,7 +308,9 @@ public static partial class WebSiteBuilder
                 ResolveCacheRoot(spec, plan.RootPath));
             items = MaterializeLocalizedFallbackPages(spec, items);
             items.AddRange(BuildTaxonomyItems(spec, items));
-            return BuildPaginatedItems(spec, items);
+            items = BuildPaginatedItems(spec, items);
+            AddLegacyAmpRedirects(spec, redirects, items);
+            return (items, redirects.ToArray());
         }
         finally
         {

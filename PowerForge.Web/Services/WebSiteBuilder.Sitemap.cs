@@ -128,12 +128,23 @@ public static partial class WebSiteBuilder
     {
         var normalizedRoute = NormalizeRouteForMatch(route).Trim('/');
         var fileName = ResolveOutputFileName(format);
-        var relative = string.IsNullOrWhiteSpace(normalizedRoute)
-            ? fileName
-            : normalizedRoute.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-              normalizedRoute.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)
-                ? normalizedRoute
-                : Path.Combine(normalizedRoute.Replace('/', Path.DirectorySeparatorChar), fileName);
+        string relative;
+        if (normalizedRoute.Equals("404", StringComparison.OrdinalIgnoreCase) &&
+            fileName.Equals("index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            relative = "404.html";
+        }
+        else if (string.IsNullOrWhiteSpace(normalizedRoute))
+        {
+            relative = fileName;
+        }
+        else
+        {
+            var normalizedFileRoute = normalizedRoute.Replace('/', Path.DirectorySeparatorChar);
+            relative = Path.GetFileName(normalizedFileRoute).Equals(fileName, StringComparison.OrdinalIgnoreCase)
+                ? normalizedFileRoute
+                : Path.Combine(normalizedFileRoute, fileName);
+        }
 
         return Path.GetFullPath(Path.Combine(outputRoot, relative));
     }
