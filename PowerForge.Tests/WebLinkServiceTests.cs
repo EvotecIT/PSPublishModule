@@ -1624,9 +1624,6 @@ public sealed class WebLinkServiceTests
     [Fact]
     public void Load_PreservesCaseDistinctOverlayFilesOnCaseSensitivePlatforms()
     {
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
-            return;
-
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
@@ -1642,6 +1639,8 @@ public sealed class WebLinkServiceTests
                 """
                 [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
                 """);
+            if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+                return;
 
             var dataSet = WebLinkService.Load(new WebLinkLoadOptions
             {

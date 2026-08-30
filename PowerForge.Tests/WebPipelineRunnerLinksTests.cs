@@ -337,24 +337,25 @@ public sealed class WebPipelineRunnerLinksTests
     }
 
     [Fact]
-    public void RunPipeline_LinksExportApache_PreservesCaseDistinctOverlayPathsOnLinux()
+    public void RunPipeline_LinksExportApache_PreservesCaseDistinctOverlayPathsOnCaseSensitiveVolumes()
     {
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
-            return;
-
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "Managed.json"),
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
                 """
                 [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
                 """);
-            File.WriteAllText(Path.Combine(root, "managed.json"),
+            File.WriteAllText(lowerPath,
                 """
                 [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
                 """);
+            if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+                return;
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
                 """

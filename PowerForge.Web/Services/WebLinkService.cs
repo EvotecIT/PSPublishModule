@@ -17,9 +17,7 @@ public static partial class WebLinkService
     private static readonly Regex SafeSlugRegex = new("^[a-z0-9][a-z0-9._-]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LegacyPostIdRegex = new(@"^\s*/\?p=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LegacyPageIdRegex = new(@"^\s*/\?page_id=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly StringComparer FileSystemPathComparer = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal;
+    private static readonly StringComparer FileSystemPathComparer = StringComparer.Ordinal;
 
     /// <summary>Loads redirect and shortlink data from configured JSON and compatibility CSV files.</summary>
     public static WebLinkDataSet Load(WebLinkLoadOptions options)

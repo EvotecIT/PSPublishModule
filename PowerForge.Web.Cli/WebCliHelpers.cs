@@ -12,9 +12,7 @@ namespace PowerForge.Web.Cli;
 internal static partial class WebCliHelpers
 {
     private const int ErrorSchemaVersion = 1;
-    internal static StringComparer FileSystemPathComparer { get; } = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-        ? StringComparer.OrdinalIgnoreCase
-        : StringComparer.Ordinal;
+    internal static StringComparer FileSystemPathComparer { get; } = StringComparer.Ordinal;
 
     internal static void PrintUsage()
     {

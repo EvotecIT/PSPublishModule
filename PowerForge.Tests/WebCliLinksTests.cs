@@ -134,11 +134,8 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
-    public void HandleSubCommand_LinksExportApache_PreservesCaseDistinctOverlayFlagsOnLinux()
+    public void HandleSubCommand_LinksExportApache_PreservesCaseDistinctOverlayFlagsOnCaseSensitiveVolumes()
     {
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
-            return;
-
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
@@ -155,6 +152,8 @@ public sealed class WebCliLinksTests
                 """
                 [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
                 """);
+            if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+                return;
 
             var exitCode = WebCliCommandHandlers.HandleSubCommand(
                 "links",
