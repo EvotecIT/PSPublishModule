@@ -968,5 +968,6 @@ public static partial class WebSiteVerifier
         string[] Outputs,
         string? TaxonomyTerm = null,
         PageResource[]? Resources = null,
-        IReadOnlyDictionary<string, string[]>? TaxonomyValues = null);
+        IReadOnlyDictionary<string, string[]>? TaxonomyValues = null,
+        string? ProjectSlug = null);
 }

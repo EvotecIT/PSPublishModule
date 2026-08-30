@@ -541,6 +541,82 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_Registers_All_BuilderGenerated_Navigation_Routes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blog = Path.Combine(root, "content", "blog");
+            var pages = Path.Combine(root, "content", "pages");
+            var theme = Path.Combine(root, "themes", "route-theme");
+            Directory.CreateDirectory(blog);
+            Directory.CreateDirectory(pages);
+            Directory.CreateDirectory(Path.Combine(theme, "assets"));
+            File.WriteAllText(Path.Combine(blog, "post.md"), "---\ntitle: Post\n---\n\nSearchable post");
+            File.WriteAllText(Path.Combine(pages, "404.md"), "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
+            File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"route-theme\",\"assetsPath\":\"assets\"}");
+            File.WriteAllText(Path.Combine(theme, "assets", "brand.svg"), "<svg/>");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+
+            var expectedRoutes = new[]
+            {
+                "/blog/",
+                "/404.html",
+                "/search/index.json",
+                "/search/manifest.json",
+                "/search/en/index.json",
+                "/search/collections/blog/index.json",
+                "/themes/route-theme/assets/brand.svg"
+            };
+            var spec = new SiteSpec
+            {
+                Name = "Generated routes",
+                BaseUrl = "https://example.test",
+                DefaultTheme = "route-theme",
+                ThemesRoot = "themes",
+                Features = ["search"],
+                Collections =
+                [
+                    new CollectionSpec { Name = "blog", Input = "content/blog", Output = "/blog", AutoGenerateSectionIndex = true },
+                    new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" }
+                ],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = expectedRoutes.Select(route => new MenuItemSpec { Title = route, Url = route }).ToArray()
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            foreach (var route in expectedRoutes)
+            {
+                Assert.DoesNotContain(result.Warnings, warning =>
+                    warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
+                    warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_RejectsLinkedDirectoriesInStaticAssetMappings()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-link-" + Guid.NewGuid().ToString("N"));

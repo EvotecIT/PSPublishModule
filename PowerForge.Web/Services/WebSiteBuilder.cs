@@ -318,23 +318,38 @@ public static partial class WebSiteBuilder
 
     private static void CopyThemeAssets(SiteSpec spec, string rootPath, string outputRoot)
     {
+        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
+        foreach (var mapping in ResolveThemeAssetMappings(spec, rootPath))
+        {
+            var destination = Path.GetFullPath(Path.Combine(outputRoot, mapping.DestinationRelativePath));
+            if (!IsPathWithinRoot(normalizedOutputRoot, destination))
+            {
+                Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
+                continue;
+            }
+            CopyDirectory(mapping.SourceRoot, destination);
+        }
+    }
+
+    internal static IReadOnlyList<(string SourceRoot, string DestinationRelativePath)> ResolveThemeAssetMappings(
+        SiteSpec spec,
+        string rootPath)
+    {
         if (string.IsNullOrWhiteSpace(spec.DefaultTheme))
-            return;
+            return Array.Empty<(string, string)>();
 
         var themeRoot = ResolveThemeRoot(spec, rootPath);
         if (string.IsNullOrWhiteSpace(themeRoot) || !Directory.Exists(themeRoot))
-            return;
+            return Array.Empty<(string, string)>();
 
         var loader = new ThemeLoader();
         var manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, rootPath));
         if (manifest is null)
-            return;
+            return Array.Empty<(string, string)>();
 
         var outputThemesFolder = ResolveThemesFolder(spec);
-        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
-
-        var chain = BuildThemeChain(themeRoot, manifest);
-        foreach (var entry in chain)
+        var mappings = new List<(string, string)>();
+        foreach (var entry in BuildThemeChain(themeRoot, manifest))
         {
             var assetsDir = entry.Manifest.AssetsPath ?? "assets";
             if (string.IsNullOrWhiteSpace(assetsDir))
@@ -355,14 +370,10 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(entryThemeName))
                 entryThemeName = spec.DefaultTheme ?? "theme";
 
-            var destination = Path.GetFullPath(Path.Combine(outputRoot, outputThemesFolder, entryThemeName, assetsDir));
-            if (!IsPathWithinRoot(normalizedOutputRoot, destination))
-            {
-                Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
-                continue;
-            }
-            CopyDirectory(source, destination);
+            mappings.Add((source, Path.Combine(outputThemesFolder, entryThemeName, assetsDir)));
         }
+
+        return mappings;
     }
 
     private static void CopyDirectory(string source, string destination)
