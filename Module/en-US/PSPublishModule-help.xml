@@ -13645,12 +13645,12 @@ the private runtime copy without relying on PSModulePath discovery.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="None">
         <maml:name>Path</maml:name>
         <maml:description>
           <maml:para>Installed dependency root or module-dependencies.json receipt path.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -14917,12 +14917,12 @@ non-secret bootstrap package for other machines.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="Name,Profile">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="Name,Profile">
         <maml:name>ProfileName</maml:name>
         <maml:description>
           <maml:para>Saved repository profile name. When used with Path, selects one imported profile from the file. When used with Azure Artifacts feed details, creates that profile name.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -50762,6 +50762,19 @@ module build should coordinate with that package lane.</maml:para>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>New-ConfigurationProjectRelease</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>BuildDuringPublish</maml:name>
+          <maml:description>
+            <maml:para>Lets each dotnet publish invocation perform its own authoritative build instead of&#xD;
+consuming outputs from a separate prebuild step.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Configuration</maml:name>
           <maml:description>
             <maml:para>Build configuration used by the generated release object.</maml:para>
@@ -50848,6 +50861,19 @@ module build should coordinate with that package lane.</maml:para>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>BuildDuringPublish</maml:name>
+        <maml:description>
+          <maml:para>Lets each dotnet publish invocation perform its own authoritative build instead of&#xD;
+consuming outputs from a separate prebuild step.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Configuration</maml:name>
         <maml:description>
@@ -50955,7 +50981,7 @@ module build should coordinate with that package lane.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationProjectRelease -Configuration 'Value'</dev:code>
+        <dev:code>New-ConfigurationProjectRelease -BuildDuringPublish</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -54033,12 +54059,12 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Type</maml:name>
         <maml:description>
           <maml:para>Choose between PowerShellGallery and GitHub.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">PublishDestination</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">PublishDestination</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">PowerShellGallery</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">GitHub</command:parameterValue>
@@ -60787,12 +60813,12 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>ApiKey</maml:name>
         <maml:description>
           <maml:para>API key used to authenticate against the NuGet feed. For Azure Artifacts profiles this defaults to a non-secret placeholder used by NuGet clients; for GitHub Packages profiles this defaults from GITHUB_TOKEN or GH_TOKEN.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
