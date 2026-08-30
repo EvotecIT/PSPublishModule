@@ -21,16 +21,17 @@ public static partial class WebSiteBuilder
         var entries = items
             .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
             .Where(item => ItemRendersHtml(spec, item))
-            .OrderBy(static item => NormalizeRouteForMatch(item.OutputPath), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static item => item.SourcePath, StringComparer.OrdinalIgnoreCase)
-            .Select(item => new WebSitemapEntry
+            .Select(item => new { Item = item, Path = ResolveSitemapEntryPath(spec, item) })
+            .OrderBy(static entry => NormalizeRouteForMatch(entry.Path), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static entry => entry.Item.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new WebSitemapEntry
             {
-                Path = item.OutputPath,
-                Title = item.Title,
-                Description = item.Description,
-                Section = item.Collection,
-                LastModified = FormatSitemapLastModified(item.LastModifiedUtc),
-                NoIndex = ItemDeclaresNoIndex(spec, item, outputRoot)
+                Path = entry.Path,
+                Title = entry.Item.Title,
+                Description = entry.Item.Description,
+                Section = entry.Item.Collection,
+                LastModified = FormatSitemapLastModified(entry.Item.LastModifiedUtc),
+                NoIndex = ItemDeclaresNoIndex(spec, entry.Item, outputRoot)
             })
             .ToArray();
 
@@ -61,6 +62,25 @@ public static partial class WebSiteBuilder
     {
         var formats = ResolveOutputFormats(spec, item);
         return formats.Any(RendersHtmlPage);
+    }
+
+    private static string ResolveSitemapEntryPath(SiteSpec spec, ContentItem item)
+    {
+        var htmlFormats = ResolveOutputFormats(spec, item)
+            .Where(RendersHtmlPage)
+            .ToArray();
+        var primary = htmlFormats.FirstOrDefault(static format =>
+                          string.IsNullOrWhiteSpace(format.Suffix) ||
+                          format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+                      ?? htmlFormats[0];
+        var normalizedBaseRoute = NormalizeRouteForMatch(item.OutputPath);
+        if ((string.IsNullOrWhiteSpace(primary.Suffix) || primary.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)) &&
+            normalizedBaseRoute.Trim('/').Equals("404", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/404.html";
+        }
+
+        return ResolveOutputRoute(item.OutputPath, primary);
     }
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)

@@ -322,7 +322,8 @@ public static partial class WebSiteVerifier
             .ToArray();
         var navigationRoutes = publishableRoutes
             .Where(route => EmitsIndexHtml(spec, route))
-            .Select(static route => ResolveBuiltNavigationRoute(route.Route))
+            .Where(static route => !IsBuiltNotFoundRoute(route.Route))
+            .Select(static route => route.Route)
             .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)))
             .Concat(generatedPaginationRoutes
                 .Where(route => EmitsIndexHtml(spec, route))

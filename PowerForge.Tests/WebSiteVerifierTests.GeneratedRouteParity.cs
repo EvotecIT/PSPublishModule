@@ -54,10 +54,120 @@ public partial class WebSiteVerifierTests
             {
                 Assert.Contains(
                     sitemap.RootElement.GetProperty("entries").EnumerateArray(),
+                    entry => entry.GetProperty("path").GetString() == "/index.htm");
+                Assert.DoesNotContain(
+                    sitemap.RootElement.GetProperty("entries").EnumerateArray(),
                     entry => entry.GetProperty("path").GetString() == "/");
             }
+            var generatedSitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot,
+                BaseUrl = spec.BaseUrl,
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false
+            });
+            var sitemapXml = File.ReadAllText(generatedSitemap.OutputPath);
+            Assert.Contains("<loc>https://example.test/index.htm</loc>", sitemapXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("<loc>https://example.test/</loc>", sitemapXml, StringComparison.Ordinal);
             Assert.Equal(File.Exists(cardPath), !missingRouteWarning);
             Assert.Equal(WebSocialCardGenerator.IsPngRenderingAvailable(), File.Exists(cardPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsPaginationForDistinctTaxonomyTermsWithCollidingSlugs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-slug-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "one.md"), "---\ntitle: One\ntags: [\"C#\"]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "two.md"), "---\ntitle: Two\ntags: [\"C++\"]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string pageTwoRoute = "/tags/page/2/";
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy slug collision pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Tag page 2", Url = pageTwoRoute }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "page", "2", "index.html")));
+            Assert.False(HasMissingRouteWarning(result, pageTwoRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_KeepsNotFoundFileOutOfDirectoryRouteMatching()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-not-found-file-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "404.md"), "---\ntitle: Not found\n---\nMissing");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string fileRoute = "/404.html";
+            const string invalidDirectoryRoute = "/404.html/";
+            var spec = new SiteSpec
+            {
+                Name = "Not found route parity",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Not found file", Url = fileRoute },
+                                new MenuItemSpec { Title = "Invalid not found directory", Url = invalidDirectoryRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
+            Assert.False(HasMissingRouteWarning(result, fileRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, invalidDirectoryRoute), string.Join(Environment.NewLine, result.Warnings));
         }
         finally
         {

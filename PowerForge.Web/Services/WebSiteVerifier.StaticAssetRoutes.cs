@@ -287,13 +287,11 @@ public static partial class WebSiteVerifier
         }
     }
 
-    private static string ResolveBuiltNavigationRoute(string route)
+    private static bool IsBuiltNotFoundRoute(string route)
     {
         var normalized = NormalizeRouteForNavigationMatch(route);
         return normalized.Equals("/404/", StringComparison.OrdinalIgnoreCase) ||
-               normalized.Equals("/404", StringComparison.OrdinalIgnoreCase)
-            ? "/404.html"
-            : route;
+               normalized.Equals("/404", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<CollectionRoute> DiscoverGeneratedPaginationRoutes(
@@ -352,11 +350,7 @@ public static partial class WebSiteVerifier
                     string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(candidate.Route, section.Route, StringComparison.OrdinalIgnoreCase) &&
                     NormalizeRouteForNavigationMatch(candidate.Route).StartsWith(sectionRoute, StringComparison.OrdinalIgnoreCase)),
-                PageKind.Taxonomy => routes.Count(candidate =>
-                    !candidate.Draft &&
-                    candidate.Kind == PageKind.Term &&
-                    string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(candidate.Language, section.Language, StringComparison.OrdinalIgnoreCase)),
+                PageKind.Taxonomy => ResolveTaxonomyTermTotal(taxonomyTermCountsByLanguage, section),
                 PageKind.Term => ResolveTaxonomyTermCount(taxonomyTermCountsByLanguage, section),
                 _ => 0
             };
@@ -396,6 +390,19 @@ public static partial class WebSiteVerifier
         }
 
         return count;
+    }
+
+    private static int ResolveTaxonomyTermTotal(
+        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
+        CollectionRoute route)
+    {
+        if (!taxonomyTermCountsByLanguage.TryGetValue(route.Collection, out var countsByLanguage) ||
+            !countsByLanguage.TryGetValue(route.Language, out var counts))
+        {
+            return 0;
+        }
+
+        return counts.Count;
     }
 
     private static IEnumerable<string> DiscoverGeneratedOutputRoutes(
