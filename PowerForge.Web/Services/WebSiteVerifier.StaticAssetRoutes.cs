@@ -393,11 +393,20 @@ public static partial class WebSiteVerifier
             };
             foreach (var format in WebSiteBuilder.ResolveOutputFormats(spec, item))
             {
-                if (NormalizeRouteForNavigationMatch(route.Route).TrimEnd('/')
-                        .Equals("/404", StringComparison.OrdinalIgnoreCase) &&
-                    EmitsIndexHtml(format))
+                if (EmitsIndexHtml(format))
                 {
-                    yield return "/404.html";
+                    var normalizedBaseRoute = NormalizeRouteForNavigationMatch(route.Route).Trim('/');
+                    if (normalizedBaseRoute.Equals("404", StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return "/404.html";
+                        continue;
+                    }
+
+                    var physicalOutput = string.IsNullOrWhiteSpace(normalizedBaseRoute)
+                        ? "index.html"
+                        : Uri.UnescapeDataString(normalizedBaseRoute) + "/index.html";
+                    foreach (var physicalRoute in GetStaticAssetRoutes(physicalOutput))
+                        yield return physicalRoute;
                     continue;
                 }
                 var outputRoute = WebSiteBuilder.ResolveOutputRoute(route.Route, format);

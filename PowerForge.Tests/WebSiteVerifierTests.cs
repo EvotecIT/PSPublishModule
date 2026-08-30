@@ -2460,6 +2460,8 @@ public partial class WebSiteVerifierTests
                         Items =
                         [
                             new MenuItemSpec { Title = "Polish fallback", Url = "/pl/blog/" },
+                            new MenuItemSpec { Title = "Blog physical HTML", Url = "/blog/index.html" },
+                            new MenuItemSpec { Title = "Blog extensionless HTML", Url = "/blog/index" },
                             new MenuItemSpec { Title = "Polish fallback page 2", Url = "/pl/blog/page/2/" },
                             new MenuItemSpec { Title = "Blog feed", Url = "/blog/index.xml" },
                             new MenuItemSpec { Title = "Invalid feed directory", Url = "/blog/index.xml/" },
@@ -2479,6 +2481,8 @@ public partial class WebSiteVerifierTests
 
             Assert.DoesNotContain(result.Warnings, warning =>
                 (warning.Contains("/pl/blog/", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("/blog/index.html", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("/blog/index'", StringComparison.OrdinalIgnoreCase) ||
                  warning.Contains("/blog/index.xml'", StringComparison.OrdinalIgnoreCase) ||
                  warning.Contains("/pl/tags/", StringComparison.OrdinalIgnoreCase)) &&
                  warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
