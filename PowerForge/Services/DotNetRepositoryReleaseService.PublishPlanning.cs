@@ -125,7 +125,10 @@ public sealed partial class DotNetRepositoryReleaseService
             try
             {
                 using var archive = ZipFile.OpenRead(packagePath);
-                var nuspecEntries = archive.Entries.Where(entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)).ToArray();
+                var nuspecEntries = archive.Entries.Where(entry =>
+                    entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase) &&
+                    entry.FullName.IndexOf('/') < 0 &&
+                    entry.FullName.IndexOf('\\') < 0).ToArray();
                 if (nuspecEntries.Length != 1)
                     throw new InvalidOperationException($"Package artifact '{packagePath}' must contain exactly one .nuspec file; found {nuspecEntries.Length}.");
                 using var stream = nuspecEntries[0].Open();
@@ -175,12 +178,18 @@ public sealed partial class DotNetRepositoryReleaseService
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration);
         ValidatePlanningContract(project, outer);
-        AddPlannedDependencies(project, outer, selectedPackages, selectedProjectPaths, dependencies);
-        foreach (var targetFramework in outer.TargetFrameworks)
+        if (outer.DeclaredTargetFrameworks.Count == 0)
         {
-            var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration);
-            ValidatePlanningContract(project, evaluation);
-            AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
+            AddPlannedDependencies(project, outer, selectedPackages, selectedProjectPaths, dependencies);
+        }
+        else
+        {
+            foreach (var targetFramework in outer.DeclaredTargetFrameworks)
+            {
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration);
+                ValidatePlanningContract(project, evaluation);
+                AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
+            }
         }
 
         return dependencies;
@@ -206,6 +215,9 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyDictionary<string, string> selectedProjectPaths,
         ISet<string> dependencies)
     {
+        if (string.Equals(evaluation.GetProperty("SuppressDependenciesWhenPacking"), "true", StringComparison.OrdinalIgnoreCase))
+            return;
+
         foreach (var reference in evaluation.ProjectReferences)
         {
             if (reference.IsExcludedFromPackage())
@@ -222,7 +234,7 @@ public sealed partial class DotNetRepositoryReleaseService
             var packageId = reference.Get("Identity");
             if (string.IsNullOrWhiteSpace(packageId) || !selectedPackages.TryGetValue(packageId!, out var selectedPackage))
                 continue;
-            var versionRange = reference.Get("VersionOverride") ?? reference.Get("Version");
+            var versionRange = reference.Get("VersionOverride") ?? reference.Get("Version") ?? evaluation.GetCentralPackageVersion(packageId!);
             if (DependencyTargetsSelectedVersion(versionRange, selectedPackage, GetEffectivePackageId(consumer)))
                 dependencies.Add(packageId!);
         }
@@ -239,8 +251,9 @@ public sealed partial class DotNetRepositoryReleaseService
             "msbuild", projectPath, "-nologo", "-verbosity:quiet",
             "-getProperty:TargetFrameworks", "-getProperty:TargetFramework",
             "-getProperty:PackageId", "-getProperty:AssemblyName", "-getProperty:NuspecFile",
-            "-getProperty:CentralPackageTransitivePinningEnabled",
-            "-getItem:ProjectReference", "-getItem:PackageReference",
+            "-getProperty:CentralPackageTransitivePinningEnabled", "-getProperty:SuppressDependenciesWhenPacking",
+            "-getItem:ProjectReference", "-getItem:PackageReference", "-getItem:PackageVersion",
+            "-p:NoBuild=true",
             "-p:BuildProjectReferences=false",
             $"-p:Configuration={(string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim())}"
         };
@@ -320,20 +333,31 @@ public sealed partial class DotNetRepositoryReleaseService
 
     private sealed class PublishPlanningEvaluation
     {
-        private PublishPlanningEvaluation(Dictionary<string, string> properties, List<PublishPlanningItem> projectReferences, List<PublishPlanningItem> packageReferences)
+        private PublishPlanningEvaluation(
+            Dictionary<string, string> properties,
+            List<PublishPlanningItem> projectReferences,
+            List<PublishPlanningItem> packageReferences,
+            List<PublishPlanningItem> packageVersions)
         {
             Properties = properties;
             ProjectReferences = projectReferences;
             PackageReferences = packageReferences;
+            PackageVersions = packageVersions;
         }
 
         private Dictionary<string, string> Properties { get; }
         internal IReadOnlyList<PublishPlanningItem> ProjectReferences { get; }
         internal IReadOnlyList<PublishPlanningItem> PackageReferences { get; }
+        private IReadOnlyList<PublishPlanningItem> PackageVersions { get; }
         internal string? GetProperty(string name) => Properties.TryGetValue(name, out var value) ? value : null;
-        internal IReadOnlyList<string> TargetFrameworks => ((GetProperty("TargetFrameworks") ?? GetProperty("TargetFramework")) ?? string.Empty)
+        internal IReadOnlyList<string> DeclaredTargetFrameworks => (GetProperty("TargetFrameworks") ?? string.Empty)
             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(value => value.Trim()).Where(value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        internal string? GetCentralPackageVersion(string packageId)
+        {
+            var item = PackageVersions.FirstOrDefault(candidate => string.Equals(candidate.Get("Identity"), packageId, StringComparison.OrdinalIgnoreCase));
+            return item?.Get("Version");
+        }
 
         internal static PublishPlanningEvaluation Parse(JsonElement root)
         {
@@ -345,12 +369,14 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             var projectReferences = new List<PublishPlanningItem>();
             var packageReferences = new List<PublishPlanningItem>();
+            var packageVersions = new List<PublishPlanningItem>();
             if (root.TryGetProperty("Items", out var items))
             {
                 ParseItems(items, "ProjectReference", projectReferences);
                 ParseItems(items, "PackageReference", packageReferences);
+                ParseItems(items, "PackageVersion", packageVersions);
             }
-            return new PublishPlanningEvaluation(properties, projectReferences, packageReferences);
+            return new PublishPlanningEvaluation(properties, projectReferences, packageReferences, packageVersions);
         }
 
         private static void ParseItems(JsonElement items, string itemType, ICollection<PublishPlanningItem> destination)
