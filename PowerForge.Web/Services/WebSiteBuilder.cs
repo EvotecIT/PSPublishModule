@@ -445,7 +445,10 @@ public static partial class WebSiteBuilder
         if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
             return false;
 
-        var destination = (configuredDestination ?? string.Empty).TrimStart('/', '\\');
+        var destination = (configuredDestination ?? string.Empty)
+            .TrimStart('/', '\\')
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         var candidate = File.Exists(sourcePath)
             ? string.IsNullOrWhiteSpace(destination)
                 ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))

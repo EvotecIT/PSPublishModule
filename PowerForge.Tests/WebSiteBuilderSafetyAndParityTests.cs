@@ -147,6 +147,45 @@ public class WebSiteBuilderSafetyAndParityTests
     }
 
     [Fact]
+    public void Build_NormalizesPortableStaticAssetDestinationSeparators()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-static-separators-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"), "---\ntitle: Home\nslug: index\n---\n\nHome");
+            File.WriteAllText(Path.Combine(root, "manual.pdf"), "PDF");
+
+            var spec = BuildBasicSpec("content/pages", "/");
+            spec.StaticAssets =
+            [
+                new StaticAssetSpec
+                {
+                    Source = "manual.pdf",
+                    Destination = "downloads\\manual.pdf"
+                }
+            ];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, configPath), outPath);
+
+            Assert.True(File.Exists(Path.Combine(outPath, "downloads", "manual.pdf")));
+            if (Path.DirectorySeparatorChar == '/')
+                Assert.False(File.Exists(Path.Combine(outPath, "downloads\\manual.pdf")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_GeneratedRoutesOverrideConventionalStaticCollisions()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-static-route-collision-" + Guid.NewGuid().ToString("N"));

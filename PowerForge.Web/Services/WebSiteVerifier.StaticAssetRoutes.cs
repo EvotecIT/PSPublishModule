@@ -2,7 +2,7 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteVerifier
 {
-    private static IEnumerable<string> DiscoverStaticHtmlRoutes(SiteSpec spec, string rootPath)
+    private static IEnumerable<string> DiscoverStaticAssetRoutes(SiteSpec spec, string rootPath)
     {
         var projectionRoot = Path.GetFullPath(Path.Combine(rootPath, ".powerforge-static-route-projection"));
         if (!WebSiteBuilder.HasExplicitConventionalStaticMapping(spec, rootPath))
@@ -10,9 +10,9 @@ public static partial class WebSiteVerifier
             var conventionalRoot = Path.GetFullPath(Path.Combine(rootPath, "static"));
             if (Directory.Exists(conventionalRoot))
             {
-                foreach (var file in EnumerateStaticHtmlFiles(conventionalRoot))
+                foreach (var file in EnumerateStaticFiles(conventionalRoot))
                 {
-                    foreach (var route in GetStaticHtmlRoutes(file))
+                    foreach (var route in GetStaticAssetRoutes(file))
                         yield return route;
                 }
             }
@@ -45,7 +45,7 @@ public static partial class WebSiteVerifier
                         out var targetPath))
                     continue;
 
-                foreach (var route in GetStaticHtmlRoutes(Path.GetRelativePath(projectionRoot, targetPath)))
+                foreach (var route in GetStaticAssetRoutes(Path.GetRelativePath(projectionRoot, targetPath)))
                     yield return route;
                 continue;
             }
@@ -60,16 +60,16 @@ public static partial class WebSiteVerifier
                     out var targetRoot))
                 continue;
 
-            foreach (var file in EnumerateStaticHtmlFiles(sourcePath))
+            foreach (var file in EnumerateStaticFiles(sourcePath))
             {
                 var projectedFile = Path.Combine(targetRoot, file);
-                foreach (var route in GetStaticHtmlRoutes(Path.GetRelativePath(projectionRoot, projectedFile)))
+                foreach (var route in GetStaticAssetRoutes(Path.GetRelativePath(projectionRoot, projectedFile)))
                     yield return route;
             }
         }
     }
 
-    private static IEnumerable<string> EnumerateStaticHtmlFiles(string sourceRoot)
+    private static IEnumerable<string> EnumerateStaticFiles(string sourceRoot)
     {
         var root = new DirectoryInfo(sourceRoot);
         WebSiteBuilder.RejectLinkedAsset(root);
@@ -77,26 +77,23 @@ public static partial class WebSiteVerifier
         foreach (var file in root.EnumerateFiles())
         {
             WebSiteBuilder.RejectLinkedAsset(file);
-            if (IsHtmlExtension(file.Extension))
-                yield return file.Name;
+            yield return file.Name;
         }
 
         foreach (var directory in root.EnumerateDirectories())
         {
             WebSiteBuilder.RejectLinkedAsset(directory);
-            foreach (var file in EnumerateStaticHtmlFiles(directory.FullName))
+            foreach (var file in EnumerateStaticFiles(directory.FullName))
             {
                 yield return Path.Combine(directory.Name, file);
             }
         }
     }
 
-    private static IEnumerable<string> GetStaticHtmlRoutes(string destination)
+    private static IEnumerable<string> GetStaticAssetRoutes(string destination)
     {
-        if (string.IsNullOrWhiteSpace(destination) || !IsHtmlExtension(Path.GetExtension(destination)))
-        {
+        if (string.IsNullOrWhiteSpace(destination))
             yield break;
-        }
 
         var normalized = destination.Replace('\\', '/').TrimStart('/');
         if (normalized.Length == 0 ||
@@ -111,25 +108,25 @@ public static partial class WebSiteVerifier
         yield return fileRoute;
 
         var fileName = Path.GetFileName(normalized);
-        if (!string.Equals(fileName, "index.html", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(fileName, "index.htm", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(fileName, "index.html", StringComparison.Ordinal))
             yield break;
 
-        var directory = Path.GetDirectoryName(encoded)?.Replace('\\', '/').Trim('/');
+        var separatorIndex = encoded.LastIndexOf('/');
+        var directory = separatorIndex < 0 ? string.Empty : encoded[..separatorIndex].Trim('/');
         yield return string.IsNullOrWhiteSpace(directory) ? "/" : "/" + directory + "/";
     }
 
-    private static bool IsHtmlExtension(string? extension) =>
-        string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase);
-
-    private static IEnumerable<string> DiscoverGeneratedFeatureRoutes(SiteSpec spec, bool hasContentItems)
+    private static IEnumerable<string> DiscoverGeneratedFeatureRoutes(
+        SiteSpec spec,
+        IEnumerable<CollectionRoute> contentRoutes)
     {
-        if (hasContentItems && (spec.Features ?? Array.Empty<string>()).Any(feature =>
-                string.Equals(feature?.Trim(), "search", StringComparison.OrdinalIgnoreCase)))
-        {
-            yield return "/search/index.html";
-            yield return "/search/";
-        }
+        var searchEnabled = (spec.Features ?? Array.Empty<string>()).Any(feature =>
+            string.Equals(feature?.Trim(), "search", StringComparison.OrdinalIgnoreCase));
+        if (!searchEnabled || !contentRoutes.Any(route =>
+                WebSiteBuilder.IsSearchableContent(route.Draft, route.Route)))
+            yield break;
+
+        yield return "/search/index.html";
+        yield return "/search/";
     }
 }

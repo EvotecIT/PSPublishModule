@@ -18,10 +18,11 @@ public partial class WebSiteVerifierTests
             File.WriteAllText(Path.Combine(content, "pipeline.md"), "---\ntitle: Pipeline\nslug: pipeline\n---\n\nPipeline");
             var staticDocs = Path.Combine(root, "static-docs");
             Directory.CreateDirectory(staticDocs);
-            File.WriteAllText(Path.Combine(staticDocs, "INDEX.HTML"), "<h1>Docs</h1>");
+            File.WriteAllText(Path.Combine(staticDocs, "index.html"), "<h1>Docs</h1>");
+            File.WriteAllText(Path.Combine(staticDocs, "manual.pdf"), "PDF");
             var conventional = Path.Combine(root, "static", "ingestion", "conventional");
             Directory.CreateDirectory(conventional);
-            File.WriteAllText(Path.Combine(conventional, "INDEX.HTML"), "<h1>Conventional</h1>");
+            File.WriteAllText(Path.Combine(conventional, "index.html"), "<h1>Conventional</h1>");
 
             var spec = new SiteSpec
             {
@@ -36,7 +37,7 @@ public partial class WebSiteVerifierTests
                 [
                     new StaticAssetSpec { Source = "index.html", Destination = "./" },
                     new StaticAssetSpec { Source = "apps.html", Destination = "ingestion/apps.html" },
-                    new StaticAssetSpec { Source = "About # Żółć.htm", Destination = "nested/../" },
+                    new StaticAssetSpec { Source = "About # Żółć.htm", Destination = "nested\\../" },
                     new StaticAssetSpec { Source = "static-docs", Destination = "ingestion/docs" }
                 ],
                 Navigation = new NavigationSpec
@@ -53,6 +54,7 @@ public partial class WebSiteVerifierTests
                                 new MenuItemSpec { Title = "Apps", Url = "/ingestion/apps.html" },
                                 new MenuItemSpec { Title = "About", Url = "/About%20%23%20%C5%BB%C3%B3%C5%82%C4%87.htm" },
                                 new MenuItemSpec { Title = "Docs", Url = "/ingestion/docs/" },
+                                new MenuItemSpec { Title = "Manual", Url = "/ingestion/docs/manual.pdf" },
                                 new MenuItemSpec { Title = "Conventional", Url = "/ingestion/conventional/" },
                                 new MenuItemSpec { Title = "Search", Url = "/search/" }
                             ]
@@ -77,6 +79,9 @@ public partial class WebSiteVerifierTests
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("/ingestion/docs/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/ingestion/docs/manual.pdf", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("/ingestion/conventional/", StringComparison.OrdinalIgnoreCase) &&
@@ -104,14 +109,14 @@ public partial class WebSiteVerifierTests
                 warning.Contains("/ingestion/docs/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
-            File.Delete(Path.Combine(conventional, "INDEX.HTML"));
+            File.Delete(Path.Combine(conventional, "index.html"));
             spec.StaticAssets = allMappings;
             var resultWithoutConventional = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
             Assert.Contains(resultWithoutConventional.Warnings, warning =>
                 warning.Contains("/ingestion/conventional/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
-            File.WriteAllText(Path.Combine(conventional, "INDEX.HTML"), "<h1>Conventional</h1>");
+            File.WriteAllText(Path.Combine(conventional, "index.html"), "<h1>Conventional</h1>");
             spec.Features = [];
             spec.StaticAssets = allMappings;
             var resultWithoutSearch = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
@@ -193,6 +198,130 @@ public partial class WebSiteVerifierTests
             var resultWithoutApps = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
             Assert.Contains(resultWithoutApps.Warnings, warning =>
                 warning.Contains("/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersFilesButNotUnsupportedDirectoryAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assets = Path.Combine(root, "assets");
+            Directory.CreateDirectory(Path.Combine(assets, "uppercase"));
+            Directory.CreateDirectory(Path.Combine(assets, "legacy"));
+            File.WriteAllText(Path.Combine(assets, "uppercase", "INDEX.HTML"), "<h1>Uppercase</h1>");
+            File.WriteAllText(Path.Combine(assets, "legacy", "index.htm"), "<h1>Legacy</h1>");
+
+            var spec = new SiteSpec
+            {
+                Name = "Static alias contract",
+                BaseUrl = "https://example.test",
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Uppercase file", Url = "/assets/uppercase/INDEX.HTML" },
+                                new MenuItemSpec { Title = "Legacy file", Url = "/assets/legacy/index.htm" },
+                                new MenuItemSpec { Title = "Unsupported uppercase alias", Url = "/assets/uppercase/" },
+                                new MenuItemSpec { Title = "Unsupported legacy alias", Url = "/assets/legacy/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/assets/uppercase/INDEX.HTML", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/assets/legacy/index.htm", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("'/assets/uppercase/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("'/assets/legacy/'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersSearchOnlyForSearchableContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-search-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<h1>Home</h1>");
+            var content = Path.Combine(root, "content");
+            Directory.CreateDirectory(content);
+            File.WriteAllText(
+                Path.Combine(content, "draft.md"),
+                "---\ntitle: Draft\nslug: draft\ndraft: true\n---\n\nDraft");
+            File.WriteAllText(
+                Path.Combine(content, "404.md"),
+                "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
+
+            var spec = new SiteSpec
+            {
+                Name = "Search route contract",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Features = ["search"],
+                StaticAssets = [new StaticAssetSpec { Source = "index.html", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "Search", Url = "/search/" }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var withoutSearchableContent = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(withoutSearchableContent.Warnings, warning =>
+                warning.Contains("/search/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            File.WriteAllText(
+                Path.Combine(content, "public.md"),
+                "---\ntitle: Public\nslug: public\n---\n\nPublic");
+            var withSearchableContent = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.DoesNotContain(withSearchableContent.Warnings, warning =>
+                warning.Contains("/search/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally
