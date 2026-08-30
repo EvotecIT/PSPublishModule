@@ -1054,7 +1054,7 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
-    public void Verify_WarnsForLocalizationDuplicateAndMissingTranslations()
+    public void Verify_WarnsForLocalizationDuplicateAndMissingTranslationsDespiteMaterializedFallbacks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-verify-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1105,6 +1105,8 @@ public class WebSiteLocalizationFeaturesTests
                     DefaultLanguage = "en",
                     PrefixDefaultLanguage = false,
                     DetectFromPath = true,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
                     Languages = new[]
                     {
                         new LanguageSpec { Code = "en", Default = true },

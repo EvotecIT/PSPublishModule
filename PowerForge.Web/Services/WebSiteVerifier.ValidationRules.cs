@@ -807,6 +807,7 @@ public static partial class WebSiteVerifier
         var entries = collectionRoutes.Values
             .SelectMany(static routes => routes)
             .Where(static route => !route.Draft)
+            .Where(static route => !route.IsGeneratedFallback)
             .Where(static route => !string.IsNullOrWhiteSpace(route.TranslationKey))
             .Select(route => new
             {
@@ -938,5 +939,6 @@ public static partial class WebSiteVerifier
         PageResource[]? Resources = null,
         IReadOnlyDictionary<string, string[]>? TaxonomyValues = null,
         string? ProjectSlug = null,
-        ContentItem? SocialCardItem = null);
+        ContentItem? SocialCardItem = null,
+        bool IsGeneratedFallback = false);
 }

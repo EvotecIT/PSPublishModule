@@ -477,6 +477,7 @@ public static partial class WebSiteVerifier
                     Route = fallbackRoute,
                     Language = language.Code,
                     Draft = false,
+                    IsGeneratedFallback = true,
                     SocialCardItem = source.SocialCardItem is null
                         ? null
                         : WebSiteBuilder.CloneFallbackItem(spec, source.SocialCardItem, fallbackRoute, language.Code)

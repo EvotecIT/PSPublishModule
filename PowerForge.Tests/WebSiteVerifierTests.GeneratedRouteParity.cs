@@ -152,6 +152,7 @@ public partial class WebSiteVerifierTests
                 "/guide/amp/"
             };
             const string invalidFileRedirectDirectory = "/legacy-file.html/";
+            const string invalidSlashlessRedirect = "/configured-old";
             var spec = new SiteSpec
             {
                 Name = "Generated redirect navigation routes",
@@ -192,6 +193,7 @@ public partial class WebSiteVerifierTests
                             Items = redirectRoutes
                                 .Prepend("/")
                                 .Append(invalidFileRedirectDirectory)
+                                .Append(invalidSlashlessRedirect)
                                 .Select((route, index) => new MenuItemSpec { Title = $"Redirect {index}", Url = route })
                                 .ToArray()
                         }
@@ -214,6 +216,9 @@ public partial class WebSiteVerifierTests
             });
             Assert.True(
                 HasMissingRouteWarning(result, invalidFileRedirectDirectory),
+                string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(
+                HasMissingRouteWarning(result, invalidSlashlessRedirect),
                 string.Join(Environment.NewLine, result.Warnings));
         }
         finally
