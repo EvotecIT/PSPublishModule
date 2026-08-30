@@ -15,6 +15,22 @@ public enum PowerShellCompilationSemanticHostFamily
     PowerShell7
 }
 
+/// <summary>Recognized execution lanes accepted by semantic comparison and promotion.</summary>
+public enum PowerShellCompilationSemanticExecutionSurface
+{
+    /// <summary>Source executed by the selected external PowerShell host.</summary>
+    Interpreted,
+
+    /// <summary>A generated Hybrid artifact executed by its selected PowerShell host.</summary>
+    Hybrid,
+
+    /// <summary>A runtime-free Strict CLR artifact.</summary>
+    Strict,
+
+    /// <summary>An equivalent hand-written runtime-free CLR implementation.</summary>
+    HandWrittenClr
+}
+
 /// <summary>
 /// Immutable identity of one supported interpreted PowerShell semantic oracle.
 /// The compiler consumes this as evidence and never loads implementation assemblies from the host.
@@ -207,6 +223,9 @@ public sealed class PowerShellCompilationSemanticPropertyObservation
 /// <summary>One normalized value written to a PowerShell stream.</summary>
 public sealed class PowerShellCompilationSemanticValueObservation
 {
+    /// <summary>Cross-stream sequence assigned at the observation boundary.</summary>
+    public int Sequence { get; set; }
+
     /// <summary>Normalized value text.</summary>
     public string Value { get; set; } = string.Empty;
 
@@ -216,7 +235,13 @@ public sealed class PowerShellCompilationSemanticValueObservation
     /// <summary>Whether the observed value is null.</summary>
     public bool IsNull { get; set; }
 
-    /// <summary>Stable, sorted property snapshot.</summary>
+    /// <summary>Whether the observed value is PowerShell's internal no-value sentinel.</summary>
+    public bool IsAutomationNull { get; set; }
+
+    /// <summary>Observable pipeline enumeration state.</summary>
+    public string EnumerationState { get; set; } = "PipelineItem";
+
+    /// <summary>Stable selected-property snapshot in the source object's original property order.</summary>
     public PowerShellCompilationSemanticPropertyObservation[] Properties { get; set; } = Array.Empty<PowerShellCompilationSemanticPropertyObservation>();
 }
 
@@ -227,7 +252,7 @@ public sealed class PowerShellCompilationSemanticValueObservation
 public sealed class PowerShellCompilationSemanticOracleEnvelope
 {
     /// <summary>Envelope schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>Semantic profile identity.</summary>
     public string ProfileId { get; set; } = string.Empty;
@@ -250,6 +275,9 @@ public sealed class PowerShellCompilationSemanticOracleEnvelope
     /// <summary>Culture used during execution.</summary>
     public string Culture { get; set; } = string.Empty;
 
+    /// <summary>Integrity-bound exact executable/runtime identity for host-backed observations.</summary>
+    public PowerShellCompilationSemanticHostArtifact? HostArtifact { get; set; }
+
     /// <summary>Ordered success-stream observations.</summary>
     public PowerShellCompilationSemanticValueObservation[] Success { get; set; } = Array.Empty<PowerShellCompilationSemanticValueObservation>();
 
@@ -265,8 +293,14 @@ public sealed class PowerShellCompilationSemanticOracleEnvelope
     /// <summary>Ordered debug-stream observations.</summary>
     public string[] Debug { get; set; } = Array.Empty<string>();
 
+    /// <summary>Ordered structured information, warning, verbose, and debug records.</summary>
+    public PowerShellCompilationSemanticStreamObservation[] StreamRecords { get; set; } = Array.Empty<PowerShellCompilationSemanticStreamObservation>();
+
     /// <summary>Ordered normalized error identities.</summary>
     public string[] Errors { get; set; } = Array.Empty<string>();
+
+    /// <summary>Ordered structured error records including identity, category, exception, target, and termination.</summary>
+    public PowerShellCompilationSemanticErrorObservation[] ErrorRecords { get; set; } = Array.Empty<PowerShellCompilationSemanticErrorObservation>();
 
     /// <summary>Process-style exit code when applicable.</summary>
     public int? ExitCode { get; set; }
@@ -318,6 +352,12 @@ public sealed class PowerShellCompilationSemanticOracleRequest
 
     /// <summary>Execution-surface label.</summary>
     public string ExecutionSurface { get; set; } = "Interpreted";
+
+    /// <summary>Optional exact executable path used instead of the profile's PATH-resolved host name.</summary>
+    public string? HostExecutablePath { get; set; }
+
+    /// <summary>Optional pre-recorded host-artifact identity required for this observation.</summary>
+    public string? ExpectedHostArtifactSha256 { get; set; }
 
     /// <summary>Maximum host execution time.</summary>
     public int TimeoutSeconds { get; set; } = 120;

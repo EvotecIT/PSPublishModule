@@ -9,93 +9,7 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompilationSemanticOracleRunner
 {
-    private const string WrapperSource = """
-param([Parameter(Mandatory)][string] $ConfigPath)
-$ErrorActionPreference = 'Stop'
-$config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
-$culture = [System.Globalization.CultureInfo]::GetCultureInfo([string] $config.Culture)
-[System.Globalization.CultureInfo]::CurrentCulture = $culture
-[System.Globalization.CultureInfo]::CurrentUICulture = $culture
-
-function Get-FileSnapshot([string] $Root) {
-    $snapshot = @{}
-    if ([string]::IsNullOrWhiteSpace($Root) -or -not (Test-Path -LiteralPath $Root -PathType Container)) { return $snapshot }
-    foreach ($file in Get-ChildItem -LiteralPath $Root -File -Recurse -Force | Sort-Object FullName) {
-        $relative = $file.FullName.Substring($Root.Length).TrimStart([char[]]@('\','/')).Replace('\','/')
-        $snapshot[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
-    return $snapshot
-}
-
-function Get-Lines([string] $Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
-    return @(Get-Content -LiteralPath $Path | ForEach-Object { [string] $_ })
-}
-
-$before = Get-FileSnapshot ([string] $config.FileSystemRoot)
-$errorPath = Join-Path $PSScriptRoot 'error.txt'
-$warningPath = Join-Path $PSScriptRoot 'warning.txt'
-$verbosePath = Join-Path $PSScriptRoot 'verbose.txt'
-$debugPath = Join-Path $PSScriptRoot 'debug.txt'
-$informationPath = Join-Path $PSScriptRoot 'information.txt'
-$previousErrorAction = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-$global:LASTEXITCODE = $null
-$invocationArguments = @($config.Arguments)
-$success = @(& ([string] $config.ScriptPath) @invocationArguments 2> $errorPath 3> $warningPath 4> $verbosePath 5> $debugPath 6> $informationPath)
-$scriptExitCode = if ($global:LASTEXITCODE -is [int]) { [int] $global:LASTEXITCODE } else { $null }
-$ErrorActionPreference = $previousErrorAction
-$after = Get-FileSnapshot ([string] $config.FileSystemRoot)
-
-$effects = [System.Collections.Generic.List[string]]::new()
-foreach ($path in @($before.Keys + $after.Keys | Sort-Object -Unique)) {
-    if (-not $before.ContainsKey($path)) { $effects.Add("Added:${path}:$($after[$path])"); continue }
-    if (-not $after.ContainsKey($path)) { $effects.Add("Removed:${path}:$($before[$path])"); continue }
-    if ($before[$path] -ne $after[$path]) { $effects.Add("Modified:${path}:$($after[$path])") }
-}
-
-$values = foreach ($item in $success) {
-    $isNull = $null -eq $item
-    $properties = foreach ($name in @($config.ObservedPropertyNames | Sort-Object -Unique)) {
-        $property = if ($isNull) { $null } else { $item.PSObject.Properties[[string] $name] }
-        if ($null -eq $property) { continue }
-        $propertyValue = $property.Value
-        [ordered]@{
-            Name = [string] $name
-            Value = if ($null -eq $propertyValue) { '' } else { [string] $propertyValue }
-            TypeName = if ($null -eq $propertyValue) { '' } else { $propertyValue.GetType().FullName }
-            IsNull = $null -eq $propertyValue
-        }
-    }
-    [ordered]@{
-        Value = if ($isNull) { '' } else { [string] $item }
-        TypeName = if ($isNull) { '' } else { $item.GetType().FullName }
-        IsNull = $isNull
-        Properties = @($properties)
-    }
-}
-
-$envelope = [ordered]@{
-    SchemaVersion = 1
-    ProfileId = [string] $config.ProfileId
-    ExecutionSurface = [string] $config.ExecutionSurface
-    HostVersion = $PSVersionTable.PSVersion.ToString()
-    PowerShellEdition = [string] $PSVersionTable.PSEdition
-    OperatingSystem = if ($PSVersionTable.PSVersion.Major -le 5 -or $IsWindows) { 'Windows' } elseif ($IsLinux) { 'Linux' } elseif ($IsMacOS) { 'macOS' } else { 'Unknown' }
-    Architecture = if ($PSVersionTable.PSVersion.Major -le 5) { [string] $env:PROCESSOR_ARCHITECTURE } else { [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() }
-    Culture = [System.Globalization.CultureInfo]::CurrentCulture.Name
-    Success = @($values)
-    Information = @(Get-Lines $informationPath)
-    Warnings = @(Get-Lines $warningPath)
-    Verbose = @(Get-Lines $verbosePath)
-    Debug = @(Get-Lines $debugPath)
-    Errors = @(Get-Lines $errorPath)
-    ExitCode = $scriptExitCode
-    FileSystemEffects = @($effects)
-    ProcessEffects = @()
-}
-$envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $config.OutputPath) -Encoding utf8
-""";
+    private const string WrapperResourceName = "PowerForge.PowerShell.Compilation.SemanticOracle.Observe.ps1";
 
     /// <summary>Executes one black-box observation in the external host named by the selected profile.</summary>
     public PowerShellCompilationSemanticOracleEnvelope Observe(PowerShellCompilationSemanticOracleRequest request)
@@ -104,6 +18,11 @@ $envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $confi
         if (!File.Exists(request.ScriptPath)) throw new FileNotFoundException("Semantic-oracle script was not found.", request.ScriptPath);
         if (request.TimeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(request.TimeoutSeconds));
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(request.ProfileId);
+        var culture = string.IsNullOrWhiteSpace(request.Culture) ? "en-US" : request.Culture.Trim();
+        _ = System.Globalization.CultureInfo.GetCultureInfo(culture);
+        var executionSurface = NormalizeHostBackedSurface(request.ExecutionSurface);
+        var expectedHostArtifact = NormalizeExpectedHostArtifact(request.ExpectedHostArtifactSha256);
+        var hostExecutable = ResolveHostExecutable(profile, request.HostExecutablePath);
         var root = Path.Combine(Path.GetTempPath(), "PowerForgeSemanticOracle", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -111,22 +30,23 @@ $envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $confi
             var wrapperPath = Path.Combine(root, "Observe.ps1");
             var configPath = Path.Combine(root, "request.json");
             var outputPath = Path.Combine(root, "observation.json");
-            File.WriteAllText(wrapperPath, WrapperSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(wrapperPath, LoadWrapperSource(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var config = new
             {
                 request.ProfileId,
-                request.ScriptPath,
+                ScriptPath = Path.GetFullPath(request.ScriptPath),
                 Arguments = request.Arguments ?? Array.Empty<string>(),
                 ObservedPropertyNames = NormalizePropertyNames(request.ObservedPropertyNames),
-                Culture = string.IsNullOrWhiteSpace(request.Culture) ? "en-US" : request.Culture.Trim(),
+                Culture = culture,
                 FileSystemRoot = string.IsNullOrWhiteSpace(request.FileSystemRoot) ? string.Empty : Path.GetFullPath(request.FileSystemRoot),
-                ExecutionSurface = string.IsNullOrWhiteSpace(request.ExecutionSurface) ? "Interpreted" : request.ExecutionSurface.Trim(),
+                ExecutionSurface = executionSurface,
+                FeatureSwitches = profile.FeatureSwitches,
                 OutputPath = outputPath
             };
             File.WriteAllText(configPath, JsonSerializer.Serialize(config), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-                    profile.HostExecutable,
+                    hostExecutable,
                     root,
                     new[] { "-NoProfile", "-NonInteractive", "-File", wrapperPath, "-ConfigPath", configPath },
                     TimeSpan.FromSeconds(request.TimeoutSeconds)))
@@ -141,7 +61,7 @@ $envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $confi
             {
                 PropertyNameCaseInsensitive = true
             }) ?? throw new InvalidOperationException("Semantic oracle produced an empty observation.");
-            ValidateHost(profile, envelope);
+            ValidateHost(profile, envelope, culture, executionSurface, expectedHostArtifact);
             return envelope;
         }
         finally
@@ -152,13 +72,48 @@ $envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $confi
         }
     }
 
+    private static string LoadWrapperSource()
+    {
+        using var stream = typeof(PowerShellCompilationSemanticOracleRunner).Assembly.GetManifestResourceStream(WrapperResourceName)
+            ?? throw new InvalidOperationException($"Embedded semantic-oracle wrapper '{WrapperResourceName}' was not found.");
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
+
+    private static string ResolveHostExecutable(PowerShellCompilationSemanticOracleProfile profile, string? requestedPath)
+    {
+        if (string.IsNullOrWhiteSpace(requestedPath)) return profile.HostExecutable;
+        var fullPath = Path.GetFullPath(requestedPath!.Trim());
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException("The exact semantic-oracle host executable was not found.", fullPath);
+        return fullPath;
+    }
+
+    private static string NormalizeExpectedHostArtifact(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var normalized = value!.Trim().ToLowerInvariant();
+        if (normalized.Length != 64 || normalized.Any(static character => !Uri.IsHexDigit(character)))
+            throw new ArgumentException("ExpectedHostArtifactSha256 must be a 64-character hexadecimal SHA-256 value.", nameof(PowerShellCompilationSemanticOracleRequest.ExpectedHostArtifactSha256));
+        return normalized;
+    }
+
+    private static string NormalizeHostBackedSurface(string? value)
+    {
+        var requested = string.IsNullOrWhiteSpace(value) ? "Interpreted" : value!.Trim();
+        if (!Enum.TryParse<PowerShellCompilationSemanticExecutionSurface>(requested, ignoreCase: true, out var surface) ||
+            (surface != PowerShellCompilationSemanticExecutionSurface.Interpreted &&
+             surface != PowerShellCompilationSemanticExecutionSurface.Hybrid))
+            throw new ArgumentException("An external semantic-oracle observation must use the Interpreted or Hybrid execution surface.", nameof(value));
+        return surface.ToString();
+    }
+
     private static string[] NormalizePropertyNames(IEnumerable<string>? names)
     {
         var normalized = (names ?? Array.Empty<string>())
             .Select(static name => name?.Trim() ?? string.Empty)
             .Where(static name => name.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var forbidden = normalized.FirstOrDefault(static name =>
             name.Contains("Password", StringComparison.OrdinalIgnoreCase) ||
@@ -172,22 +127,35 @@ $envelope | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath ([string] $confi
 
     private static void ValidateHost(
         PowerShellCompilationSemanticOracleProfile profile,
-        PowerShellCompilationSemanticOracleEnvelope envelope)
+        PowerShellCompilationSemanticOracleEnvelope envelope,
+        string expectedCulture,
+        string expectedExecutionSurface,
+        string expectedHostArtifact)
     {
+        if (envelope.SchemaVersion != 2)
+            throw new InvalidOperationException($"Unsupported semantic-oracle envelope schema {envelope.SchemaVersion}.");
         if (!string.Equals(profile.ProfileId, envelope.ProfileId, StringComparison.Ordinal))
             throw new InvalidOperationException("Semantic oracle returned the wrong profile identity.");
-        if (!string.Equals(profile.PowerShellEdition, envelope.PowerShellEdition, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Semantic profile '{profile.ProfileId}' requires PowerShell edition '{profile.PowerShellEdition}', but host reported '{envelope.PowerShellEdition}'.");
-        if (!Version.TryParse(envelope.HostVersion, out var version))
-            throw new InvalidOperationException($"Semantic oracle reported invalid host version '{envelope.HostVersion}'.");
-        var expectedMajor = profile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 ? 5 : 7;
-        var expectedMinor = profile.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId ? 4
-            : profile.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId ? 6
-            : 1;
-        if (version.Major != expectedMajor || version.Minor != expectedMinor)
-            throw new InvalidOperationException($"Semantic profile '{profile.ProfileId}' does not accept host version '{version}'.");
-        if (profile.OperatingSystem != "Any" && !string.Equals(profile.OperatingSystem, envelope.OperatingSystem, StringComparison.OrdinalIgnoreCase))
-            throw new PlatformNotSupportedException($"Semantic profile '{profile.ProfileId}' requires {profile.OperatingSystem}, but host reported {envelope.OperatingSystem}.");
+        if (!string.Equals(expectedExecutionSurface, envelope.ExecutionSurface, StringComparison.Ordinal))
+            throw new InvalidOperationException("Semantic oracle returned the wrong execution-surface identity.");
+        var artifact = PowerShellCompilationSemanticHostArtifactService.Normalize(envelope.HostArtifact
+            ?? throw new InvalidOperationException("Semantic oracle did not report its exact host artifact."));
+        PowerShellCompilationSemanticHostArtifactService.EnsureMatchesProfile(artifact, profile, expectedCulture);
+        if (expectedHostArtifact.Length > 0 && !string.Equals(expectedHostArtifact, artifact.IdentitySha256, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Semantic oracle host artifact '{artifact.IdentitySha256}' does not match the required identity '{expectedHostArtifact}'.");
+        ValidateEnvelopeMirror(envelope, artifact);
+    }
+
+    private static void ValidateEnvelopeMirror(
+        PowerShellCompilationSemanticOracleEnvelope envelope,
+        PowerShellCompilationSemanticHostArtifact artifact)
+    {
+        if (!string.Equals(envelope.HostVersion, artifact.HostVersion, StringComparison.Ordinal) ||
+            !string.Equals(envelope.PowerShellEdition, artifact.PowerShellEdition, StringComparison.Ordinal) ||
+            !string.Equals(envelope.OperatingSystem, artifact.OperatingSystem, StringComparison.Ordinal) ||
+            !string.Equals(envelope.Architecture, artifact.Architecture, StringComparison.Ordinal) ||
+            !string.Equals(envelope.Culture, artifact.Culture, StringComparison.Ordinal))
+            throw new InvalidOperationException("Semantic-oracle envelope identity does not match its integrity-bound host artifact.");
     }
 
     private static string Bound(string value)

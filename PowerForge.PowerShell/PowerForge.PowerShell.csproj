@@ -64,5 +64,6 @@
     <EmbeddedResource Include="Templates\Compilation\TypedExecutableProgram.cs.template" LogicalName="PowerForge.PowerShell.Compilation.TypedExecutableProgram.cs.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\BinaryModule.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.BinaryModule.csproj.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CompilerPackages.json" LogicalName="PowerForge.PowerShell.Compilation.CompilerPackages.json" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\SemanticOracle.Observe.ps1" LogicalName="PowerForge.PowerShell.Compilation.SemanticOracle.Observe.ps1" WithCulture="false" />
   </ItemGroup>
 </Project>

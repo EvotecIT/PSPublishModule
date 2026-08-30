@@ -203,7 +203,9 @@ public static class PowerShellCompilationSemanticOracleComparer
         Add(differences, allowed, "Warnings", expected.Warnings, actual.Warnings);
         Add(differences, allowed, "Verbose", expected.Verbose, actual.Verbose);
         Add(differences, allowed, "Debug", expected.Debug, actual.Debug);
+        Add(differences, allowed, "StreamRecords", expected.StreamRecords, actual.StreamRecords);
         Add(differences, allowed, "Errors", expected.Errors, actual.Errors);
+        Add(differences, allowed, "ErrorRecords", expected.ErrorRecords, actual.ErrorRecords);
         Add(differences, allowed, "ExitCode", expected.ExitCode, actual.ExitCode);
         Add(differences, allowed, "FileSystemEffects", expected.FileSystemEffects, actual.FileSystemEffects);
         Add(differences, allowed, "ProcessEffects", expected.ProcessEffects, actual.ProcessEffects);
