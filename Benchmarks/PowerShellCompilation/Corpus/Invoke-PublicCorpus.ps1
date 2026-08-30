@@ -132,16 +132,13 @@ function Expand-VerifiedPackage {
     param([object] $Entry, [string] $PackagePath, [string] $ExtractCache)
 
     $target = Join-Path $ExtractCache $Entry.sha256
-    $marker = Join-Path $target '.powerforge-corpus-package.json'
-    if (Test-Path -LiteralPath $marker) {
-        $record = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
-        if ($record.id -ne $Entry.id -or $record.version -ne $Entry.version -or $record.sha256 -ne $Entry.sha256) {
-            throw "Extracted package marker does not match the requested identity: $target"
-        }
-        return $target
-    }
     if (Test-Path -LiteralPath $target) {
-        throw "Unmarked extraction directory already exists and will not be trusted: $target"
+        Assert-ContainedPath -Root $ExtractCache -Path $target -Label 'Cached package extraction' | Out-Null
+        $targetItem = Get-Item -LiteralPath $target -Force
+        if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Cached package extraction is a symbolic link or junction and will not be trusted: $target"
+        }
+        Remove-Item -LiteralPath $target -Recurse -Force
     }
 
     $staging = Join-Path $ExtractCache ($Entry.sha256 + '.' + [guid]::NewGuid().ToString('N') + '.extracting')

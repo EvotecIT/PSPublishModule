@@ -49,7 +49,53 @@ public sealed class PowerShellCompilationProviderPackageTests
     public void SdkBuildsDeterministicPackageAndReaderLocksTrustClosureWithoutAssemblyLoad()
     {
         using var fixture = ProviderFixture.Create();
+        var firstProvider = fixture.Manifest.Providers[0];
+        firstProvider.ModuleNames = new[] { "Generic.Second", "Generic.First" };
+        firstProvider.Aliases = new[] { "Write-NoticeZ", "Write-NoticeA" };
+        firstProvider.Parameters[0].Aliases = new[] { "TextZ", "TextA" };
+        firstProvider.Adapter.Dependencies = new[] { "Generic.Runtime.Z", "Generic.Runtime.A" };
+        var secondProvider = new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "generic.command.stream.warning",
+            ProviderVersion = "1.0",
+            FeatureId = "command.write-package-warning-core",
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = "Write-PackageWarningCore",
+            ModuleNames = new[] { "Generic.Warning.Z", "Generic.Warning.A" },
+            Aliases = new[] { "Write-WarningZ", "Write-WarningA" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract
+                {
+                    Name = "Message",
+                    Position = 0,
+                    Aliases = new[] { "WarningZ", "WarningA" }
+                }
+            },
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "Warning",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "WriteWarning",
+                SemanticProfile = firstProvider.Adapter.SemanticProfile,
+                RuntimeFree = true,
+                AotCompatible = true,
+                Dependencies = new[] { "Generic.Warning.Runtime.Z", "Generic.Warning.Runtime.A" }
+            }
+        };
+        fixture.Manifest.Providers = new[] { firstProvider, secondProvider };
         var first = fixture.BuildPackage("first.nupkg");
+        fixture.Manifest.Providers = new[] { secondProvider, firstProvider };
+        Array.Reverse(firstProvider.ModuleNames);
+        Array.Reverse(firstProvider.Aliases);
+        Array.Reverse(firstProvider.Parameters[0].Aliases);
+        Array.Reverse(firstProvider.Adapter.Dependencies);
+        Array.Reverse(secondProvider.ModuleNames);
+        Array.Reverse(secondProvider.Aliases);
+        Array.Reverse(secondProvider.Parameters[0].Aliases);
+        Array.Reverse(secondProvider.Adapter.Dependencies);
         var second = fixture.BuildPackage("second.nupkg");
 
         Assert.Equal(Hash(fixture.PackagePath("first.nupkg")), Hash(fixture.PackagePath("second.nupkg")));
@@ -64,6 +110,7 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.NotEmpty(first.Lock.LockSha256);
         Assert.Equal(first.Lock.LockSha256, second.Lock.LockSha256);
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.notice");
+        Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.warning");
     }
 
     [Fact]

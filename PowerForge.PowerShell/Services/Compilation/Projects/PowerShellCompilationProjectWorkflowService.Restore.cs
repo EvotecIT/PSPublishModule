@@ -20,6 +20,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         Directory.CreateDirectory(packageRoot);
         var results = new List<PowerShellCompilationProjectTargetResult>();
         var verifiedPackages = new Dictionary<string, PowerShellCompilationProjectPackage>(StringComparer.OrdinalIgnoreCase);
+        var resolvedLocks = new List<PowerShellCompilationProjectResolvedLock>();
         foreach (var artifact in artifacts)
         {
             try
@@ -30,6 +31,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 PowerShellCompilationDependencyLockHasher.EnsureValid(graph, artifact.Name);
                 var packages = GetTargetPackages(graph, context, artifact);
                 var restoreProject = WriteRestoreProject(environmentRoot, artifact, packages, offline);
+                var restoreRoot = Path.GetDirectoryName(restoreProject)!;
+                var resolvedLockPath = Path.Combine(restoreRoot, "packages.lock.json");
+                if (offline && !File.Exists(resolvedLockPath))
+                    throw new FileNotFoundException("Offline restore requires a previously acquired exact NuGet closure lock.", resolvedLockPath);
                 var arguments = new List<string>
                 {
                     "restore", restoreProject,
@@ -41,6 +46,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 {
                     arguments.Add("--ignore-failed-sources");
                 }
+                if (File.Exists(resolvedLockPath)) arguments.Add("--locked-mode");
                 if (!string.IsNullOrWhiteSpace(artifact.Target.RuntimeIdentifier) && artifact.Target.ArtifactKind == PowerShellCompilationArtifactKind.Executable)
                 {
                     arguments.Add("--runtime");
@@ -58,11 +64,22 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     })).GetAwaiter().GetResult();
                 if (!run.Succeeded)
                     throw new InvalidOperationException($"Isolated restore failed for '{artifact.Name}': {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
-                foreach (var package in packages)
+                if (!File.Exists(resolvedLockPath))
+                    throw new FileNotFoundException("NuGet restore did not produce the required complete closure lock.", resolvedLockPath);
+                var resolvedPackages = ReadResolvedPackages(resolvedLockPath);
+                EnsureDeclaredPackagesAreLocked(packages, resolvedPackages, artifact.Name);
+                VerifyAssetsClosure(Path.Combine(restoreRoot, "obj", "project.assets.json"), resolvedPackages, artifact.Name);
+                foreach (var package in resolvedPackages)
                 {
-                    VerifyPackage(packageRoot, package);
-                    verifiedPackages[package.Id + "/" + package.Version] = package;
+                    var verified = VerifyPackage(packageRoot, package);
+                    verifiedPackages[verified.Id + "/" + verified.Version] = verified;
                 }
+                resolvedLocks.Add(new PowerShellCompilationProjectResolvedLock
+                {
+                    TargetName = artifact.Name,
+                    Path = FrameworkCompatibility.GetRelativePath(context.Root, resolvedLockPath).Replace('\\', '/'),
+                    Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(resolvedLockPath)
+                });
                 VerifyRuntimeAssets(packageRoot, graph);
                 results.Add(Pass(artifact, offline ? "Offline locked restore passed." : "Exact isolated acquisition passed.", packageRoot, graph.LockSha256));
             }
@@ -87,12 +104,14 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 Packages = verifiedPackages.Values
                     .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(static package => package.Version, StringComparer.Ordinal)
-                    .ToArray()
+                    .ToArray(),
+                ResolvedLocks = resolvedLocks.OrderBy(static item => item.TargetName, StringComparer.Ordinal).ToArray()
             };
             environment.EnvironmentSha256 = ComputeEnvironmentSha256(
                 environment.ProjectSha256,
                 environment.DependencyLockSha256,
-                environment.Packages);
+                environment.Packages,
+                environment.ResolvedLocks);
             WriteJson(Path.Combine(environmentRoot, "environment.json"), environment);
         }
         return result;
@@ -156,6 +175,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
               <PropertyGroup>
                 <TargetFramework>{EscapeXml(artifact.Target.TargetFramework)}</TargetFramework>
                 {rid}
+                <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+                <NuGetLockFilePath>packages.lock.json</NuGetLockFilePath>
               </PropertyGroup>
               <ItemGroup>
             {packageItems}
@@ -174,7 +195,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         return projectPath;
     }
 
-    private static void VerifyPackage(string packageRoot, PowerShellCompilationProjectPackage package)
+    private static PowerShellCompilationProjectPackage VerifyPackage(string packageRoot, PowerShellCompilationProjectPackage package)
     {
         if (string.IsNullOrWhiteSpace(package.Id) || string.IsNullOrWhiteSpace(package.Version) || string.IsNullOrWhiteSpace(package.ContentHash))
             throw new InvalidDataException("A project dependency lock contains an incomplete package identity.");
@@ -184,20 +205,163 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var metadataPath = Path.Combine(versionRoot, ".nupkg.metadata");
         if (!File.Exists(packagePath) || !File.Exists(hashPath) || !File.Exists(metadataPath))
             throw new FileNotFoundException($"Exact restored package '{package.Id}/{package.Version}' is incomplete in the isolated environment.", versionRoot);
+        PowerShellCompilationPathSafety.EnsureNoLinks(packageRoot, versionRoot, $"Restored package '{package.Id}/{package.Version}' traverses a symbolic link or junction.");
+        string actualArchiveHash;
         using (var stream = File.OpenRead(packagePath))
         using (var algorithm = SHA512.Create())
         {
-            var actualArchiveHash = Convert.ToBase64String(algorithm.ComputeHash(stream));
+            actualArchiveHash = Convert.ToBase64String(algorithm.ComputeHash(stream));
             var recordedArchiveHash = File.ReadAllText(hashPath).Trim();
             if (!actualArchiveHash.Equals(recordedArchiveHash, StringComparison.Ordinal))
                 throw new InvalidDataException($"Restored package archive '{package.Id}/{package.Version}' differs from its NuGet archive hash.");
         }
+        if (!string.IsNullOrWhiteSpace(package.ArchiveSha512) &&
+            !actualArchiveHash.Equals(NormalizeNuGetContentHash(package.ArchiveSha512), StringComparison.Ordinal))
+            throw new InvalidDataException($"Restored package archive '{package.Id}/{package.Version}' differs from the isolated environment evidence.");
         using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
         if (!metadata.RootElement.TryGetProperty("contentHash", out var contentHashElement))
             throw new InvalidDataException($"Restored package '{package.Id}/{package.Version}' has no NuGet content identity.");
         var actualContentHash = contentHashElement.GetString() ?? string.Empty;
-        if (!actualContentHash.Equals(package.ContentHash, StringComparison.Ordinal))
+        if (!NormalizeNuGetContentHash(actualContentHash).Equals(NormalizeNuGetContentHash(package.ContentHash), StringComparison.Ordinal))
             throw new InvalidDataException($"Restored package '{package.Id}/{package.Version}' does not match the reviewed NuGet content hash (expected {package.ContentHash}, actual {actualContentHash}).");
+        var extractedHash = ComputeExtractedPackageSha256(versionRoot, packagePath, hashPath, metadataPath);
+        if (!string.IsNullOrWhiteSpace(package.ExtractedFilesSha256) &&
+            !package.ExtractedFilesSha256.Equals(extractedHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Extracted package payload '{package.Id}/{package.Version}' differs from the isolated environment evidence.");
+        return new PowerShellCompilationProjectPackage
+        {
+            Id = package.Id,
+            Version = package.Version,
+            ContentHash = NormalizeNuGetContentHash(package.ContentHash),
+            ArchiveSha512 = actualArchiveHash,
+            ExtractedFilesSha256 = extractedHash
+        };
+    }
+
+    private static PowerShellCompilationProjectPackage[] ReadResolvedPackages(string lockPath)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(lockPath));
+        if (!document.RootElement.TryGetProperty("dependencies", out var dependencies) ||
+            dependencies.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("NuGet closure lock has no dependency groups.");
+        var packages = new Dictionary<string, PowerShellCompilationProjectPackage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in dependencies.EnumerateObject())
+        {
+            if (group.Value.ValueKind != JsonValueKind.Object) continue;
+            foreach (var item in group.Value.EnumerateObject())
+            {
+                if (!item.Value.TryGetProperty("resolved", out var resolvedElement) ||
+                    !item.Value.TryGetProperty("contentHash", out var hashElement))
+                    throw new InvalidDataException($"NuGet closure entry '{item.Name}' is missing its exact version or content hash.");
+                var version = resolvedElement.GetString() ?? string.Empty;
+                var contentHash = NormalizeNuGetContentHash(hashElement.GetString() ?? string.Empty);
+                var key = item.Name + "/" + version;
+                var package = new PowerShellCompilationProjectPackage { Id = item.Name, Version = version, ContentHash = contentHash };
+                if (packages.TryGetValue(key, out var existing) &&
+                    !existing.ContentHash.Equals(contentHash, StringComparison.Ordinal))
+                    throw new InvalidDataException($"NuGet closure contains conflicting content identities for '{key}'.");
+                packages[key] = package;
+            }
+        }
+        return packages.Values
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static void EnsureDeclaredPackagesAreLocked(
+        IEnumerable<PowerShellCompilationProjectPackage> declared,
+        IEnumerable<PowerShellCompilationProjectPackage> resolved,
+        string targetName)
+    {
+        var actual = resolved.ToDictionary(
+            static package => package.Id + "/" + package.Version,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var package in declared)
+        {
+            var key = package.Id + "/" + package.Version;
+            if (!actual.TryGetValue(key, out var locked))
+                throw new InvalidDataException($"NuGet closure for '{targetName}' omitted reviewed package '{key}'.");
+            if (!NormalizeNuGetContentHash(package.ContentHash).Equals(locked.ContentHash, StringComparison.Ordinal))
+                throw new InvalidDataException($"NuGet closure for '{targetName}' changed the reviewed content identity of '{key}'.");
+        }
+    }
+
+    private static void VerifyAssetsClosure(
+        string assetsPath,
+        IEnumerable<PowerShellCompilationProjectPackage> locked,
+        string targetName)
+    {
+        if (!File.Exists(assetsPath)) throw new FileNotFoundException("NuGet restore did not produce an assets graph.", assetsPath);
+        using var document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+        if (!document.RootElement.TryGetProperty("libraries", out var libraries) || libraries.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("NuGet assets graph has no libraries map.");
+        var actual = libraries.EnumerateObject()
+            .Where(static item => item.Value.TryGetProperty("type", out var type) &&
+                                  (type.GetString() ?? string.Empty).Equals("package", StringComparison.OrdinalIgnoreCase))
+            .Select(static item =>
+            {
+                var separator = item.Name.LastIndexOf('/');
+                if (separator <= 0 || separator == item.Name.Length - 1)
+                    throw new InvalidDataException($"NuGet assets package identity '{item.Name}' is malformed.");
+                var hash = item.Value.TryGetProperty("sha512", out var hashElement) ? hashElement.GetString() ?? string.Empty : string.Empty;
+                return new PowerShellCompilationProjectPackage
+                {
+                    Id = item.Name.Substring(0, separator),
+                    Version = item.Name.Substring(separator + 1),
+                    ContentHash = NormalizeNuGetContentHash(hash)
+                };
+            })
+            .OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.Ordinal)
+            .ToArray();
+        var expected = locked.OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static package => package.Version, StringComparer.Ordinal)
+            .ToArray();
+        if (actual.Length != expected.Length || actual.Where((package, index) =>
+                !package.Id.Equals(expected[index].Id, StringComparison.OrdinalIgnoreCase) ||
+                !package.Version.Equals(expected[index].Version, StringComparison.Ordinal) ||
+                !package.ContentHash.Equals(NormalizeNuGetContentHash(expected[index].ContentHash), StringComparison.Ordinal)).Any())
+            throw new InvalidDataException($"NuGet assets closure for '{targetName}' differs from its exact packages.lock.json graph.");
+    }
+
+    private static string ComputeExtractedPackageSha256(
+        string versionRoot,
+        params string[] excludedPaths)
+    {
+        var excluded = excludedPaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var files = Directory.EnumerateFiles(versionRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !excluded.Contains(Path.GetFullPath(path)))
+            .OrderBy(path => FrameworkCompatibility.GetRelativePath(versionRoot, path), StringComparer.Ordinal)
+            .Select(path =>
+            {
+                PowerShellCompilationPathSafety.EnsureNoLinks(versionRoot, path, "Extracted package payload traverses a symbolic link or junction.");
+                return new
+                {
+                    path = FrameworkCompatibility.GetRelativePath(versionRoot, path).Replace('\\', '/'),
+                    sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(path),
+                    size = new FileInfo(path).Length
+                };
+            })
+            .ToArray();
+        var canonical = JsonSerializer.Serialize(files);
+        using var algorithm = SHA256.Create();
+        return PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(Encoding.UTF8.GetBytes(canonical)));
+    }
+
+    private static string NormalizeNuGetContentHash(string value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (normalized.StartsWith("sha512-", StringComparison.OrdinalIgnoreCase)) normalized = normalized.Substring(7);
+        try
+        {
+            if (Convert.FromBase64String(normalized).Length != 64) throw new FormatException();
+        }
+        catch (FormatException exception)
+        {
+            throw new InvalidDataException("NuGet content identity is not a SHA-512 digest.", exception);
+        }
+        return normalized;
     }
 
     private static void VerifyRuntimeAssets(string packageRoot, PowerShellCompilationDependencyGraph graph)
@@ -226,7 +390,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private static string ComputeEnvironmentSha256(
         string projectSha256,
         IEnumerable<string> locks,
-        IEnumerable<PowerShellCompilationProjectPackage> packages)
+        IEnumerable<PowerShellCompilationProjectPackage> packages,
+        IEnumerable<PowerShellCompilationProjectResolvedLock> resolvedLocks)
     {
         var canonical = JsonSerializer.Serialize(new
         {
@@ -234,7 +399,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             locks = locks.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             packages = packages.OrderBy(static package => package.Id, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static package => package.Version, StringComparer.Ordinal)
-                .Select(static package => new { package.Id, package.Version, package.ContentHash })
+                .Select(static package => new { package.Id, package.Version, package.ContentHash, package.ArchiveSha512, package.ExtractedFilesSha256 }),
+            resolvedLocks = resolvedLocks.OrderBy(static item => item.TargetName, StringComparer.Ordinal)
+                .Select(static item => new { item.TargetName, item.Path, item.Sha256 })
         });
         using var algorithm = SHA256.Create();
         return PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(Encoding.UTF8.GetBytes(canonical)));

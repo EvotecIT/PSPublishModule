@@ -120,7 +120,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationProjectManifestService.ProjectContext context,
         PowerShellCompilationProjectArtifact artifact,
         PowerShellCompilationResolvedInput input,
-        IEnumerable<PowerShellCompilationCommandProviderContract> providers)
+        IEnumerable<PowerShellCompilationCommandProviderContract> providers,
+        string? nuGetPackageRoot = null)
     {
         return new PowerShellCompilationAnalyzer(providers).Analyze(
             input,
@@ -131,7 +132,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             context.Manifest.Resources.Exclude,
             context.Resolve(artifact.OutputDirectory),
             artifact.Target,
-            GetGeneratedOutputDirectories(context));
+            GetGeneratedOutputDirectories(context),
+            nuGetPackageRoot);
     }
 
     private static string[] GetGeneratedOutputDirectories(

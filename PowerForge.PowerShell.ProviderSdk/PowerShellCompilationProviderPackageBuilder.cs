@@ -74,11 +74,12 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 throw new InvalidOperationException($"Provider assembly package path '{assembly.PackagePath}' is unsafe.");
         }
 
-        request.Manifest.Assemblies = request.Assemblies
+        var assemblies = request.Assemblies
             .OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal)
             .Select(static assembly => PowerShellCompilationProviderPackageReader.InspectAssembly(assembly.SourcePath, assembly.PackagePath))
             .ToArray();
-        _ = new PowerShellCompilationProviderConformanceKit().Validate(request.Manifest);
+        var manifest = CreateCanonicalManifest(request.Manifest, assemblies);
+        _ = new PowerShellCompilationProviderConformanceKit().Validate(manifest);
         var directory = Path.GetDirectoryName(request.OutputPath);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
         var temporary = request.OutputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -87,9 +88,9 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
             {
-                AddText(archive, request.Manifest.PackageId + ".nuspec", CreateNuspec(request.Manifest));
+                AddText(archive, manifest.PackageId + ".nuspec", CreateNuspec(manifest));
                 AddText(archive, "[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"utf-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"json\" ContentType=\"application/json\"/><Default Extension=\"dll\" ContentType=\"application/octet\"/><Default Extension=\"nuspec\" ContentType=\"application/octet\"/></Types>");
-                AddText(archive, PowerShellCompilationProviderPackageReader.ManifestPath, SerializeManifest(request.Manifest));
+                AddText(archive, PowerShellCompilationProviderPackageReader.ManifestPath, SerializeManifest(manifest));
                 foreach (var assembly in request.Assemblies.OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal))
                     AddFile(archive, assembly.PackagePath, assembly.SourcePath);
             }
@@ -112,6 +113,81 @@ public sealed class PowerShellCompilationProviderPackageBuilder
         options.Converters.Add(new JsonStringEnumConverter());
         return JsonSerializer.Serialize(manifest, options);
     }
+
+    private static PowerShellCompilationProviderPackageManifest CreateCanonicalManifest(
+        PowerShellCompilationProviderPackageManifest source,
+        PowerShellCompilationProviderAssembly[] assemblies)
+        => new()
+        {
+            SchemaVersion = source.SchemaVersion,
+            ProviderAbiVersion = source.ProviderAbiVersion,
+            PackageId = source.PackageId,
+            PackageVersion = source.PackageVersion,
+            Publisher = source.Publisher,
+            LicenseExpression = source.LicenseExpression,
+            SemanticProfiles = (source.SemanticProfiles ?? Array.Empty<string>())
+                .OrderBy(static value => value, StringComparer.Ordinal)
+                .ToArray(),
+            Assemblies = assemblies,
+            Dependencies = (source.Dependencies ?? Array.Empty<PowerShellCompilationProviderDependency>())
+                .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
+                .ThenBy(static dependency => dependency.Version, StringComparer.Ordinal)
+                .ThenBy(static dependency => dependency.ContentHash, StringComparer.Ordinal)
+                .Select(static dependency => new PowerShellCompilationProviderDependency
+                {
+                    PackageId = dependency.PackageId,
+                    Version = dependency.Version,
+                    ContentHash = dependency.ContentHash
+                })
+                .ToArray(),
+            Providers = (source.Providers ?? Array.Empty<PowerShellCompilationCommandProviderContract>())
+                .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+                .ThenBy(static provider => provider.CommandName, StringComparer.Ordinal)
+                .ThenBy(static provider => provider.FeatureId, StringComparer.Ordinal)
+                .Select(CreateCanonicalProvider)
+                .ToArray()
+        };
+
+    private static PowerShellCompilationCommandProviderContract CreateCanonicalProvider(
+        PowerShellCompilationCommandProviderContract source)
+        => new()
+        {
+            SchemaVersion = source.SchemaVersion,
+            ProviderId = source.ProviderId,
+            ProviderVersion = source.ProviderVersion,
+            FeatureId = source.FeatureId,
+            Family = source.Family,
+            CommandName = source.CommandName,
+            ModuleNames = (source.ModuleNames ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            Aliases = (source.Aliases ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            Parameters = (source.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>())
+                .OrderBy(static parameter => parameter.Position)
+                .ThenBy(static parameter => parameter.Name, StringComparer.Ordinal)
+                .Select(static parameter => new PowerShellCompilationCommandParameterContract
+                {
+                    Name = parameter.Name,
+                    Aliases = (parameter.Aliases ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                    Position = parameter.Position
+                })
+                .ToArray(),
+            Output = source.Output,
+            Cardinality = source.Cardinality,
+            Stream = source.Stream,
+            Errors = source.Errors,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = source.Adapter.Operation,
+                SemanticProfile = source.Adapter.SemanticProfile,
+                RuntimeFree = source.Adapter.RuntimeFree,
+                AotCompatible = source.Adapter.AotCompatible,
+                Cancellation = source.Adapter.Cancellation,
+                Cleanup = source.Adapter.Cleanup,
+                Dependencies = (source.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray()
+            },
+            CompileTimeOnly = source.CompileTimeOnly,
+            MayImportSourceModules = source.MayImportSourceModules,
+            MayExecuteSource = source.MayExecuteSource
+        };
 
     private static string CreateNuspec(PowerShellCompilationProviderPackageManifest manifest)
     {

@@ -20,7 +20,9 @@ public sealed class PowerShellCompilationProjectManifestService
         var fullProjectPath = Path.GetFullPath(projectPath.Trim().Trim('"'));
         var projectRoot = Path.GetDirectoryName(fullProjectPath) ?? Directory.GetCurrentDirectory();
         var fullSourcePath = Path.GetFullPath(sourcePath.Trim().Trim('"'));
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullProjectPath, "Project manifest path traverses a symbolic link or junction.");
         PowerShellCompilationPathSafety.EnsureContained(projectRoot, fullSourcePath, "Project source must be contained by the project directory.");
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullSourcePath, "Project source traverses a symbolic link or junction.");
         if (!File.Exists(fullSourcePath) && !Directory.Exists(fullSourcePath))
             throw new FileNotFoundException("PowerShell compilation project source was not found.", fullSourcePath);
         var normalizedTarget = PowerShellCompilationTargetContractService.Normalize(target);
@@ -57,6 +59,7 @@ public sealed class PowerShellCompilationProjectManifestService
     public void Save(string projectPath, PowerShellCompilationProjectManifest manifest)
     {
         var fullPath = Path.GetFullPath(projectPath.Trim().Trim('"'));
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullPath, "Project manifest path traverses a symbolic link or junction.");
         var normalized = Normalize(fullPath, manifest, requireInputs: true);
         var parent = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
@@ -88,6 +91,8 @@ public sealed class PowerShellCompilationProjectManifestService
         manifest.SemanticProfileId = manifest.SemanticProfileId?.Trim() ?? string.Empty;
         _ = PowerShellCompilationSemanticOracleCatalog.Get(manifest.SemanticProfileId);
         var root = Path.GetDirectoryName(Path.GetFullPath(projectPath)) ?? Directory.GetCurrentDirectory();
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(projectPath, "Project manifest path traverses a symbolic link or junction.");
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(root, "Project root traverses a symbolic link or junction.");
         manifest.Sources = NormalizeRelativePaths(root, manifest.Sources, requireInputs, "source");
         if (manifest.Sources.Length == 0) throw new InvalidDataException("A PowerShell compilation project requires at least one source.");
         if (!string.IsNullOrWhiteSpace(manifest.EntryPoint))
@@ -136,6 +141,7 @@ public sealed class PowerShellCompilationProjectManifestService
             throw new InvalidDataException($"Project {label} path '{value}' must be relative.");
         var full = Path.GetFullPath(Path.Combine(root, trimmed.Replace('/', Path.DirectorySeparatorChar)));
         PowerShellCompilationPathSafety.EnsureContained(root, full, $"Project {label} path '{value}' escapes the project root.");
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(full, $"Project {label} path '{value}' traverses a symbolic link or junction.");
         if (requireExists && !File.Exists(full) && !Directory.Exists(full))
             throw new FileNotFoundException($"Project {label} path was not found.", full);
         return NormalizeRelative(root, full);
@@ -193,7 +199,13 @@ public sealed class PowerShellCompilationProjectManifestService
         internal string ProjectPath { get; }
         internal string Root { get; }
         internal PowerShellCompilationProjectManifest Manifest { get; }
-        internal string Resolve(string relative) => Path.GetFullPath(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)));
+        internal string Resolve(string relative)
+        {
+            var path = Path.GetFullPath(Path.Combine(Root, relative.Replace('/', Path.DirectorySeparatorChar)));
+            PowerShellCompilationPathSafety.EnsureContained(Root, path, $"Project path '{relative}' escapes the project root.");
+            PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(path, $"Project path '{relative}' traverses a symbolic link or junction.");
+            return path;
+        }
         internal string[] Sources => Manifest.Sources.Select(Resolve).ToArray();
         internal string? EntryPoint => string.IsNullOrWhiteSpace(Manifest.EntryPoint) ? null : Resolve(Manifest.EntryPoint!);
     }

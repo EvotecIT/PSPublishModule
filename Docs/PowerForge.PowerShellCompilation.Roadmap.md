@@ -1292,7 +1292,7 @@ Exit gate: **Complete.** A user can explain why a unit compiled, fell back, or f
 
 ## Milestone 18 — Establish versioned semantic oracles
 
-This is the current correctness gate. It may proceed before Milestone 16 because it strengthens the existing built-in compiler path without defining a third-party provider surface.
+This completed correctness gate strengthens both built-in and external-provider semantic paths without copying PowerShell's compiler architecture.
 
 - [x] Define immutable semantic-profile manifests for Windows PowerShell 5.1 and each supported PowerShell 7 behavior family. Record the exact host version/build, edition, OS, architecture, culture, experimental features, and upstream PowerShell commit or release identity used as evidence.
 - [x] Add one semantic-provenance record per promoted feature: PowerForge feature ID and contract version, official documentation/spec reference, pinned upstream source/test reference, observed host matrix, intentional divergences, and owning binder/IR/runtime-free helper.

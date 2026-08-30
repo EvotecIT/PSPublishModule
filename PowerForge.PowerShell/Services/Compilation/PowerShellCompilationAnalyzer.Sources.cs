@@ -31,7 +31,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
         string? outputDirectory = null)
-        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, null);
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, null, null, null);
 
     /// <summary>Analyzes the exact compilation graph and dependency lock for an explicit target contract.</summary>
     public PowerShellCompilationPlan Analyze(
@@ -43,7 +43,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
         PowerShellCompilationTargetContract? targetContract)
-        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, targetContract, null);
+        => Analyze(input, mode, targetFramework, resourceMode, includeResource, excludeResource, outputDirectory, targetContract, null, null);
 
     internal PowerShellCompilationPlan Analyze(
         PowerShellCompilationResolvedInput input,
@@ -54,7 +54,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
         PowerShellCompilationTargetContract? targetContract,
-        IEnumerable<string>? generatedOutputDirectories)
+        IEnumerable<string>? generatedOutputDirectories,
+        string? nuGetPackageRoot)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -108,7 +109,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 normalizedTargetFramework,
                 target.RuntimeIdentifier,
                 includeRuntimePack: target.ArtifactKind == PowerShellCompilationArtifactKind.Executable &&
-                                    target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent);
+                                    target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent,
+                nuGetPackageRoot);
         }
         var combined = new PowerShellCompilationPlan(
             plan.Mode,

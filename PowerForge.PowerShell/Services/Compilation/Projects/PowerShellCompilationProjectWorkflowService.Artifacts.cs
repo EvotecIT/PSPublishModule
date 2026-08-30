@@ -83,11 +83,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
-                var receipt = ReadBuildReceipt(context, artifact);
-                var path = receipt.ArtifactPath ?? throw new InvalidDataException("Build receipt has no artifact path.");
-                if (!File.Exists(path)) throw new FileNotFoundException("Built artifact is missing.", path);
-                TestArtifact(artifact, path);
-                results.Add(Pass(artifact, "Built artifact passed its direct execution, clean import, or CLR metadata test.", path, receipt.Manifest?.DependencyGraph?.LockSha256, receipt.Manifest?.ArtifactSha256));
+                var validated = ValidateBuildReceipt(context, artifact);
+                TestArtifact(artifact, validated.ArtifactPath);
+                var testEvidence = CreateTestEvidence(context, artifact, validated);
+                WriteJson(context.Resolve($".powerforge/test/{artifact.Name}.json"), testEvidence);
+                results.Add(Pass(artifact, "Integrity-validated artifact passed its direct execution, clean import, or CLR metadata test.", validated.ArtifactPath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
             }
             catch (Exception exception)
             {
@@ -106,15 +106,13 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
-                var receipt = ReadBuildReceipt(context, artifact);
-                if (!receipt.Succeeded || receipt.Manifest is null || string.IsNullOrWhiteSpace(receipt.ArtifactPath))
-                    throw new InvalidDataException("A successful build receipt is required before packing.");
-                var outputRoot = context.Resolve(artifact.OutputDirectory);
+                var validated = ValidateBuildReceipt(context, artifact);
+                var testEvidence = ReadTestEvidence(context, artifact, validated);
                 var packageRoot = context.Resolve(".powerforge/packages");
                 Directory.CreateDirectory(packageRoot);
                 var packagePath = Path.Combine(packageRoot, GetArtifactName(context.Manifest, artifact) + ".zip");
-                WriteDeterministicPackage(packagePath, outputRoot, context, artifact, receipt);
-                results.Add(Pass(artifact, "Qualified artifact archive includes target, lock, SBOM, provenance, and artifact evidence.", packagePath, receipt.Manifest.DependencyGraph?.LockSha256, receipt.Manifest.ArtifactSha256));
+                WriteDeterministicPackage(packagePath, context, artifact, validated, testEvidence);
+                results.Add(Pass(artifact, "Qualified tested artifact archive includes exact inventory, target, lock, SBOM, provenance, and test evidence.", packagePath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
             }
             catch (Exception exception)
             {
@@ -133,18 +131,19 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
-                var receipt = ReadBuildReceipt(context, artifact);
-                var manifest = receipt.Manifest ?? throw new InvalidDataException("Build receipt has no compiler manifest.");
+                var validated = ValidateBuildReceipt(context, artifact);
+                var testEvidence = ReadTestEvidence(context, artifact, validated);
+                var manifest = validated.Manifest;
                 var artifactSha256 = manifest.ArtifactSha256;
                 if (string.IsNullOrWhiteSpace(artifactSha256)) throw new InvalidDataException("Build receipt has no artifact identity.");
                 var packagePath = context.Resolve($".powerforge/packages/{GetArtifactName(context.Manifest, artifact)}.zip");
                 if (!File.Exists(packagePath)) throw new FileNotFoundException("Run project pack before install.", packagePath);
+                ValidateQualifiedPackage(packagePath, context, artifact, validated, testEvidence);
                 var installRoot = context.Resolve(
                     $".powerforge/i/{artifact.Target.ContractSha256.Substring(0, 16).ToLowerInvariant()}/{artifactSha256.Substring(0, 24).ToLowerInvariant()}");
-                var outputRoot = context.Resolve(artifact.OutputDirectory);
                 var primaryRelative = FrameworkCompatibility.GetRelativePath(
-                    outputRoot,
-                    receipt.ArtifactPath ?? throw new InvalidDataException("Build receipt has no primary artifact path.")).Replace('\\', '/');
+                    validated.OutputRoot,
+                    validated.ArtifactPath).Replace('\\', '/');
                 if (Directory.Exists(installRoot))
                     EnsureInstalledPackageMatches(packagePath, installRoot);
                 else
@@ -175,19 +174,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
-                var receipt = ReadBuildReceipt(context, artifact);
-                var manifest = receipt.Manifest ?? throw new InvalidDataException("Build receipt has no compiler manifest.");
-                PowerShellCompilationReproductionEvidenceBuilder.Validate(manifest);
-                var dependencyLock = ReadJson<PowerShellCompilationDependencyGraph>(context.Resolve(artifact.DependencyLock));
-                PowerShellCompilationDependencyLockHasher.EnsureValid(dependencyLock, artifact.Name);
-                if (!dependencyLock.LockSha256.Equals(manifest.DependencyGraph?.LockSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Built artifact dependency identity differs from the reviewed project lock.");
-                var artifactPath = receipt.ArtifactPath ?? throw new InvalidDataException("Build receipt has no primary artifact path.");
-                if (!File.Exists(artifactPath)) throw new FileNotFoundException("Primary built artifact is missing.", artifactPath);
-                var actualHash = PowerShellCompilationProjectManifestService.ComputeSha256(artifactPath);
-                if (!actualHash.Equals(manifest.ArtifactSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Primary built artifact differs from the compiler manifest hash.");
-                results.Add(Pass(artifact, "Locks, reproduction evidence, and primary artifact integrity are valid.", artifactPath, dependencyLock.LockSha256, actualHash));
+                var validated = ValidateBuildReceipt(context, artifact);
+                results.Add(Pass(artifact, "Target, locks, reproduction evidence, and complete artifact-set integrity are valid.", validated.ArtifactPath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
             }
             catch (Exception exception)
             {
@@ -203,13 +191,19 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var path = context.Resolve(".powerforge/environment/environment.json");
         if (!File.Exists(path)) throw new FileNotFoundException("Run project restore before build.", path);
         var environment = ReadJson<PowerShellCompilationProjectEnvironment>(path);
+        if (environment.SchemaVersion != 2)
+            throw new InvalidDataException($"Unsupported isolated environment schema {environment.SchemaVersion}; run restore again.");
         var projectSha = PowerShellCompilationProjectManifestService.ComputeSha256(context.ProjectPath);
         if (!environment.ProjectSha256.Equals(projectSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The isolated environment belongs to a different project-manifest revision; run restore again.");
+        var expectedPackageRoot = context.Resolve(".powerforge/environment/packages");
+        if (!PowerShellCompilationPathSafety.PathEquals(environment.PackageRoot, expectedPackageRoot))
+            throw new InvalidDataException("The isolated environment package root differs from the project-owned path.");
         if (!Directory.Exists(environment.PackageRoot))
             throw new DirectoryNotFoundException($"The isolated project package root is missing: {environment.PackageRoot}");
         environment.DependencyLockSha256 ??= Array.Empty<string>();
         environment.Packages ??= Array.Empty<PowerShellCompilationProjectPackage>();
+        environment.ResolvedLocks ??= Array.Empty<PowerShellCompilationProjectResolvedLock>();
         if (environment.DependencyLockSha256.Length == 0)
             throw new InvalidDataException("The isolated environment records no reviewed dependency locks.");
         foreach (var lockSha256 in environment.DependencyLockSha256)
@@ -219,11 +213,24 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 throw new InvalidDataException("The isolated environment contains an invalid dependency-lock identity.");
         }
         foreach (var package in environment.Packages)
-            VerifyPackage(environment.PackageRoot, package);
+            _ = VerifyPackage(environment.PackageRoot, package);
+        if (environment.ResolvedLocks.Length == 0)
+            throw new InvalidDataException("The isolated environment records no exact NuGet transitive-closure locks.");
+        foreach (var resolvedLock in environment.ResolvedLocks)
+        {
+            if (!context.Manifest.Artifacts.Any(artifact => artifact.Name.Equals(resolvedLock.TargetName, StringComparison.Ordinal)))
+                throw new InvalidDataException($"The isolated environment references unknown target '{resolvedLock.TargetName}'.");
+            var resolvedPath = context.Resolve(resolvedLock.Path);
+            if (!File.Exists(resolvedPath)) throw new FileNotFoundException("A resolved NuGet closure lock is missing.", resolvedPath);
+            var actual = PowerShellCompilationProjectManifestService.ComputeSha256(resolvedPath);
+            if (!actual.Equals(resolvedLock.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Resolved NuGet closure lock for '{resolvedLock.TargetName}' differs from environment evidence.");
+        }
         var expectedEnvironmentSha = ComputeEnvironmentSha256(
             environment.ProjectSha256,
             environment.DependencyLockSha256,
-            environment.Packages);
+            environment.Packages,
+            environment.ResolvedLocks);
         if (!environment.EnvironmentSha256.Equals(expectedEnvironmentSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The isolated environment evidence differs from its recorded content identity; run restore again.");
         return environment;
@@ -365,11 +372,12 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 
     private static void WriteDeterministicPackage(
         string packagePath,
-        string outputRoot,
         PowerShellCompilationProjectManifestService.ProjectContext context,
         PowerShellCompilationProjectArtifact artifact,
-        PowerShellCompilationBuildResult receipt)
+        ValidatedProjectBuild validated,
+        PowerShellCompilationProjectTestEvidence testEvidence)
     {
+        var outputRoot = validated.OutputRoot;
         if (!Directory.Exists(outputRoot)) throw new DirectoryNotFoundException($"Artifact output is missing: {outputRoot}");
         var temporary = packagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -378,6 +386,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
             {
                 foreach (var file in Directory.EnumerateFiles(outputRoot, "*", SearchOption.AllDirectories)
+                             .Where(path => IsArtifactPayloadFile(path, context, artifact))
                              .OrderBy(path => FrameworkCompatibility.GetRelativePath(outputRoot, path), StringComparer.Ordinal))
                 {
                     PowerShellCompilationPathSafety.EnsureNoLinks(outputRoot, file, "Artifact package input traverses a symbolic link or junction.");
@@ -388,23 +397,13 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     using var output = entry.Open();
                     input.CopyTo(output);
                 }
-                var descriptor = new
-                {
-                    schemaVersion = 1,
-                    project = context.Manifest.Name,
-                    semanticProfile = context.Manifest.SemanticProfileId,
-                    targetName = artifact.Name,
-                    target = artifact.Target,
-                    dependencyLockSha256 = receipt.Manifest!.DependencyGraph?.LockSha256,
-                    providerLockSha256 = receipt.Manifest.ProviderLock?.LockSha256,
-                    publicAbiSha256 = receipt.Manifest.PublicAbi?.Sha256,
-                    artifactSha256 = receipt.Manifest.ArtifactSha256
-                };
+                var descriptor = CreatePackageDescriptor(context, artifact, validated, testEvidence);
                 var descriptorEntry = archive.CreateEntry("powerforge-package.json", CompressionLevel.Optimal);
                 descriptorEntry.LastWriteTime = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
                 using var writer = new StreamWriter(descriptorEntry.Open(), new UTF8Encoding(false));
                 writer.Write(JsonSerializer.Serialize(descriptor, PowerShellCompilationProjectManifestService.JsonOptions));
             }
+            ValidateQualifiedPackage(temporary, context, artifact, validated, testEvidence);
             if (File.Exists(packagePath)) File.Delete(packagePath);
             File.Move(temporary, packagePath);
         }

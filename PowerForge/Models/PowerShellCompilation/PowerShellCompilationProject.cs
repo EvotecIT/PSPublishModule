@@ -79,7 +79,7 @@ public sealed class PowerShellCompilationProjectArtifact
 public sealed class PowerShellCompilationProjectEnvironment
 {
     /// <summary>Environment schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>SHA-256 over the portable project manifest.</summary>
     public string ProjectSha256 { get; set; } = string.Empty;
@@ -92,6 +92,9 @@ public sealed class PowerShellCompilationProjectEnvironment
 
     /// <summary>Exact package identities verified in the isolated root.</summary>
     public PowerShellCompilationProjectPackage[] Packages { get; set; } = Array.Empty<PowerShellCompilationProjectPackage>();
+
+    /// <summary>Exact NuGet transitive-closure locks consumed for the selected targets.</summary>
+    public PowerShellCompilationProjectResolvedLock[] ResolvedLocks { get; set; } = Array.Empty<PowerShellCompilationProjectResolvedLock>();
 
     /// <summary>Reviewed dependency-lock identities acquired into this environment.</summary>
     public string[] DependencyLockSha256 { get; set; } = Array.Empty<string>();
@@ -111,6 +114,25 @@ public sealed class PowerShellCompilationProjectPackage
 
     /// <summary>NuGet SHA-512 content identity.</summary>
     public string ContentHash { get; set; } = string.Empty;
+
+    /// <summary>SHA-512 of the exact downloaded nupkg bytes in the isolated root.</summary>
+    public string ArchiveSha512 { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 over the complete extracted package payload consumed from the isolated root.</summary>
+    public string ExtractedFilesSha256 { get; set; } = string.Empty;
+}
+
+/// <summary>One target's complete NuGet transitive-closure lock.</summary>
+public sealed class PowerShellCompilationProjectResolvedLock
+{
+    /// <summary>Project-local target identity.</summary>
+    public string TargetName { get; set; } = string.Empty;
+
+    /// <summary>Project-relative packages.lock.json path.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 over the exact lock bytes consumed by restore.</summary>
+    public string Sha256 { get; set; } = string.Empty;
 }
 
 /// <summary>Result for one project workflow invocation.</summary>
