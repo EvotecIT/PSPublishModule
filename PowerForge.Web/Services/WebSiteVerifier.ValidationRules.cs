@@ -552,14 +552,15 @@ public static partial class WebSiteVerifier
             if (string.IsNullOrWhiteSpace(name) || values is null)
                 return;
 
-            if (!target.TryGetValue(name, out var terms))
-            {
-                terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                target[name] = terms;
-            }
-
             foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
+            {
+                if (!target.TryGetValue(name, out var terms))
+                {
+                    terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    target[name] = terms;
+                }
                 terms.Add(value.Trim());
+            }
         }
 
         AddValues(resolved, "tags", matter.Tags);

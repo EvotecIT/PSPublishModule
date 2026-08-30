@@ -3,6 +3,45 @@ using PowerForge.Web;
 public partial class WebSiteVerifierTests
 {
     [Fact]
+    public void Verify_DoesNotWarnAboutEmptyImplicitTaxonomies()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-empty-taxonomies-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var content = Path.Combine(root, "content");
+            Directory.CreateDirectory(content);
+            File.WriteAllText(Path.Combine(content, "index.md"), "---\ntitle: Home\nslug: index\n---\n\nHome");
+            var spec = new SiteSpec
+            {
+                Name = "Empty taxonomy test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections =
+                [
+                    new CollectionSpec { Name = "pages", Input = "content", Output = "/" }
+                ]
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Content uses tags", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Content uses categories", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_UsesMappedStaticHtmlFilesAsNavigationRoutes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-routes-" + Guid.NewGuid().ToString("N"));
