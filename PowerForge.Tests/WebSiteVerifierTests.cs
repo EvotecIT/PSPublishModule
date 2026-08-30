@@ -148,10 +148,17 @@ public partial class WebSiteVerifierTests
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<h1>Home</h1>");
             File.WriteAllText(Path.Combine(root, "apps.html"), "<h1>Apps</h1>");
+            var theme = Path.Combine(root, "themes", "static-theme");
+            Directory.CreateDirectory(Path.Combine(theme, "assets"));
+            File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"static-theme\",\"assetsPath\":\"./assets\"}");
+            File.WriteAllText(Path.Combine(theme, "assets", "brand.svg"), "<svg/>");
             var spec = new SiteSpec
             {
                 Name = "Static-only Navigation Test",
                 BaseUrl = "https://example.test",
+                DefaultTheme = "static-theme",
+                ThemesRoot = "themes",
+                DataRoot = "./payload",
                 StaticAssets =
                 [
                     new StaticAssetSpec { Source = "index.html", Destination = "./" },
@@ -168,7 +175,9 @@ public partial class WebSiteVerifierTests
                             Items =
                             [
                                 new MenuItemSpec { Title = "Home", Url = "/" },
-                                new MenuItemSpec { Title = "Apps", Url = "/apps.html" }
+                                new MenuItemSpec { Title = "Apps", Url = "/apps.html" },
+                                new MenuItemSpec { Title = "Theme", Url = "/themes/static-theme/assets/brand.svg" },
+                                new MenuItemSpec { Title = "Navigation data", Url = "/payload/site-nav.json" }
                             ]
                         }
                     ]
@@ -177,12 +186,23 @@ public partial class WebSiteVerifierTests
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            Assert.True(File.Exists(Path.Combine(outputRoot, "themes", "static-theme", "assets", "brand.svg")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "payload", "site-nav.json")));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("points to '/'", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/themes/static-theme/assets/brand.svg", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/payload/site-nav.json", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
             spec.StaticAssets = spec.StaticAssets.Where(mapping => mapping.Source != "index.html").ToArray();
@@ -549,38 +569,49 @@ public partial class WebSiteVerifierTests
         try
         {
             var blog = Path.Combine(root, "content", "blog");
-            var pages = Path.Combine(root, "content", "pages");
+            var pages = Path.Combine(root, "content", "pages", "404");
+            var feeds = Path.Combine(root, "content", "feeds");
             var theme = Path.Combine(root, "themes", "route-theme");
             Directory.CreateDirectory(blog);
             Directory.CreateDirectory(pages);
+            Directory.CreateDirectory(feeds);
             Directory.CreateDirectory(Path.Combine(theme, "assets"));
             File.WriteAllText(Path.Combine(blog, "post.md"), "---\ntitle: Post\n---\n\nSearchable post");
-            File.WriteAllText(Path.Combine(pages, "404.md"), "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
-            File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"route-theme\",\"assetsPath\":\"assets\"}");
+            File.WriteAllText(Path.Combine(pages, "index.md"), "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
+            File.WriteAllText(Path.Combine(pages, "manual.pdf"), "not found help");
+            File.WriteAllText(Path.Combine(feeds, "entry.md"), "---\ntitle: Feed entry\n---\n\nFeed entry");
+            File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"route-theme\",\"assetsPath\":\"./assets\"}");
             File.WriteAllText(Path.Combine(theme, "assets", "brand.svg"), "<svg/>");
             File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
 
             var expectedRoutes = new[]
             {
                 "/blog/",
+                "/blog/index.json",
                 "/404.html",
+                "/manual.pdf",
                 "/search/index.json",
                 "/search/manifest.json",
                 "/search/en/index.json",
                 "/search/collections/blog/index.json",
-                "/themes/route-theme/assets/brand.svg"
+                "/themes/route-theme/assets/brand.svg",
+                "/payload/site-nav.json",
+                "/feed-only/entry/index.json"
             };
+            const string missingHtmlRoute = "/feed-only/entry/";
             var spec = new SiteSpec
             {
                 Name = "Generated routes",
                 BaseUrl = "https://example.test",
                 DefaultTheme = "route-theme",
                 ThemesRoot = "themes",
+                DataRoot = "./payload",
                 Features = ["search"],
                 Collections =
                 [
-                    new CollectionSpec { Name = "blog", Input = "content/blog", Output = "/blog", AutoGenerateSectionIndex = true },
-                    new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" }
+                    new CollectionSpec { Name = "blog", Input = "content/blog", Output = "/blog", AutoGenerateSectionIndex = true, Outputs = ["html", "json"] },
+                    new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" },
+                    new CollectionSpec { Name = "feeds", Input = "content/feeds", Output = "/feed-only", Outputs = ["json"] }
                 ],
                 StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
                 Navigation = new NavigationSpec
@@ -591,7 +622,10 @@ public partial class WebSiteVerifierTests
                         new MenuSpec
                         {
                             Name = "main",
-                            Items = expectedRoutes.Select(route => new MenuItemSpec { Title = route, Url = route }).ToArray()
+                            Items = expectedRoutes
+                                .Append(missingHtmlRoute)
+                                .Select(route => new MenuItemSpec { Title = route, Url = route })
+                                .ToArray()
                         }
                     ]
                 }
@@ -599,7 +633,10 @@ public partial class WebSiteVerifierTests
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
 
             Assert.True(result.Success);
             foreach (var route in expectedRoutes)
@@ -608,6 +645,27 @@ public partial class WebSiteVerifierTests
                     warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
                     warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             }
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains($"points to '{missingHtmlRoute}'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            foreach (var relativePath in new[]
+                     {
+                         Path.Combine("blog", "index.html"),
+                         Path.Combine("blog", "index.json"),
+                         "404.html",
+                         "manual.pdf",
+                         Path.Combine("search", "index.json"),
+                         Path.Combine("search", "manifest.json"),
+                         Path.Combine("search", "en", "index.json"),
+                         Path.Combine("search", "collections", "blog", "index.json"),
+                         Path.Combine("themes", "route-theme", "assets", "brand.svg"),
+                         Path.Combine("payload", "site-nav.json"),
+                         Path.Combine("feed-only", "entry", "index.json")
+                     })
+            {
+                Assert.True(File.Exists(Path.Combine(outputRoot, relativePath)), $"Expected generated file '{relativePath}'.");
+            }
+            Assert.False(File.Exists(Path.Combine(outputRoot, "feed-only", "entry", "index.html")));
         }
         finally
         {

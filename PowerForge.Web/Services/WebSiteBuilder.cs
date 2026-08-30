@@ -370,7 +370,14 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(entryThemeName))
                 entryThemeName = spec.DefaultTheme ?? "theme";
 
-            mappings.Add((source, Path.Combine(outputThemesFolder, entryThemeName, assetsDir)));
+            var destination = Path.Combine(outputThemesFolder, entryThemeName, assetsDir);
+            if (!TryNormalizeRelativeOutputPath(destination, out var normalizedDestination))
+            {
+                Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
+                continue;
+            }
+
+            mappings.Add((source, normalizedDestination));
         }
 
         return mappings;
@@ -623,6 +630,28 @@ public static partial class WebSiteBuilder
             return true;
 
         return full.StartsWith(root + Path.DirectorySeparatorChar, comparison);
+    }
+
+    internal static bool TryNormalizeRelativeOutputPath(string relativePath, out string normalizedPath)
+    {
+        normalizedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+            return false;
+
+        try
+        {
+            var projectionRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "powerforge-output-projection"));
+            var candidate = Path.GetFullPath(Path.Combine(projectionRoot, relativePath));
+            if (!IsPathWithinRoot(NormalizeRootPathForSink(projectionRoot), candidate))
+                return false;
+
+            normalizedPath = Path.GetRelativePath(projectionRoot, candidate);
+            return !string.IsNullOrWhiteSpace(normalizedPath) && normalizedPath != ".";
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
 }
