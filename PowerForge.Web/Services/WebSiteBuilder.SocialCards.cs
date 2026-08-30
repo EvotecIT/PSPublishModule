@@ -145,9 +145,9 @@ public static partial class WebSiteBuilder
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
         var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
         var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
-        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme));
+        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme), rootPath);
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
-            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
+            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate, rootPath)
             : string.Empty;
         var metrics = ResolveSocialCardMetrics(spec, item, cardTheme);
         var themeTokens = MergeSocialCardThemeTokens(ResolveSocialCardSiteThemeTokens(spec, rootPath), cardTheme?.Tokens);
@@ -914,7 +914,7 @@ public static partial class WebSiteBuilder
         return string.Equals(styleKey, "blog", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate)
+    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate, string? rootPath = null)
     {
         if (string.IsNullOrWhiteSpace(candidate))
             return string.Empty;
@@ -926,7 +926,7 @@ public static partial class WebSiteBuilder
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return trimmed;
 
-        var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed);
+        var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed, rootPath);
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
             return string.Empty;
 
@@ -947,10 +947,10 @@ public static partial class WebSiteBuilder
         return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(sourcePath))}";
     }
 
-    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate)
+    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate, string? rootPath = null)
     {
         var sourceDir = Path.GetDirectoryName(item.SourcePath);
-        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir);
+        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir, rootPath);
 
         if (Path.IsPathRooted(candidate) && File.Exists(candidate))
         {
@@ -993,10 +993,10 @@ public static partial class WebSiteBuilder
         return string.Empty;
     }
 
-    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir)
+    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir, string? explicitRootPath = null)
     {
         var roots = new List<string>();
-        var rootPath = BuildRootPathScope.Value;
+        var rootPath = string.IsNullOrWhiteSpace(explicitRootPath) ? BuildRootPathScope.Value : explicitRootPath;
         if (!string.IsNullOrWhiteSpace(rootPath))
         {
             roots.Add(Path.GetFullPath(rootPath));

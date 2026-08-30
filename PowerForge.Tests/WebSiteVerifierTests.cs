@@ -2837,4 +2837,111 @@ public partial class WebSiteVerifierTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Verify_UsesSiteRootAssetsForGeneratedSocialCardRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-root-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\ndescription: Root asset card.\nslug: index\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "brand.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"10\" height=\"10\"/></svg>");
+            var spec = new SiteSpec
+            {
+                Name = "Root asset social route",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "brand.svg", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true, GeneratedCardLogo = "/brand.svg" },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var item = new ContentItem { SourcePath = Path.Combine(root, "content", "index.md"), Collection = "pages", OutputPath = "/", Title = "Home", Description = "Root asset card.", Slug = "index", Kind = PageKind.Home, Meta = new Dictionary<string, object?>() };
+            var withoutRoot = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item);
+            var withRoot = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, root);
+            Assert.NotEqual(withoutRoot, withRoot);
+            spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Built card", Url = withRoot }, new MenuItemSpec { Title = "Missing asset hash", Url = withoutRoot }] }];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            var rootAssetWarnings = result.Warnings.Where(warning => warning.Contains($"points to '{withRoot}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
+            Assert.True(rootAssetWarnings.Length == 0, string.Join(Environment.NewLine, result.Warnings));
+            Assert.Contains(result.Warnings, warning => warning.Contains($"points to '{withoutRoot}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void Verify_DoesNotProjectSocialCardsForNonHtmlOnlyContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-json-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "entry.md"), "---\ntitle: Entry\n---\nEntry");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "JSON-only social route",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/data", Outputs = ["json"] }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var item = new ContentItem { SourcePath = Path.Combine(root, "content", "entry.md"), Collection = "pages", OutputPath = "/data/entry", Title = "Entry", Slug = "entry", Kind = PageKind.Page, Outputs = ["json"], Meta = new Dictionary<string, object?>() };
+            var nonexistentCard = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, root);
+            spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Nonexistent card", Url = nonexistentCard }] }];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Warnings.Any(warning => warning.Contains($"points to '{nonexistentCard}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void Verify_ClearsInheritedCanonicalForFallbackSocialCardRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-fallback-canonical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "en"));
+        try
+        {
+            var sourcePath = Path.Combine(root, "content", "en", "index.md");
+            File.WriteAllText(sourcePath, "---\ntitle: Home\ndescription: Localized fallback card.\nslug: index\nlanguage: en\ntranslation_key: home\ncanonical: https://canonical.example.test/home/\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Fallback social route",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec { Enabled = true, DefaultLanguage = "en", DetectFromPath = true, FallbackToDefaultLanguage = true, MaterializeFallbackPages = true, Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }] },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content/en", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var sourceItem = new ContentItem { SourcePath = sourcePath, Collection = "pages", OutputPath = "/", Language = "en", TranslationKey = "home", Title = "Home", Description = "Localized fallback card.", Slug = "index", Kind = PageKind.Home, Canonical = "https://canonical.example.test/home/", Meta = new Dictionary<string, object?>() };
+            var fallbackItem = WebSiteBuilder.CloneFallbackItem(spec, sourceItem, "/pl/", "pl");
+            var inheritedCanonicalItem = WebSiteBuilder.CloneContentItem(sourceItem);
+            inheritedCanonicalItem.OutputPath = "/pl/";
+            inheritedCanonicalItem.Language = "pl";
+            var builtCard = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, fallbackItem, root);
+            var inheritedCanonicalCard = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, inheritedCanonicalItem, root);
+            Assert.NotEqual(builtCard, inheritedCanonicalCard);
+            spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Fallback card", Url = builtCard }, new MenuItemSpec { Title = "Inherited canonical card", Url = inheritedCanonicalCard }] }];
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            var fallbackWarnings = result.Warnings.Where(warning => warning.Contains($"points to '{builtCard}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
+            Assert.True(fallbackWarnings.Length == 0, string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
 }

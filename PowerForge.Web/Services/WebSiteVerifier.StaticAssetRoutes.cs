@@ -197,6 +197,8 @@ public static partial class WebSiteVerifier
             item.TranslationKey = route.TranslationKey;
             item.Kind = route.Kind;
             item.Outputs = route.Outputs ?? Array.Empty<string>();
+            if (!WebSiteBuilder.ResolveOutputFormats(spec, item).Any(EmitsIndexHtml))
+                continue;
             var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, rootPath);
             if (!string.IsNullOrWhiteSpace(cardRoute))
                 yield return cardRoute;
@@ -498,7 +500,10 @@ public static partial class WebSiteVerifier
                 {
                     Route = fallbackRoute,
                     Language = language.Code,
-                    Draft = false
+                    Draft = false,
+                    SocialCardItem = source.SocialCardItem is null
+                        ? null
+                        : WebSiteBuilder.CloneFallbackItem(spec, source.SocialCardItem, fallbackRoute, language.Code)
                 };
             }
         }

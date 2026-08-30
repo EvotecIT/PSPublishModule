@@ -401,6 +401,23 @@ public static partial class WebSiteBuilder
         };
     }
 
+    internal static ContentItem CloneFallbackItem(
+        SiteSpec spec,
+        ContentItem source,
+        string outputPath,
+        string targetLanguage)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(source);
+        var localization = ResolveLocalizationConfig(spec);
+        return CloneFallbackItem(
+            source,
+            outputPath,
+            targetLanguage,
+            localization.DefaultLanguage,
+            ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage));
+    }
+
     private static string RebaseFallbackPageResourceUrls(
         string html,
         string sourceRoute,
