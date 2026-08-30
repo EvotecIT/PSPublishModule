@@ -11,7 +11,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string[] compilationSourcePaths,
         PowerShellCompilationPlan plan,
         PowerShellCompilationDependency[] dependencyPlan,
-        PowerShellCompilationCommandProviderContract[] commandProviders)
+        PowerShellCompilationCommandProviderContract[] commandProviders,
+        string providerProjectReferences)
     {
         var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileForBinaryModule(
             compilationSourcePaths,
@@ -53,6 +54,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
                 .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework))
                 .Replace("{{SECURITY_XML_VERSION}}", GetSecurityXmlVersion(spec.TargetFramework))
+                .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences)
                 .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
             new UTF8Encoding(false));
         var compiledMethods = typed.Methods.Where(static method => method.Lifecycle is null).ToArray();

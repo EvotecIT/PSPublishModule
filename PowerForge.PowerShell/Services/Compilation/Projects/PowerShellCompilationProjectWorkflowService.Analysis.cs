@@ -158,7 +158,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationProjectManifestService.ProjectContext context)
         => new PowerShellCompilationProviderPackageReader().Resolve(
             context.Manifest.ProviderPackages.Select(path => new PowerShellCompilationProviderPackageReference(context.Resolve(path))),
-            context.Manifest.ProviderTrust);
+            context.Manifest.ProviderTrust,
+            context.Manifest.SemanticProfileId);
 
     private static PowerShellCompilationProjectArtifact[] SelectArtifacts(
         PowerShellCompilationProjectManifestService.ProjectContext context,

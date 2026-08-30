@@ -512,8 +512,32 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             if (IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
                 continue;
             if (!locked.TryGetValue(assembly.Identity.StableKey, out var candidates))
-                throw new InvalidOperationException(
-                    $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' is absent from the reviewed dependency graph.");
+            {
+                var providerCandidates = (request.ProviderLock?.Packages ?? Array.Empty<PowerShellCompilationProviderPackageLockEntry>())
+                    .SelectMany(static package => package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
+                    .Where(candidate =>
+                        candidate.AssemblyName.Equals(assembly.Identity.Name, StringComparison.OrdinalIgnoreCase) &&
+                        candidate.AssemblyVersion.Equals(assembly.Identity.Version.ToString(), StringComparison.Ordinal) &&
+                        candidate.PublicKeyToken.Equals(assembly.Identity.PublicKeyToken, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (providerCandidates.Length == 0)
+                    throw new InvalidOperationException(
+                        $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' is absent from the reviewed dependency graph and provider lock.");
+                if (!providerCandidates.Any(candidate => candidate.Sha256.Equals(assembly.ContentSha256, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException(
+                        $"Strict runtime-free delivered provider dependency '{assembly.Identity.DisplayName}' does not match its reviewed provider-lock SHA-256.");
+                result.DeliveredDependencies.Add(new PowerShellCompilationDeliveredDependency
+                {
+                    Identity = assembly.Identity.DisplayName,
+                    DeliveredSha256 = assembly.ContentSha256,
+                    ReviewedInputSha256 = providerCandidates.Select(static candidate => candidate.Sha256)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase)
+                        .ToArray(),
+                    Derivation = "ExactProviderLock"
+                });
+                continue;
+            }
             var contentHashes = candidates.Select(static node => node.Identity.Sha256)
                 .Where(static hash => !string.IsNullOrWhiteSpace(hash))
                 .Distinct(StringComparer.OrdinalIgnoreCase)

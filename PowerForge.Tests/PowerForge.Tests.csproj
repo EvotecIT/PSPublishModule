@@ -23,6 +23,7 @@
     <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj" />
     <ProjectReference Include="..\PowerForge.Web.Cli\PowerForge.Web.Cli.csproj" />
     <ProjectReference Include="..\PowerForge.Cli\PowerForge.Cli.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationProviderRuntimeFixture\PowerShellCompilationProviderRuntimeFixture.csproj" />
   </ItemGroup>
 
   <ItemGroup>

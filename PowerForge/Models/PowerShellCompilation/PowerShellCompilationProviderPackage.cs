@@ -6,7 +6,20 @@ namespace PowerForge;
 public static class PowerShellCompilationProviderAbi
 {
     /// <summary>Current provider package ABI version.</summary>
-    public const string CurrentVersion = "1";
+    public const string CurrentVersion = "2";
+}
+
+/// <summary>One validated provider assembly available to generated projects but never loaded by the compiler.</summary>
+public sealed class PowerShellCompilationResolvedProviderAssembly
+{
+    /// <summary>Provider package identity.</summary>
+    public string PackageId { get; set; } = string.Empty;
+
+    /// <summary>Full source package path.</summary>
+    public string PackagePath { get; set; } = string.Empty;
+
+    /// <summary>Locked package-relative assembly evidence.</summary>
+    public PowerShellCompilationProviderAssembly Assembly { get; set; } = new();
 }
 
 /// <summary>One managed assembly delivered by a provider package.</summary>
@@ -48,7 +61,7 @@ public sealed class PowerShellCompilationProviderDependency
 public sealed class PowerShellCompilationProviderPackageManifest
 {
     /// <summary>Provider-package manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>PowerForge provider ABI version.</summary>
     public string ProviderAbiVersion { get; set; } = PowerShellCompilationProviderAbi.CurrentVersion;
@@ -67,6 +80,9 @@ public sealed class PowerShellCompilationProviderPackageManifest
 
     /// <summary>Semantic profiles accepted by this package.</summary>
     public string[] SemanticProfiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Named PowerShell source semantic profiles for which these contracts are valid.</summary>
+    public string[] SourceSemanticProfiles { get; set; } = Array.Empty<string>();
 
     /// <summary>Managed provider assemblies carried by the package.</summary>
     public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
@@ -165,7 +181,10 @@ public sealed class PowerShellCompilationProviderPackageLockEntry
 public sealed class PowerShellCompilationProviderLock
 {
     /// <summary>Provider-lock schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+
+    /// <summary>Exact PowerShell source semantic profile used to select this provider set.</summary>
+    public string SemanticProfileId { get; set; } = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
 
     /// <summary>Locked provider packages ordered by package identity.</summary>
     public PowerShellCompilationProviderPackageLockEntry[] Packages { get; set; } = Array.Empty<PowerShellCompilationProviderPackageLockEntry>();
@@ -182,4 +201,7 @@ public sealed class PowerShellCompilationProviderResolution
 
     /// <summary>Deterministic trust lock.</summary>
     public PowerShellCompilationProviderLock Lock { get; set; } = new();
+
+    /// <summary>Validated runtime assemblies to extract into generated projects without loading them in the compiler.</summary>
+    public PowerShellCompilationResolvedProviderAssembly[] RuntimeAssemblies { get; set; } = Array.Empty<PowerShellCompilationResolvedProviderAssembly>();
 }

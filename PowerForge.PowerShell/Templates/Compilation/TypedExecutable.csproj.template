@@ -19,4 +19,7 @@
     <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
     <TreatWarningsAsErrors Condition="'$(PublishTrimmed)' == 'true' or '$(PublishAot)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    {{PROVIDER_REFERENCES}}
+  </ItemGroup>
 </Project>

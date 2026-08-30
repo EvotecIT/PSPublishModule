@@ -2,10 +2,13 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Xml;
+using System.Xml.Linq;
 using NuGet.Packaging;
 using NuGet.Packaging.Signing;
 
@@ -37,7 +40,8 @@ public sealed class PowerShellCompilationProviderPackageReader
     /// <summary>Resolves explicit provider packages and applies ABI, integrity, and allow/deny policy.</summary>
     public PowerShellCompilationProviderResolution Resolve(
         IEnumerable<PowerShellCompilationProviderPackageReference> packageReferences,
-        PowerShellCompilationProviderTrustPolicy? trustPolicy = null)
+        PowerShellCompilationProviderTrustPolicy? trustPolicy = null,
+        string? semanticProfileId = null)
     {
         if (packageReferences is null) throw new ArgumentNullException(nameof(packageReferences));
         var references = packageReferences
@@ -49,18 +53,30 @@ public sealed class PowerShellCompilationProviderPackageReader
             throw new InvalidOperationException($"Provider package '{duplicate.Key}' was selected more than once.");
 
         var policy = trustPolicy ?? new PowerShellCompilationProviderTrustPolicy();
+        var semanticProfile = PowerShellCompilationSemanticOracleCatalog.Get(
+            string.IsNullOrWhiteSpace(semanticProfileId)
+                ? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+                : semanticProfileId!.Trim()).ProfileId;
         var packages = new List<PowerShellCompilationProviderPackageLockEntry>();
         var providers = new List<PowerShellCompilationCommandProviderContract>();
+        var runtimeAssemblies = new List<PowerShellCompilationResolvedProviderAssembly>();
         foreach (var reference in references)
         {
-            var package = Read(reference.Path, policy);
+            var package = Read(reference.Path, policy, semanticProfile);
             packages.Add(package.Lock);
             providers.AddRange(package.Providers);
+            runtimeAssemblies.AddRange(package.RuntimeAssemblies);
         }
 
         EnsureUniqueProviders(providers);
+        var duplicateAssembly = runtimeAssemblies
+            .GroupBy(static assembly => assembly.Assembly.AssemblyName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateAssembly is not null)
+            throw new InvalidOperationException($"Provider assembly identity '{duplicateAssembly.Key}' is supplied by more than one package assembly.");
         var providerLock = new PowerShellCompilationProviderLock
         {
+            SemanticProfileId = semanticProfile,
             Packages = packages
                 .OrderBy(static package => package.PackageId, StringComparer.Ordinal)
                 .ThenBy(static package => package.PackageVersion, StringComparer.Ordinal)
@@ -70,7 +86,11 @@ public sealed class PowerShellCompilationProviderPackageReader
         return new PowerShellCompilationProviderResolution
         {
             Providers = providers.OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal).ToArray(),
-            Lock = providerLock
+            Lock = providerLock,
+            RuntimeAssemblies = runtimeAssemblies
+                .OrderBy(static assembly => assembly.PackageId, StringComparer.Ordinal)
+                .ThenBy(static assembly => assembly.Assembly.Path, StringComparer.Ordinal)
+                .ToArray()
         };
     }
 
@@ -81,6 +101,7 @@ public sealed class PowerShellCompilationProviderPackageReader
         var canonical = new
         {
             providerLock.SchemaVersion,
+            providerLock.SemanticProfileId,
             Packages = (providerLock.Packages ?? Array.Empty<PowerShellCompilationProviderPackageLockEntry>())
                 .OrderBy(static package => package.PackageId, StringComparer.Ordinal)
                 .ThenBy(static package => package.PackageVersion, StringComparer.Ordinal)
@@ -124,7 +145,10 @@ public sealed class PowerShellCompilationProviderPackageReader
             throw new InvalidOperationException($"Provider lock mismatch. Expected '{expectedHash}', actual '{actualHash}'.");
     }
 
-    private static ProviderPackage Read(string path, PowerShellCompilationProviderTrustPolicy policy)
+    private static ProviderPackage Read(
+        string path,
+        PowerShellCompilationProviderTrustPolicy policy,
+        string semanticProfileId)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("PowerForge provider package was not found.", path);
         var packageBytes = File.ReadAllBytes(path);
@@ -143,6 +167,8 @@ public sealed class PowerShellCompilationProviderPackageReader
         }
         if (policy.RequirePackageSignature && signature is null)
             throw new InvalidOperationException($"Provider package '{path}' is unsigned, but policy requires a NuGet package signature.");
+        if (policy.RequirePackageSignature && policy.AllowedSignerFingerprints.Length == 0)
+            throw new InvalidOperationException("Signed provider-package trust requires at least one explicitly allowed signing-certificate fingerprint.");
         if (policy.AllowedSignerFingerprints.Length > 0 &&
             !Contains(policy.AllowedSignerFingerprints, signerFingerprint))
             throw new InvalidOperationException($"Provider package '{path}' signing-certificate fingerprint is not allowed by policy.");
@@ -164,8 +190,10 @@ public sealed class PowerShellCompilationProviderPackageReader
         options.Converters.Add(new JsonStringEnumConverter());
         var manifest = JsonSerializer.Deserialize<PowerShellCompilationProviderPackageManifest>(manifestBytes, options)
             ?? throw new InvalidOperationException($"Provider package '{path}' contains an empty manifest.");
-        ValidateManifest(manifest, policy, path);
+        ValidateManifest(manifest, policy, path, semanticProfileId);
+        ValidatePackageMetadata(packageReader, files, manifest, path);
         var assemblies = ValidateAssemblies(packageReader, files, manifest, path);
+        ValidateAdapterEntryPoints(packageReader, manifest, path);
 
         return new ProviderPackage(
             manifest.Providers,
@@ -188,15 +216,22 @@ public sealed class PowerShellCompilationProviderPackageReader
                     .Select(static provider => provider.ProviderId)
                     .OrderBy(static id => id, StringComparer.Ordinal)
                     .ToArray()
-            });
+            },
+            assemblies.Select(assembly => new PowerShellCompilationResolvedProviderAssembly
+            {
+                PackageId = manifest.PackageId,
+                PackagePath = Path.GetFullPath(path),
+                Assembly = assembly
+            }).ToArray());
     }
 
     private static void ValidateManifest(
         PowerShellCompilationProviderPackageManifest manifest,
         PowerShellCompilationProviderTrustPolicy policy,
-        string path)
+        string path,
+        string semanticProfileId)
     {
-        if (manifest.SchemaVersion != 1)
+        if (manifest.SchemaVersion != 2)
             throw new InvalidOperationException($"Provider package '{path}' uses unsupported manifest schema '{manifest.SchemaVersion}'.");
         if (!string.Equals(manifest.ProviderAbiVersion, PowerShellCompilationProviderAbi.CurrentVersion, StringComparison.Ordinal))
             throw new InvalidOperationException($"Provider package '{path}' targets ABI '{manifest.ProviderAbiVersion}', expected '{PowerShellCompilationProviderAbi.CurrentVersion}'.");
@@ -209,6 +244,13 @@ public sealed class PowerShellCompilationProviderPackageReader
         ApplyIdentityPolicy(manifest, policy, path);
         if (manifest.SemanticProfiles.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one semantic profile.");
+        if (manifest.SourceSemanticProfiles.Length == 0)
+            throw new InvalidOperationException($"Provider package '{path}' must declare at least one source semantic profile.");
+        var sourceProfiles = manifest.SourceSemanticProfiles
+            .Select(static profile => PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId)
+            .ToArray();
+        if (!sourceProfiles.Contains(semanticProfileId, StringComparer.Ordinal))
+            throw new InvalidOperationException($"Provider package '{path}' does not support source semantic profile '{semanticProfileId}'.");
         if (manifest.Assemblies.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one provider assembly.");
         if (manifest.Providers.Length == 0)
@@ -234,9 +276,107 @@ public sealed class PowerShellCompilationProviderPackageReader
                 throw new InvalidOperationException($"Provider '{provider.ProviderId}' must declare an adapter semantic profile.");
             if (!manifest.SemanticProfiles.Contains(provider.Adapter.SemanticProfile, StringComparer.Ordinal))
                 throw new InvalidOperationException($"Provider '{provider.ProviderId}' targets undeclared semantic profile '{provider.Adapter.SemanticProfile}'.");
+            if (provider.Adapter.RuntimeFree && provider.Adapter.EntryPoint is null)
+                throw new InvalidOperationException($"Runtime-free provider '{provider.ProviderId}' must declare an executable adapter entry point.");
             ApplyProviderPolicy(provider.ProviderId, policy, path);
         }
         EnsureUniqueProviders(manifest.Providers);
+    }
+
+    private static void ValidateAdapterEntryPoints(
+        PackageArchiveReader packageReader,
+        PowerShellCompilationProviderPackageManifest manifest,
+        string packagePath)
+    {
+        foreach (var provider in manifest.Providers.Where(static provider => provider.Adapter?.EntryPoint is not null))
+        {
+            var entryPoint = provider.Adapter.EntryPoint!;
+            var assemblyPath = NormalizePath(entryPoint.AssemblyPath);
+            if (!manifest.Assemblies.Any(assembly => NormalizePath(assembly.Path).Equals(assemblyPath, StringComparison.Ordinal)))
+                throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point references undeclared assembly '{entryPoint.AssemblyPath}'.");
+            if (provider.Stream.Equals("Success", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Provider '{provider.ProviderId}' executable string adapter cannot target the Success stream.");
+            if (!IsQualifiedIdentifier(entryPoint.TypeName) || !IsIdentifier(entryPoint.MethodName))
+                throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point is not a safe CLR/C# identifier.");
+            byte[] bytes;
+            using (var source = packageReader.GetStream(assemblyPath))
+            using (var memory = new MemoryStream())
+            {
+                source.CopyTo(memory);
+                bytes = memory.ToArray();
+            }
+            using var stream = new MemoryStream(bytes, writable: false);
+            using var peReader = new PEReader(stream, PEStreamOptions.LeaveOpen);
+            var reader = peReader.GetMetadataReader();
+            var matches = new List<MethodDefinition>();
+            foreach (var typeHandle in reader.TypeDefinitions)
+            {
+                var type = reader.GetTypeDefinition(typeHandle);
+                var typeName = reader.GetString(type.Name);
+                var typeNamespace = reader.GetString(type.Namespace);
+                var fullName = string.IsNullOrWhiteSpace(typeNamespace) ? typeName : typeNamespace + "." + typeName;
+                if (!fullName.Equals(entryPoint.TypeName, StringComparison.Ordinal) ||
+                    (type.Attributes & TypeAttributes.VisibilityMask) != TypeAttributes.Public)
+                    continue;
+                foreach (var methodHandle in type.GetMethods())
+                {
+                    var method = reader.GetMethodDefinition(methodHandle);
+                    if (reader.GetString(method.Name).Equals(entryPoint.MethodName, StringComparison.Ordinal) &&
+                        (method.Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public &&
+                        (method.Attributes & MethodAttributes.Static) != 0)
+                        matches.Add(method);
+                }
+            }
+            if (matches.Count != 1 || !HasStringTransformSignature(reader, matches[0]))
+                throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point must be one public static non-generic string Method(string).");
+        }
+    }
+
+    private static bool HasStringTransformSignature(MetadataReader reader, MethodDefinition method)
+    {
+        var blob = reader.GetBlobReader(method.Signature);
+        var header = blob.ReadSignatureHeader();
+        if (header.IsGeneric) return false;
+        if (blob.ReadCompressedInteger() != 1) return false;
+        return blob.ReadSignatureTypeCode() == SignatureTypeCode.String &&
+               blob.ReadSignatureTypeCode() == SignatureTypeCode.String;
+    }
+
+    private static bool IsQualifiedIdentifier(string value)
+        => !string.IsNullOrWhiteSpace(value) && value.Split('.').All(IsIdentifier);
+
+    private static bool IsIdentifier(string value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           (char.IsLetter(value[0]) || value[0] == '_') &&
+           value.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+
+    private static void ValidatePackageMetadata(
+        PackageArchiveReader packageReader,
+        IReadOnlyCollection<string> files,
+        PowerShellCompilationProviderPackageManifest manifest,
+        string packagePath)
+    {
+        var nuspecPaths = files.Where(static file => file.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (nuspecPaths.Length != 1)
+            throw new InvalidOperationException($"Provider package '{packagePath}' must contain exactly one NuGet manifest.");
+        using var nuspecStream = packageReader.GetStream(nuspecPaths[0]);
+        using var xmlReader = XmlReader.Create(nuspecStream, new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null
+        });
+        var document = XDocument.Load(xmlReader, LoadOptions.None);
+        var metadata = document.Root?.Elements().FirstOrDefault(static element => element.Name.LocalName == "metadata")
+            ?? throw new InvalidOperationException($"Provider package '{packagePath}' has no NuGet metadata element.");
+        string Value(string name) => metadata.Elements().FirstOrDefault(element => element.Name.LocalName == name)?.Value.Trim() ?? string.Empty;
+        var license = metadata.Elements().FirstOrDefault(static element => element.Name.LocalName == "license");
+        if (!Value("id").Equals(manifest.PackageId, StringComparison.Ordinal) ||
+            !Value("version").Equals(manifest.PackageVersion, StringComparison.Ordinal) ||
+            !Value("authors").Equals(manifest.Publisher, StringComparison.Ordinal) ||
+            license is null ||
+            !string.Equals(license.Attribute("type")?.Value, "expression", StringComparison.OrdinalIgnoreCase) ||
+            !license.Value.Trim().Equals(manifest.LicenseExpression, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Provider package '{packagePath}' manifest identity, publisher, or license conflicts with its NuGet metadata.");
     }
 
     private static PowerShellCompilationProviderAssembly[] ValidateAssemblies(
@@ -357,13 +497,18 @@ public sealed class PowerShellCompilationProviderPackageReader
 
     private sealed class ProviderPackage
     {
-        internal ProviderPackage(PowerShellCompilationCommandProviderContract[] providers, PowerShellCompilationProviderPackageLockEntry providerLock)
+        internal ProviderPackage(
+            PowerShellCompilationCommandProviderContract[] providers,
+            PowerShellCompilationProviderPackageLockEntry providerLock,
+            PowerShellCompilationResolvedProviderAssembly[] runtimeAssemblies)
         {
             Providers = providers;
             Lock = providerLock;
+            RuntimeAssemblies = runtimeAssemblies;
         }
 
         internal PowerShellCompilationCommandProviderContract[] Providers { get; }
         internal PowerShellCompilationProviderPackageLockEntry Lock { get; }
+        internal PowerShellCompilationResolvedProviderAssembly[] RuntimeAssemblies { get; }
     }
 }

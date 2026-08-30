@@ -8,13 +8,13 @@ namespace PowerForge;
 public sealed class PowerShellCompilationProviderConformanceReport
 {
     /// <summary>Conformance report schema version.</summary>
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; set; } = 1;
 
     /// <summary>Canonical identity of the validated provider contract set.</summary>
-    public string ContractSha256 { get; init; } = string.Empty;
+    public string ContractSha256 { get; set; } = string.Empty;
 
     /// <summary>Stable names of the conformance checks that passed.</summary>
-    public string[] PassedChecks { get; init; } = Array.Empty<string>();
+    public string[] PassedChecks { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -35,13 +35,18 @@ public sealed class PowerShellCompilationProviderConformanceKit
         if (manifest is null) throw new ArgumentNullException(nameof(manifest));
         if (manifest.Providers is null || manifest.Providers.Length == 0)
             throw new InvalidOperationException("Provider conformance requires at least one command contract.");
+        if (manifest.SchemaVersion != 2 || manifest.SourceSemanticProfiles is null || manifest.SourceSemanticProfiles.Length == 0)
+            throw new InvalidOperationException("Provider conformance requires schema 2 and at least one named source semantic profile.");
+        _ = manifest.SourceSemanticProfiles
+            .Select(static profile => PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId)
+            .ToArray();
 
         var contracts = manifest.Providers;
         EnsureUniqueRegistration(contracts);
         foreach (var contract in contracts) ValidateContract(contract, manifest);
 
         var forward = ComputeContractHash(contracts);
-        var reverse = ComputeContractHash(contracts.Reverse());
+        var reverse = ComputeContractHash(contracts.AsEnumerable().Reverse());
         if (!forward.Equals(reverse, StringComparison.Ordinal))
             throw new InvalidOperationException("Provider registration order changes the canonical contract identity.");
 
@@ -76,6 +81,8 @@ public sealed class PowerShellCompilationProviderConformanceKit
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' violates the no-execution analysis boundary.");
         if (contract.Adapter is null || string.IsNullOrWhiteSpace(contract.Adapter.Operation))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' requires an adapter operation.");
+        if (contract.Adapter.RuntimeFree && contract.Adapter.EntryPoint is null)
+            throw new InvalidOperationException($"Runtime-free package provider '{contract.ProviderId}' requires an executable adapter entry point.");
         if (!manifest.SemanticProfiles.Contains(contract.Adapter.SemanticProfile, StringComparer.Ordinal))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' targets an undeclared semantic profile.");
         if (!KnownStreams.Contains(contract.Stream, StringComparer.Ordinal))
@@ -169,7 +176,15 @@ public sealed class PowerShellCompilationProviderConformanceKit
                 contract.Adapter.AotCompatible,
                 Cancellation = contract.Adapter.Cancellation.ToString(),
                 Cleanup = contract.Adapter.Cleanup.ToString(),
-                Dependencies = (contract.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal)
+                Dependencies = (contract.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal),
+                EntryPoint = contract.Adapter.EntryPoint is null
+                    ? null
+                    : new
+                    {
+                        contract.Adapter.EntryPoint.AssemblyPath,
+                        contract.Adapter.EntryPoint.TypeName,
+                        contract.Adapter.EntryPoint.MethodName
+                    }
             });
         using var sha256 = SHA256.Create();
         var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonical)));

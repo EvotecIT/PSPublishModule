@@ -8,7 +8,8 @@ internal sealed class PowerShellStrictDependencyClosureRequest
         string targetFramework,
         string? runtimeIdentifier,
         PowerShellCompilationDependencyGraph dependencyGraph,
-        PowerShellCompilationExecutableOptimization optimization = PowerShellCompilationExecutableOptimization.None)
+        PowerShellCompilationExecutableOptimization optimization = PowerShellCompilationExecutableOptimization.None,
+        PowerShellCompilationProviderLock? providerLock = null)
     {
         Files = files?.ToArray() ?? throw new ArgumentNullException(nameof(files));
         TargetFramework = string.IsNullOrWhiteSpace(targetFramework)
@@ -17,6 +18,7 @@ internal sealed class PowerShellStrictDependencyClosureRequest
         RuntimeIdentifier = runtimeIdentifier?.Trim() ?? string.Empty;
         DependencyGraph = dependencyGraph ?? throw new ArgumentNullException(nameof(dependencyGraph));
         Optimization = optimization;
+        ProviderLock = providerLock;
     }
 
     internal PowerShellCompilationArtifactFile[] Files { get; }
@@ -24,4 +26,5 @@ internal sealed class PowerShellStrictDependencyClosureRequest
     internal string RuntimeIdentifier { get; }
     internal PowerShellCompilationDependencyGraph DependencyGraph { get; }
     internal PowerShellCompilationExecutableOptimization Optimization { get; }
+    internal PowerShellCompilationProviderLock? ProviderLock { get; }
 }

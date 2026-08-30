@@ -16,5 +16,6 @@
   </PropertyGroup>
   <ItemGroup>
     {{TARGET_REFERENCE}}
+    {{PROVIDER_REFERENCES}}
   </ItemGroup>
 </Project>

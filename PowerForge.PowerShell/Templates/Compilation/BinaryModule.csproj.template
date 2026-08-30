@@ -13,5 +13,6 @@
   <ItemGroup>
     {{TARGET_REFERENCE}}
     {{POWERSHELL_REFERENCE}}
+    {{PROVIDER_REFERENCES}}
   </ItemGroup>
 </Project>

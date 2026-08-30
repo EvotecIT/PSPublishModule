@@ -51,7 +51,7 @@ public sealed class PowerShellCompilationProviderPackageBuildRequest
 }
 
 /// <summary>
-/// Builds deterministic metadata-only provider packages and immediately runs the compiler-owned conformance reader.
+/// Builds deterministic provider packages and immediately runs the compiler-owned non-executing conformance reader.
 /// </summary>
 public sealed class PowerShellCompilationProviderPackageBuilder
 {
@@ -99,7 +99,8 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             else
                 File.Move(temporary, request.OutputPath);
             return new PowerShellCompilationProviderPackageReader().Resolve(
-                new[] { new PowerShellCompilationProviderPackageReference(request.OutputPath) });
+                new[] { new PowerShellCompilationProviderPackageReference(request.OutputPath) },
+                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault());
         }
         finally
         {
@@ -126,6 +127,10 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             Publisher = source.Publisher,
             LicenseExpression = source.LicenseExpression,
             SemanticProfiles = (source.SemanticProfiles ?? Array.Empty<string>())
+                .OrderBy(static value => value, StringComparer.Ordinal)
+                .ToArray(),
+            SourceSemanticProfiles = (source.SourceSemanticProfiles ?? Array.Empty<string>())
+                .Select(static value => PowerShellCompilationSemanticOracleCatalog.Get(value).ProfileId)
                 .OrderBy(static value => value, StringComparer.Ordinal)
                 .ToArray(),
             Assemblies = assemblies,
@@ -182,7 +187,15 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 AotCompatible = source.Adapter.AotCompatible,
                 Cancellation = source.Adapter.Cancellation,
                 Cleanup = source.Adapter.Cleanup,
-                Dependencies = (source.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray()
+                Dependencies = (source.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                EntryPoint = source.Adapter.EntryPoint is null
+                    ? null
+                    : new PowerShellCompilationProviderAdapterEntryPoint
+                    {
+                        AssemblyPath = source.Adapter.EntryPoint.AssemblyPath.Replace('\\', '/'),
+                        TypeName = source.Adapter.EntryPoint.TypeName,
+                        MethodName = source.Adapter.EntryPoint.MethodName
+                    }
             },
             CompileTimeOnly = source.CompileTimeOnly,
             MayImportSourceModules = source.MayImportSourceModules,

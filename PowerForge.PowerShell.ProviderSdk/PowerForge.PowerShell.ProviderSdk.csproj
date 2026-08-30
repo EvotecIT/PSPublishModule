@@ -9,7 +9,7 @@
     <WarningsAsErrors>CS1591</WarningsAsErrors>
     <VersionPrefix>1.0.0</VersionPrefix>
     <PackageId>PowerForge.PowerShell.ProviderSdk</PackageId>
-    <Description>Metadata-only SDK and conformance tooling for PowerForge PowerShell compilation providers.</Description>
+    <Description>Non-executing discovery and constrained runtime adapter SDK for PowerForge PowerShell compilation providers.</Description>
     <AssemblyName>PowerForge.PowerShell.ProviderSdk</AssemblyName>
     <RootNamespace>PowerForge</RootNamespace>
     <PackageTags>powershell;compiler;provider;sdk;powerforge</PackageTags>

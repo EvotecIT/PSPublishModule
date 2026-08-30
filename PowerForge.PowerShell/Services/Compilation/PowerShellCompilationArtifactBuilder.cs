@@ -68,6 +68,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
             failureStage = PowerShellCompilationFailureStage.Dependency;
             var providerResolution = ResolveProviderPackages(spec);
+            var providerRuntimeAssemblies = PrepareProviderRuntimeAssemblies(workspace, providerResolution);
+            var providerProjectReferences = CreateProviderProjectReferences(providerRuntimeAssemblies);
             var commandProviderInputs = spec.CommandProviders
                 .Concat(providerResolution.Providers)
                 .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
@@ -142,7 +144,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{SINGLE_FILE}}", publishSingleFile ? "true" : "false")
                         .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
                         .Replace("{{PUBLISH_TRIMMED}}", spec.Optimization != PowerShellCompilationExecutableOptimization.None ? "true" : "false")
-                        .Replace("{{PUBLISH_AOT}}", spec.Optimization == PowerShellCompilationExecutableOptimization.NativeAot ? "true" : "false"),
+                        .Replace("{{PUBLISH_AOT}}", spec.Optimization == PowerShellCompilationExecutableOptimization.NativeAot ? "true" : "false")
+                        .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = false;
                 usesPowerShellRuntimeFallback = false;
@@ -160,7 +163,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     compilationSourcePaths,
                     plan,
                     dependencyPlan,
-                    commandProviderInputs);
+                    commandProviderInputs,
+                    providerProjectReferences);
                 typed = hybrid.Typed;
                 projectPath = hybrid.ProjectPath;
                 requiresPowerShellRuntime = true;
@@ -240,6 +244,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     projectTemplate
                         .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
                         .Replace("{{TARGET_REFERENCE}}", PowerShellGeneratedReferenceAssemblyResolver.GetGeneratedProjectReference(spec.TargetFramework))
+                        .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences)
                         .Replace("{{ARTIFACT_NAME}}", EscapeXml(generatedAssemblyName))
                         .Replace("{{ASSEMBLY_VERSION}}", EscapeXml(GetBinaryModuleAssemblyVersion(spec))),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -286,6 +291,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{SELF_CONTAINED}}", spec.SelfContained ? "true" : "false")
                         .Replace("{{POWERSHELL_SDK_VERSION}}", GetPowerShellSdkVersion(spec.TargetFramework))
                         .Replace("{{SECURITY_XML_VERSION}}", GetSecurityXmlVersion(spec.TargetFramework))
+                        .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences)
                         .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = true;
@@ -371,6 +377,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyProviderRuntimeAssemblies(
+                    spec,
+                    stagedArtifact.PrimaryPath,
+                    providerRuntimeAssemblies,
+                    stagedArtifact.Files));
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
                     stagedArtifact.PrimaryPath,
                     artifactName,
@@ -453,7 +464,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         spec.TargetFramework,
                         runtimeIdentifier,
                         dependencyGraph,
-                        spec.Optimization));
+                        spec.Optimization,
+                        providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock));
                     EnsureStrictDependencyClosureCertified(dependencyClosure);
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);

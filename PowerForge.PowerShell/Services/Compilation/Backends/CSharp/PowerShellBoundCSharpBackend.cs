@@ -192,8 +192,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 if (stream.Kind == PowerShellStreamCommandKind.Success)
                     builder.Append("(object?)").Append(EmitExpression(stream.Message));
                 else
+                {
+                    var entryPoint = stream.Provider.Adapter.EntryPoint;
+                    if (entryPoint is not null)
+                        builder.Append("global::").Append(entryPoint.TypeName).Append('.').Append(entryPoint.MethodName).Append('(');
                     builder.Append("global::System.Convert.ToString(").Append(EmitExpression(stream.Message))
                         .Append(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty");
+                    if (entryPoint is not null) builder.Append(')');
+                }
                 builder.AppendLine(");");
                 return;
             case PowerShellLoweredCommandRegionStatement region:

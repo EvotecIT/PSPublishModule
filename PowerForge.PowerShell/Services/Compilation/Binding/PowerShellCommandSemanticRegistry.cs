@@ -352,7 +352,15 @@ internal sealed class PowerShellCommandSemanticRegistry
                 AotCompatible = source.Adapter?.AotCompatible == true,
                 Cancellation = source.Adapter?.Cancellation ?? PowerShellCompilationProviderCancellation.NotApplicable,
                 Cleanup = source.Adapter?.Cleanup ?? PowerShellCompilationProviderCleanup.NotApplicable,
-                Dependencies = source.Adapter?.Dependencies?.ToArray() ?? Array.Empty<string>()
+                Dependencies = source.Adapter?.Dependencies?.ToArray() ?? Array.Empty<string>(),
+                EntryPoint = source.Adapter?.EntryPoint is null
+                    ? null
+                    : new PowerShellCompilationProviderAdapterEntryPoint
+                    {
+                        AssemblyPath = source.Adapter.EntryPoint.AssemblyPath,
+                        TypeName = source.Adapter.EntryPoint.TypeName,
+                        MethodName = source.Adapter.EntryPoint.MethodName
+                    }
             }
         };
 }

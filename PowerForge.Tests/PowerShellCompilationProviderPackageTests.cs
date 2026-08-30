@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Reflection;
+using System.Runtime.Loader;
 using PowerForge;
 using Xunit;
 
@@ -29,7 +31,8 @@ public sealed class PowerShellCompilationProviderPackageTests
                 Operation = "WriteWarning",
                 SemanticProfile = first.Adapter.SemanticProfile,
                 RuntimeFree = true,
-                AotCompatible = true
+                AotCompatible = true,
+                EntryPoint = first.Adapter.EntryPoint
             }
         };
         fixture.Manifest.Providers = new[] { first, second };
@@ -82,7 +85,8 @@ public sealed class PowerShellCompilationProviderPackageTests
                 SemanticProfile = firstProvider.Adapter.SemanticProfile,
                 RuntimeFree = true,
                 AotCompatible = true,
-                Dependencies = new[] { "Generic.Warning.Runtime.Z", "Generic.Warning.Runtime.A" }
+                Dependencies = new[] { "Generic.Warning.Runtime.Z", "Generic.Warning.Runtime.A" },
+                EntryPoint = firstProvider.Adapter.EntryPoint
             }
         };
         fixture.Manifest.Providers = new[] { firstProvider, secondProvider };
@@ -108,6 +112,7 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.NotEmpty(package.PackageSha256);
         Assert.NotEmpty(package.ManifestSha256);
         Assert.NotEmpty(first.Lock.LockSha256);
+        Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, first.Lock.SemanticProfileId);
         Assert.Equal(first.Lock.LockSha256, second.Lock.LockSha256);
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.notice");
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.warning");
@@ -142,6 +147,32 @@ public sealed class PowerShellCompilationProviderPackageTests
         {
             AllowedSignerFingerprints = new[] { new string('a', 64) }
         }));
+    }
+
+    [Fact]
+    public void ReaderRejectsProviderPackageForDifferentSourceSemanticProfile()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.BuildPackage("provider.nupkg");
+        var reference = new PowerShellCompilationProviderPackageReference(fixture.PackagePath("provider.nupkg"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderPackageReader().Resolve(
+                new[] { reference },
+                semanticProfileId: PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId));
+
+        Assert.Contains("does not support source semantic profile", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsMissingExecutableAdapterMethodWithoutLoadingProviderAssembly()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.Manifest.Providers[0].Adapter.EntryPoint!.MethodName = "MissingMethod";
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("provider.nupkg"));
+
+        Assert.Contains("public static non-generic string", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -195,6 +226,32 @@ public sealed class PowerShellCompilationProviderPackageTests
         var provenancePath = Assert.Single(result.Manifest.Files, static file => file.Role == "BuildProvenance").Path;
         Assert.Contains("Generic.Semantic.Provider", File.ReadAllText(sbomPath), StringComparison.Ordinal);
         Assert.Contains(resolution.Lock.LockSha256, File.ReadAllText(provenancePath), StringComparison.OrdinalIgnoreCase);
+        var providerRuntime = Assert.Single(result.Manifest.Files, static file => file.Role == "CompilerProviderRuntime");
+        Assert.Equal(Assert.Single(resolution.Lock.Packages).Assemblies[0].Sha256, providerRuntime.Sha256);
+
+        var loadContext = new ArtifactLoadContext(Path.GetDirectoryName(result.ArtifactPath!)!);
+        try
+        {
+            var assembly = loadContext.LoadFromAssemblyPath(result.ArtifactPath!);
+            var method = assembly.GetType("PowerForge.Compiled.ReviewedProviderMethods", throwOnError: true)!
+                .GetMethod("Write_PackageNotice", BindingFlags.Public | BindingFlags.Static)!;
+            var information = new List<string>();
+            method.Invoke(null, new object[]
+            {
+                (Action<object?>)(_ => { }),
+                (Action<string>)(_ => { }),
+                (Action<string>)(_ => { }),
+                (Action<string>)(_ => { }),
+                (Action<string>)(information.Add),
+                (Action<string>)(_ => { }),
+                (Action<string>)(_ => { })
+            });
+            Assert.Equal(new[] { "provider:locked" }, information);
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
     }
 
     [Fact]
@@ -241,6 +298,10 @@ public sealed class PowerShellCompilationProviderPackageTests
                 PackageVersion = "1.0.0",
                 Publisher = "Generic Publisher",
                 LicenseExpression = "MIT",
+                SourceSemanticProfiles = new[]
+                {
+                    PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+                },
                 SemanticProfiles = new[]
                 {
                     PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion
@@ -267,7 +328,13 @@ public sealed class PowerShellCompilationProviderPackageTests
                             Operation = "WriteInformation",
                             SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
                             RuntimeFree = true,
-                            AotCompatible = true
+                            AotCompatible = true,
+                            EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
+                            {
+                                AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.dll",
+                                TypeName = "Generic.Semantic.Provider.NoticeAdapter",
+                                MethodName = "Transform"
+                            }
                         }
                     }
                 }
@@ -284,7 +351,7 @@ public sealed class PowerShellCompilationProviderPackageTests
                 Assemblies = new[]
                 {
                     new PowerShellCompilationProviderAssemblyInput(
-                        typeof(PowerShellCompilationProviderPackageBuilder).Assembly.Location,
+                        typeof(Generic.Semantic.Provider.NoticeAdapter).Assembly.Location,
                         "lib/net8.0/Generic.Semantic.Provider.dll")
                 }
             });
@@ -325,6 +392,21 @@ public sealed class PowerShellCompilationProviderPackageTests
             try { Directory.Delete(RootPath, recursive: true); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private sealed class ArtifactLoadContext : AssemblyLoadContext
+    {
+        private readonly string _directory;
+
+        internal ArtifactLoadContext(string directory)
+            : base("ProviderArtifactProof-" + Guid.NewGuid().ToString("N"), isCollectible: true)
+            => _directory = directory;
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            var candidate = Path.Combine(_directory, assemblyName.Name + ".dll");
+            return File.Exists(candidate) ? LoadFromAssemblyPath(candidate) : null;
         }
     }
 }

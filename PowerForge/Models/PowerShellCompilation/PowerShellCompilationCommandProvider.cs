@@ -88,6 +88,19 @@ public enum PowerShellCompilationProviderCleanup
     PowerShellHost
 }
 
+/// <summary>A narrowly typed public static provider method invoked only by generated artifacts.</summary>
+public sealed class PowerShellCompilationProviderAdapterEntryPoint
+{
+    /// <summary>Package-relative assembly path declared in the provider manifest.</summary>
+    public string AssemblyPath { get; set; } = string.Empty;
+
+    /// <summary>Public non-nested CLR type name.</summary>
+    public string TypeName { get; set; } = string.Empty;
+
+    /// <summary>Public static method accepting and returning one string.</summary>
+    public string MethodName { get; set; } = string.Empty;
+}
+
 /// <summary>Runtime adapter required by a command provider.</summary>
 public sealed class PowerShellCompilationCommandAdapterContract
 {
@@ -111,6 +124,9 @@ public sealed class PowerShellCompilationCommandAdapterContract
 
     /// <summary>Exact runtime dependencies required by the adapter.</summary>
     public string[] Dependencies { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional runtime entry point. Discovery validates metadata and never loads or invokes this assembly.</summary>
+    public PowerShellCompilationProviderAdapterEntryPoint? EntryPoint { get; set; }
 }
 
 /// <summary>One parameter shape accepted by a compile-time command provider.</summary>
