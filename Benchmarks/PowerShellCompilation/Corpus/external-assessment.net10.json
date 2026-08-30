@@ -20,7 +20,14 @@
         "url": "https://codeload.github.com/jakehildreth/locksmith/zip/a58905638fe819c8cc11ee7fd4f0a8513b5c873a",
         "sha256": "fb117dbbd39cf32f3d7db347380174ea5e1576078f81536365a6c987712bb070"
       },
-      "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1"
+      "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1",
+      "qualification": {
+        "kind": "HybridModuleCommand",
+        "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psm1",
+        "importSurface": "RootModuleDirect",
+        "unitName": "Test-IsADAdmin",
+        "probeScript": "(Test-IsADAdmin).ToString()"
+      }
     },
     {
       "id": "locksmith2",
@@ -39,6 +46,7 @@
       "entryPoint": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1",
       "qualification": {
         "kind": "HybridModuleCommand",
+        "importSurface": "Manifest",
         "unitName": "Test-IsPowerShellCore",
         "probeScript": "(Test-IsPowerShellCore).ToString()"
       }

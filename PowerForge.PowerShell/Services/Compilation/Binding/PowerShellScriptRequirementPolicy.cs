@@ -14,6 +14,10 @@ internal static class PowerShellScriptRequirementPolicy
         @"(?<![\w-])-(?<name>[A-Za-z][A-Za-z0-9]*)",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex EditionPattern = new(
+        @"(?<![\w-])-PSEdition(?:\s+|:\s*)(?<edition>""[^""]*""|'[^']*'|[^\s#]+)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     internal static string? GetFailure(ParsedSourceDocument document, string semanticProfileId)
     {
         if (document.SyntaxRoot.ScriptRequirements is not { } requirements)
@@ -41,19 +45,41 @@ internal static class PowerShellScriptRequirementPolicy
                 return $"Source #requires needs PowerShell {requiredVersion} or newer, but semantic profile '{profile.ProfileId}' represents {profileVersion}.";
         }
 
-        if (requirements.RequiredPSEditions.Count > 0 &&
-            !requirements.RequiredPSEditions.Any(edition => edition.Equals(profile.PowerShellEdition, StringComparison.OrdinalIgnoreCase)))
-            return $"Source #requires accepts PowerShell edition '{string.Join("' or '", requirements.RequiredPSEditions)}', but semantic profile '{profile.ProfileId}' represents '{profile.PowerShellEdition}'.";
+        var requiredEditions = GetRequiredEditions(requirements, document.SyntaxRoot.Extent.Text);
+        if (requiredEditions.Length > 0 &&
+            !requiredEditions.Any(edition => edition.Equals(profile.PowerShellEdition, StringComparison.OrdinalIgnoreCase)))
+            return $"Source #requires accepts PowerShell edition '{string.Join("' or '", requiredEditions)}', but semantic profile '{profile.ProfileId}' represents '{profile.PowerShellEdition}'.";
 
-        if (requirements.RequiredPSVersion is null && requirements.RequiredPSEditions.Count == 0)
+        if (requirements.RequiredPSVersion is null && requiredEditions.Length == 0)
             return "Source #requires does not contain a compile-time requirement supported by the selected semantic profile.";
 
         return null;
     }
 
+    private static string[] GetRequiredEditions(ScriptRequirements requirements, string sourceText)
+    {
+        var property = typeof(ScriptRequirements).GetProperty("RequiredPSEditions");
+        if (property?.GetValue(requirements) is System.Collections.IEnumerable editions)
+        {
+            return editions.Cast<object>()
+                .Select(static edition => edition.ToString()?.Trim() ?? string.Empty)
+                .Where(static edition => edition.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return DirectivePattern.Matches(sourceText)
+            .Cast<Match>()
+            .SelectMany(static directive => EditionPattern.Matches(directive.Groups["body"].Value).Cast<Match>())
+            .Select(static match => match.Groups["edition"].Value.Trim().Trim('\'', '"'))
+            .Where(static edition => edition.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static Version GetMinimumVersion(PowerShellCompilationSemanticOracleProfile profile)
     {
-        var separator = profile.VersionRange.IndexOf(',', StringComparison.Ordinal);
+        var separator = profile.VersionRange.IndexOf(',');
         var minimum = separator > 1 ? profile.VersionRange.Substring(1, separator - 1).Trim() : string.Empty;
         return Version.TryParse(minimum, out var version)
             ? version

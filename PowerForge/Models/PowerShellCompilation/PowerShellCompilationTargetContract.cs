@@ -130,6 +130,12 @@ public sealed class PowerShellCompilationBuildCacheEvidence
 /// <summary>Canonical target-contract construction and validation.</summary>
 public static class PowerShellCompilationTargetContractService
 {
+    /// <summary>Returns the semantic profile implied by a compatibility target framework.</summary>
+    public static string GetDefaultSemanticProfileId(string? targetFramework)
+        => string.Equals(targetFramework?.Trim(), "net472", StringComparison.OrdinalIgnoreCase)
+            ? PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId
+            : PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+
     /// <summary>Creates the target implied by compatibility build fields.</summary>
     public static PowerShellCompilationTargetContract Create(
         PowerShellCompilationArtifactKind kind,
@@ -162,7 +168,7 @@ public static class PowerShellCompilationTargetContractService
                 : PowerShellCompilationRuntimeRequirement.DotNet;
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(
             string.IsNullOrWhiteSpace(semanticProfileId)
-                ? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+                ? GetDefaultSemanticProfileId(framework)
                 : semanticProfileId!.Trim());
         var contract = new PowerShellCompilationTargetContract
         {
@@ -186,10 +192,22 @@ public static class PowerShellCompilationTargetContractService
 
     /// <summary>Normalizes and verifies a caller-supplied target contract.</summary>
     public static PowerShellCompilationTargetContract Normalize(PowerShellCompilationTargetContract contract)
+        => Normalize(contract, legacySemanticProfileId: null);
+
+    /// <summary>Normalizes and verifies a caller-supplied target contract, preserving a containing manifest's profile when migrating a pre-profile target schema.</summary>
+    public static PowerShellCompilationTargetContract Normalize(
+        PowerShellCompilationTargetContract contract,
+        string? legacySemanticProfileId)
     {
         if (contract is null) throw new ArgumentNullException(nameof(contract));
         if (contract.SchemaVersion is not 1 and not 2 and not 3) throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
         var originalSchema = contract.SchemaVersion;
+        var migratedProfileId = originalSchema < 3
+            ? PowerShellCompilationSemanticOracleCatalog.Get(
+                string.IsNullOrWhiteSpace(legacySemanticProfileId)
+                    ? GetDefaultSemanticProfileId(contract.TargetFramework)
+                    : legacySemanticProfileId!.Trim()).ProfileId
+            : string.Empty;
         if (originalSchema < 3) contract.SemanticProfileId = string.Empty;
         else contract.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(contract.SemanticProfileId).ProfileId;
         contract.TargetFramework = contract.TargetFramework?.Trim() ?? string.Empty;
@@ -216,7 +234,7 @@ public static class PowerShellCompilationTargetContractService
             contract.RuntimeIdentifier);
         contract.SchemaVersion = 3;
         contract.SemanticProfileId = originalSchema < 3
-            ? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+            ? migratedProfileId
             : PowerShellCompilationSemanticOracleCatalog.Get(contract.SemanticProfileId).ProfileId;
         contract.Explicit = true;
         contract.ContractSha256 = ComputeSha256(contract);

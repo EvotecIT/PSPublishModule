@@ -94,7 +94,9 @@ internal static partial class Program
         try
         {
             PowerShellCompilationTargetContract? targetContract = null;
-            var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ?? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+            var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+            var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
+                                    PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
             semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
             var targetContractPath = TryGetOptionValue(args, "--target-contract");
             if (!string.IsNullOrWhiteSpace(targetContractPath))
@@ -154,7 +156,7 @@ internal static partial class Program
                 ResourceMode = resourceMode,
                 IncludeResource = GetOptionValues(args, "--include-resource").ToArray(),
                 ExcludeResource = GetOptionValues(args, "--exclude-resource").ToArray(),
-                TargetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0",
+                TargetFramework = targetFramework,
                 RuntimeIdentifier = TryGetOptionValue(args, "--rid"),
                 SelfContained = args.Any(static argument => argument.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)),
                 SingleFile = !args.Any(static argument => argument.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),

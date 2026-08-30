@@ -175,8 +175,10 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.Contains("public static non-generic string", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void ArtifactBuildRequiresReviewedProviderLockAndRecordsPackageAndAssemblyEvidence()
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Strict)]
+    [InlineData(PowerShellCompilationMode.Hybrid)]
+    public void ArtifactBuildRequiresReviewedProviderLockAndExecutesAdapter(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
         var packagePath = providerFixture.PackagePath("provider.nupkg");
@@ -186,9 +188,9 @@ public sealed class PowerShellCompilationProviderPackageTests
         var unlocked = new PowerShellCompilationBuildSpec(
             artifactFixture.ScriptPath,
             artifactFixture.OutputPath,
-            "UnreviewedProvider",
+            "UnreviewedProvider" + mode,
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict,
+            mode,
             allowUnreviewedDependencyResolution: true)
         {
             ProviderPackages = new[] { reference }
@@ -201,9 +203,9 @@ public sealed class PowerShellCompilationProviderPackageTests
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             artifactFixture.ScriptPath,
             artifactFixture.OutputPath,
-            "ReviewedProvider",
+            "ReviewedProvider" + mode,
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict,
+            mode,
             allowUnreviewedDependencyResolution: true)
         {
             ProviderPackages = new[] { reference },
@@ -233,7 +235,7 @@ public sealed class PowerShellCompilationProviderPackageTests
         try
         {
             var assembly = loadContext.LoadFromAssemblyPath(result.ArtifactPath!);
-            var method = assembly.GetType("PowerForge.Compiled.ReviewedProviderMethods", throwOnError: true)!
+            var method = assembly.GetType("PowerForge.Compiled.ReviewedProvider" + mode + "Methods", throwOnError: true)!
                 .GetMethod("Write_PackageNotice", BindingFlags.Public | BindingFlags.Static)!;
             var information = new List<string>();
             method.Invoke(null, new object[]

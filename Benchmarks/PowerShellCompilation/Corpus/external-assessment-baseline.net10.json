@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "e069128c9100c3757af2a7dceeb7345af7ec0f8d1e18ea9af8f3cb3d1733399c",
+  "packetSha256": "292a6617c4281e59d52cf7266e9815c89befb5073887ae86228b9b2824ea07b5",
   "recordedOn": "2026-08-30",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",

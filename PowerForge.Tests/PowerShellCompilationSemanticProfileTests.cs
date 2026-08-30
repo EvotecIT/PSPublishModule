@@ -6,6 +6,25 @@ namespace PowerForge.Tests;
 [Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationSemanticProfileTests
 {
+    [Theory]
+    [InlineData("net472", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
+    [InlineData("net8.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
+    [InlineData("net10.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
+    public void CompatibilityTargetSelectsFrameworkOwnedSemanticProfile(string targetFramework, string expectedProfileId)
+    {
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework,
+            runtimeIdentifier: null,
+            selfContained: false,
+            singleFile: false,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: false);
+
+        Assert.Equal(expectedProfileId, target.SemanticProfileId);
+    }
+
     [Fact]
     public void TargetIdentityChangesWithSemanticProfile()
     {

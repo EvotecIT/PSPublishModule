@@ -143,8 +143,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var packagePath = context.Resolve($".powerforge/packages/{GetArtifactName(context.Manifest, artifact)}.zip");
                 if (!File.Exists(packagePath)) throw new FileNotFoundException("Run project pack before install.", packagePath);
                 ValidateQualifiedPackage(packagePath, context, artifact, validated, testEvidence);
-                var installRoot = context.Resolve(
-                    $".powerforge/i/{artifact.Target.ContractSha256.Substring(0, 16).ToLowerInvariant()}/{artifactSha256.Substring(0, 24).ToLowerInvariant()}");
+                var installIdentity = ComputeQualifiedInstallationIdentity(
+                    artifact.Target.ContractSha256,
+                    validated.ArtifactSetSha256);
+                var installRoot = context.Resolve($".powerforge/i/{installIdentity}");
                 var primaryRelative = FrameworkCompatibility.GetRelativePath(
                     validated.OutputRoot,
                     validated.ArtifactPath).Replace('\\', '/');
@@ -159,7 +161,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 if (!actualHash.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Installed primary artifact differs from its compiler identity.");
                 TestArtifact(artifact, installedPrimary);
-                results.Add(Pass(artifact, "Qualified package was installed by exact target and artifact identity and passed its declared surface test.", installRoot, manifest.DependencyGraph?.LockSha256, actualHash));
+                results.Add(Pass(artifact, "Qualified package was installed by its complete target and authenticated artifact-set identities and passed its declared surface test.", installRoot, manifest.DependencyGraph?.LockSha256, actualHash));
             }
             catch (Exception exception)
             {

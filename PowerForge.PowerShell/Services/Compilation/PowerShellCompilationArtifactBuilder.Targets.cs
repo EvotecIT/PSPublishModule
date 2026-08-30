@@ -29,25 +29,32 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     internal static void ApplyExplicitTargetContract(PowerShellCompilationBuildSpec spec)
     {
-        if (spec.TargetContract is null) return;
-        var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
-        if (target.ArtifactKind != spec.Kind || target.Mode != spec.Mode)
-            throw new ArgumentException("The explicit PowerShell compilation target kind and mode must match the build request.", nameof(spec));
-        spec.TargetFramework = target.TargetFramework;
-        spec.SemanticProfileId = target.SemanticProfileId;
-        spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? null : target.RuntimeIdentifier;
-        spec.SingleFile = target.SingleFile;
-        spec.SelfContained = target.Deployment is PowerShellCompilationDeploymentModel.SelfContained or
-            PowerShellCompilationDeploymentModel.Trimmed or PowerShellCompilationDeploymentModel.ReadyToRun or
-            PowerShellCompilationDeploymentModel.NativeAot;
-        spec.Optimization = target.Deployment switch
+        if (spec.TargetContract is not null)
         {
-            PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
-            PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
-            PowerShellCompilationDeploymentModel.ReadyToRun => throw new ArgumentException(
-                "ReadyToRun remains a benchmark-only lane and cannot be selected as a public artifact target.", nameof(spec)),
-            _ => PowerShellCompilationExecutableOptimization.None
-        };
+            var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
+            if (target.ArtifactKind != spec.Kind || target.Mode != spec.Mode)
+                throw new ArgumentException("The explicit PowerShell compilation target kind and mode must match the build request.", nameof(spec));
+            spec.TargetFramework = target.TargetFramework;
+            spec.SemanticProfileId = target.SemanticProfileId;
+            spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? null : target.RuntimeIdentifier;
+            spec.SingleFile = target.SingleFile;
+            spec.SelfContained = target.Deployment is PowerShellCompilationDeploymentModel.SelfContained or
+                PowerShellCompilationDeploymentModel.Trimmed or PowerShellCompilationDeploymentModel.ReadyToRun or
+                PowerShellCompilationDeploymentModel.NativeAot;
+            spec.Optimization = target.Deployment switch
+            {
+                PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
+                PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
+                PowerShellCompilationDeploymentModel.ReadyToRun => throw new ArgumentException(
+                    "ReadyToRun remains a benchmark-only lane and cannot be selected as a public artifact target.", nameof(spec)),
+                _ => PowerShellCompilationExecutableOptimization.None
+            };
+        }
+
+        spec.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
+            string.IsNullOrWhiteSpace(spec.SemanticProfileId)
+                ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(spec.TargetFramework)
+                : spec.SemanticProfileId.Trim()).ProfileId;
     }
 
     private static PowerShellCompilationTargetContract ResolveTargetContract(

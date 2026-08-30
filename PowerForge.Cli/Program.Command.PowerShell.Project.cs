@@ -92,7 +92,8 @@ internal static partial class Program
             var framework = TryGetOptionValue(args, "--framework") ?? (kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict ? "net10.0" : "net8.0");
             var selfContained = args.Any(static value => value.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)) || optimization != PowerShellCompilationExecutableOptimization.None;
             var semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
-                TryGetOptionValue(args, "--semantic-profile") ?? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId).ProfileId;
+                TryGetOptionValue(args, "--semantic-profile") ??
+                PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(framework)).ProfileId;
             var target = PowerShellCompilationTargetContractService.Create(
                 kind,
                 mode,

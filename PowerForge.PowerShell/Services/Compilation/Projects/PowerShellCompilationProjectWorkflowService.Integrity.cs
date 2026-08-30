@@ -155,6 +155,18 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         => CanonicalJsonSha256(files.OrderBy(static file => file.Path, StringComparer.Ordinal)
             .Select(static file => new { file.Path, file.Sha256, file.Size }).ToArray());
 
+    internal static string ComputeQualifiedInstallationIdentity(
+        string targetContractSha256,
+        string artifactSetSha256)
+        => Convert.ToBase64String(CanonicalJsonHash(new
+            {
+                TargetContractSha256 = targetContractSha256.ToLowerInvariant(),
+                ArtifactSetSha256 = artifactSetSha256.ToLowerInvariant()
+            }))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
     private static bool IsArtifactPayloadFile(
         string path,
         PowerShellCompilationProjectManifestService.ProjectContext context,
@@ -306,10 +318,13 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static string CanonicalJsonSha256<T>(T value)
+        => PowerShellCompilationProjectManifestService.ToHex(CanonicalJsonHash(value));
+
+    private static byte[] CanonicalJsonHash<T>(T value)
     {
         var json = JsonSerializer.Serialize(value, PowerShellCompilationProjectManifestService.JsonOptions);
         using var algorithm = SHA256.Create();
-        return PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(Encoding.UTF8.GetBytes(json)));
+        return algorithm.ComputeHash(Encoding.UTF8.GetBytes(json));
     }
 
     private sealed class ValidatedProjectBuild

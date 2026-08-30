@@ -62,6 +62,17 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         Assert.Equal(packageHash, PowerShellCompilationProjectManifestService.ComputeSha256(Assert.Single(repeatedPack.Targets).Path!));
         var install = workflow.Install(fixture.ProjectPath);
         Assert.True(install.Succeeded, string.Join(Environment.NewLine, install.Targets.Select(static result => result.Message)));
+        var installRoot = Assert.Single(install.Targets).Path!;
+        var installDirectory = new DirectoryInfo(installRoot);
+        Assert.Equal(43, installDirectory.Name.Length);
+        using (var qualifiedArchive = ZipFile.OpenRead(packagePath))
+        using (var descriptor = JsonDocument.Parse(qualifiedArchive.GetEntry("powerforge-package.json")!.Open()))
+            Assert.Equal(
+                PowerShellCompilationProjectWorkflowService.ComputeQualifiedInstallationIdentity(
+                    Assert.Single(manifest.Artifacts).Target.ContractSha256,
+                    descriptor.RootElement.GetProperty("artifactSetSha256").GetString()!),
+                installDirectory.Name,
+                ignoreCase: true);
         var repeatedInstall = workflow.Install(fixture.ProjectPath);
         Assert.True(repeatedInstall.Succeeded, string.Join(Environment.NewLine, repeatedInstall.Targets.Select(static result => result.Message)));
 
@@ -257,6 +268,51 @@ public sealed class PowerShellCompilationProjectWorkflowTests
 
         var exception = Assert.Throws<InvalidDataException>(() => service.Save(fixture.ProjectPath, manifest));
         Assert.Contains("duplicates another exact artifact variant", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProjectManifest_MigratesLegacyNet472TargetWithProjectSemanticProfile()
+    {
+        using var fixture = ProjectFixture.Create();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            "net472",
+            null,
+            false,
+            false,
+            PowerShellCompilationExecutableOptimization.None,
+            explicitContract: true);
+        target.SchemaVersion = 2;
+        target.ContractSha256 = PowerShellCompilationTargetContractService.ComputeSha256(target);
+        var manifest = new PowerShellCompilationProjectManifest
+        {
+            SchemaVersion = 1,
+            Name = "LegacyDesktopProject",
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            Sources = new[] { Path.GetFileName(fixture.ManifestPath) },
+            Artifacts = new[]
+            {
+                new PowerShellCompilationProjectArtifact
+                {
+                    Name = "legacy-net472",
+                    Target = target,
+                    OutputDirectory = "artifacts/legacy-net472",
+                    DependencyLock = ".powerforge/locks/legacy-net472.lock.json"
+                }
+            }
+        };
+        File.WriteAllText(
+            fixture.ProjectPath,
+            JsonSerializer.Serialize(manifest, PowerShellCompilationProjectManifestService.JsonOptions));
+
+        var loaded = new PowerShellCompilationProjectManifestService().Load(fixture.ProjectPath);
+
+        Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, loaded.SemanticProfileId);
+        var migratedTarget = Assert.Single(loaded.Artifacts).Target;
+        Assert.Equal(3, migratedTarget.SchemaVersion);
+        Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, migratedTarget.SemanticProfileId);
+        Assert.Equal(PowerShellCompilationTargetContractService.ComputeSha256(migratedTarget), migratedTarget.ContractSha256);
     }
 
     private sealed class ProjectFixture : IDisposable

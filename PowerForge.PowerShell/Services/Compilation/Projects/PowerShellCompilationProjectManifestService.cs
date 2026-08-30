@@ -114,7 +114,10 @@ public sealed class PowerShellCompilationProjectManifestService
         {
             artifact.Name = NormalizeName(artifact.Name, "artifact target name");
             if (!names.Add(artifact.Name)) throw new InvalidDataException($"Duplicate project target name '{artifact.Name}'.");
-            artifact.Target = PowerShellCompilationTargetContractService.Normalize(artifact.Target ?? throw new InvalidDataException($"Project target '{artifact.Name}' has no target contract."));
+            var target = artifact.Target ?? throw new InvalidDataException($"Project target '{artifact.Name}' has no target contract.");
+            artifact.Target = PowerShellCompilationTargetContractService.Normalize(
+                target,
+                target.SchemaVersion < 3 ? manifest.SemanticProfileId : null);
             if (!artifact.Target.SemanticProfileId.Equals(manifest.SemanticProfileId, StringComparison.Ordinal))
                 throw new InvalidDataException($"Project target '{artifact.Name}' semantic profile '{artifact.Target.SemanticProfileId}' differs from project profile '{manifest.SemanticProfileId}'.");
             PowerShellCompilationBuildSpec.EnsureModeSupported(artifact.Target.ArtifactKind, artifact.Target.Mode);

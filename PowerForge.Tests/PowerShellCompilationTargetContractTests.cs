@@ -234,7 +234,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var normalized = PowerShellCompilationTargetContractService.Normalize(target);
 
-        Assert.Equal(2, normalized.SchemaVersion);
+        Assert.Equal(3, normalized.SchemaVersion);
         Assert.True(normalized.Explicit);
         Assert.NotEqual(legacyHash, normalized.ContractSha256);
         Assert.Equal(PowerShellCompilationTargetContractService.ComputeSha256(normalized), normalized.ContractSha256);
@@ -302,7 +302,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var normalized = PowerShellCompilationTargetContractService.Normalize(target);
 
-        Assert.Equal(2, normalized.SchemaVersion);
+        Assert.Equal(3, normalized.SchemaVersion);
         Assert.Equal("Supported", normalized.SupportLevel);
         Assert.True(normalized.Explicit);
         Assert.Equal(normalized.ContractSha256, PowerShellCompilationTargetContractService.ComputeSha256(normalized));

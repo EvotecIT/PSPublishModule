@@ -79,8 +79,21 @@ try {
             if ([string]::IsNullOrWhiteSpace($entry.qualification.unitName) -or [string]::IsNullOrWhiteSpace($entry.qualification.probeScript)) {
                 throw 'HybridModuleCommand qualification requires unitName and probeScript.'
             }
+            $importSurface = if ($null -ne $entry.qualification.PSObject.Properties['importSurface']) {
+                [string] $entry.qualification.importSurface
+            } else {
+                'Manifest'
+            }
+            if ($importSurface -notin @('Manifest', 'RootModuleDirect')) {
+                throw "Unsupported qualification import surface '$importSurface'."
+            }
             $sourceRoot = Join-Path $WorkspacePath ('extract/' + $entry.acquisition.sha256)
-            $sourcePath = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $entry.entryPoint) -Label 'Qualification entry point'
+            $qualificationEntryPoint = if ($null -ne $entry.qualification.PSObject.Properties['entryPoint']) {
+                [string] $entry.qualification.entryPoint
+            } else {
+                [string] $entry.entryPoint
+            }
+            $sourcePath = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $qualificationEntryPoint) -Label 'Qualification entry point'
             if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Qualification entry point does not exist: $sourcePath" }
             $analysis = Invoke-CliJson -Arguments @('powershell', 'analyze', $sourcePath, '--kind', 'dll', '--mode', 'Hybrid', '--framework', $packet.targetFramework, '--semantic-profile', $packet.semanticProfile, '--resource-mode', 'Declared', '--output', 'json') -WorkingDirectory $runRoot
             $lockPath = Join-Path $runRoot ($entry.id + '.lock.json')
@@ -92,8 +105,16 @@ try {
                 throw "Qualification unit '$($entry.qualification.unitName)' was not emitted as exactly one CLR method."
             }
 
+            $compiledImportPath = [string] $build.artifactPath
+            if ($importSurface -eq 'RootModuleDirect') {
+                $artifactRoot = Split-Path -Parent $compiledImportPath
+                $compiledManifest = Import-PowerShellDataFile -LiteralPath $compiledImportPath
+                if ([string]::IsNullOrWhiteSpace($compiledManifest.RootModule)) { throw 'Generated module manifest declares no root module.' }
+                $compiledImportPath = Assert-ContainedPath -Root $artifactRoot -Path (Join-Path $artifactRoot $compiledManifest.RootModule) -Label 'Qualification generated root module'
+                if (-not (Test-Path -LiteralPath $compiledImportPath -PathType Leaf)) { throw "Generated root module does not exist: $compiledImportPath" }
+            }
             $originalCommand = 'Import-Module -Name ' + (Quote-PowerShellLiteral $sourcePath) + ' -Force -ErrorAction Stop; ' + $entry.qualification.probeScript
-            $compiledCommand = 'Import-Module -Name ' + (Quote-PowerShellLiteral ([string] $build.artifactPath)) + ' -Force -ErrorAction Stop; ' + $entry.qualification.probeScript
+            $compiledCommand = 'Import-Module -Name ' + (Quote-PowerShellLiteral $compiledImportPath) + ' -Force -ErrorAction Stop; ' + $entry.qualification.probeScript
             $original = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoProfile', '-NonInteractive', '-Command', $originalCommand) -WorkingDirectory $runRoot -TimeoutSeconds 120
             $compiled = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoProfile', '-NonInteractive', '-Command', $compiledCommand) -WorkingDirectory $runRoot -TimeoutSeconds 120
             if ($original.ExitCode -ne 0 -or $compiled.ExitCode -ne 0 -or
@@ -103,6 +124,7 @@ try {
             $results.Add([ordered]@{
                 id = $entry.id
                 unitName = $entry.qualification.unitName
+                importSurface = $importSurface
                 emittedClrMethod = $true
                 runtimeRouted = [int] $ledgerEntry[0].runtimeCommandRegions -gt 0 -or [bool] $ledgerEntry[0].retainedHostedSource
                 compiledMethods = [int] $build.manifest.compiledMethods
