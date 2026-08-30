@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-public-powershell-modules-net8-v1",
+  "fixedOn": "2026-08-30",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net8.0",
+  "strictTargetFramework": "net10.0",
+  "strictRuntimeIdentifiers": [
+    "win-x64",
+    "linux-x64"
+  ],
+  "artifactKind": "BinaryModule",
+  "mode": "Hybrid",
+  "resourceMode": "CompleteModule",
+  "modules": [
+    {
+      "id": "PSFramework",
+      "version": "1.14.457",
+      "repositoryUrl": "https://github.com/PowershellFrameworkCollective/psframework",
+      "license": "https://github.com/PowershellFrameworkCollective/psframework/blob/master/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "1.14.457",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/PSFramework/1.14.457",
+      "sha256": "0c8f6b5c2f72b5512f684bbd3c35cd6ded5a709588d57d9b68cd046d427da1c9",
+      "entryPoint": "PSFramework.psd1",
+      "scenarioFamily": "module-orchestration-configuration",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = Get-PSFConfig | Select-Object -First 1; if ($null -eq $value) { throw 'No configuration result.' }; 'ok'"
+    },
+    {
+      "id": "PSScriptAnalyzer",
+      "version": "1.25.0",
+      "repositoryUrl": "https://github.com/PowerShell/PSScriptAnalyzer",
+      "license": "https://github.com/PowerShell/PSScriptAnalyzer/blob/main/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "1.25.0",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/PSScriptAnalyzer/1.25.0",
+      "sha256": "14e634c828eb98efb9f40b2918ba90f139ed5eccdf663a2a747736d996995d60",
+      "entryPoint": "PSScriptAnalyzer.psd1",
+      "scenarioFamily": "managed-binary-static-analysis",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = Get-ScriptAnalyzerRule | Select-Object -First 1; if ($null -eq $value) { throw 'No analyzer rule.' }; 'ok'"
+    },
+    {
+      "id": "ImportExcel",
+      "version": "7.8.10",
+      "repositoryUrl": "https://github.com/dfinke/ImportExcel",
+      "license": "https://github.com/dfinke/ImportExcel/blob/master/LICENSE.txt",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "7.8.10",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/ImportExcel/7.8.10",
+      "sha256": "d8a1d79dc8cf10c0eea30b68b70459b3fb4cac0042fb756fcb23890671857e4c",
+      "entryPoint": "ImportExcel.psd1",
+      "scenarioFamily": "filesystem-csv-spreadsheet",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = Get-ExcelColumnName 27; if ($value.ColumnName -ne 'AA') { throw 'Unexpected column name.' }; 'ok'"
+    },
+    {
+      "id": "platyPS",
+      "version": "0.14.2",
+      "repositoryUrl": "https://github.com/PowerShell/platyPS",
+      "license": "https://github.com/PowerShell/platyPS/blob/master/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "0.14.2",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/platyPS/0.14.2",
+      "sha256": "12176941c2972577d7adbf4877ad6aebcca0920c416b46ef1131e5a5248ec59b",
+      "entryPoint": "platyPS.psd1",
+      "scenarioFamily": "object-metadata-documentation",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$markdown = '---' + [Environment]::NewLine + 'title: Demo' + [Environment]::NewLine + '---' + [Environment]::NewLine + '# Body'; $value = Get-MarkdownMetadata -Markdown $markdown; if ($null -eq $value) { throw 'No metadata.' }; 'ok'"
+    },
+    {
+      "id": "Pester",
+      "version": "6.1.0",
+      "repositoryUrl": "https://github.com/Pester/Pester",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0.html",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "6.1.0",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/Pester/6.1.0",
+      "sha256": "0207a75ea09f81b27c1ded44898b2bb3c845bafa02045bd64a39e26a53ca41b4",
+      "entryPoint": "Pester.psd1",
+      "scenarioFamily": "test-control-flow",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = New-PesterConfiguration; if ($null -eq $value.Run) { throw 'No run configuration.' }; 'ok'"
+    },
+    {
+      "id": "InvokeBuild",
+      "version": "5.14.23",
+      "repositoryUrl": "https://github.com/nightroman/Invoke-Build",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "5.14.23",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/InvokeBuild/5.14.23",
+      "sha256": "a4c9b093583282ce12cfea0d3ce6299a45f9c9cc3f7818246cb39f743ff737d4",
+      "entryPoint": "InvokeBuild.psd1",
+      "scenarioFamily": "task-process-orchestration",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$root = Join-Path ([IO.Path]::GetTempPath()) ('pf-corpus-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $root | Out-Null; try { $file = Join-Path $root 'sample.build.ps1'; [IO.File]::WriteAllText($file, \"task . { 'ok' }\", [Text.UTF8Encoding]::new($false)); $value = Invoke-Build -File $file -Task .; if ('ok' -notin @($value)) { throw 'Build task did not run.' } } finally { Remove-Item -LiteralPath $root -Recurse -Force }; 'ok'"
+    },
+    {
+      "id": "Microsoft.PowerShell.Archive",
+      "version": "1.2.6",
+      "repositoryUrl": "https://github.com/PowerShell/Microsoft.PowerShell.Archive",
+      "license": "https://github.com/PowerShell/Microsoft.PowerShell.Archive/blob/master/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "1.2.6",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/Microsoft.PowerShell.Archive/1.2.6",
+      "sha256": "fc7e304bffcc14ea95828eedf52c5992432c6233fef36416a6f5fb4628d13c47",
+      "entryPoint": "Microsoft.PowerShell.Archive.psd1",
+      "scenarioFamily": "filesystem-archive",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$root = Join-Path ([IO.Path]::GetTempPath()) ('pf-corpus-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $root | Out-Null; try { $source = Join-Path $root 'source.txt'; $zip = Join-Path $root 'archive.zip'; $expanded = Join-Path $root 'expanded'; [IO.File]::WriteAllText($source, 'ok', [Text.UTF8Encoding]::new($false)); Compress-Archive -LiteralPath $source -DestinationPath $zip; Expand-Archive -LiteralPath $zip -DestinationPath $expanded; if (-not (Test-Path -LiteralPath (Join-Path $expanded 'source.txt'))) { throw 'Archive roundtrip failed.' } } finally { Remove-Item -LiteralPath $root -Recurse -Force }; 'ok'"
+    },
+    {
+      "id": "powershell-yaml",
+      "version": "0.4.12",
+      "repositoryUrl": "https://github.com/cloudbase/powershell-yaml",
+      "license": "https://github.com/cloudbase/powershell-yaml/blob/master/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "0.4.12",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/powershell-yaml/0.4.12",
+      "sha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+      "entryPoint": "powershell-yaml.psd1",
+      "scenarioFamily": "json-yaml-data-shaping",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = ConvertFrom-Yaml 'answer: 42'; if ([int]$value.answer -ne 42) { throw 'YAML conversion failed.' }; 'ok'"
+    },
+    {
+      "id": "Pode",
+      "version": "2.14.1",
+      "repositoryUrl": "https://github.com/Badgerati/Pode",
+      "license": "https://raw.githubusercontent.com/Badgerati/Pode/master/LICENSE.txt",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "2.14.1",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/Pode/2.14.1",
+      "sha256": "38f7bedb4fd40a65d7518fc87de483450fafab22f5274ef82ebcfb0fca8ec6de",
+      "entryPoint": "Pode.psd1",
+      "scenarioFamily": "rest-json-server-orchestration",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$value = Get-PodeVersion; if ($null -eq $value) { throw 'No version.' }; 'ok'"
+    },
+    {
+      "id": "ThreadJob",
+      "version": "2.1.0",
+      "repositoryUrl": "https://github.com/PowerShell/ThreadJob",
+      "license": "https://github.com/PowerShell/ThreadJob/blob/master/LICENSE",
+      "revisionKind": "PSGalleryPackageVersion",
+      "revision": "2.1.0",
+      "packageUrl": "https://www.powershellgallery.com/api/v2/package/ThreadJob/2.1.0",
+      "sha256": "914b4cbde1e189cdf782878afd9d2c6869de9644f1e99b93dcd0bffebc5bb805",
+      "entryPoint": "ThreadJob.psd1",
+      "scenarioFamily": "concurrency-process-lifecycle",
+      "restorePolicy": "IsolatedExactPackage",
+      "probeScript": "$job = Start-ThreadJob -ScriptBlock { 6 * 7 }; try { $value = $job | Wait-Job | Receive-Job; if ([int]$value -ne 42) { throw 'Thread job failed.' } } finally { $job | Remove-Job -Force -ErrorAction SilentlyContinue }; 'ok'"
+    }
+  ],
+  "strictPrograms": [
+    {
+      "id": "strict-recursion-local-call",
+      "entryPoint": "StrictProgram/Main.ps1",
+      "expectedOutput": "8",
+      "scenarioFamily": "compute-recursion-control-flow"
+    },
+    {
+      "id": "strict-collection-mutation",
+      "entryPoint": "StrictCollections/Main.ps1",
+      "expectedOutput": "2",
+      "scenarioFamily": "object-collection-mutation"
+    },
+    {
+      "id": "strict-switch-control-flow",
+      "entryPoint": "StrictSwitch/Main.ps1",
+      "expectedOutput": "20",
+      "scenarioFamily": "switch-control-flow"
+    }
+  ]
+}

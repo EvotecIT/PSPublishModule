@@ -164,4 +164,29 @@ public sealed class ModuleManifestValueReaderTests
         }
     }
 
+    [Fact]
+    public void ReadTopLevelStringArrays_SkipEarlierHereStringMetadata()
+    {
+        const string manifest = """
+            @{
+                Description = @'
+            Text may contain 'quoted fragments', URLs, # characters, and = signs.
+            '@
+                FunctionsToExport = @(
+                    'Get-First'
+                    # A comment between literal entries is valid manifest syntax.
+                    'Get-Second',
+                )
+                AliasesToExport = @('one', 'two')
+            }
+            """;
+
+        Assert.Equal(
+            new[] { "Get-First", "Get-Second" },
+            ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(manifest, "FunctionsToExport"));
+        Assert.Equal(
+            new[] { "one", "two" },
+            ModuleManifestValueReader.ReadTopLevelStringOrArrayFromText(manifest, "AliasesToExport"));
+    }
+
 }

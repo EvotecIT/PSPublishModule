@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-public-powershell-modules-net8-v1",
+  "packetSha256": "55fa38fe09c6b066dd7c2125623eb06d0bf596fa1563d9336bdc2509f22596bf",
+  "recordedOn": "2026-08-30",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "hybrid": {
+    "runtimeIdentifier": "win-x64",
+    "modulesPassed": 10,
+    "modulesTotal": 10,
+    "scenarioFamilies": 10,
+    "cleanImportedCommands": 887,
+    "analyzedUnits": 735,
+    "boundUnits": 6,
+    "emittedClrUnits": 0,
+    "exportedCmdletUnits": 0,
+    "hostedRegions": 0,
+    "retainedSourceUnits": 735,
+    "semanticFallbackUnits": 729,
+    "shapingFallbackUnits": 6,
+    "runtimeRoutedUnits": 735,
+    "omittedUnits": 0,
+    "rejectedUnits": 0,
+    "cleanTargetCompleteProgramPassPercentage": 100.0,
+    "emittedClrUnitPercentage": 0.0
+  },
+  "strict": {
+    "programs": 3,
+    "analyzedUnits": 7,
+    "boundUnits": 7,
+    "emittedClrUnits": 7,
+    "completeProgramPassPercentage": 100.0,
+    "emittedClrUnitPercentage": 100.0,
+    "targetHosts": [
+      {
+        "runtimeIdentifier": "win-x64",
+        "programsPassed": 3,
+        "programsTotal": 3
+      },
+      {
+        "runtimeIdentifier": "linux-x64",
+        "programsPassed": 3,
+        "programsTotal": 3
+      }
+    ]
+  },
+  "interpretation": {
+    "powerShellLanguageCoveragePercentage": null,
+    "note": "Complete-program pass rates and emitted-unit ratios are bounded packet measurements, not percentages of the PowerShell language or predictions for arbitrary inputs."
+  }
+}

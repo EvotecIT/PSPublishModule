@@ -4,7 +4,10 @@ This checked-in corpus is the portable, product-neutral acceptance surface for P
 
 - `HybridModule` exercises parameter metadata and literal defaults, typed operators, direct self-recursion, safe runtime-state intrinsics, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its current net10 baseline emits all 8 functions without fallback.
 - `StrictProgram` is a multi-file script graph that must build as a PowerShell-free typed executable.
+- `StrictCollections` and `StrictSwitch` add collection mutation and exhaustive control-flow programs without input-specific compiler configuration.
 - `census-baseline.net10.json` records post-emission module coverage and a source fingerprint. Its relative product path remains comparable from another checkout root.
+- `public-corpus.net8.json` fixes ten unrelated public module packages by URL, version, license, content hash, scenario family, entrypoint, and clean-target probe. Package contents remain external.
+- `public-corpus-baseline.net8.json` records the bounded Windows Hybrid and Windows/Linux Strict outcomes. Its percentages are packet measurements, never estimates of PowerShell-language coverage.
 
 Run the portable coverage gate from the repository root:
 
@@ -16,3 +19,11 @@ powerforge powershell census `
 ```
 
 The wider external-repository census remains useful scale evidence, but every external root is optional and replaceable. Compiler eligibility is based only on generic syntax, type, binding, host-capability, and artifact contracts.
+
+Run the fixed public packet after building the CLI:
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1
+```
+
+The runner downloads only the exact declared package URLs, verifies SHA-256 before extraction, rejects escaping paths, portable case collisions, and links, writes one reviewed dependency lock per input, builds without the compiler build cache, and probes each generated module in a clean child PowerShell process. Use `-Offline` after the first acquisition to prove that the packet no longer depends on a package feed. Strict programs are executed directly for the selected RID; run them on the actual target host rather than treating cross-publish as execution proof.

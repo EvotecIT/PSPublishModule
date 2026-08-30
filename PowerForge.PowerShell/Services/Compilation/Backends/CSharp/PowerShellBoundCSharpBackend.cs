@@ -382,7 +382,32 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         builder.Append(prefix).AppendLine("}");
         builder.Append(prefix).AppendLine("while (false);");
+        if (SwitchAlwaysReturns(statement))
+        {
+            builder.Append(prefix).AppendLine(
+                "throw new global::System.InvalidOperationException(\"An exhaustive PowerShell switch completed without returning.\");");
+        }
     }
+
+    private static bool SwitchAlwaysReturns(PowerShellLoweredSwitchStatement statement)
+        => statement.DefaultStatements is not null &&
+           statement.Clauses.All(static clause => StatementsAlwaysReturn(clause.Statements)) &&
+           StatementsAlwaysReturn(statement.DefaultStatements);
+
+    private static bool StatementsAlwaysReturn(IEnumerable<PowerShellLoweredStatement> statements)
+        => statements.LastOrDefault() switch
+        {
+            PowerShellLoweredReturnStatement { EmitsValue: true } => true,
+            PowerShellLoweredThrowStatement => true,
+            PowerShellLoweredIfStatement conditional => conditional.ElseStatements is not null &&
+                conditional.Clauses.All(static clause => StatementsAlwaysReturn(clause.Statements)) &&
+                StatementsAlwaysReturn(conditional.ElseStatements),
+            PowerShellLoweredSwitchStatement nested => SwitchAlwaysReturns(nested),
+            PowerShellLoweredTryStatement guarded =>
+                StatementsAlwaysReturn(guarded.Statements) &&
+                guarded.Catches.All(static clause => StatementsAlwaysReturn(clause.Statements)),
+            _ => false
+        };
 
     private static string EmitExpression(PowerShellLoweredExpression expression)
         => expression switch

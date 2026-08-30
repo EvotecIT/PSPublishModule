@@ -139,6 +139,10 @@ internal static class PowerShellCompiledModuleManifest
         var nestedModuleFunctionPatterns = GetNestedModuleFunctionExportPatterns(sourcePath, allFunctions, sourceManifest);
         var selectedFallback = Select(explicitFallback, manifestFunctions)
             .Concat(nestedModuleFunctionPatterns)
+            .Concat(GetRetainedRootFunctionExportPatterns(
+                rootModuleFileName,
+                explicitCompiled.Concat(explicitFallback),
+                manifestFunctions))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var preserveWildcardCmdlets = hasNestedModules && manifestCmdlets?.Contains("*", StringComparer.OrdinalIgnoreCase) == true;
@@ -265,6 +269,18 @@ internal static class PowerShellCompiledModuleManifest
         if (manifestFunctions?.Contains("*", StringComparer.OrdinalIgnoreCase) == true)
             return new[] { "*" };
         return SelectPatternsWithoutMatches(sourceFunctionNames, manifestFunctions);
+    }
+
+    private static string[] GetRetainedRootFunctionExportPatterns(
+        string rootModuleFileName,
+        IEnumerable<string> staticallyDiscoveredFunctions,
+        string[]? manifestFunctions)
+    {
+        if (!rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) || manifestFunctions is null)
+            return Array.Empty<string>();
+        if (manifestFunctions.Contains("*", StringComparer.OrdinalIgnoreCase))
+            return new[] { "*" };
+        return SelectPatternsWithoutMatches(staticallyDiscoveredFunctions, manifestFunctions);
     }
 
     private static void ApplyTargetCompatibility(

@@ -385,6 +385,13 @@ internal static class ModuleManifestTextParser
         if (index >= text.Length)
             return string.Empty;
 
+        if (TryReadHereString(text, index, out var hereStringEnd))
+        {
+            var expression = text.Substring(index, hereStringEnd - index);
+            index = hereStringEnd;
+            return expression.Trim();
+        }
+
         if (TryReadQuotedString(text, index, out var quotedEnd))
         {
             var expression = text.Substring(index, quotedEnd - index);
@@ -411,6 +418,48 @@ internal static class ModuleManifestTextParser
         var result = text.Substring(index, end - index).Trim();
         index = end;
         return result;
+    }
+
+    private static bool TryReadHereString(string text, int start, out int endExclusive)
+    {
+        endExclusive = start;
+        if (start + 2 >= text.Length || text[start] != '@' || text[start + 1] is not ('\'' or '"'))
+            return false;
+
+        var quote = text[start + 1];
+        var headerEnd = start + 2;
+        if (text[headerEnd] == '\r')
+            headerEnd++;
+        if (headerEnd >= text.Length || text[headerEnd] != '\n')
+            return false;
+
+        var lineStart = headerEnd + 1;
+        while (lineStart < text.Length)
+        {
+            var marker = lineStart;
+            while (marker < text.Length && text[marker] is ' ' or '\t')
+                marker++;
+
+            if (marker + 1 < text.Length && text[marker] == quote && text[marker + 1] == '@')
+            {
+                var remainder = marker + 2;
+                while (remainder < text.Length && text[remainder] is ' ' or '\t')
+                    remainder++;
+
+                if (remainder == text.Length || text[remainder] is '\r' or '\n' or ';' or ',')
+                {
+                    endExclusive = marker + 2;
+                    return true;
+                }
+            }
+
+            var newline = text.IndexOf('\n', lineStart);
+            if (newline < 0)
+                break;
+            lineStart = newline + 1;
+        }
+
+        return false;
     }
 
     private static bool TryReadQuotedString(string text, int start, out int endExclusive)
@@ -488,6 +537,12 @@ internal static class ModuleManifestTextParser
                 while (i < text.Length && text[i] != '\r' && text[i] != '\n')
                     i++;
                 i--;
+                continue;
+            }
+
+            if (ch == '@' && TryReadHereString(text, i, out var hereStringEnd))
+            {
+                i = hereStringEnd - 1;
                 continue;
             }
 

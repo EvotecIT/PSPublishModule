@@ -326,6 +326,28 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             throw new InvalidOperationException($"Module manifest file reference '{value}' must remain relative to the module root.");
         var sourcePath = Path.GetFullPath(Path.Combine(manifestDirectory, normalized));
         PowerShellCompilationPathSafety.EnsureContained(moduleRoot, sourcePath, $"Module dependency '{value}' escapes the module root.");
+        if (Directory.Exists(sourcePath))
+        {
+            PowerShellCompilationPathSafety.EnsureNoLinks(
+                moduleRoot,
+                sourcePath,
+                $"Module dependency directory '{value}' traverses a symbolic link or junction.");
+            foreach (var containedFile in EnumerateContainedFiles(sourcePath, ignoreInaccessible: false))
+            {
+                var containedDisposition = GetManifestDisposition(kind, mode, discovery, containedFile);
+                AddLocal(
+                    results,
+                    localPaths,
+                    moduleRoot,
+                    containedFile,
+                    discovery,
+                    containedDisposition,
+                    GetManifestNote(kind, mode, discovery, containedFile),
+                    required,
+                    PowerShellCompilationDependencySelection.Required);
+            }
+            return;
+        }
         if (File.Exists(sourcePath))
             PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, sourcePath, $"Module dependency '{value}' traverses a symbolic link or junction.");
         if (discovery == PowerShellCompilationDependencyDiscovery.FileList && localPaths.Contains(sourcePath))

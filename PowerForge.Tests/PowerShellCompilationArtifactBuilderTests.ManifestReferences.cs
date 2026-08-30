@@ -118,6 +118,42 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("1", run.StandardOutput.Trim());
     }
 
+    [Fact]
+    public void Build_HybridModulePreservesManifestFunctionsLoadedByRuntimeDirectoryDiscovery()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "foreach ($file in Get-ChildItem -Path \"$PSScriptRoot/Public/*.ps1\") { . $file.FullName }",
+            ".psm1");
+        var publicDirectory = Path.Combine(fixture.RootPath, "Public");
+        Directory.CreateDirectory(publicDirectory);
+        File.WriteAllText(Path.Combine(publicDirectory, "Get-DynamicValue.ps1"), "function Get-DynamicValue { return 42 }");
+        File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'f5bc074f-ea7a-47d3-bfa7-77799015280e'; FunctionsToExport = @('Get-DynamicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @() }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.RuntimeDirectoryExports",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            ResourceMode = PowerShellCompilationResourceMode.CompleteModule
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var manifest = File.ReadAllText(result.ArtifactPath!);
+        Assert.Contains("Get-DynamicValue", manifest, StringComparison.Ordinal);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = RunPowerShell(
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force -ErrorAction Stop; Get-DynamicValue");
+        Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
+        Assert.Equal("42", run.StandardOutput.Trim());
+    }
+
     [Theory]
     [InlineData("FormatsToProcess", ".\\Formats\\Demo.ps1xml", "Formats", "Demo.ps1xml")]
     [InlineData("RequiredAssemblies", "lib\\Helper.dll", "lib", "Helper.dll")]
@@ -231,6 +267,31 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(artifactName + ".dll", fileList, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("Assets/data.txt", fileList, StringComparer.OrdinalIgnoreCase);
         Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Assets", "data.txt")));
+    }
+
+    [Fact]
+    public void Build_HybridModuleCopiesDirectoryEntriesDeclaredByFileList()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PublicValue { return 1 }; function Get-FallbackValue { throw 'fallback' }",
+            ".psm1");
+        var nested = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Assets", "Nested"));
+        File.WriteAllText(Path.Combine(nested.FullName, "data.txt"), "payload");
+        File.WriteAllText(
+            Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; FunctionsToExport = @('Get-PublicValue', 'Get-FallbackValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); FileList = @('Assets') }");
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.FileListDirectory",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Assets", "Nested", "data.txt")));
+        Assert.Contains("Assets", ModuleManifestValueReader.ReadTopLevelStringOrArray(result.ArtifactPath!, "FileList"), StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]

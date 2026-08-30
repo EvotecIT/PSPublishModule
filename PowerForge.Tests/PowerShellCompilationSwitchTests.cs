@@ -82,6 +82,27 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_TypedLibraryAcceptsExhaustiveReturningSwitch()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-SwitchValue { param([int] $Value) switch ($Value) { 1 { return 10 } 2 { return 20 } default { return -1 } } }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ReturningSwitch",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = Assembly.LoadFile(result.ArtifactPath!);
+        var method = assembly.GetType("PowerForge.Compiled.PowerForge_ReturningSwitchMethods", throwOnError: true)!
+            .GetMethod("Get_SwitchValue")!;
+        Assert.Equal(20, method.Invoke(null, new object[] { 2 }));
+        Assert.Equal(-1, method.Invoke(null, new object[] { 9 }));
+    }
+
+    [Fact]
     public void Build_ScalarSwitchContinuePreservesPowerShellSwitchScopeInsideAndOutsideLoops()
     {
         using var fixture = ArtifactFixture.Create(
