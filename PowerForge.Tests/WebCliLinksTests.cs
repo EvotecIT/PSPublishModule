@@ -134,6 +134,47 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
+    public void HandleSubCommand_LinksExportApache_PreservesCaseDistinctOverlayFlagsOnLinux()
+    {
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var configPath = WriteSiteFixture(root, duplicateRedirects: false);
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
+                """);
+            File.WriteAllText(lowerPath,
+                """
+                [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
+                """);
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "links",
+                new[] { "export-apache", "--config", configPath, "--shortlink-source", upperPath, "--shortlink-source", lowerPath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
+
+            Assert.Equal(0, exitCode);
+            var apache = File.ReadAllText(Path.Combine(root, "deploy", "apache", "link-service-redirects.conf"));
+            Assert.Contains("RewriteRule ^/?upper/?$", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?lower/?$", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void EvaluateBaseline_AcceptsStableAndLegacyWarningKeys()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-baseline-" + Guid.NewGuid().ToString("N"));

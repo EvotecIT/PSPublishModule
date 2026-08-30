@@ -1622,6 +1622,42 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void Load_PreservesCaseDistinctOverlayFilesOnCaseSensitivePlatforms()
+    {
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
+                """);
+            File.WriteAllText(lowerPath,
+                """
+                [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
+                """);
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinkPaths = new[] { upperPath, lowerPath }
+            });
+
+            Assert.Equal(new[] { "upper", "lower" }, dataSet.Shortlinks.Select(static link => link.Slug));
+            Assert.Equal(new[] { Path.GetFullPath(upperPath), Path.GetFullPath(lowerPath) }, dataSet.UsedSources);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Load_ValidatesConflictsAcrossPrimaryAndAdditionalShortlinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-shortlink-conflict-" + Guid.NewGuid().ToString("N"));

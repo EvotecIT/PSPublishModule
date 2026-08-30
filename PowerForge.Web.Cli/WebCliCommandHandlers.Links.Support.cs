@@ -124,11 +124,11 @@ internal static partial class WebCliCommandHandlers
             ShortlinksPath = shortlinksPath,
             ShortlinkPaths = shortlinkPaths
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(FileSystemPathComparer)
                 .ToArray(),
             RedirectCsvPaths = csvPaths
                 .Where(static value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(FileSystemPathComparer)
                 .ToArray(),
             Hosts = BuildLinkHostMap(args, links),
             LanguageRootHosts = BuildLinkLanguageRootHostMap(args, links)

@@ -160,8 +160,8 @@ internal static partial class WebPipelineRunner
             parts.Add($"salt:{salt}");
         parts.Add(step.GetRawText());
         var paths = EnumerateFingerprintPaths(baseDir, step)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+            .Distinct(WebCliHelpers.FileSystemPathComparer)
+            .OrderBy(path => path, WebCliHelpers.FileSystemPathComparer);
 
         foreach (var path in paths)
         {
@@ -306,7 +306,7 @@ internal static partial class WebPipelineRunner
                 .Concat(linkOptions.RedirectCsvPaths)
                 .Where(static path => !string.IsNullOrWhiteSpace(path))
                 .Select(static path => Path.GetFullPath(path!))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Distinct(WebCliHelpers.FileSystemPathComparer)
                 .ToArray();
         }
         catch

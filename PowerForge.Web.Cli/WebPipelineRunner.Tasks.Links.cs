@@ -474,7 +474,7 @@ internal static partial class WebPipelineRunner
                 .Select(value => ResolvePath(baseDir, value)))
             .OfType<string>()
             .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(WebCliHelpers.FileSystemPathComparer)
             .ToArray();
 
         var csvSources = GetArrayOfStrings(step, "sources") ??
@@ -508,7 +508,7 @@ internal static partial class WebPipelineRunner
             RedirectsPath = redirectsPath,
             ShortlinksPath = shortlinksPath,
             ShortlinkPaths = shortlinkPaths,
-            RedirectCsvPaths = csvPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            RedirectCsvPaths = csvPaths.Distinct(WebCliHelpers.FileSystemPathComparer).ToArray(),
             Hosts = BuildLinksHostMap(step, links),
             LanguageRootHosts = BuildLinksLanguageRootHostMap(step, links)
         };

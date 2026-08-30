@@ -17,6 +17,9 @@ public static partial class WebLinkService
     private static readonly Regex SafeSlugRegex = new("^[a-z0-9][a-z0-9._-]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LegacyPostIdRegex = new(@"^\s*/\?p=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LegacyPageIdRegex = new(@"^\s*/\?page_id=(\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly StringComparer FileSystemPathComparer = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     /// <summary>Loads redirect and shortlink data from configured JSON and compatibility CSV files.</summary>
     public static WebLinkDataSet Load(WebLinkLoadOptions options)
@@ -29,7 +32,7 @@ public static partial class WebLinkService
         var missingSources = new List<string>();
 
         LoadRedirectJson(options.RedirectsPath, redirects, usedSources, missingSources);
-        var seenShortlinkSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenShortlinkSources = new HashSet<string>(FileSystemPathComparer);
         foreach (var shortlinkPath in new[] { options.ShortlinksPath }.Concat(options.ShortlinkPaths ?? Array.Empty<string>()))
         {
             if (string.IsNullOrWhiteSpace(shortlinkPath))
@@ -60,8 +63,8 @@ public static partial class WebLinkService
         {
             Redirects = redirects.ToArray(),
             Shortlinks = shortlinks.ToArray(),
-            UsedSources = usedSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            MissingSources = missingSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            UsedSources = usedSources.Distinct(FileSystemPathComparer).ToArray(),
+            MissingSources = missingSources.Distinct(FileSystemPathComparer).ToArray(),
             Hosts = NormalizeHostMap(options.Hosts),
             LanguageRootHosts = NormalizeLanguageRootHosts(options.LanguageRootHosts)
         };

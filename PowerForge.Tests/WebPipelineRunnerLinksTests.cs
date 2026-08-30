@@ -337,6 +337,53 @@ public sealed class WebPipelineRunnerLinksTests
     }
 
     [Fact]
+    public void RunPipeline_LinksExportApache_PreservesCaseDistinctOverlayPathsOnLinux()
+    {
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Managed.json"),
+                """
+                [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
+                """);
+            File.WriteAllText(Path.Combine(root, "managed.json"),
+                """
+                [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
+                """);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-export-apache",
+                      "shortlinkSources": ["./Managed.json", "./managed.json"],
+                      "apacheOut": "./links.conf",
+                      "hosts": { "short": "evo.yt" }
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var apache = File.ReadAllText(Path.Combine(root, "links.conf"));
+            Assert.Contains("RewriteRule ^/?upper/?$", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?lower/?$", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_LinksValidate_FailsOnUnsafeExternalTarget()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-fail-" + Guid.NewGuid().ToString("N"));
