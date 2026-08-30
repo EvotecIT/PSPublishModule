@@ -119,6 +119,8 @@ public static partial class WebSiteVerifier
             Enabled = localizationSpec?.Enabled == true && byCode.Count > 0,
             DetectFromPath = localizationSpec?.DetectFromPath ?? true,
             PrefixDefaultLanguage = localizationSpec?.PrefixDefaultLanguage == true,
+            FallbackToDefaultLanguage = localizationSpec?.FallbackToDefaultLanguage == true,
+            MaterializeFallbackPages = localizationSpec?.MaterializeFallbackPages == true,
             DefaultLanguage = explicitDefault.Code,
             Languages = entries.ToArray(),
             ByCode = byCode,

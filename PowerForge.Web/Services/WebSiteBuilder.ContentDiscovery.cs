@@ -1007,7 +1007,7 @@ public static partial class WebSiteBuilder
         return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
     }
 
-    private static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)
+    internal static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)
     {
         var outputs = TryGetMetaStringList(meta, "outputs");
         if (outputs.Length > 0)

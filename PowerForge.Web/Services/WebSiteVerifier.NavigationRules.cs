@@ -217,6 +217,10 @@ public static partial class WebSiteVerifier
             .Select(NormalizeStaticRouteForNavigationMatch)
             .Where(route => !string.IsNullOrWhiteSpace(route))
             .ToHashSet(StringComparer.Ordinal);
+        var knownPatternRoutes = knownRoutes
+            .Concat(knownStaticRoutes)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var knownCollections = (spec.Collections ?? Array.Empty<CollectionSpec>())
             .Where(collection => !string.IsNullOrWhiteSpace(collection?.Name))
@@ -246,7 +250,7 @@ public static partial class WebSiteVerifier
                 continue;
 
             var menuContext = $"Navigation.Menus['{menu.Name}']";
-            ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
+            ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
             var menuLanguage = ResolveNavigationMenuLanguage(menu.Name, localization);
             ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes);
         }
@@ -286,9 +290,9 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Navigation lint: {profileContext} has no selectors (paths/collections/layouts/projects). It will apply globally.");
             }
 
-            if (profile.Paths is { Length: > 0 } && knownRoutes.Length > 0)
+            if (profile.Paths is { Length: > 0 } && knownPatternRoutes.Length > 0)
             {
-                var hasRouteHit = profile.Paths.Any(path => ShouldValidateRouteCoverage(path, routeScopedPrefixes) && PatternMatchesAnyRoute(path, knownRoutes));
+                var hasRouteHit = profile.Paths.Any(path => ShouldValidateRouteCoverage(path, routeScopedPrefixes) && PatternMatchesAnyRoute(path, knownPatternRoutes));
                 if (!hasRouteHit)
                     warnings.Add($"Navigation lint: {profileContext}.Paths do not match any generated routes.");
             }
@@ -322,7 +326,7 @@ public static partial class WebSiteVerifier
                     continue;
 
                 var menuContext = $"{profileContext}.Menus['{menu.Name}']";
-                ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
+                ValidateVisibilityPatterns(menu.Visibility, menuContext + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
                 var menuLanguage = ResolveNavigationMenuLanguage(menu.Name, localization);
                 ValidateMenuItemsForLint(menu.Items, menuContext + ".Items", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, itemIdLocations, warnings, localization, menuLanguage, knownStaticRoutes);
             }
@@ -523,7 +527,10 @@ public static partial class WebSiteVerifier
             }
         }
 
-        ValidateVisibilityPatterns(item.Visibility, context + ".Visibility", knownRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
+        var knownPatternRoutes = knownStaticRoutes is { Count: > 0 }
+            ? knownRoutes.Concat(knownStaticRoutes).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : knownRoutes;
+        ValidateVisibilityPatterns(item.Visibility, context + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
 
         if (!string.IsNullOrWhiteSpace(item.Url))
         {
@@ -559,9 +566,9 @@ public static partial class WebSiteVerifier
         }
 
         if (!string.IsNullOrWhiteSpace(item.Match) &&
-            knownRoutes.Length > 0 &&
+            knownPatternRoutes.Length > 0 &&
             ShouldValidateRouteCoverage(item.Match, routeScopedPrefixes) &&
-            !PatternMatchesAnyRoute(item.Match, knownRoutes))
+            !PatternMatchesAnyRoute(item.Match, knownPatternRoutes))
         {
             warnings.Add($"Navigation lint: {context}.Match '{item.Match}' does not match any generated route.");
         }

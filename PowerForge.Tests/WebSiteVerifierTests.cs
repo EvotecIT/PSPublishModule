@@ -2064,4 +2064,150 @@ public partial class WebSiteVerifierTests
                 Directory.Delete(root, true);
         }
     }
+    [Fact]
+    public void Verify_UsesStaticRoutesForNavigationPatterns()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-patterns-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "static", "docs"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "static", "docs", "index.html"), "<h1>Docs</h1>");
+            var spec = new SiteSpec
+            {
+                Name = "Static patterns",
+                BaseUrl = "https://example.test",
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec
+                    {
+                        Name = "main",
+                        Visibility = new NavigationVisibilitySpec { Paths = ["/docs/**"] },
+                        Items = [new MenuItemSpec { Title = "Docs", Url = "/docs/", Match = "/docs/**" }]
+                    }],
+                    Profiles = [new NavigationProfileSpec { Name = "docs", Paths = ["/docs/**"] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("do not match any generated route", StringComparison.OrdinalIgnoreCase) ||
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersTaxonomyPaginationRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-pagination-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "one.md"), "---\ntitle: One\ntags: [release, security]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "two.md"), "---\ntitle: Two\ntags: [release]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec
+                    {
+                        Name = "main",
+                        Items =
+                        [
+                            new MenuItemSpec { Title = "Tag page 2", Url = "/tags/page/2/" },
+                            new MenuItemSpec { Title = "Release page 2", Url = "/tags/release/page/2/" }
+                        ]
+                    }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("page/2", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersMaterializedFallbackAndAlternateOutputRoutesButNotDrafts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-materialized-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "en"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "en", "_index.md"), "---\ntitle: Blog\ntranslation_key: blog\n---\nBlog");
+            File.WriteAllText(Path.Combine(root, "content", "en", "draft.md"), "---\ntitle: Draft\ndraft: true\n---\nDraft");
+            File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
+            var spec = new SiteSpec
+            {
+                Name = "Materialized routes",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
+                    Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }]
+                },
+                Collections = [new CollectionSpec { Name = "blog", Preset = "blog", Input = "content", Output = "/blog" }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec
+                    {
+                        Name = "main",
+                        Items =
+                        [
+                            new MenuItemSpec { Title = "Polish fallback", Url = "/pl/blog/" },
+                            new MenuItemSpec { Title = "Blog feed", Url = "/blog/index.xml" },
+                            new MenuItemSpec { Title = "Draft", Url = "/blog/draft/" }
+                        ]
+                    }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                (warning.Contains("/pl/blog/", StringComparison.OrdinalIgnoreCase) || warning.Contains("/blog/index.xml", StringComparison.OrdinalIgnoreCase)) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("/blog/draft/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
 }

@@ -514,6 +514,7 @@ public static partial class WebSiteVerifier
         FrontMatter? matter,
         string language,
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
         HashSet<string> usedTaxonomyNames)
     {
         if (matter is null)
@@ -530,7 +531,7 @@ public static partial class WebSiteVerifier
             foreach (var value in matter.Tags)
             {
                 if (!string.IsNullOrWhiteSpace(value))
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "tags", normalizedLanguage, value.Trim());
+                    RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, "tags", normalizedLanguage, value.Trim());
             }
         }
 
@@ -541,7 +542,7 @@ public static partial class WebSiteVerifier
             {
                 usedTaxonomyNames.Add("categories");
                 foreach (var value in categories)
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "categories", normalizedLanguage, value);
+                    RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, "categories", normalizedLanguage, value);
             }
         }
 
@@ -559,12 +560,13 @@ public static partial class WebSiteVerifier
             usedTaxonomyNames.Add(taxonomy.Name);
 
             foreach (var value in values)
-                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomy.Name, normalizedLanguage, value);
+                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, taxonomy.Name, normalizedLanguage, value);
         }
     }
 
     private static void RecordTaxonomyTerm(
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
         string taxonomyName,
         string language,
         string term)
@@ -585,6 +587,20 @@ public static partial class WebSiteVerifier
         }
 
         terms.Add(term);
+
+        if (!taxonomyTermCountsByLanguage.TryGetValue(taxonomyName, out var countsByLanguage))
+        {
+            countsByLanguage = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            taxonomyTermCountsByLanguage[taxonomyName] = countsByLanguage;
+        }
+
+        if (!countsByLanguage.TryGetValue(language, out var counts))
+        {
+            counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            countsByLanguage[language] = counts;
+        }
+
+        counts[term] = counts.TryGetValue(term, out var count) ? count + 1 : 1;
     }
 
     private static bool TryGetMetaValues(object? value, out string[] values)
@@ -623,6 +639,7 @@ public static partial class WebSiteVerifier
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         Dictionary<string, string> routes,
+        Dictionary<string, List<CollectionRoute>> collectionRoutes,
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
         List<string> warnings)
     {
@@ -651,6 +668,24 @@ public static partial class WebSiteVerifier
                     routes[listRoute] = $"[taxonomy:{taxonomy.Name}:{language}]";
                 }
 
+                if (!collectionRoutes.TryGetValue(taxonomy.Name, out var taxonomyRoutes))
+                {
+                    taxonomyRoutes = new List<CollectionRoute>();
+                    collectionRoutes[taxonomy.Name] = taxonomyRoutes;
+                }
+                if (!taxonomyRoutes.Any(route => route.Kind == PageKind.Taxonomy && route.Route.Equals(listRoute, StringComparison.OrdinalIgnoreCase)))
+                {
+                    taxonomyRoutes.Add(new CollectionRoute(
+                        taxonomy.Name,
+                        listRoute,
+                        $"[taxonomy:{taxonomy.Name}:{language}]",
+                        false,
+                        language,
+                        string.Empty,
+                        PageKind.Taxonomy,
+                        taxonomy.Outputs ?? Array.Empty<string>()));
+                }
+
                 if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
                     !termsByLanguage.TryGetValue(language, out var terms) ||
                     terms.Count == 0)
@@ -672,6 +707,16 @@ public static partial class WebSiteVerifier
                     }
 
                     routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
+                    taxonomyRoutes.Add(new CollectionRoute(
+                        taxonomy.Name,
+                        termRoute,
+                        $"[taxonomy:{taxonomy.Name}:{language}:{term}]",
+                        false,
+                        language,
+                        string.Empty,
+                        PageKind.Term,
+                        taxonomy.Outputs ?? Array.Empty<string>(),
+                        term));
                 }
             }
         }
@@ -858,6 +903,8 @@ public static partial class WebSiteVerifier
         public bool Enabled { get; init; }
         public bool DetectFromPath { get; init; }
         public bool PrefixDefaultLanguage { get; init; }
+        public bool FallbackToDefaultLanguage { get; init; }
+        public bool MaterializeFallbackPages { get; init; }
         public string DefaultLanguage { get; init; } = "en";
         public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
         public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
@@ -882,5 +929,7 @@ public static partial class WebSiteVerifier
         bool Draft,
         string Language,
         string TranslationKey,
-        PageKind Kind);
+        PageKind Kind,
+        string[] Outputs,
+        string? TaxonomyTerm = null);
 }

@@ -324,7 +324,7 @@ public static partial class WebSiteBuilder
         public ConcurrentDictionary<string, string> CriticalCssCache { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
+    internal static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
     {
         var formatNames = item.Outputs.Length > 0 ? item.Outputs : ResolveOutputRule(spec, item);
         if (formatNames.Length == 0)
@@ -504,7 +504,7 @@ public static partial class WebSiteBuilder
             : string.Join(Environment.NewLine, lines);
     }
 
-    private static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
+    internal static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
     {
         var baseRoute = NormalizeRouteForMatch(outputPath);
         if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))

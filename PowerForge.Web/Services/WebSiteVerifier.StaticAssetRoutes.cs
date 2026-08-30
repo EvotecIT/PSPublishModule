@@ -139,7 +139,8 @@ public static partial class WebSiteVerifier
 
     private static IEnumerable<string> DiscoverGeneratedPaginationRoutes(
         SiteSpec spec,
-        IEnumerable<CollectionRoute> contentRoutes)
+        IEnumerable<CollectionRoute> contentRoutes,
+        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage)
     {
         if (spec.Pagination is { Enabled: false })
             yield break;
@@ -159,22 +160,42 @@ public static partial class WebSiteVerifier
                 static collection => collection.Name,
                 collection => Math.Max(0, collection.PageSize ?? defaultPageSize),
                 StringComparer.OrdinalIgnoreCase);
+        var taxonomyPageSizes = (spec.Taxonomies ?? Array.Empty<TaxonomySpec>())
+            .Where(static taxonomy => taxonomy is not null && !string.IsNullOrWhiteSpace(taxonomy.Name))
+            .ToDictionary(
+                static taxonomy => taxonomy.Name,
+                taxonomy => Math.Max(0, taxonomy.PageSize ?? defaultPageSize),
+                StringComparer.OrdinalIgnoreCase);
 
-        foreach (var section in routes.Where(static route => !route.Draft && route.Kind == PageKind.Section))
+        foreach (var section in routes.Where(static route => !route.Draft && route.Kind is PageKind.Section or PageKind.Taxonomy or PageKind.Term))
         {
-            var pageSize = collectionPageSizes.TryGetValue(section.Collection, out var configuredPageSize)
-                ? configuredPageSize
-                : defaultPageSize;
+            var pageSize = section.Kind == PageKind.Section
+                ? collectionPageSizes.TryGetValue(section.Collection, out var configuredCollectionPageSize)
+                    ? configuredCollectionPageSize
+                    : defaultPageSize
+                : taxonomyPageSizes.TryGetValue(section.Collection, out var configuredTaxonomyPageSize)
+                    ? configuredTaxonomyPageSize
+                    : defaultPageSize;
             if (pageSize <= 0)
                 continue;
 
             var sectionRoute = NormalizeRouteForNavigationMatch(section.Route);
-            var totalItems = routes.Count(candidate =>
-                !candidate.Draft &&
-                candidate.Kind is PageKind.Page or PageKind.Home &&
-                string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(candidate.Route, section.Route, StringComparison.OrdinalIgnoreCase) &&
-                NormalizeRouteForNavigationMatch(candidate.Route).StartsWith(sectionRoute, StringComparison.OrdinalIgnoreCase));
+            var totalItems = section.Kind switch
+            {
+                PageKind.Section => routes.Count(candidate =>
+                    !candidate.Draft &&
+                    candidate.Kind is PageKind.Page or PageKind.Home &&
+                    string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(candidate.Route, section.Route, StringComparison.OrdinalIgnoreCase) &&
+                    NormalizeRouteForNavigationMatch(candidate.Route).StartsWith(sectionRoute, StringComparison.OrdinalIgnoreCase)),
+                PageKind.Taxonomy => routes.Count(candidate =>
+                    !candidate.Draft &&
+                    candidate.Kind == PageKind.Term &&
+                    string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(candidate.Language, section.Language, StringComparison.OrdinalIgnoreCase)),
+                PageKind.Term => ResolveTaxonomyTermCount(taxonomyTermCountsByLanguage, section),
+                _ => 0
+            };
             var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
             for (var page = 2; page <= totalPages; page++)
             {
@@ -185,5 +206,118 @@ public static partial class WebSiteVerifier
                     spec.TrailingSlash);
             }
         }
+    }
+
+    private static int ResolveTaxonomyTermCount(
+        IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
+        CollectionRoute route)
+    {
+        if (string.IsNullOrWhiteSpace(route.TaxonomyTerm) ||
+            !taxonomyTermCountsByLanguage.TryGetValue(route.Collection, out var countsByLanguage) ||
+            !countsByLanguage.TryGetValue(route.Language, out var counts) ||
+            !counts.TryGetValue(route.TaxonomyTerm, out var count))
+        {
+            return 0;
+        }
+
+        return count;
+    }
+
+    private static IEnumerable<string> DiscoverGeneratedOutputRoutes(
+        SiteSpec spec,
+        IEnumerable<CollectionRoute> contentRoutes)
+    {
+        foreach (var route in contentRoutes.Where(static route => route is not null && !route.Draft))
+        {
+            var item = new ContentItem
+            {
+                Collection = route.Collection,
+                OutputPath = route.Route,
+                Kind = route.Kind,
+                Outputs = route.Outputs ?? Array.Empty<string>()
+            };
+            foreach (var format in WebSiteBuilder.ResolveOutputFormats(spec, item))
+            {
+                var outputRoute = WebSiteBuilder.ResolveOutputRoute(route.Route, format);
+                if (!string.IsNullOrWhiteSpace(outputRoute))
+                    yield return outputRoute;
+            }
+        }
+    }
+
+    private static IEnumerable<string> DiscoverGeneratedLocalizedFallbackRoutes(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        IEnumerable<CollectionRoute> contentRoutes)
+    {
+        if (!localization.Enabled ||
+            !localization.FallbackToDefaultLanguage ||
+            !localization.MaterializeFallbackPages ||
+            localization.Languages.Length <= 1)
+        {
+            yield break;
+        }
+
+        var routes = contentRoutes.Where(static route => route is not null && !route.Draft).ToArray();
+        var existingRouteLanguages = routes
+            .Select(route => ResolveEffectiveLanguageCode(localization, route.Language) + "|" + NormalizeRouteForNavigationMatch(route.Route))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingTranslations = routes
+            .Where(static route => !string.IsNullOrWhiteSpace(route.TranslationKey))
+            .Select(route => ResolveEffectiveLanguageCode(localization, route.Language) + "|" + route.TranslationKey.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in routes.Where(route =>
+                     route.Kind is PageKind.Page or PageKind.Home or PageKind.Section &&
+                     ResolveEffectiveLanguageCode(localization, route.Language)
+                         .Equals(localization.DefaultLanguage, StringComparison.OrdinalIgnoreCase)))
+        {
+            var strippedRoute = StripLanguagePrefix(localization, source.Route);
+            foreach (var language in localization.Languages.Where(static language => !language.IsDefault))
+            {
+                if (!CollectionSupportsFallbackLanguage(spec, localization, source.Collection, language.Code))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(source.TranslationKey) &&
+                    existingTranslations.Contains(language.Code + "|" + source.TranslationKey.Trim()))
+                {
+                    continue;
+                }
+
+                var fallbackRoute = ApplyLanguagePrefixToRoute(spec, localization, strippedRoute, language.Code);
+                if (existingRouteLanguages.Contains(language.Code + "|" + NormalizeRouteForNavigationMatch(fallbackRoute)))
+                    continue;
+
+                yield return fallbackRoute;
+            }
+        }
+    }
+
+    private static bool CollectionSupportsFallbackLanguage(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string collectionName,
+        string languageCode)
+    {
+        var collection = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Where(static candidate => candidate is not null)
+            .Select(CollectionPresetDefaults.Apply)
+            .FirstOrDefault(candidate => candidate.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+        if (collection?.MaterializeFallbackPages == false)
+            return false;
+
+        var configured = collection?.FallbackLanguages;
+        if (configured is null || configured.Length == 0)
+            return localization.ByCode.ContainsKey(languageCode);
+
+        var supportedLanguages = configured
+            .Select(NormalizeLanguageToken)
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Where(localization.ByCode.ContainsKey)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (supportedLanguages.Length == 0)
+            return localization.ByCode.ContainsKey(languageCode);
+
+        return supportedLanguages.Contains(NormalizeLanguageToken(languageCode), StringComparer.OrdinalIgnoreCase);
     }
 }
