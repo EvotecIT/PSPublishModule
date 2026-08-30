@@ -58,6 +58,8 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>New version applied to the project file.</summary>
     public string? NewVersion { get; set; }
 
+    internal bool HasPendingVersionUpdate { get; set; }
+
     /// <summary>Packages produced for this project.</summary>
     public List<string> Packages { get; set; } = new();
 

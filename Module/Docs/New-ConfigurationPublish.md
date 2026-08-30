@@ -705,7 +705,7 @@ Parameter Sets: ApiFromFile, ApiKey, JFrog
 Aliases: None
 Possible values: PowerShellGallery, GitHub
 
-Required: True
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
