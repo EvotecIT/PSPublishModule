@@ -35,6 +35,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         PowerShellCompilationToolchainEvidence toolchain,
         PowerShellCompilationSemanticProfile? semanticProfile,
         PowerShellCompilationAbiManifest? publicAbi,
+        PowerShellCompilationProviderLock providerLock,
         string generatedSourceSha256,
         IReadOnlyCollection<PowerShellCompilationArtifactFile> files,
         IReadOnlyCollection<PowerShellCompilationDiagnostic> diagnostics,
@@ -60,7 +61,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         var sourceMapSha256 = GetSourceMapSha256(files);
         var evidence = new PowerShellCompilationReproductionEvidence
         {
-            SchemaVersion = 3,
+            SchemaVersion = 4,
             Mode = plan.Mode,
             Kind = kind,
             Sources = sources,
@@ -70,6 +71,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             SemanticProfileVersion = semanticProfile?.Version ?? string.Empty,
             TargetContractSha256 = toolchain.TargetContractSha256,
             ProviderContractsSha256 = ComputeProviderContractsSha256(providers),
+            ProviderLockSha256 = providerLock.Packages.Length == 0 ? string.Empty : providerLock.LockSha256,
             DependencyLockSha256 = toolchain.DependencyLockSha256,
             GeneratedSourceSha256 = generatedSourceSha256 ?? string.Empty,
             PublicAbiSha256 = publicAbi?.Sha256 ?? string.Empty,
@@ -106,7 +108,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
         var failureMapSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeFailureMapSha256(failureMap);
         var diagnosticAuditSha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.ComputeAuditTrailSha256(diagnosticAudit);
         var diagnosticsPolicySha256 = PowerShellCompilationDiagnosticsEvidenceBuilder.Hash(diagnosticsPolicy);
-        if (evidence.SchemaVersion != 3 ||
+        if (evidence.SchemaVersion != 4 ||
             evidence.Mode != manifest.Mode ||
             evidence.Kind != manifest.Kind ||
             !EqualsIgnoreCase(evidence.CompilerVersion, manifest.Toolchain?.CompilerVersion) ||
@@ -119,6 +121,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             !EqualsIgnoreCase(evidence.SemanticProfileVersion, manifest.SemanticProfile?.Version) ||
             !EqualsIgnoreCase(evidence.SourceMapSha256, GetSourceMapSha256(manifest.Files)) ||
             !EqualsIgnoreCase(evidence.ProviderContractsSha256, ComputeProviderContractsSha256(manifest.CommandProviders)) ||
+            !EqualsIgnoreCase(evidence.ProviderLockSha256, manifest.ProviderLock?.LockSha256) ||
             !EqualsIgnoreCase(evidence.UnitDispositionLedgerSha256, ComputeTextSha256(Serialize(unitDispositionLedger))) ||
             !EqualsIgnoreCase(evidence.DecisionTraceSha256, ComputeTextSha256(Serialize(decisionTrace))) ||
             !EqualsIgnoreCase(evidence.DiagnosticsSha256, ComputeDiagnosticsSha256(manifest.Diagnostics)) ||
@@ -163,6 +166,7 @@ internal static class PowerShellCompilationReproductionEvidenceBuilder
             evidence.SemanticProfileVersion,
             evidence.TargetContractSha256,
             evidence.ProviderContractsSha256,
+            evidence.ProviderLockSha256,
             evidence.DependencyLockSha256,
             evidence.GeneratedSourceSha256,
             evidence.PublicAbiSha256,

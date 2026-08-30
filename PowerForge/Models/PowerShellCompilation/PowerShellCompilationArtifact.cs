@@ -238,6 +238,18 @@ public sealed class PowerShellCompilationBuildSpec
 
     /// <summary>Additional compile-time-only command semantic providers used by this build.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
+
+    /// <summary>Explicit provider packages inspected without assembly loading or source execution.</summary>
+    public PowerShellCompilationProviderPackageReference[] ProviderPackages { get; set; } = Array.Empty<PowerShellCompilationProviderPackageReference>();
+
+    /// <summary>Separately reviewed provider-package lock required for trusted provider resolution.</summary>
+    public PowerShellCompilationProviderLock? ExpectedProviderLock { get; set; }
+
+    /// <summary>Provider package allow/deny, publisher, license, and signature policy.</summary>
+    public PowerShellCompilationProviderTrustPolicy ProviderTrustPolicy { get; set; } = new();
+
+    /// <summary>Explicit development opt-out permitting provider package resolution without a reviewed provider lock.</summary>
+    public bool AllowUnreviewedProviderResolution { get; set; }
 }
 
 /// <summary>
@@ -246,7 +258,7 @@ public sealed class PowerShellCompilationBuildSpec
 public sealed class PowerShellCompilationArtifactManifest
 {
     /// <summary>Manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 10;
+    public int SchemaVersion { get; set; } = 11;
 
     /// <summary>Artifact name.</summary>
     public string ArtifactName { get; set; } = string.Empty;
@@ -406,6 +418,12 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
+
+    /// <summary>Exact package, assembly, dependency, publisher, license, and signature evidence for external providers.</summary>
+    public PowerShellCompilationProviderLock? ProviderLock { get; set; }
+
+    /// <summary>Whether provider package resolution matched a separately reviewed provider lock.</summary>
+    public bool ProviderLockReviewed { get; set; }
 
     /// <summary>Hosted advanced-function lifecycle contracts generated for Hybrid binary cmdlets.</summary>
     public PowerShellCompilationLifecycleContract[] Lifecycles { get; set; } = Array.Empty<PowerShellCompilationLifecycleContract>();

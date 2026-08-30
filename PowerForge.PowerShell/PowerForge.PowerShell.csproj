@@ -52,6 +52,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+    <PackageReference Include="Microsoft.Management.Infrastructure" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>

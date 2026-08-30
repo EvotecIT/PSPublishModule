@@ -527,9 +527,10 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         return value.IndexOf('/') >= 0 || value.IndexOf('\\') >= 0 || value.StartsWith(".", StringComparison.Ordinal) ||
                extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
-               extension.Equals(".ps1xml", StringComparison.OrdinalIgnoreCase);
+                extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".cdxml", StringComparison.OrdinalIgnoreCase) ||
+                extension.Equals(".ps1xml", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool LooksLikeWindowsRootedPath(string path)

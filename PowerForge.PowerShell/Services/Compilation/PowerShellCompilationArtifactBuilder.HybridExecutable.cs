@@ -10,9 +10,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         string[] compilationSourcePaths,
         PowerShellCompilationPlan plan,
-        PowerShellCompilationDependency[] dependencyPlan)
+        PowerShellCompilationDependency[] dependencyPlan,
+        PowerShellCompilationCommandProviderContract[] commandProviders)
     {
-        var typed = new PowerShellTypedCompilationTranspiler(spec.CommandProviders).TranspileForBinaryModule(
+        var typed = new PowerShellTypedCompilationTranspiler(commandProviders).TranspileForBinaryModule(
             compilationSourcePaths,
             "PowerForge.Compiled",
             PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",

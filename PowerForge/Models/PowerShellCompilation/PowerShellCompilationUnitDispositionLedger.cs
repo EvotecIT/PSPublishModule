@@ -180,7 +180,7 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     public int BoundaryCrossings => Entries.Sum(static entry => entry.BoundaryCrossings);
     /// <summary>Whether the delivered artifact retains any PowerShell runtime execution path.</summary>
     public bool UsesPowerShellRuntimeFallback =>
-        Entries.Any(static entry => entry.RetainedHostedSource) || DeliveryRuntimeCauses.Count > 0;
+        Entries.Any(static entry => entry.RuntimeRouted) || DeliveryRuntimeCauses.Count > 0;
     /// <summary>Typed emission coverage among authored units.</summary>
     public double CompilationCoveragePercentage => AnalyzedUnits == 0 ? 0 : EmittedUnits * 100d / AnalyzedUnits;
 }

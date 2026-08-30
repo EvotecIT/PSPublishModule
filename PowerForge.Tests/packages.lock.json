@@ -1126,9 +1126,16 @@
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )",
           "Microsoft.PowerShell.SDK": "[7.6.5, )",
           "PowerForge": "[3.0.124, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
+        }
+      },
+      "powerforge.powershell.providersdk": {
+        "type": "Project",
+        "dependencies": {
+          "PowerForge": "[3.0.124, )"
         }
       },
       "powerforge.web": {

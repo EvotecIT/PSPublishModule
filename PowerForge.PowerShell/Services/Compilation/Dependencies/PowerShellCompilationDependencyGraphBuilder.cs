@@ -409,6 +409,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             PowerShellCompilationDependencyKind.TypeData => PowerShellCompilationDependencyNodeKind.TypeData,
             PowerShellCompilationDependencyKind.FormatData => PowerShellCompilationDependencyNodeKind.FormatData,
             PowerShellCompilationDependencyKind.PowerShellSource => ClassifyLocalPath(dependency.SourcePath ?? dependency.Name),
+            _ when dependency.Discovery == PowerShellCompilationDependencyDiscovery.NestedModules => ClassifyLocalPath(dependency.SourcePath ?? dependency.Name),
             _ => PowerShellCompilationDependencyNodeKind.Content
         };
 

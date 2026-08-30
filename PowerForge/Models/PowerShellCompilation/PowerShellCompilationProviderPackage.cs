@@ -1,0 +1,179 @@
+using System;
+
+namespace PowerForge;
+
+/// <summary>Provider-package ABI owned by PowerForge and negotiated before provider metadata is accepted.</summary>
+public static class PowerShellCompilationProviderAbi
+{
+    /// <summary>Current provider package ABI version.</summary>
+    public const string CurrentVersion = "1";
+}
+
+/// <summary>One managed assembly delivered by a provider package.</summary>
+public sealed class PowerShellCompilationProviderAssembly
+{
+    /// <summary>Package-relative assembly path.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Assembly file SHA-256.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>Declared managed assembly name.</summary>
+    public string AssemblyName { get; set; } = string.Empty;
+
+    /// <summary>Declared managed assembly version.</summary>
+    public string AssemblyVersion { get; set; } = string.Empty;
+
+    /// <summary>Declared public-key token, or empty for an unsigned assembly.</summary>
+    public string PublicKeyToken { get; set; } = string.Empty;
+}
+
+/// <summary>One exact transitive dependency declared by a provider package.</summary>
+public sealed class PowerShellCompilationProviderDependency
+{
+    /// <summary>Package identity.</summary>
+    public string PackageId { get; set; } = string.Empty;
+
+    /// <summary>Exact three-part public package version.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>Immutable NuGet content hash or equivalent package content identity.</summary>
+    public string ContentHash { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Deterministic metadata embedded at <c>powerforge/provider.json</c> in a provider package.
+/// The compiler reads this document directly and never executes provider assemblies during discovery.
+/// </summary>
+public sealed class PowerShellCompilationProviderPackageManifest
+{
+    /// <summary>Provider-package manifest schema version.</summary>
+    public int SchemaVersion { get; set; } = 1;
+
+    /// <summary>PowerForge provider ABI version.</summary>
+    public string ProviderAbiVersion { get; set; } = PowerShellCompilationProviderAbi.CurrentVersion;
+
+    /// <summary>NuGet-style package identity.</summary>
+    public string PackageId { get; set; } = string.Empty;
+
+    /// <summary>Exact public package version.</summary>
+    public string PackageVersion { get; set; } = string.Empty;
+
+    /// <summary>Publisher identity asserted by package metadata and policy.</summary>
+    public string Publisher { get; set; } = string.Empty;
+
+    /// <summary>SPDX-compatible license expression.</summary>
+    public string LicenseExpression { get; set; } = string.Empty;
+
+    /// <summary>Semantic profiles accepted by this package.</summary>
+    public string[] SemanticProfiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>Managed provider assemblies carried by the package.</summary>
+    public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
+
+    /// <summary>Exact transitive package closure required by the provider.</summary>
+    public PowerShellCompilationProviderDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationProviderDependency>();
+
+    /// <summary>Compile-time-only command contracts supplied by the package.</summary>
+    public PowerShellCompilationCommandProviderContract[] Providers { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
+}
+
+/// <summary>Explicit provider-package input selected for one compiler invocation.</summary>
+public sealed class PowerShellCompilationProviderPackageReference
+{
+    /// <summary>Creates an explicit provider-package reference.</summary>
+    public PowerShellCompilationProviderPackageReference(string path)
+    {
+        Path = string.IsNullOrWhiteSpace(path)
+            ? throw new ArgumentException("A provider package path is required.", nameof(path))
+            : System.IO.Path.GetFullPath(path.Trim().Trim('"'));
+    }
+
+    /// <summary>Full path to a provider package.</summary>
+    public string Path { get; }
+}
+
+/// <summary>Trust and allow/deny policy applied to provider packages before their contracts enter analysis.</summary>
+public sealed class PowerShellCompilationProviderTrustPolicy
+{
+    /// <summary>Package identities explicitly allowed. Empty means no allow-list restriction.</summary>
+    public string[] AllowedPackageIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Package identities explicitly denied. Deny rules take precedence.</summary>
+    public string[] DeniedPackageIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Provider identities explicitly allowed. Empty means no allow-list restriction.</summary>
+    public string[] AllowedProviderIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Provider identities explicitly denied. Deny rules take precedence.</summary>
+    public string[] DeniedProviderIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Accepted publisher identities. Empty means no publisher allow-list restriction.</summary>
+    public string[] AllowedPublishers { get; set; } = Array.Empty<string>();
+
+    /// <summary>Accepted license expressions. Empty means no license allow-list restriction.</summary>
+    public string[] AllowedLicenseExpressions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Whether an unsigned provider package is rejected.</summary>
+    public bool RequirePackageSignature { get; set; }
+}
+
+/// <summary>Locked identity and trust evidence for one provider package.</summary>
+public sealed class PowerShellCompilationProviderPackageLockEntry
+{
+    /// <summary>Package identity.</summary>
+    public string PackageId { get; set; } = string.Empty;
+
+    /// <summary>Exact package version.</summary>
+    public string PackageVersion { get; set; } = string.Empty;
+
+    /// <summary>Provider ABI version.</summary>
+    public string ProviderAbiVersion { get; set; } = string.Empty;
+
+    /// <summary>Full package SHA-256.</summary>
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    /// <summary>Embedded provider-manifest SHA-256.</summary>
+    public string ManifestSha256 { get; set; } = string.Empty;
+
+    /// <summary>NuGet signature state: Valid, Invalid, or Unsigned.</summary>
+    public string Signature { get; set; } = "Unsigned";
+
+    /// <summary>Publisher identity.</summary>
+    public string Publisher { get; set; } = string.Empty;
+
+    /// <summary>License expression.</summary>
+    public string LicenseExpression { get; set; } = string.Empty;
+
+    /// <summary>Exact assembly closure.</summary>
+    public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
+
+    /// <summary>Exact package dependency closure.</summary>
+    public PowerShellCompilationProviderDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationProviderDependency>();
+
+    /// <summary>Accepted provider identities.</summary>
+    public string[] ProviderIds { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>Deterministic provider package lock consumed by analysis and artifact publication.</summary>
+public sealed class PowerShellCompilationProviderLock
+{
+    /// <summary>Provider-lock schema version.</summary>
+    public int SchemaVersion { get; set; } = 1;
+
+    /// <summary>Locked provider packages ordered by package identity.</summary>
+    public PowerShellCompilationProviderPackageLockEntry[] Packages { get; set; } = Array.Empty<PowerShellCompilationProviderPackageLockEntry>();
+
+    /// <summary>SHA-256 over the canonical provider lock.</summary>
+    public string LockSha256 { get; set; } = string.Empty;
+}
+
+/// <summary>Non-executing provider package discovery result.</summary>
+public sealed class PowerShellCompilationProviderResolution
+{
+    /// <summary>Validated compile-time provider contracts.</summary>
+    public PowerShellCompilationCommandProviderContract[] Providers { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();
+
+    /// <summary>Deterministic trust lock.</summary>
+    public PowerShellCompilationProviderLock Lock { get; set; } = new();
+}

@@ -134,7 +134,7 @@ public sealed class PowerShellCompilationReproductionSource
 public sealed class PowerShellCompilationReproductionEvidence
 {
     /// <summary>Reproduction evidence schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
     /// <summary>Selected compilation mode.</summary>
     public PowerShellCompilationMode Mode { get; set; }
     /// <summary>Selected artifact kind.</summary>
@@ -153,6 +153,8 @@ public sealed class PowerShellCompilationReproductionEvidence
     public string TargetContractSha256 { get; set; } = string.Empty;
     /// <summary>Exact provider-contract set identity.</summary>
     public string ProviderContractsSha256 { get; set; } = string.Empty;
+    /// <summary>Exact external provider-package lock identity.</summary>
+    public string ProviderLockSha256 { get; set; } = string.Empty;
     /// <summary>Exact reviewed dependency-lock identity.</summary>
     public string DependencyLockSha256 { get; set; } = string.Empty;
     /// <summary>Exact generated-source identity.</summary>
