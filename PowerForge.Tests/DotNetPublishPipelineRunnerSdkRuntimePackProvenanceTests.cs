@@ -157,6 +157,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Contains("-p:TargetFramework=net10.0", arguments);
         Assert.Single(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("-p:RestoreSources=C:\\isolated\\verified", arguments);
+        Assert.Contains("-p:DisableImplicitFrameworkReferences=true", arguments);
         Assert.Contains("-p:ImportDirectoryBuildProps=false", arguments);
         Assert.Contains("-p:ImportDirectoryBuildTargets=false", arguments);
         Assert.Contains("-p:ImportDirectoryPackagesProps=false", arguments);
@@ -218,6 +219,45 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             {
                 (cache as IDisposable)?.Dispose();
             }
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SdkEvidence_RejectsPackageArchiveMutationAfterTrustedSnapshot()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            const string packageId = "sdk.test.package";
+            const string packageVersion = "1.0.0";
+            string packageDirectory = Directory.CreateDirectory(
+                Path.Combine(root, packageId, packageVersion)).FullName;
+            string packagePath = Path.Combine(
+                packageDirectory,
+                packageId + "." + packageVersion + ".nupkg");
+            WriteTestPackage(packagePath, "trusted");
+            string contentHash;
+            using (FileStream stream = File.OpenRead(packagePath))
+            using (var reader = new PackageArchiveReader(stream, leaveStreamOpen: false))
+                contentHash = reader.GetContentHash(CancellationToken.None);
+
+            MethodInfo verify = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryVerifyCurrentSdkPackageArchives",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [packageId + "|" + packageVersion] = contentHash
+            };
+
+            Assert.True(Assert.IsType<bool>(verify.Invoke(null, [root, hashes])));
+            File.Delete(packagePath);
+            WriteTestPackage(packagePath, "mutated");
+            Assert.False(Assert.IsType<bool>(verify.Invoke(null, [root, hashes])));
         }
         finally
         {

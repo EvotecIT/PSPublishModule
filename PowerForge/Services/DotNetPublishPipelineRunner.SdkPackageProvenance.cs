@@ -204,6 +204,17 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
+            if (!TryReadSdkPackageHashes(
+                    isolatedPackageRoot,
+                    sdkPackageKeys,
+                    out Dictionary<string, string> trustedSdkPackageHashes) ||
+                !TrySnapshotSdkPackageArchives(
+                    isolatedPackageRoot,
+                    trustedSdkPackageHashes,
+                    archives))
+            {
+                return false;
+            }
             if (!TryWriteSdkEvidenceNuGetConfig(
                     configPath,
                     verifiedPackageSource,
@@ -241,6 +252,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 environmentVariables,
                 TimeSpan.FromMinutes(5));
             if (restoreProcess.ExitCode != 0 || restoreProcess.TimedOut)
+            {
+                return false;
+            }
+            if (!TryReadSdkPackageHashes(
+                    isolatedPackageRoot,
+                    sdkPackageKeys,
+                    out Dictionary<string, string> postRestoreSdkPackageHashes) ||
+                !HaveSamePackageHashes(trustedSdkPackageHashes, postRestoreSdkPackageHashes) ||
+                !TryVerifyCurrentSdkPackageArchives(
+                    isolatedPackageRoot,
+                    trustedSdkPackageHashes))
             {
                 return false;
             }
@@ -529,9 +551,97 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AppendSyntheticSdkEvidenceProjectIsolationProperties(
         ICollection<string> arguments)
     {
+        arguments.Add("-p:DisableImplicitFrameworkReferences=true");
         arguments.Add("-p:ImportDirectoryBuildProps=false");
         arguments.Add("-p:ImportDirectoryBuildTargets=false");
         arguments.Add("-p:ImportDirectoryPackagesProps=false");
+    }
+
+    private static bool TryReadSdkPackageHashes(
+        string isolatedPackageRoot,
+        IEnumerable<string> packageKeys,
+        out Dictionary<string, string> hashes)
+    {
+        hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string[] expectedKeys = packageKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (string packageKey in expectedKeys)
+            AddSdkDownloadPackageHash(packageKey, new[] { isolatedPackageRoot }, hashes);
+
+        if (hashes.Count != expectedKeys.Length)
+            return false;
+        foreach (string key in expectedKeys)
+        {
+            if (!hashes.TryGetValue(key, out string? value) || string.IsNullOrWhiteSpace(value))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TrySnapshotSdkPackageArchives(
+        string isolatedPackageRoot,
+        IReadOnlyDictionary<string, string> hashes,
+        VerifiedPackageArchiveCache archives)
+    {
+        foreach (KeyValuePair<string, string> package in hashes)
+        {
+            if (!TryGetSdkPackageArchivePath(isolatedPackageRoot, package.Key, out string? archivePath) ||
+                archives.TryGetOrOpen(archivePath!, package.Value) is null)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool TryVerifyCurrentSdkPackageArchives(
+        string isolatedPackageRoot,
+        IReadOnlyDictionary<string, string> hashes)
+    {
+        foreach (KeyValuePair<string, string> package in hashes)
+        {
+            if (!TryGetSdkPackageArchivePath(isolatedPackageRoot, package.Key, out string? archivePath))
+                return false;
+            using VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(archivePath!, package.Value);
+            if (archive is null)
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TryGetSdkPackageArchivePath(
+        string isolatedPackageRoot,
+        string packageKey,
+        out string? archivePath)
+    {
+        archivePath = null;
+        int separator = packageKey.LastIndexOf('|');
+        if (separator <= 0 || separator == packageKey.Length - 1)
+            return false;
+
+        string packageId = packageKey.Substring(0, separator).ToLowerInvariant();
+        string packageVersion = packageKey.Substring(separator + 1).ToLowerInvariant();
+        string candidate = Path.Combine(
+            Path.GetFullPath(isolatedPackageRoot),
+            packageId,
+            packageVersion,
+            packageId + "." + packageVersion + ".nupkg");
+        if (!File.Exists(candidate) || HasReparsePointBelowRoot(candidate, isolatedPackageRoot))
+            return false;
+
+        archivePath = candidate;
+        return true;
+    }
+
+    private static bool HaveSamePackageHashes(
+        IReadOnlyDictionary<string, string> expected,
+        IReadOnlyDictionary<string, string> actual)
+    {
+        return expected.Count == actual.Count &&
+               expected.All(package => actual.TryGetValue(package.Key, out string? hash) &&
+                                       string.Equals(package.Value, hash, StringComparison.Ordinal));
     }
 
     private static void TryDeleteSdkEvidenceRoot(string? path)
