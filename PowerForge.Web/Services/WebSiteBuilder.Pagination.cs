@@ -326,7 +326,7 @@ public static partial class WebSiteBuilder
         item.Meta[PaginationNextUrlMetaKey] = nextUrl;
     }
 
-    private static string BuildPaginationRoute(string baseRoute, string pathSegment, int page, TrailingSlashMode slashMode)
+    internal static string BuildPaginationRoute(string baseRoute, string pathSegment, int page, TrailingSlashMode slashMode)
     {
         var normalizedBase = NormalizeRouteForMatch(baseRoute);
         if (page <= 1)
@@ -338,7 +338,7 @@ public static partial class WebSiteBuilder
         return EnsureTrailingSlash(combined, slashMode);
     }
 
-    private static string NormalizePaginationSegment(string? value)
+    internal static string NormalizePaginationSegment(string? value)
     {
         var segment = string.IsNullOrWhiteSpace(value) ? "page" : value.Trim();
         segment = segment.Trim('/').Replace('\\', '/');

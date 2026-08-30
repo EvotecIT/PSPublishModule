@@ -875,5 +875,12 @@ public static partial class WebSiteVerifier
 
     private sealed record ReleasePlacementReference(string Placement, string? PlacementsRoot);
 
-    private sealed record CollectionRoute(string Collection, string Route, string File, bool Draft, string Language, string TranslationKey);
+    private sealed record CollectionRoute(
+        string Collection,
+        string Route,
+        string File,
+        bool Draft,
+        string Language,
+        string TranslationKey,
+        PageKind Kind);
 }

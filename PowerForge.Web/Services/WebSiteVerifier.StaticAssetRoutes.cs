@@ -109,8 +109,8 @@ public static partial class WebSiteVerifier
 
         var fileName = Path.GetFileName(normalized);
         var extension = Path.GetExtension(fileName);
-        if (string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(extension, ".html", StringComparison.Ordinal) ||
+            string.Equals(extension, ".htm", StringComparison.Ordinal))
         {
             yield return "/" + encoded[..^extension.Length];
         }
@@ -135,5 +135,55 @@ public static partial class WebSiteVerifier
 
         yield return "/search/index.html";
         yield return "/search/";
+    }
+
+    private static IEnumerable<string> DiscoverGeneratedPaginationRoutes(
+        SiteSpec spec,
+        IEnumerable<CollectionRoute> contentRoutes)
+    {
+        if (spec.Pagination is { Enabled: false })
+            yield break;
+
+        var routes = contentRoutes
+            .Where(static route => route is not null)
+            .ToArray();
+        if (routes.Length == 0)
+            yield break;
+
+        var pageSegment = WebSiteBuilder.NormalizePaginationSegment(spec.Pagination?.PathSegment);
+        var defaultPageSize = Math.Max(0, spec.Pagination?.DefaultPageSize ?? 0);
+        var collectionPageSizes = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Where(static collection => collection is not null && !string.IsNullOrWhiteSpace(collection.Name))
+            .Select(CollectionPresetDefaults.Apply)
+            .ToDictionary(
+                static collection => collection.Name,
+                collection => Math.Max(0, collection.PageSize ?? defaultPageSize),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var section in routes.Where(static route => !route.Draft && route.Kind == PageKind.Section))
+        {
+            var pageSize = collectionPageSizes.TryGetValue(section.Collection, out var configuredPageSize)
+                ? configuredPageSize
+                : defaultPageSize;
+            if (pageSize <= 0)
+                continue;
+
+            var sectionRoute = NormalizeRouteForNavigationMatch(section.Route);
+            var totalItems = routes.Count(candidate =>
+                !candidate.Draft &&
+                candidate.Kind is PageKind.Page or PageKind.Home &&
+                string.Equals(candidate.Collection, section.Collection, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(candidate.Route, section.Route, StringComparison.OrdinalIgnoreCase) &&
+                NormalizeRouteForNavigationMatch(candidate.Route).StartsWith(sectionRoute, StringComparison.OrdinalIgnoreCase));
+            var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
+            for (var page = 2; page <= totalPages; page++)
+            {
+                yield return WebSiteBuilder.BuildPaginationRoute(
+                    section.Route,
+                    pageSegment,
+                    page,
+                    spec.TrailingSlash);
+            }
+        }
     }
 }

@@ -538,7 +538,7 @@ public static partial class WebSiteVerifier
                 {
                     warnings.Add($"Navigation lint: {context} points to '{item.Url}' but its language is configured with renderAtRoot=true. Use the public route '{suggestedPublicUrl}' and let preview/runtime map it locally.");
                 }
-                else if (knownRoutes.Length > 0 &&
+                else if ((knownRoutes.Length > 0 || knownStaticRoutes is { Count: > 0 }) &&
                          ShouldValidateRouteCoverage(trimmedUrl, routeScopedPrefixes) &&
                          !trimmedUrl.Contains('{', StringComparison.Ordinal) &&
                          !trimmedUrl.Contains('}', StringComparison.Ordinal) &&
@@ -598,11 +598,11 @@ public static partial class WebSiteVerifier
         ResolvedLocalizationConfig? localization,
         IReadOnlySet<string>? knownStaticRoutes)
     {
-        if (TryEvaluateStaticNavigationRoute(url, knownStaticRoutes, out var staticMatch))
-            return staticMatch;
-
         if (PatternMatchesAnyRoute(url, knownRoutes))
             return true;
+
+        if (TryEvaluateStaticNavigationRoute(url, knownStaticRoutes, out var staticMatch))
+            return staticMatch;
 
         if (localization is null || string.IsNullOrWhiteSpace(navigationLanguage))
             return false;
@@ -619,10 +619,10 @@ public static partial class WebSiteVerifier
             ? NormalizeRouteForNavigationMatch("/" + normalizedPrefix + "/")
             : NormalizeRouteForNavigationMatch("/" + normalizedPrefix + normalizedUrl);
 
-        if (TryEvaluateStaticNavigationRoute(generatedRoute, knownStaticRoutes, out staticMatch))
-            return staticMatch;
+        if (PatternMatchesAnyRoute(generatedRoute, knownRoutes))
+            return true;
 
-        return PatternMatchesAnyRoute(generatedRoute, knownRoutes);
+        return TryEvaluateStaticNavigationRoute(generatedRoute, knownStaticRoutes, out staticMatch) && staticMatch;
     }
 
     private static bool TryEvaluateStaticNavigationRoute(

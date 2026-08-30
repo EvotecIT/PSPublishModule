@@ -282,6 +282,7 @@ public partial class WebSiteVerifierTests
             Directory.CreateDirectory(assets);
             Directory.CreateDirectory(Path.Combine(assets, "docs"));
             File.WriteAllText(Path.Combine(assets, "Guide.html"), "<h1>Guide</h1>");
+            File.WriteAllText(Path.Combine(assets, "Uppercase.HTML"), "<h1>Uppercase</h1>");
             File.WriteAllText(Path.Combine(assets, "legacy.htm"), "<h1>Legacy</h1>");
             File.WriteAllText(Path.Combine(assets, "terms+conditions.html"), "<h1>Terms</h1>");
             File.WriteAllText(Path.Combine(assets, "manual.pdf"), "PDF");
@@ -309,6 +310,8 @@ public partial class WebSiteVerifierTests
                                 new MenuItemSpec { Title = "Literal reserved character", Url = "/assets/terms+conditions.html" },
                                 new MenuItemSpec { Title = "Encoded reserved character", Url = "/assets/terms%2Bconditions.html" },
                                 new MenuItemSpec { Title = "HTML extensionless", Url = "/assets/Guide" },
+                                new MenuItemSpec { Title = "Uppercase HTML exact", Url = "/assets/Uppercase.HTML" },
+                                new MenuItemSpec { Title = "Uppercase HTML extensionless", Url = "/assets/Uppercase" },
                                 new MenuItemSpec { Title = "HTM extensionless", Url = "/assets/legacy" },
                                 new MenuItemSpec { Title = "Directory alias without slash", Url = "/assets/docs" },
                                 new MenuItemSpec { Title = "Wrong-case directory alias", Url = "/assets/Docs/" }
@@ -332,6 +335,9 @@ public partial class WebSiteVerifierTests
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains("points to '/assets/Docs/'", StringComparison.Ordinal) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/assets/Uppercase'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             foreach (var validUrl in new[]
                      {
                          "/assets/Guide.html",
@@ -339,6 +345,7 @@ public partial class WebSiteVerifierTests
                          "/assets/terms+conditions.html",
                          "/assets/terms%2Bconditions.html",
                          "/assets/Guide",
+                         "/assets/Uppercase.HTML",
                          "/assets/legacy",
                          "/assets/docs"
                      })
@@ -347,6 +354,123 @@ public partial class WebSiteVerifierTests
                     warning.Contains($"points to '{validUrl}'", StringComparison.Ordinal) &&
                     warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_PrefersGeneratedContentWhenStaticExtensionlessAliasCollides()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-content-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var content = Path.Combine(root, "content");
+            var assets = Path.Combine(root, "assets");
+            Directory.CreateDirectory(content);
+            Directory.CreateDirectory(assets);
+            File.WriteAllText(Path.Combine(content, "about.md"), "---\ntitle: About\n---\n\nAbout");
+            File.WriteAllText(Path.Combine(assets, "about.html"), "<h1>Static about</h1>");
+
+            var spec = new SiteSpec
+            {
+                Name = "Static/content collision",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "." }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "About", Url = "/about/" }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/about/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersGeneratedRootPaginationRoutesWhenStaticAssetsEnableFullCoverage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-root-pagination-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var content = Path.Combine(root, "content");
+            var assets = Path.Combine(root, "assets");
+            Directory.CreateDirectory(content);
+            Directory.CreateDirectory(assets);
+            File.WriteAllText(Path.Combine(content, "_index.md"), "---\ntitle: Home\n---\n\nHome");
+            File.WriteAllText(Path.Combine(content, "one.md"), "---\ntitle: One\n---\n\nOne");
+            File.WriteAllText(Path.Combine(content, "two.md"), "---\ntitle: Two\n---\n\nTwo");
+            File.WriteAllText(Path.Combine(content, "three.md"), "---\ntitle: Three\n---\n\nThree");
+            File.WriteAllText(Path.Combine(assets, "site.css"), "body{}");
+
+            var spec = new SiteSpec
+            {
+                Name = "Root pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Pagination = new PaginationSpec { Enabled = true, PathSegment = "page" },
+                Collections =
+                [
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content",
+                        Output = "/",
+                        PageSize = 2
+                    }
+                ],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "Page 2", Url = "/page/2/" }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/page/2/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

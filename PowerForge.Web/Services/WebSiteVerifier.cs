@@ -55,7 +55,7 @@ public static partial class WebSiteVerifier
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
             var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
-            ValidateNavigationLint(spec, localization, plan, staticOnlyRoutes, warnings, staticOnlyRoutes.Length > 0, staticOnlyRoutes);
+            ValidateNavigationLint(spec, localization, plan, Array.Empty<string>(), warnings, staticOnlyRoutes.Length > 0, staticOnlyRoutes);
             return new WebVerifyResult
             {
                 Success = true,
@@ -133,7 +133,7 @@ public static partial class WebSiteVerifier
                 var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
-                if (string.IsNullOrWhiteSpace(slugPath))
+                if (string.IsNullOrWhiteSpace(slugPath) && !isSectionIndex && !isBundleIndex)
                 {
                     errors.Add($"Missing slug in: {file}");
                     continue;
@@ -167,7 +167,13 @@ public static partial class WebSiteVerifier
                     list = new List<CollectionRoute>();
                     collectionRoutes[collection.Name] = list;
                 }
-                list.Add(new CollectionRoute(collection.Name, route, file, matter?.Draft ?? false, resolvedLanguage, translationKey));
+                var kind = isSectionIndex
+                    ? PageKind.Section
+                    : string.Equals(route, "/", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(collection.Output, "/", StringComparison.OrdinalIgnoreCase)
+                        ? PageKind.Home
+                        : PageKind.Page;
+                list.Add(new CollectionRoute(collection.Name, route, file, matter?.Draft ?? false, resolvedLanguage, translationKey, kind));
             }
         }
 
@@ -191,7 +197,10 @@ public static partial class WebSiteVerifier
         var generatedFeatureRoutes = DiscoverGeneratedFeatureRoutes(
             spec,
             collectionRoutes.Values.SelectMany(static values => values));
-        var navigationRoutes = routes.Keys.Concat(staticRoutes).Concat(generatedFeatureRoutes);
+        var generatedPaginationRoutes = DiscoverGeneratedPaginationRoutes(
+            spec,
+            collectionRoutes.Values.SelectMany(static values => values));
+        var navigationRoutes = routes.Keys.Concat(generatedFeatureRoutes).Concat(generatedPaginationRoutes);
         ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0, staticRoutes);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
