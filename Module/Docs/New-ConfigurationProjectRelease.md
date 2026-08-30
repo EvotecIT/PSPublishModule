@@ -11,7 +11,7 @@ Creates release-level defaults for a PowerShell-authored project build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationProjectRelease [-Configuration <string>] [-PublishToolGitHub] [-SkipRestore] [-SkipBuild] [-ToolOutput <ConfigurationProjectReleaseOutputType[]>] [-SkipToolOutput <ConfigurationProjectReleaseOutputType[]>] [<CommonParameters>]
+New-ConfigurationProjectRelease [-Configuration <string>] [-PublishToolGitHub] [-SkipRestore] [-SkipBuild] [-BuildDuringPublish] [-ToolOutput <ConfigurationProjectReleaseOutputType[]>] [-SkipToolOutput <ConfigurationProjectReleaseOutputType[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -21,11 +21,28 @@ Creates release-level defaults for a PowerShell-authored project build.
 
 ### EXAMPLE 1
 ```powershell
-New-ConfigurationProjectRelease -Configuration 'Value'
+New-ConfigurationProjectRelease -BuildDuringPublish
 ```
 
 
 ## PARAMETERS
+
+### -BuildDuringPublish
+Lets each dotnet publish invocation perform its own authoritative build instead of
+consuming outputs from a separate prebuild step.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -Configuration
 Build configuration used by the generated release object.

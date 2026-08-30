@@ -4146,7 +4146,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_SkipRestoreAndBuild_ApplyToDotNetToolPlan()
+    public void Execute_SkipRestoreAndBuild_ApplyToPublishOwnedDotNetToolPlan()
     {
         var root = CreateSandbox();
         try
@@ -4180,7 +4180,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 ProjectRoot = ".",
                                 Configuration = "Release",
                                 Restore = true,
-                                Build = true
+                                Build = false,
+                                NoRestoreInPublish = false,
+                                NoBuildInPublish = false
                             },
                             Targets = new[]
                             {

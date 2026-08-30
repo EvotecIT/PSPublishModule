@@ -54,7 +54,9 @@ internal static class PowerForgeProjectDslMapper
                     DotNet = new DotNetPublishDotNetOptions
                     {
                         ProjectRoot = fullProjectRoot,
-                        Configuration = string.IsNullOrWhiteSpace(release.Configuration) ? "Release" : release.Configuration.Trim()
+                        Configuration = string.IsNullOrWhiteSpace(release.Configuration) ? "Release" : release.Configuration.Trim(),
+                        Build = !release.BuildDuringPublish,
+                        NoBuildInPublish = !release.BuildDuringPublish
                     },
                     Targets = dotNetTargets,
                     Bundles = bundles,

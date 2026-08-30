@@ -139,8 +139,42 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Single(spec.Tools.DotNetPublish.Targets);
         Assert.Empty(spec.Tools.DotNetPublish.Bundles);
         Assert.Empty(spec.Tools.DotNetPublish.Installers);
+        Assert.True(spec.Tools.DotNetPublish.DotNet.Build);
+        Assert.True(spec.Tools.DotNetPublish.DotNet.NoBuildInPublish);
         Assert.Single(request.ToolOutputs);
         Assert.Equal(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs[0]);
+    }
+
+    [Fact]
+    public void CreateRelease_BuildDuringPublishUsesPublishOwnedBuild()
+    {
+        var project = new ConfigurationProject
+        {
+            Name = "Demo",
+            Release = new ConfigurationProjectRelease
+            {
+                BuildDuringPublish = true
+            },
+            Targets = new[]
+            {
+                new ConfigurationProjectTarget
+                {
+                    Name = "Cli",
+                    ProjectPath = "src/Cli/Cli.csproj",
+                    Framework = "net10.0",
+                    Runtimes = new[] { "win-x64", "linux-x64" }
+                }
+            }
+        };
+
+        var (spec, _) = PowerForgeProjectDslMapper.CreateRelease(
+            project,
+            @"C:\repo\.powerforge\project.release.json",
+            @"C:\repo");
+
+        Assert.NotNull(spec.Tools?.DotNetPublish);
+        Assert.False(spec.Tools!.DotNetPublish!.DotNet.Build);
+        Assert.False(spec.Tools.DotNetPublish.DotNet.NoBuildInPublish);
     }
 
     [Fact]
