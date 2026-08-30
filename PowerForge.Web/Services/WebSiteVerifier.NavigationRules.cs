@@ -824,6 +824,7 @@ public static partial class WebSiteVerifier
         var normalizedPattern = NormalizePatternForNavigationMatch(pattern);
         if (string.IsNullOrWhiteSpace(normalizedPattern))
             return false;
+        var normalizedStaticPattern = NormalizeStaticRouteForNavigationMatch(pattern);
 
         if (normalizedPattern.Contains('{', StringComparison.Ordinal) ||
             normalizedPattern.Contains('}', StringComparison.Ordinal))
@@ -832,13 +833,18 @@ public static partial class WebSiteVerifier
         var hasWildcard = normalizedPattern.Contains('*', StringComparison.Ordinal);
         foreach (var knownRoute in knownRoutes)
         {
-            var route = NormalizeRouteForNavigationMatch(knownRoute);
+            if (string.IsNullOrWhiteSpace(knownRoute))
+                continue;
+
+            var route = knownRoute.Trim();
             if (hasWildcard)
             {
-                if (GlobMatch(normalizedPattern, route))
+                if (GlobMatch(normalizedPattern, route) ||
+                    GlobMatch(normalizedStaticPattern, route))
                     return true;
             }
-            else if (string.Equals(normalizedPattern, route, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(normalizedPattern, route, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(normalizedStaticPattern, route, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

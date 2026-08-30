@@ -137,7 +137,7 @@ public static partial class WebSiteVerifier
         yield return "/search/";
     }
 
-    private static IEnumerable<string> DiscoverGeneratedPaginationRoutes(
+    private static IEnumerable<CollectionRoute> DiscoverGeneratedPaginationRoutes(
         SiteSpec spec,
         IEnumerable<CollectionRoute> contentRoutes,
         IReadOnlyDictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage)
@@ -199,11 +199,18 @@ public static partial class WebSiteVerifier
             var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
             for (var page = 2; page <= totalPages; page++)
             {
-                yield return WebSiteBuilder.BuildPaginationRoute(
-                    section.Route,
-                    pageSegment,
-                    page,
-                    spec.TrailingSlash);
+                yield return section with
+                {
+                    Route = WebSiteBuilder.BuildPaginationRoute(
+                        section.Route,
+                        pageSegment,
+                        page,
+                        spec.TrailingSlash),
+                    TranslationKey = string.IsNullOrWhiteSpace(section.TranslationKey)
+                        ? string.Empty
+                        : $"{section.TranslationKey}:page:{page}",
+                    Outputs = ["html"]
+                };
             }
         }
     }
@@ -239,13 +246,44 @@ public static partial class WebSiteVerifier
             foreach (var format in WebSiteBuilder.ResolveOutputFormats(spec, item))
             {
                 var outputRoute = WebSiteBuilder.ResolveOutputRoute(route.Route, format);
-                if (!string.IsNullOrWhiteSpace(outputRoute))
+                if (!string.IsNullOrWhiteSpace(outputRoute) &&
+                    !NormalizeRouteForNavigationMatch(outputRoute).Equals(
+                        NormalizeRouteForNavigationMatch(route.Route),
+                        StringComparison.OrdinalIgnoreCase))
                     yield return outputRoute;
             }
         }
     }
 
-    private static IEnumerable<string> DiscoverGeneratedLocalizedFallbackRoutes(
+    private static IEnumerable<string> DiscoverGeneratedResourceRoutes(
+        IEnumerable<CollectionRoute> contentRoutes)
+    {
+        foreach (var route in contentRoutes.Where(static route => route is not null && !route.Draft))
+        {
+            foreach (var resource in route.Resources ?? Array.Empty<PageResource>())
+            {
+                var relative = string.IsNullOrWhiteSpace(resource.RelativePath)
+                    ? resource.Name
+                    : resource.RelativePath;
+                if (string.IsNullOrWhiteSpace(relative))
+                    continue;
+
+                var encoded = string.Join(
+                    "/",
+                    relative.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(Uri.EscapeDataString));
+                if (string.IsNullOrWhiteSpace(encoded))
+                    continue;
+
+                var baseRoute = NormalizeRouteForNavigationMatch(route.Route).TrimEnd('/');
+                yield return string.IsNullOrWhiteSpace(baseRoute)
+                    ? "/" + encoded
+                    : baseRoute + "/" + encoded;
+            }
+        }
+    }
+
+    private static IEnumerable<CollectionRoute> DiscoverGeneratedLocalizedFallbackRoutes(
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         IEnumerable<CollectionRoute> contentRoutes)
@@ -287,7 +325,12 @@ public static partial class WebSiteVerifier
                 if (existingRouteLanguages.Contains(language.Code + "|" + NormalizeRouteForNavigationMatch(fallbackRoute)))
                     continue;
 
-                yield return fallbackRoute;
+                yield return source with
+                {
+                    Route = fallbackRoute,
+                    Language = language.Code,
+                    Draft = false
+                };
             }
         }
     }

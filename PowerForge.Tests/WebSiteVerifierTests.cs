@@ -2072,6 +2072,8 @@ public partial class WebSiteVerifierTests
         try
         {
             File.WriteAllText(Path.Combine(root, "static", "docs", "index.html"), "<h1>Docs</h1>");
+            File.WriteAllText(Path.Combine(root, "static", "About Us.html"), "<h1>About</h1>");
+            File.WriteAllText(Path.Combine(root, "static", "guide#old.html"), "<h1>Guide</h1>");
             var spec = new SiteSpec
             {
                 Name = "Static patterns",
@@ -2082,10 +2084,20 @@ public partial class WebSiteVerifierTests
                     Menus = [new MenuSpec
                     {
                         Name = "main",
-                        Visibility = new NavigationVisibilitySpec { Paths = ["/docs/**"] },
-                        Items = [new MenuItemSpec { Title = "Docs", Url = "/docs/", Match = "/docs/**" }]
+                        Visibility = new NavigationVisibilitySpec { Paths = ["/docs/**", "/About%20Us.html", "/guide%23old.html"] },
+                        Items =
+                        [
+                            new MenuItemSpec { Title = "Docs", Url = "/docs/", Match = "/docs/**" },
+                            new MenuItemSpec { Title = "About", Url = "/About%20Us.html", Match = "/About%20Us.html" },
+                            new MenuItemSpec { Title = "Guide", Url = "/guide%23old.html", Match = "/guide%23old.html" }
+                        ]
                     }],
-                    Profiles = [new NavigationProfileSpec { Name = "docs", Paths = ["/docs/**"] }]
+                    Profiles =
+                    [
+                        new NavigationProfileSpec { Name = "docs", Paths = ["/docs/**"] },
+                        new NavigationProfileSpec { Name = "about", Paths = ["/About%20Us.html"] },
+                        new NavigationProfileSpec { Name = "guide", Paths = ["/guide%23old.html"] }
+                    ]
                 }
             };
             var configPath = Path.Combine(root, "site.json");
@@ -2160,6 +2172,9 @@ public partial class WebSiteVerifierTests
         try
         {
             File.WriteAllText(Path.Combine(root, "content", "en", "_index.md"), "---\ntitle: Blog\ntranslation_key: blog\n---\nBlog");
+            File.WriteAllText(Path.Combine(root, "content", "en", "one.md"), "---\ntitle: One\ntags: [release]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "en", "two.md"), "---\ntitle: Two\ntags: [release]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "content", "en", "manual.pdf"), "manual");
             File.WriteAllText(Path.Combine(root, "content", "en", "draft.md"), "---\ntitle: Draft\ndraft: true\n---\nDraft");
             File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
             var spec = new SiteSpec
@@ -2176,7 +2191,8 @@ public partial class WebSiteVerifierTests
                     MaterializeFallbackPages = true,
                     Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }]
                 },
-                Collections = [new CollectionSpec { Name = "blog", Preset = "blog", Input = "content", Output = "/blog" }],
+                Collections = [new CollectionSpec { Name = "blog", Preset = "blog", Input = "content", Output = "/blog", PageSize = 1 }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", Outputs = ["html", "rss"] }],
                 StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
                 Navigation = new NavigationSpec
                 {
@@ -2187,7 +2203,13 @@ public partial class WebSiteVerifierTests
                         Items =
                         [
                             new MenuItemSpec { Title = "Polish fallback", Url = "/pl/blog/" },
+                            new MenuItemSpec { Title = "Polish fallback page 2", Url = "/pl/blog/page/2/" },
                             new MenuItemSpec { Title = "Blog feed", Url = "/blog/index.xml" },
+                            new MenuItemSpec { Title = "Invalid feed directory", Url = "/blog/index.xml/" },
+                            new MenuItemSpec { Title = "Bundle resource", Url = "/pl/blog/manual.pdf" },
+                            new MenuItemSpec { Title = "Paginated bundle resource", Url = "/pl/blog/page/2/manual.pdf" },
+                            new MenuItemSpec { Title = "Polish fallback taxonomy", Url = "/pl/tags/" },
+                            new MenuItemSpec { Title = "Polish fallback taxonomy feed", Url = "/pl/tags/index.xml" },
                             new MenuItemSpec { Title = "Draft", Url = "/blog/draft/" }
                         ]
                     }]
@@ -2199,10 +2221,74 @@ public partial class WebSiteVerifierTests
             var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
 
             Assert.DoesNotContain(result.Warnings, warning =>
-                (warning.Contains("/pl/blog/", StringComparison.OrdinalIgnoreCase) || warning.Contains("/blog/index.xml", StringComparison.OrdinalIgnoreCase)) &&
+                (warning.Contains("/pl/blog/", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("/blog/index.xml'", StringComparison.OrdinalIgnoreCase) ||
+                 warning.Contains("/pl/tags/", StringComparison.OrdinalIgnoreCase)) &&
+                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("/blog/index.xml/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains("/blog/draft/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotRegisterLocalizedTaxonomyOutputsWithoutLocalizedTerms()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-localized-taxonomy-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "en"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "en", "one.md"), "---\ntitle: One\ntags: [release]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "assets", "site.css"), "body{}");
+            var spec = new SiteSpec
+            {
+                Name = "Localized taxonomy without terms",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = false,
+                    MaterializeFallbackPages = false,
+                    Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }]
+                },
+                Collections = [new CollectionSpec { Name = "blog", Input = "content", Output = "/blog" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", Outputs = ["html", "rss"] }],
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec
+                    {
+                        Name = "main",
+                        Items =
+                        [
+                            new MenuItemSpec { Title = "English feed", Url = "/tags/index.xml" },
+                            new MenuItemSpec { Title = "Missing Polish feed", Url = "/pl/tags/index.xml" }
+                        ]
+                    }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("points to '/tags/index.xml'", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("/pl/tags/index.xml", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
         finally

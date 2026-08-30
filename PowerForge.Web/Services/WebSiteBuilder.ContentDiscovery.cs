@@ -868,7 +868,7 @@ public static partial class WebSiteBuilder
         return PageKind.Page;
     }
 
-    private static PageResource[] BuildBundleResources(string bundleRoot)
+    internal static PageResource[] BuildBundleResources(string bundleRoot)
     {
         if (string.IsNullOrWhiteSpace(bundleRoot) || !Directory.Exists(bundleRoot))
             return Array.Empty<PageResource>();

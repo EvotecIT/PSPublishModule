@@ -183,6 +183,12 @@ public static partial class WebSiteVerifier
                         taxonomyTermCountsByLanguage,
                         usedTaxonomyNames);
                 }
+                var taxonomyValues = !(matter?.Draft ?? false) && kind is PageKind.Page or PageKind.Home
+                    ? ResolveTaxonomyValues(spec.Taxonomies, matter)
+                    : new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                var resources = isSectionIndex || isBundleIndex
+                    ? WebSiteBuilder.BuildBundleResources(Path.GetDirectoryName(file) ?? string.Empty)
+                    : Array.Empty<PageResource>();
                 list.Add(new CollectionRoute(
                     collection.Name,
                     route,
@@ -191,8 +197,32 @@ public static partial class WebSiteVerifier
                     resolvedLanguage,
                     translationKey,
                     kind,
-                    WebSiteBuilder.ResolveOutputs(matter?.Meta, effectiveCollection)));
+                    WebSiteBuilder.ResolveOutputs(matter?.Meta, effectiveCollection),
+                    Resources: resources,
+                    TaxonomyValues: taxonomyValues));
             }
+        }
+
+        var materializedFallbackRoutes = DiscoverGeneratedLocalizedFallbackRoutes(
+                spec,
+                localization,
+                collectionRoutes.Values.SelectMany(static values => values))
+            .ToArray();
+        foreach (var fallback in materializedFallbackRoutes)
+        {
+            if (!collectionRoutes.TryGetValue(fallback.Collection, out var fallbackCollectionRoutes))
+            {
+                fallbackCollectionRoutes = new List<CollectionRoute>();
+                collectionRoutes[fallback.Collection] = fallbackCollectionRoutes;
+            }
+            fallbackCollectionRoutes.Add(fallback);
+            routes[fallback.Route] = fallback.File;
+            RecordTaxonomyValues(
+                fallback.TaxonomyValues ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase),
+                fallback.Language,
+                taxonomyTermsByLanguage,
+                taxonomyTermCountsByLanguage,
+                usedTaxonomyNames);
         }
 
         AddSyntheticTaxonomyRoutes(spec, localization, routes, collectionRoutes, taxonomyTermsByLanguage, warnings);
@@ -218,24 +248,25 @@ public static partial class WebSiteVerifier
         var generatedPaginationRoutes = DiscoverGeneratedPaginationRoutes(
             spec,
             collectionRoutes.Values.SelectMany(static values => values),
-            taxonomyTermCountsByLanguage);
+            taxonomyTermCountsByLanguage).ToArray();
         var publishableRoutes = collectionRoutes.Values
             .SelectMany(static values => values)
             .Where(static route => !route.Draft)
-            .Select(static route => route.Route);
-        var generatedFallbackRoutes = DiscoverGeneratedLocalizedFallbackRoutes(
-            spec,
-            localization,
-            collectionRoutes.Values.SelectMany(static values => values));
+            .ToArray();
         var generatedOutputRoutes = DiscoverGeneratedOutputRoutes(
             spec,
-            collectionRoutes.Values.SelectMany(static values => values));
-        var navigationRoutes = publishableRoutes
+            publishableRoutes.Concat(generatedPaginationRoutes));
+        var generatedResourceRoutes = DiscoverGeneratedResourceRoutes(
+            publishableRoutes.Concat(generatedPaginationRoutes));
+        var fileRoutes = staticRoutes
+            .Concat(generatedOutputRoutes)
+            .Concat(generatedResourceRoutes)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var navigationRoutes = publishableRoutes.Select(static route => route.Route)
             .Concat(generatedFeatureRoutes)
-            .Concat(generatedPaginationRoutes)
-            .Concat(generatedFallbackRoutes)
-            .Concat(generatedOutputRoutes);
-        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0, staticRoutes);
+            .Concat(generatedPaginationRoutes.Select(static route => route.Route));
+        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0, fileRoutes);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

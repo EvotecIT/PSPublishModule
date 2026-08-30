@@ -517,33 +517,51 @@ public static partial class WebSiteVerifier
         Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
         HashSet<string> usedTaxonomyNames)
     {
-        if (matter is null)
-            return;
-
         var normalizedLanguage = NormalizeLanguageToken(language);
         if (string.IsNullOrWhiteSpace(normalizedLanguage))
             normalizedLanguage = "en";
 
-        if (matter.Tags is { Length: > 0 })
-        {
-            usedTaxonomyNames.Add("tags");
+        RecordTaxonomyValues(
+            ResolveTaxonomyValues(taxonomies, matter),
+            normalizedLanguage,
+            taxonomyTermsByLanguage,
+            taxonomyTermCountsByLanguage,
+            usedTaxonomyNames);
+    }
 
-            foreach (var value in matter.Tags)
+    private static IReadOnlyDictionary<string, string[]> ResolveTaxonomyValues(
+        TaxonomySpec[]? taxonomies,
+        FrontMatter? matter)
+    {
+        var resolved = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (matter is null)
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        static void AddValues(
+            Dictionary<string, HashSet<string>> target,
+            string name,
+            IEnumerable<string>? values)
+        {
+            if (string.IsNullOrWhiteSpace(name) || values is null)
+                return;
+
+            if (!target.TryGetValue(name, out var terms))
             {
-                if (!string.IsNullOrWhiteSpace(value))
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, "tags", normalizedLanguage, value.Trim());
+                terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                target[name] = terms;
             }
+
+            foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
+                terms.Add(value.Trim());
         }
 
+        AddValues(resolved, "tags", matter.Tags);
+        AddValues(resolved, "categories", matter.Categories);
         if (matter.Meta is not null)
         {
             if (matter.Meta.TryGetValue("categories", out var categoriesValue) &&
                 TryGetMetaValues(categoriesValue, out var categories))
-            {
-                usedTaxonomyNames.Add("categories");
-                foreach (var value in categories)
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, "categories", normalizedLanguage, value);
-            }
+                AddValues(resolved, "categories", categories);
         }
 
         foreach (var taxonomy in taxonomies ?? Array.Empty<TaxonomySpec>())
@@ -557,10 +575,27 @@ public static partial class WebSiteVerifier
             if (!TryGetMetaValues(metaValue, out var values))
                 continue;
 
-            usedTaxonomyNames.Add(taxonomy.Name);
+            AddValues(resolved, taxonomy.Name, values);
+        }
 
-            foreach (var value in values)
-                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, taxonomy.Name, normalizedLanguage, value);
+        return resolved.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void RecordTaxonomyValues(
+        IReadOnlyDictionary<string, string[]> taxonomyValues,
+        string language,
+        Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
+        HashSet<string> usedTaxonomyNames)
+    {
+        foreach (var pair in taxonomyValues)
+        {
+            usedTaxonomyNames.Add(pair.Key);
+            foreach (var value in pair.Value)
+                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, pair.Key, language, value);
         }
     }
 
@@ -656,6 +691,11 @@ public static partial class WebSiteVerifier
                 : new[] { localization.DefaultLanguage };
             foreach (var language in languages)
             {
+                if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
+                    !termsByLanguage.TryGetValue(language, out var terms) ||
+                    terms.Count == 0)
+                    continue;
+
                 var listRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
                 listRoute = ApplyLanguagePrefixToRoute(spec, localization, listRoute, language);
                 if (routes.TryGetValue(listRoute, out var existingListRoute))
@@ -685,11 +725,6 @@ public static partial class WebSiteVerifier
                         PageKind.Taxonomy,
                         taxonomy.Outputs ?? Array.Empty<string>()));
                 }
-
-                if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
-                    !termsByLanguage.TryGetValue(language, out var terms) ||
-                    terms.Count == 0)
-                    continue;
 
                 foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
                 {
@@ -931,5 +966,7 @@ public static partial class WebSiteVerifier
         string TranslationKey,
         PageKind Kind,
         string[] Outputs,
-        string? TaxonomyTerm = null);
+        string? TaxonomyTerm = null,
+        PageResource[]? Resources = null,
+        IReadOnlyDictionary<string, string[]>? TaxonomyValues = null);
 }
