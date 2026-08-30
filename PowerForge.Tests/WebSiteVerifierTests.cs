@@ -635,6 +635,7 @@ public partial class WebSiteVerifierTests
             File.WriteAllText(Path.Combine(pages, "index.md"), "---\ntitle: Not found\nslug: 404\n---\n\nNot found");
             File.WriteAllText(Path.Combine(pages, "manual.pdf"), "not found help");
             File.WriteAllText(Path.Combine(pages, "legacy.html"), "<h1>Legacy help</h1>");
+            File.WriteAllText(Path.Combine(pages, "About Us.html"), "<h1>About help</h1>");
             File.WriteAllText(Path.Combine(feeds, "entry.md"), "---\ntitle: Feed entry\n---\n\nFeed entry");
             File.WriteAllText(Path.Combine(theme, "theme.json"), "{\"name\":\"route-theme\",\"assetsPath\":\"./assets\"}");
             File.WriteAllText(Path.Combine(theme, "assets", "brand.svg"), "<svg/>");
@@ -648,6 +649,8 @@ public partial class WebSiteVerifierTests
                 "/manual.pdf",
                 "/legacy.html",
                 "/legacy",
+                "/About%20Us.html",
+                "/About%20Us",
                 "/search/index.json",
                 "/search/manifest.json",
                 "/search/en/index.json",
@@ -2535,6 +2538,77 @@ public partial class WebSiteVerifierTests
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("points to '/pl/pl/docs/'", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersDeterministicGeneratedSocialCardRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-card-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\ndescription: Generated card route.\nslug: index\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Social route",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec
+                {
+                    Enabled = true,
+                    SiteName = "Social route",
+                    AutoGenerateCards = true,
+                    GeneratedCardsPath = "/assets/social/generated"
+                },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var (matter, _) = FrontMatterParser.Parse(File.ReadAllText(Path.Combine(root, "content", "index.md")));
+            var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, new ContentItem
+            {
+                SourcePath = Path.Combine(root, "content", "index.md"),
+                Collection = "pages",
+                OutputPath = "/",
+                Title = "Home",
+                Description = "Generated card route.",
+                Slug = "index",
+                Kind = PageKind.Home,
+                HtmlContent = "<p>Home</p>",
+                Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            });
+            Assert.StartsWith("/assets/social/generated/", cardRoute, StringComparison.Ordinal);
+
+            string html = File.ReadAllText(Path.Combine(outputRoot, "index.html"));
+            const string marker = "property=\"og:image\" content=\"https://example.test";
+            int start = html.IndexOf(marker, StringComparison.Ordinal);
+            if (start >= 0)
+            {
+                start += marker.Length;
+                int end = html.IndexOf('"', start);
+                string renderedCardRoute = html[start..end];
+                Assert.Equal(cardRoute, renderedCardRoute);
+                Assert.True(File.Exists(Path.Combine(outputRoot, renderedCardRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))));
+            }
+
+            spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Card", Url = cardRoute }] }];
+            WebVerifyResult result = WebSiteVerifier.Verify(spec, plan);
+
+            var missingRouteWarnings = result.Warnings.Where(warning =>
+                warning.Contains($"points to '{cardRoute}'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase)).ToArray();
+            Assert.True(missingRouteWarnings.Length == 0, string.Join(Environment.NewLine, missingRouteWarnings));
         }
         finally
         {

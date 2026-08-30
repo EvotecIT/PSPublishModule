@@ -264,7 +264,7 @@ public static partial class WebSiteBuilder
         return 0;
     }
 
-    private static ContentItem CloneContentItem(ContentItem item)
+    internal static ContentItem CloneContentItem(ContentItem item)
     {
         return new ContentItem
         {

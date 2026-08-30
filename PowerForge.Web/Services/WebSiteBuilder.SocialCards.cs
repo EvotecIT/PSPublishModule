@@ -80,7 +80,54 @@ public static partial class WebSiteBuilder
         if (spec.Social is null || string.IsNullOrWhiteSpace(outputRoot))
             return string.Empty;
 
+        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName);
+        if (plan is null)
+            return string.Empty;
+
         var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
+        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, plan.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
+            return string.Empty;
+        var bytes = WebSocialCardGenerator.RenderPng(plan.RenderOptions);
+        if (bytes is null || bytes.Length == 0)
+            return string.Empty;
+
+        WriteAllBytesIfChanged(fullPath, bytes);
+        return "/" + plan.RelativePath.Replace('\\', '/');
+    }
+
+    internal static string ResolveGeneratedSocialCardRoute(SiteSpec spec, ContentItem item)
+    {
+        if (spec?.Social is null || item is null || !spec.Social.Enabled || !spec.Social.AutoGenerateCards)
+            return string.Empty;
+        if (TryGetMetaBool(item.Meta, "social", out var socialEnabled) && !socialEnabled)
+            return string.Empty;
+        if (!string.IsNullOrWhiteSpace(ResolveSocialImageOverride(item)) || !ShouldAutoGenerateSocialCardForPage(item))
+            return string.Empty;
+
+        var title = GetMetaString(item.Meta, "social_title");
+        if (string.IsNullOrWhiteSpace(title))
+            title = ResolveSeoTitle(spec, item);
+        if (string.IsNullOrWhiteSpace(title))
+            title = spec.Name;
+        var description = GetMetaString(item.Meta, "social_description");
+        if (string.IsNullOrWhiteSpace(description))
+            description = ResolveMetaDescription(spec, item);
+        var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
+        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName);
+        return plan is null ? string.Empty : "/" + plan.RelativePath.Replace('\\', '/');
+    }
+
+    private static SocialCardGenerationPlan? CreateSocialCardGenerationPlan(
+        SiteSpec spec,
+        ContentItem item,
+        string title,
+        string description,
+        string siteName)
+    {
+        if (spec.Social is null)
+            return null;
+
         var generatedPath = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath);
         var routeForSlug = BuildSocialRouteLabel(item);
         var routeLabel = ResolveSocialRouteLabel(item, routeForSlug);
@@ -126,10 +173,7 @@ public static partial class WebSiteBuilder
         var hash = ComputeSocialHash(hashInput);
         var fileName = $"{routeSlug}-{hash}.png";
         var relativePath = $"{generatedPath.TrimStart('/')}/{fileName}".TrimStart('/');
-        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
-            return string.Empty;
-        var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
+        var renderOptions = new WebSocialCardGenerator.SocialCardRenderOptions
         {
             Title = title,
             Description = description,
@@ -146,14 +190,13 @@ public static partial class WebSiteBuilder
             LogoDataUri = logoSource,
             InlineImageDataUri = inlineImageSource,
             Metrics = metrics
-        });
-        if (bytes is null || bytes.Length == 0)
-            return string.Empty;
-
-        if (!WriteAllBytesIfChanged(fullPath, bytes))
-            return "/" + relativePath.Replace('\\', '/');
-        return "/" + relativePath.Replace('\\', '/');
+        };
+        return new SocialCardGenerationPlan(relativePath, renderOptions);
     }
+
+    private sealed record SocialCardGenerationPlan(
+        string RelativePath,
+        WebSocialCardGenerator.SocialCardRenderOptions RenderOptions);
 
     private static string NormalizeGeneratedCardsPath(string? value)
     {

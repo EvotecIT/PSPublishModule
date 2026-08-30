@@ -969,5 +969,6 @@ public static partial class WebSiteVerifier
         string? TaxonomyTerm = null,
         PageResource[]? Resources = null,
         IReadOnlyDictionary<string, string[]>? TaxonomyValues = null,
-        string? ProjectSlug = null);
+        string? ProjectSlug = null,
+        ContentItem? SocialCardItem = null);
 }

@@ -194,6 +194,27 @@ public static partial class WebSiteVerifier
                 var resources = isSectionIndex || isBundleIndex
                     ? WebSiteBuilder.BuildBundleResources(Path.GetDirectoryName(file) ?? string.Empty)
                     : Array.Empty<PageResource>();
+                var outputs = WebSiteBuilder.ResolveOutputs(matter?.Meta, effectiveCollection);
+                var socialCardItem = new ContentItem
+                {
+                    SourcePath = file,
+                    Collection = collection.Name,
+                    OutputPath = route,
+                    Language = resolvedLanguage,
+                    TranslationKey = translationKey,
+                    Title = title,
+                    Description = matter?.Description ?? string.Empty,
+                    Slug = slugPath,
+                    Draft = matter?.Draft ?? false,
+                    Canonical = matter?.Canonical,
+                    Layout = matter?.Layout,
+                    Kind = kind,
+                    HtmlContent = body,
+                    Resources = resources,
+                    ProjectSlug = projectSlug,
+                    Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+                    Outputs = outputs
+                };
                 list.Add(new CollectionRoute(
                     collection.Name,
                     route,
@@ -202,10 +223,11 @@ public static partial class WebSiteVerifier
                     resolvedLanguage,
                     translationKey,
                     kind,
-                    WebSiteBuilder.ResolveOutputs(matter?.Meta, effectiveCollection),
+                    outputs,
                     Resources: resources,
                     TaxonomyValues: taxonomyValues,
-                    ProjectSlug: projectSlug));
+                    ProjectSlug: projectSlug,
+                    SocialCardItem: socialCardItem));
             }
         }
 
@@ -284,6 +306,7 @@ public static partial class WebSiteVerifier
             publishableRoutes.Concat(generatedPaginationRoutes));
         var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
         var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
+        var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(spec, publishableRoutes);
         var fileRoutes = staticRoutes
             .Concat(generatedFeatureRoutes.Where(static route =>
                 route.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
@@ -293,6 +316,7 @@ public static partial class WebSiteVerifier
             .Concat(generatedSearchDataRoutes)
             .Concat(generatedThemeAssetRoutes)
             .Concat(generatedSiteDataRoutes)
+            .Concat(generatedSocialCardRoutes)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var navigationRoutes = publishableRoutes
