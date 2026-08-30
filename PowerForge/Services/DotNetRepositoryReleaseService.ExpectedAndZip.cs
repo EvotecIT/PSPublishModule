@@ -38,19 +38,42 @@ public sealed partial class DotNetRepositoryReleaseService {
         }
     }
 
-    private static string ResolvePackageId(string csprojPath, string fallbackProjectName) {
-        try {
-            var doc = XDocument.Load(csprojPath);
-            var packageId = doc.Descendants()
-                .FirstOrDefault(e => e.Name.LocalName.Equals("PackageId", StringComparison.OrdinalIgnoreCase))
-                ?.Value;
-
-            return string.IsNullOrWhiteSpace(packageId)
-                ? fallbackProjectName
-                : (packageId ?? string.Empty).Trim();
-        } catch {
-            return fallbackProjectName;
+    private string ResolvePackageId(string csprojPath, string fallbackProjectName, DotNetRepositoryReleaseSpec spec) {
+        var projectDirectory = Path.GetDirectoryName(csprojPath) ?? spec.RootPath;
+        var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var packProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
+            ["NoBuild"] = "true"
+        };
+        if (spec.IncludeSymbols) {
+            packProperties["IncludeSymbols"] = "true";
+            packProperties["SymbolPackageFormat"] = "snupkg";
         }
+        if (!string.IsNullOrWhiteSpace(spec.OutputPath)) {
+            packProperties["PackageOutputPath"] = Path.IsPathRooted(spec.OutputPath)
+                ? Path.GetFullPath(spec.OutputPath)
+                : Path.GetFullPath(Path.Combine(spec.RootPath, spec.OutputPath));
+            if (spec.PackStrategy == DotNetRepositoryPackStrategy.MSBuild)
+                packProperties["BuildProjectReferences"] = "false";
+        }
+        var exitCode = RunDotnetMsBuildGetProperty(
+            csprojPath,
+            projectDirectory,
+            configuration,
+            targetFramework: null,
+            runtimeIdentifier: null,
+            packProperties,
+            propertyName: "PackageId",
+            fallbackProjectName,
+            _logger,
+            out var packageId,
+            out var stdErr,
+            out var stdOut,
+            out _);
+        if (exitCode != 0) {
+            var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
+            throw new InvalidOperationException($"Cannot determine the package id for '{csprojPath}' because MSBuild evaluation failed. {detail}".Trim());
+        }
+        return string.IsNullOrWhiteSpace(packageId) ? fallbackProjectName : packageId!.Trim();
     }
 
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec) {
