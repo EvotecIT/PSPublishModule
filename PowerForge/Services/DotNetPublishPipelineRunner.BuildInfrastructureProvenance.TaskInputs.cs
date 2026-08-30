@@ -70,7 +70,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 !IsDefinitelyInactiveControlledBuildOperation(
                     element,
                     evaluatedProperties,
-                    definingProjectPath: null))
+                    definingProjectPath: null,
+                    relatedDocuments))
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
@@ -81,7 +82,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 !IsDefinitelyInactiveControlledBuildOperation(
                     element,
                     evaluatedProperties,
-                    definingProjectPath: null))
+                    definingProjectPath: null,
+                    relatedDocuments))
             .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
@@ -204,7 +206,8 @@ public sealed partial class DotNetPublishPipelineRunner
                          !IsDefinitelyInactiveControlledBuildOperation(
                              element.Parent,
                              evaluatedProperties,
-                             definingProjectPath: null) &&
+                             definingProjectPath: null,
+                             relatedDocuments) &&
                          !element.Parent.Name.LocalName.Equals(
                              "ReadLinesFromFile",
                              StringComparison.OrdinalIgnoreCase)))

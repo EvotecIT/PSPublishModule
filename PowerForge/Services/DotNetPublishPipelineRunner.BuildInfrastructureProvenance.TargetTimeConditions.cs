@@ -8,7 +8,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool IsDefinitelyInactiveControlledBuildOperation(
         XElement element,
         IReadOnlyDictionary<string, string> evaluatedProperties,
-        string? definingProjectPath)
+        string? definingProjectPath,
+        IEnumerable<XDocument>? relatedDocuments = null)
     {
         if (!IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties, definingProjectPath))
             return false;
@@ -27,8 +28,22 @@ public sealed partial class DotNetPublishPipelineRunner
         if (conditionProperties.Count == 0)
             return true;
 
+        IEnumerable<XElement> precedingTargetElements = target.Descendants()
+            .TakeWhile(candidate => !ReferenceEquals(candidate, element));
+        IEnumerable<XDocument> assignmentDocuments = relatedDocuments ?? Enumerable.Empty<XDocument>();
+        if (target.Document is not null)
+            assignmentDocuments = assignmentDocuments.Prepend(target.Document);
+        IEnumerable<XElement> otherTargetElements = assignmentDocuments
+            .SelectMany(document => document.Descendants())
+            .Where(candidate =>
+            {
+                XElement? candidateTarget = candidate.AncestorsAndSelf().FirstOrDefault(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+                return candidateTarget is not null && !ReferenceEquals(candidateTarget, target);
+            });
+
         return !CanAssignTargetTimeConditionProperty(
-            target.Descendants().TakeWhile(candidate => !ReferenceEquals(candidate, element)),
+            precedingTargetElements.Concat(otherTargetElements),
             conditionProperties);
     }
 
@@ -66,10 +81,10 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool CanAssignTargetTimeConditionProperty(
-        IEnumerable<XElement> precedingElements,
+        IEnumerable<XElement> candidateElements,
         ISet<string> conditionProperties)
     {
-        foreach (XElement element in precedingElements)
+        foreach (XElement element in candidateElements)
         {
             if (element.Parent?.Name.LocalName.Equals(
                     "PropertyGroup",

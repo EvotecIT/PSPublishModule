@@ -170,16 +170,24 @@ public sealed partial class DotNetPublishPipelineRunner
             if (fullCandidatePaths.Any(path => !File.Exists(path)))
                 return CacheAll(false);
             Directory.CreateDirectory(controlledOutputRoot);
+            IReadOnlyDictionary<string, string> effectiveGlobalProperties =
+                request.ReadEffectiveGlobalProperties();
+            var controlledEvaluationProperties = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in effectiveGlobalProperties)
+                controlledEvaluationProperties[property.Key] = property.Value;
+            foreach (KeyValuePair<string, string> property in evaluatedProperties)
+                controlledEvaluationProperties[property.Key] = property.Value;
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
                     controlledSourceRoot,
                     evaluatedBuildInputs,
                     evaluatedMsBuildInputs,
-                    request.ReadEffectiveGlobalProperties(),
+                    effectiveGlobalProperties,
                     new Dictionary<string, IReadOnlyDictionary<string, string>[]>(
                         IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                     {
-                        [Path.GetFullPath(request.ProjectPath)] = [evaluatedProperties]
+                        [Path.GetFullPath(request.ProjectPath)] = [controlledEvaluationProperties]
                     },
                     out controlledGitRoot,
                     out string? controlledProjectPath))

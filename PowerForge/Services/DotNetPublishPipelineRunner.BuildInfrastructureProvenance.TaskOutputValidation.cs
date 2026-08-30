@@ -20,7 +20,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsDefinitelyInactiveControlledBuildOperation(
                     task,
                     evaluatedGlobalProperties,
-                    declaringPath))
+                    declaringPath,
+                    relatedDocuments.Select(related => related.Document)))
             {
                 continue;
             }

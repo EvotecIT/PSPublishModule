@@ -92,6 +92,49 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
     }
 
     [Fact]
+    public void Plan_UsesNormalizedWinningEnvironmentDefinitionForControlledBuildAdmission()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var projectPath = CreateProject(root);
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(
+                new DotNetPublishSpec
+                {
+                    DotNet = new DotNetPublishDotNetOptions
+                    {
+                        ProjectRoot = root,
+                        Restore = false,
+                        Build = false,
+                        Runtimes = new[] { "win-x64" },
+                        EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.Ordinal)
+                        {
+                            [" BUILD_TOKEN "] = new()
+                            {
+                                Value = "public-value",
+                                Secret = false
+                            },
+                            ["BUILD_TOKEN"] = new()
+                            {
+                                Value = "secret-value",
+                                Secret = true
+                            }
+                        }
+                    },
+                    Targets = new[] { NewTarget(projectPath) }
+                },
+                configPath: null);
+
+            Assert.Equal("secret-value", plan.EnvironmentVariables["BUILD_TOKEN"]);
+            Assert.DoesNotContain("BUILD_TOKEN", plan.ControlledBuildEnvironmentVariableNames);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Plan_ThrowsWhenRequiredDotNetEnvironmentVariableIsMissing()
     {
         var root = CreateTempRoot();

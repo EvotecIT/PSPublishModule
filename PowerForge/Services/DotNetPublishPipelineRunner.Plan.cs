@@ -557,19 +557,19 @@ public sealed partial class DotNetPublishPipelineRunner
             sourceRevision.Any(character => !Uri.IsHexDigit(character)))
             sourceRevision = string.Empty;
 
+        Dictionary<string, DotNetPublishEnvironmentVariable> normalizedEnvironmentVariables =
+            CloneEnvironmentVariables(spec.DotNet.EnvironmentVariables) ??
+            new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string?> resolvedEnvironmentVariables = ResolveDotNetEnvironmentVariables(
-            spec.DotNet.EnvironmentVariables,
+            normalizedEnvironmentVariables,
             projectRoot,
             enforceRequiredEnvironmentVariables);
         string[] controlledBuildEnvironmentVariableNames =
-            (spec.DotNet.EnvironmentVariables ??
-             new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase))
+            normalizedEnvironmentVariables
             .Where(entry =>
-                !string.IsNullOrWhiteSpace(entry.Key) &&
                 entry.Value?.Secret == false &&
-                resolvedEnvironmentVariables.ContainsKey(entry.Key.Trim()))
-            .Select(entry => entry.Key.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+                resolvedEnvironmentVariables.ContainsKey(entry.Key))
+            .Select(entry => entry.Key)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
