@@ -347,6 +347,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         arguments.Add("-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(intermediateRoot));
         arguments.Add("-p:RestoreConfigFile=" + EscapeMsBuildPropertyValue(configPath));
+        arguments.Add("-p:RestoreOutputPath=" + EscapeMsBuildPropertyValue(intermediateRoot));
         arguments.Add("-p:RestoreSources=" + EscapeMsBuildPropertyValue(restoreSource));
         arguments.Add("-p:RestoreFallbackFolders=");
         arguments.Add("-p:RestoreAdditionalProjectFallbackFolders=");
