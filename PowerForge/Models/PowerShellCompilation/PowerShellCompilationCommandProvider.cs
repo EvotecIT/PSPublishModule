@@ -66,6 +66,28 @@ public enum PowerShellCompilationCommandErrors
     PowerShellHost
 }
 
+/// <summary>Cancellation ownership declared by a provider adapter.</summary>
+public enum PowerShellCompilationProviderCancellation
+{
+    /// <summary>The operation completes synchronously and has no cancellable wait or enumeration.</summary>
+    NotApplicable,
+    /// <summary>The runtime-free adapter accepts and observes cooperative cancellation.</summary>
+    Cooperative,
+    /// <summary>The PowerShell host owns cancellation semantics for a hosted boundary.</summary>
+    PowerShellHost
+}
+
+/// <summary>Resource-lifetime ownership declared by a provider adapter.</summary>
+public enum PowerShellCompilationProviderCleanup
+{
+    /// <summary>The adapter creates no owned resource requiring cleanup.</summary>
+    NotApplicable,
+    /// <summary>The adapter deterministically releases every owned resource.</summary>
+    Deterministic,
+    /// <summary>The PowerShell host owns cleanup for the hosted boundary.</summary>
+    PowerShellHost
+}
+
 /// <summary>Runtime adapter required by a command provider.</summary>
 public sealed class PowerShellCompilationCommandAdapterContract
 {
@@ -80,6 +102,12 @@ public sealed class PowerShellCompilationCommandAdapterContract
 
     /// <summary>Whether the adapter is declared safe for NativeAOT analysis.</summary>
     public bool AotCompatible { get; set; }
+
+    /// <summary>Cancellation behavior exposed by this adapter operation.</summary>
+    public PowerShellCompilationProviderCancellation Cancellation { get; set; }
+
+    /// <summary>Cleanup behavior exposed by this adapter operation.</summary>
+    public PowerShellCompilationProviderCleanup Cleanup { get; set; }
 
     /// <summary>Exact runtime dependencies required by the adapter.</summary>
     public string[] Dependencies { get; set; } = Array.Empty<string>();

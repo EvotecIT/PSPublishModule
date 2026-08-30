@@ -92,6 +92,7 @@ public sealed class PowerShellCompilationProviderPackageReader
                     package.PackageSha256,
                     package.ManifestSha256,
                     package.Signature,
+                    package.SignerFingerprint,
                     package.Publisher,
                     package.LicenseExpression,
                     Assemblies = (package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
@@ -131,13 +132,20 @@ public sealed class PowerShellCompilationProviderPackageReader
         using var packageReader = new PackageArchiveReader(stream, leaveStreamOpen: true);
         var signature = packageReader.GetPrimarySignatureAsync(CancellationToken.None).GetAwaiter().GetResult();
         var signatureState = "Unsigned";
+        var signerFingerprint = string.Empty;
         if (signature is not null)
         {
             packageReader.ValidateIntegrityAsync(signature.SignatureContent, CancellationToken.None).GetAwaiter().GetResult();
             signatureState = "ValidIntegrity";
+            var certificate = signature.SignerInfo.Certificate
+                ?? throw new InvalidOperationException($"Provider package '{path}' signature has no signing certificate.");
+            signerFingerprint = Hash(certificate.RawData);
         }
         if (policy.RequirePackageSignature && signature is null)
             throw new InvalidOperationException($"Provider package '{path}' is unsigned, but policy requires a NuGet package signature.");
+        if (policy.AllowedSignerFingerprints.Length > 0 &&
+            !Contains(policy.AllowedSignerFingerprints, signerFingerprint))
+            throw new InvalidOperationException($"Provider package '{path}' signing-certificate fingerprint is not allowed by policy.");
 
         var files = packageReader.GetFiles().Select(NormalizePath).ToArray();
         if (files.Count(file => string.Equals(file, ManifestPath, StringComparison.Ordinal)) != 1)
@@ -169,6 +177,7 @@ public sealed class PowerShellCompilationProviderPackageReader
                 PackageSha256 = Hash(packageBytes),
                 ManifestSha256 = Hash(manifestBytes),
                 Signature = signatureState,
+                SignerFingerprint = signerFingerprint,
                 Publisher = manifest.Publisher,
                 LicenseExpression = manifest.LicenseExpression,
                 Assemblies = assemblies,

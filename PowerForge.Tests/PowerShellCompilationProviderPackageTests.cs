@@ -8,6 +8,44 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationProviderPackageTests
 {
     [Fact]
+    public void SdkConformanceKitProducesOrderStableEvidenceAndRejectsAmbiguousRegistration()
+    {
+        using var fixture = ProviderFixture.Create();
+        var first = fixture.Manifest.Providers[0];
+        var second = new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "generic.command.stream.warning",
+            ProviderVersion = "1.0",
+            FeatureId = "command.write-package-warning-core",
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = "Write-PackageWarningCore",
+            Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Message", Position = 0 } },
+            Output = PowerShellCompilationCommandOutput.None,
+            Cardinality = PowerShellCompilationCommandCardinality.None,
+            Stream = "Warning",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "WriteWarning",
+                SemanticProfile = first.Adapter.SemanticProfile,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+        fixture.Manifest.Providers = new[] { first, second };
+        var kit = new PowerShellCompilationProviderConformanceKit();
+
+        var forward = kit.Validate(fixture.Manifest);
+        fixture.Manifest.Providers = new[] { second, first };
+        var reverse = kit.Validate(fixture.Manifest);
+
+        Assert.Equal(forward.ContractSha256, reverse.ContractSha256);
+        Assert.Equal(8, forward.PassedChecks.Length);
+        second.Aliases = new[] { first.CommandName };
+        Assert.Throws<InvalidOperationException>(() => kit.Validate(fixture.Manifest));
+    }
+
+    [Fact]
     public void SdkBuildsDeterministicPackageAndReaderLocksTrustClosureWithoutAssemblyLoad()
     {
         using var fixture = ProviderFixture.Create();
@@ -52,6 +90,10 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.Throws<InvalidOperationException>(() => reader.Resolve(new[] { reference }, new PowerShellCompilationProviderTrustPolicy
         {
             RequirePackageSignature = true
+        }));
+        Assert.Throws<InvalidOperationException>(() => reader.Resolve(new[] { reference }, new PowerShellCompilationProviderTrustPolicy
+        {
+            AllowedSignerFingerprints = new[] { new string('a', 64) }
         }));
     }
 
@@ -102,6 +144,10 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.Equal(resolution.Lock.LockSha256, result.Manifest.ProviderLock!.LockSha256);
         Assert.Equal(resolution.Lock.LockSha256, result.Manifest.Reproduction!.ProviderLockSha256);
         Assert.Single(result.Manifest.CommandProviders, static provider => provider.ProviderId == "generic.command.stream.notice");
+        var sbomPath = Assert.Single(result.Manifest.Files, static file => file.Role == "Sbom").Path;
+        var provenancePath = Assert.Single(result.Manifest.Files, static file => file.Role == "BuildProvenance").Path;
+        Assert.Contains("Generic.Semantic.Provider", File.ReadAllText(sbomPath), StringComparison.Ordinal);
+        Assert.Contains(resolution.Lock.LockSha256, File.ReadAllText(provenancePath), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

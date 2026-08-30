@@ -114,6 +114,9 @@ public sealed class PowerShellCompilationProviderTrustPolicy
     /// <summary>Accepted license expressions. Empty means no license allow-list restriction.</summary>
     public string[] AllowedLicenseExpressions { get; set; } = Array.Empty<string>();
 
+    /// <summary>Accepted SHA-256 fingerprints of NuGet signing certificates. Empty means no signer allow-list restriction.</summary>
+    public string[] AllowedSignerFingerprints { get; set; } = Array.Empty<string>();
+
     /// <summary>Whether an unsigned provider package is rejected.</summary>
     public bool RequirePackageSignature { get; set; }
 }
@@ -138,6 +141,9 @@ public sealed class PowerShellCompilationProviderPackageLockEntry
 
     /// <summary>NuGet signature state: Valid, Invalid, or Unsigned.</summary>
     public string Signature { get; set; } = "Unsigned";
+
+    /// <summary>SHA-256 fingerprint of the package signing certificate, or empty for an unsigned package.</summary>
+    public string SignerFingerprint { get; set; } = string.Empty;
 
     /// <summary>Publisher identity.</summary>
     public string Publisher { get; set; } = string.Empty;

@@ -78,6 +78,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             .OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal)
             .Select(static assembly => PowerShellCompilationProviderPackageReader.InspectAssembly(assembly.SourcePath, assembly.PackagePath))
             .ToArray();
+        _ = new PowerShellCompilationProviderConformanceKit().Validate(request.Manifest);
         var directory = Path.GetDirectoryName(request.OutputPath);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
         var temporary = request.OutputPath + "." + Guid.NewGuid().ToString("N") + ".tmp";

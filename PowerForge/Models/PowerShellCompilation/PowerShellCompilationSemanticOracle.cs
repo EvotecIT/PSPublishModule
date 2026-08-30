@@ -107,7 +107,9 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
         string upstreamCommit,
         IEnumerable<string> upstreamTests,
         IEnumerable<string> documentationUris,
-        string expectedVersionDifference = "")
+        string expectedVersionDifference = "",
+        string contractVersion = "1.0",
+        string owningComponent = "PowerForge.SemanticPipeline")
     {
         FeatureId = Require(featureId, nameof(featureId));
         ProfileId = Require(profileId, nameof(profileId));
@@ -115,6 +117,8 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
         UpstreamTests = Normalize(upstreamTests, nameof(upstreamTests));
         DocumentationUris = Normalize(documentationUris, nameof(documentationUris));
         ExpectedVersionDifference = expectedVersionDifference?.Trim() ?? string.Empty;
+        ContractVersion = Require(contractVersion, nameof(contractVersion));
+        OwningComponent = Require(owningComponent, nameof(owningComponent));
     }
 
     /// <summary>Stable compiler feature identity.</summary>
@@ -135,6 +139,12 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
     /// <summary>Named and justified host-version difference, or empty when no difference is expected.</summary>
     public string ExpectedVersionDifference { get; }
 
+    /// <summary>Version of the PowerForge semantic contract supported by this evidence.</summary>
+    public string ContractVersion { get; }
+
+    /// <summary>Canonical binder, IR, or runtime-free helper that owns the behavior.</summary>
+    public string OwningComponent { get; }
+
     private static IReadOnlyList<string> Normalize(IEnumerable<string> values, string parameterName)
         => new ReadOnlyCollection<string>((values ?? throw new ArgumentNullException(parameterName))
             .Select(static value => value?.Trim() ?? string.Empty)
@@ -147,6 +157,35 @@ public sealed class PowerShellCompilationSemanticFeatureProvenance
         => string.IsNullOrWhiteSpace(value)
             ? throw new ArgumentException("A non-empty value is required.", parameterName)
             : value.Trim();
+}
+
+/// <summary>One pinned profile whose upstream source identity changed and therefore requires review.</summary>
+public sealed class PowerShellCompilationSemanticUpstreamChange
+{
+    /// <summary>Creates an immutable upstream-change review proposal.</summary>
+    public PowerShellCompilationSemanticUpstreamChange(
+        string profileId,
+        string pinnedCommit,
+        string observedCommit,
+        IEnumerable<string> affectedFeatureIds)
+    {
+        ProfileId = profileId ?? string.Empty;
+        PinnedCommit = pinnedCommit ?? string.Empty;
+        ObservedCommit = observedCommit ?? string.Empty;
+        AffectedFeatureIds = new ReadOnlyCollection<string>((affectedFeatureIds ?? Array.Empty<string>())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static feature => feature, StringComparer.Ordinal)
+            .ToArray());
+    }
+
+    /// <summary>Profile requiring review.</summary>
+    public string ProfileId { get; }
+    /// <summary>Immutable commit currently accepted by the semantic profile.</summary>
+    public string PinnedCommit { get; }
+    /// <summary>Newly observed upstream commit; it is never adopted automatically.</summary>
+    public string ObservedCommit { get; }
+    /// <summary>Promoted feature contracts that reference the changed profile.</summary>
+    public IReadOnlyList<string> AffectedFeatureIds { get; }
 }
 
 /// <summary>One property captured from semantic output without retaining live runtime objects.</summary>

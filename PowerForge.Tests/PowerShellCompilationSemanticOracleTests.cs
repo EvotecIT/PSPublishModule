@@ -1,4 +1,6 @@
 using PowerForge;
+using System.Reflection;
+using System.Runtime.Loader;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -25,6 +27,45 @@ public sealed class PowerShellCompilationSemanticOracleTests
             Assert.NotEmpty(profile.VersionRange);
             Assert.NotEmpty(profile.DocumentationUri);
         });
+    }
+
+    [Fact]
+    public void CatalogCarriesOwnedPinnedProvenanceForEveryPromotedFamilyAndProfile()
+    {
+        var evidence = PowerShellCompilationSemanticOracleCatalog.FeatureProvenance;
+        var families = evidence.Select(static item => item.FeatureId).Distinct(StringComparer.Ordinal).ToArray();
+
+        Assert.True(families.Length >= 18);
+        Assert.Equal(
+            families.Length * PowerShellCompilationSemanticOracleCatalog.Profiles.Count,
+            evidence.Count);
+        Assert.All(evidence, item =>
+        {
+            Assert.Equal("1.0", item.ContractVersion);
+            Assert.NotEmpty(item.OwningComponent);
+            Assert.NotEmpty(item.UpstreamTests);
+            Assert.NotEmpty(item.DocumentationUris);
+            Assert.Contains(PowerShellCompilationSemanticOracleCatalog.Profiles, profile => profile.ProfileId == item.ProfileId);
+        });
+    }
+
+    [Fact]
+    public void UpstreamMonitorProposesAffectedContractsWithoutMovingPinnedProfile()
+    {
+        var profileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+        var pinned = PowerShellCompilationSemanticOracleCatalog.Get(profileId).UpstreamCommit;
+        var changes = PowerShellCompilationSemanticOracleCatalog.ReviewUpstreamChanges(
+            new Dictionary<string, string> { [profileId] = new string('a', 40) });
+
+        var change = Assert.Single(changes);
+        Assert.Equal(profileId, change.ProfileId);
+        Assert.Equal(pinned, change.PinnedCommit);
+        Assert.NotEmpty(change.AffectedFeatureIds);
+        Assert.Equal(pinned, PowerShellCompilationSemanticOracleCatalog.Get(profileId).UpstreamCommit);
+        Assert.Empty(PowerShellCompilationSemanticOracleCatalog.ReviewUpstreamChanges(
+            new Dictionary<string, string> { [profileId] = pinned }));
+        Assert.Throws<KeyNotFoundException>(() => PowerShellCompilationSemanticOracleCatalog.ReviewUpstreamChanges(
+            new Dictionary<string, string> { ["unknown"] = pinned }));
     }
 
     [Fact]
@@ -97,6 +138,52 @@ Write-Information 'noted' -InformationAction Continue
         Assert.Single(observation.FileSystemEffects, static effect => effect.StartsWith("Added:created.txt:", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void SamePortableEnvelopeComparesInterpretedAndStrictClrExecution()
+    {
+        using var fixture = StrictOracleFixture.Create();
+        var interpreted = new PowerShellCompilationSemanticOracleRunner().Observe(
+            new PowerShellCompilationSemanticOracleRequest(
+                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+                fixture.OracleScriptPath));
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.SourcePath,
+            fixture.OutputPath,
+            "OracleStrict",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        using var stream = File.OpenRead(build.ArtifactPath!);
+        var context = new AssemblyLoadContext("OracleStrict-" + Guid.NewGuid().ToString("N"), isCollectible: true);
+        try
+        {
+            var method = context.LoadFromStream(stream)
+                .GetType("PowerForge.Compiled.OracleStrictMethods", throwOnError: true)!
+                .GetMethod("Get_OracleValue", BindingFlags.Public | BindingFlags.Static)!;
+            var value = method.Invoke(null, new object[] { 41 });
+            var strict = new PowerShellCompilationSemanticOracleEnvelope
+            {
+                ProfileId = interpreted.ProfileId,
+                ExecutionSurface = "Strict",
+                Success = new[]
+                {
+                    new PowerShellCompilationSemanticValueObservation
+                    {
+                        Value = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!,
+                        TypeName = value!.GetType().FullName!
+                    }
+                }
+            };
+            Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(interpreted, strict));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
     [Theory]
     [InlineData("Password")]
     [InlineData("Credential")]
@@ -152,6 +239,42 @@ Write-Information 'noted' -InformationAction Continue
             var script = Path.Combine(root, "case.ps1");
             File.WriteAllText(script, source);
             return new OracleFixture(root, script, effects);
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(RootPath, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private sealed class StrictOracleFixture : IDisposable
+    {
+        private StrictOracleFixture(string rootPath, string sourcePath, string oracleScriptPath, string outputPath)
+        {
+            RootPath = rootPath;
+            SourcePath = sourcePath;
+            OracleScriptPath = oracleScriptPath;
+            OutputPath = outputPath;
+        }
+
+        public string RootPath { get; }
+        public string SourcePath { get; }
+        public string OracleScriptPath { get; }
+        public string OutputPath { get; }
+
+        public static StrictOracleFixture Create()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "PowerForgeStrictOracleTests", Guid.NewGuid().ToString("N"));
+            var output = Path.Combine(root, "out");
+            Directory.CreateDirectory(output);
+            var source = Path.Combine(root, "source.ps1");
+            var oracle = Path.Combine(root, "oracle.ps1");
+            const string function = "function Get-OracleValue { param([int] $Value); [int] $result = $Value; $result += 1; return $result }";
+            File.WriteAllText(source, function);
+            File.WriteAllText(oracle, function + "; Get-OracleValue 41");
+            return new StrictOracleFixture(root, source, oracle, output);
         }
 
         public void Dispose()

@@ -350,6 +350,8 @@ internal sealed class PowerShellCommandSemanticRegistry
                 SemanticProfile = source.Adapter?.SemanticProfile ?? string.Empty,
                 RuntimeFree = source.Adapter?.RuntimeFree == true,
                 AotCompatible = source.Adapter?.AotCompatible == true,
+                Cancellation = source.Adapter?.Cancellation ?? PowerShellCompilationProviderCancellation.NotApplicable,
+                Cleanup = source.Adapter?.Cleanup ?? PowerShellCompilationProviderCleanup.NotApplicable,
                 Dependencies = source.Adapter?.Dependencies?.ToArray() ?? Array.Empty<string>()
             }
         };

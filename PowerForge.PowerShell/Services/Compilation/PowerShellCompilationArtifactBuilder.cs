@@ -382,6 +382,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     targetContract,
                     toolchain,
                     dependencyGraph,
+                    providerResolution.Lock,
                     runtimeFreeContract?.GeneratedSourceSha256 ?? string.Empty));
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && typed is not null)
                 {

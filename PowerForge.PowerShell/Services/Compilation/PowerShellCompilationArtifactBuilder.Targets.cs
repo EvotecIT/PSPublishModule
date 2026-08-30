@@ -146,6 +146,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationTargetContract target,
         PowerShellCompilationToolchainEvidence toolchain,
         PowerShellCompilationDependencyGraph graph,
+        PowerShellCompilationProviderLock providerLock,
         string generatedSourceSha256)
     {
         var resolvedPackages = PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph);
@@ -168,10 +169,23 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             schemaVersion = 1,
             targetContractSha256 = target.ContractSha256,
             dependencyLockSha256 = graph.LockSha256,
+            providerLockSha256 = providerLock.Packages.Length == 0 ? string.Empty : providerLock.LockSha256,
             generatedSourceSha256,
             reviewedDependencyLock = spec.ExpectedDependencyLock is not null,
+            reviewedProviderLock = providerLock.Packages.Length > 0 && spec.ExpectedProviderLock is not null,
             toolchain,
             sources,
+            providerPackages = providerLock.Packages.Select(static package => new
+            {
+                id = package.PackageId,
+                version = package.PackageVersion,
+                package.SignerFingerprint,
+                package.Signature,
+                package.Publisher,
+                package.LicenseExpression,
+                package.PackageSha256,
+                package.ManifestSha256
+            }).ToArray(),
             resolvedPackages = resolvedPackages.Select(static package => new
             {
                 id = package.Id,
@@ -227,6 +241,23 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         new { name = "powerforge:disposition", value = "Referenced" },
                         new { name = "powerforge:source", value = "NuGetRestore" },
                         new { name = "powerforge:directCompilerReference", value = package.DirectCompilerReference.ToString() }
+                    }
+                }))
+                .Concat(providerLock.Packages.Select(static package => (object)new
+                {
+                    type = "library",
+                    name = package.PackageId,
+                    version = package.PackageVersion,
+                    purl = "pkg:nuget/" + Uri.EscapeDataString(package.PackageId) + "@" + Uri.EscapeDataString(package.PackageVersion),
+                    hashes = new object[] { new { alg = "SHA-256", content = package.PackageSha256 } },
+                    licenses = new object[] { new { license = new { id = package.LicenseExpression } } },
+                    properties = new[]
+                    {
+                        new { name = "powerforge:disposition", value = "CompilerProvider" },
+                        new { name = "powerforge:publisher", value = package.Publisher },
+                        new { name = "powerforge:signature", value = package.Signature },
+                        new { name = "powerforge:signerFingerprint", value = package.SignerFingerprint },
+                        new { name = "powerforge:providerAbi", value = package.ProviderAbiVersion }
                     }
                 }))
                 .ToArray()
