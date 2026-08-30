@@ -3,6 +3,50 @@ using PowerForge.Web;
 public partial class WebSiteVerifierTests
 {
     [Fact]
+    public void Verify_DoesNotProjectAnObservedFailedSocialCardRender()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-failed-social-render-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        string? cardRoute = null;
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Failed social-card render",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var item = Assert.Single(WebSiteBuilder.BuildContentItemsForVerification(spec, plan));
+            cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, root);
+            Assert.StartsWith("/assets/social/generated/", cardRoute, StringComparison.Ordinal);
+            spec.Navigation.Menus =
+            [
+                new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Failed card", Url = cardRoute }] }
+            ];
+            WebSiteBuilder.RecordFailedGeneratedSocialCardRenderForTesting(cardRoute, root);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(HasMissingRouteWarning(result, cardRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(cardRoute))
+                WebSiteBuilder.ClearGeneratedSocialCardRenderOutcomeForTesting(cardRoute, root);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ProjectsPaginationForTaxonomyTermsWithEmptySlugs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-empty-slug-" + Guid.NewGuid().ToString("N"));

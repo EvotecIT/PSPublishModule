@@ -241,9 +241,6 @@ public static partial class WebSiteVerifier
         WebSitePlan plan,
         IEnumerable<ContentItem> contentItems)
     {
-        if (!WebSocialCardGenerator.IsPngRenderingAvailable())
-            yield break;
-
         if (spec.Social is not { Enabled: true, AutoGenerateCards: true })
             yield break;
 
@@ -252,8 +249,24 @@ public static partial class WebSiteVerifier
             if (!WebSiteBuilder.ResolveOutputFormats(spec, item).Any(WebSiteBuilder.RendersHtmlPage))
                 continue;
             var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, plan.RootPath);
-            if (!string.IsNullOrWhiteSpace(cardRoute))
+            if (string.IsNullOrWhiteSpace(cardRoute))
+                continue;
+
+            if (WebSiteBuilder.TryGetGeneratedSocialCardRenderOutcome(cardRoute, plan.RootPath, out var rendered))
+            {
+                if (rendered)
+                    yield return cardRoute;
+                continue;
+            }
+
+            var conventionalOutputRoot = Path.GetFullPath(Path.Combine(plan.RootPath, "_site"));
+            var relativeCardPath = cardRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            var fullCardPath = Path.GetFullPath(Path.Combine(conventionalOutputRoot, relativeCardPath));
+            if (fullCardPath.StartsWith(conventionalOutputRoot + Path.DirectorySeparatorChar, FileSystemPathComparison) &&
+                File.Exists(fullCardPath))
+            {
                 yield return cardRoute;
+            }
         }
     }
 

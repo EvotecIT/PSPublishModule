@@ -85,6 +85,17 @@ internal static partial class WebSocialCardGenerator
     internal static bool IsPngRenderingAvailable()
         => !OperatingSystem.IsLinux() || ResolveExternalImageMagickCommand() is not null;
 
+    internal static string GetPngRendererIdentity()
+    {
+        if (!OperatingSystem.IsLinux())
+            return $"in-process:{RendererVersion}";
+
+        var command = ResolveExternalImageMagickCommand();
+        return command is null
+            ? $"linux-unavailable:{RendererVersion}"
+            : $"external:{command.Executable}:{RendererVersion}";
+    }
+
     private static byte[]? TryRenderPngWithExternalImageMagick(string svg, int width, int height)
     {
         if (string.IsNullOrWhiteSpace(svg))

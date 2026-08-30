@@ -2798,14 +2798,17 @@ public partial class WebSiteVerifierTests
             ];
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
 
             foreach (var route in new[] { sectionCardRoute, paginationCardRoute })
             {
                 Assert.StartsWith("/assets/social/generated/", route, StringComparison.Ordinal);
                 Assert.Equal(
-                    WebSocialCardGenerator.IsPngRenderingAvailable(),
+                    File.Exists(Path.Combine(outputRoot, route.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))),
                     !HasMissingRouteWarning(result, route));
             }
         }
@@ -2875,11 +2878,14 @@ public partial class WebSiteVerifierTests
             ];
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
 
             Assert.Equal(
-                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                File.Exists(Path.Combine(outputRoot, builtRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))),
                 !HasMissingRouteWarning(result, builtRoute));
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains($"points to '{routeWithoutThemeTokens}'", StringComparison.Ordinal) &&
@@ -2916,11 +2922,14 @@ public partial class WebSiteVerifierTests
             spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Built card", Url = withRoot }, new MenuItemSpec { Title = "Missing asset hash", Url = withoutRoot }] }];
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
 
             Assert.Equal(
-                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                File.Exists(Path.Combine(outputRoot, withRoot.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))),
                 !HasMissingRouteWarning(result, withRoot));
             Assert.Contains(result.Warnings, warning => warning.Contains($"points to '{withoutRoot}'", StringComparison.Ordinal) && warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
         }
@@ -2990,11 +2999,14 @@ public partial class WebSiteVerifierTests
             spec.Navigation.Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Fallback card", Url = builtCard }, new MenuItemSpec { Title = "Inherited canonical card", Url = inheritedCanonicalCard }] }];
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
 
-            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
 
             Assert.Equal(
-                WebSocialCardGenerator.IsPngRenderingAvailable(),
+                File.Exists(Path.Combine(outputRoot, builtCard.TrimStart('/').Replace('/', Path.DirectorySeparatorChar))),
                 !HasMissingRouteWarning(result, builtCard));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
