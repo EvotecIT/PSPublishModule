@@ -104,7 +104,7 @@ public static class PowerShellCompilationSemanticOracleCatalog
             "invariant-per-case",
             new[] { "CoreEdition", "CrossPlatform", "CimCmdlets" },
             "https://github.com/PowerShell/PowerShell",
-            "4f5b7eb097060ccff3037ced9cd5c75d69cf74a1",
+            "b3d5b858eba508785484768b4b3e318742416b83",
             "https://learn.microsoft.com/powershell/scripting/whats-new/what-s-new-in-powershell-74");
 
         yield return new PowerShellCompilationSemanticOracleProfile(

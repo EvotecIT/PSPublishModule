@@ -5,6 +5,18 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+public sealed class PinnedSemanticHostFactAttribute : FactAttribute
+{
+    public PinnedSemanticHostFactAttribute()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS"),
+                "true",
+                StringComparison.OrdinalIgnoreCase))
+            Skip = "Set POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true and both exact pwsh paths to run the pinned 57-observation matrix.";
+    }
+}
+
 [Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationSemanticOracleTests
 {
@@ -26,6 +38,38 @@ public sealed class PowerShellCompilationSemanticOracleTests
             Assert.NotEmpty(profile.ProfileId);
             Assert.NotEmpty(profile.VersionRange);
             Assert.NotEmpty(profile.DocumentationUri);
+        });
+    }
+
+    [Fact]
+    public void HostPinCatalogCoversEveryProfileAndPromotedCaseWithImmutableExactEvidence()
+    {
+        Assert.Equal(
+            PowerShellCompilationSemanticOracleCatalog.Profiles.Count,
+            PowerShellCompilationSemanticHostArtifactPinCatalog.Pins.Count);
+        Assert.All(PowerShellCompilationSemanticHostArtifactPinCatalog.Pins, pin =>
+        {
+            var profile = PowerShellCompilationSemanticOracleCatalog.Get(pin.ProfileId);
+            var artifact = pin.GetHostArtifact();
+            PowerShellCompilationSemanticHostArtifactService.EnsureMatchesProfile(artifact, profile, artifact.Culture);
+            Assert.Equal(profile.UpstreamCommit, pin.UpstreamCommit, ignoreCase: true);
+            Assert.Equal(64, pin.HostArtifactIdentitySha256.Length);
+            Assert.Equal(
+                PowerShellCompilationSemanticOracleCaseCatalog.Cases
+                    .Where(item => item.ProfileIds.Contains(pin.ProfileId))
+                    .Select(static item => item.CaseId)
+                    .OrderBy(static caseId => caseId, StringComparer.Ordinal),
+                pin.ReviewedCaseIds);
+            Assert.Equal(pin.HostArtifactIdentitySha256,
+                PowerShellCompilationSemanticHostArtifactPinCatalog.ExpectedHostArtifactIdentities[pin.ProfileId]);
+            artifact.IdentitySha256 = new string('0', 64);
+            Assert.Equal(pin.HostArtifactIdentitySha256, pin.GetHostArtifact().IdentitySha256);
+            if (profile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7)
+            {
+                Assert.StartsWith("v7.", pin.ReleaseTag, StringComparison.Ordinal);
+                Assert.StartsWith("https://github.com/PowerShell/PowerShell/releases/", pin.ReleaseAssetUri, StringComparison.Ordinal);
+                Assert.Equal(64, pin.ReleaseAssetSha256.Length);
+            }
         });
     }
 
@@ -100,7 +144,7 @@ public sealed class PowerShellCompilationSemanticOracleTests
     }
 
     [Fact]
-    public void MinimizedCasesExecuteOnConfiguredExactPowerShellProfiles()
+    public void MinimizedCasesExecuteOnDefaultCompatiblePowerShellProfiles()
     {
         var runner = new PowerShellCompilationSemanticOracleRunner();
         var profiles = new List<(string ProfileId, string? HostPath)>
@@ -108,9 +152,35 @@ public sealed class PowerShellCompilationSemanticOracleTests
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, null),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, null)
         };
+
+        ExecuteCases(runner, profiles, requirePinnedHosts: false);
+    }
+
+    [PinnedSemanticHostFact]
+    public void MinimizedCasesExecuteOnConfiguredExactPowerShellProfiles()
+    {
         var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
-        if (!string.IsNullOrWhiteSpace(powerShell74Path))
-            profiles.Add((PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path));
+        var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
+        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path), "POWERFORGE_PWSH74_PATH is required by the pinned semantic-host lane.");
+        Assert.False(string.IsNullOrWhiteSpace(powerShell76Path), "POWERFORGE_PWSH76_PATH is required by the pinned semantic-host lane.");
+        var profiles = new List<(string ProfileId, string? HostPath)>
+        {
+            (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, null),
+            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path),
+            (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, powerShell76Path)
+        };
+        Assert.Equal(
+            PowerShellCompilationSemanticHostArtifactPinCatalog.Pins.Select(static pin => pin.ProfileId),
+            profiles.Select(static profile => profile.ProfileId).OrderBy(static profileId => profileId, StringComparer.Ordinal));
+
+        ExecuteCases(new PowerShellCompilationSemanticOracleRunner(), profiles, requirePinnedHosts: true);
+    }
+
+    private static void ExecuteCases(
+        PowerShellCompilationSemanticOracleRunner runner,
+        IReadOnlyList<(string ProfileId, string? HostPath)> profiles,
+        bool requirePinnedHosts)
+    {
 
         foreach (var semanticCase in PowerShellCompilationSemanticOracleCaseCatalog.Cases)
         foreach (var profile in profiles.Where(item => semanticCase.ProfileIds.Contains(item.ProfileId)))
@@ -121,7 +191,10 @@ public sealed class PowerShellCompilationSemanticOracleTests
                 Arguments = semanticCase.Arguments.ToArray(),
                 ObservedPropertyNames = semanticCase.ObservedPropertyNames.ToArray(),
                 Culture = "en-US",
-                HostExecutablePath = profile.HostPath
+                HostExecutablePath = profile.HostPath,
+                ExpectedHostArtifactSha256 = requirePinnedHosts
+                    ? PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profile.ProfileId).HostArtifactIdentitySha256
+                    : null
             });
             var value = Assert.Single(observation.Success);
             Assert.True(
@@ -189,6 +262,20 @@ public sealed class PowerShellCompilationSemanticOracleTests
             {
                 [PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId] = artifactIdentity
             }));
+    }
+
+    [Fact]
+    public void PromotionGateUsesCanonicalImmutableHostPinsByDefault()
+    {
+        var interpreted = PromotableEnvelope("Interpreted", "42", includeHostArtifact: false);
+        interpreted.HostArtifact = PowerShellCompilationSemanticHostArtifactPinCatalog
+            .Get(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+            .GetHostArtifact();
+        var strict = PromotableEnvelope("Strict", "42", includeHostArtifact: false);
+
+        Assert.Empty(PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
+            PowerShellCompilationFeatureIds.ParameterType,
+            new[] { interpreted, strict }));
     }
 
     [Fact]

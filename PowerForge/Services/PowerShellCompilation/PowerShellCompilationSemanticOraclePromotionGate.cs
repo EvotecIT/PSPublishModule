@@ -5,6 +5,19 @@ namespace PowerForge;
 /// <summary>Fail-closed promotion checks for semantic observations produced by exact external hosts and CLR surfaces.</summary>
 public static class PowerShellCompilationSemanticOraclePromotionGate
 {
+    /// <summary>Verifies feature promotion against the canonical immutable exact-host pin set.</summary>
+    public static IReadOnlyList<PowerShellCompilationSemanticOracleDifference> EnsurePromotable(
+        string featureId,
+        IReadOnlyList<PowerShellCompilationSemanticOracleEnvelope> observations,
+        IEnumerable<string>? allowedDifferencePaths = null,
+        string differenceJustification = "")
+        => EnsurePromotable(
+            featureId,
+            observations,
+            PowerShellCompilationSemanticHostArtifactPinCatalog.ExpectedHostArtifactIdentities,
+            allowedDifferencePaths,
+            differenceJustification);
+
     /// <summary>
     /// Verifies provenance, exact host pins, multiple execution surfaces, and every semantic difference before a feature is promoted.
     /// </summary>
