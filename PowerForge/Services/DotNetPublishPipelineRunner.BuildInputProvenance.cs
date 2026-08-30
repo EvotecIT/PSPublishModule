@@ -851,6 +851,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         packageRoots,
                         verifiedPackageArchives,
                         request.ReadEffectiveGlobalProperties(),
+                        request.EnvironmentVariables,
                         out verifiedPackages))
                 {
                     return false;

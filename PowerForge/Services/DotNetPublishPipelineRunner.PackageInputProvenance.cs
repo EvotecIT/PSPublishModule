@@ -405,6 +405,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 packageRoots,
                 archives,
                 effectiveGlobalProperties: null,
+                environmentVariables: null,
                 out catalog);
 
         internal static bool TryCreateForEvaluation(
@@ -413,6 +414,7 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             VerifiedPackageArchiveCache archives,
             IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables,
             out VerifiedPackageInputCatalog? catalog)
         {
             catalog = null;
@@ -445,25 +447,28 @@ public sealed partial class DotNetPublishPipelineRunner
             var sdkDownloadPackageHashes = new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase);
             var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!TryPrimeLockedPackageArchives(
+                    allRoots,
+                    committedPackageHashes,
+                    archives,
+                    out Dictionary<string, string> archivePathsByPackageKey))
+            {
+                return false;
+            }
             string? sdkEvidenceRoot = AddSdkManagedPackageHashes(
                 projectPath,
                 properties,
                 allRoots,
                 sdkDownloadPackageHashes,
                 sdkManagedPackageKeys,
-                effectiveGlobalProperties);
+                effectiveGlobalProperties,
+                environmentVariables,
+                archivePathsByPackageKey,
+                archives);
             try
             {
                 if (allRoots.Count == 0)
                     return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
-                if (!TryPrimeLockedPackageArchives(
-                        allRoots,
-                        committedPackageHashes,
-                        archives,
-                        out Dictionary<string, string> archivePathsByPackageKey))
-                {
-                    return false;
-                }
                 if (!TryPrimeLockedPackageArchives(
                         allRoots,
                         sdkDownloadPackageHashes,
@@ -662,6 +667,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         private readonly Dictionary<string, CacheEntry> _archives = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        private readonly Dictionary<string, CacheEntry> _archivesByContentHash = new(StringComparer.Ordinal);
 
         internal VerifiedPackageArchive? TryGetOrOpen(string path, string expectedContentHash)
         {
@@ -673,17 +679,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     : null;
             }
 
+            if (_archivesByContentHash.TryGetValue(expectedContentHash, out CacheEntry? cachedByHash))
+            {
+                _archives.Add(fullPath, cachedByHash);
+                return cachedByHash.Archive;
+            }
+
             VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(fullPath, expectedContentHash);
             if (archive is not null)
-                _archives.Add(fullPath, new CacheEntry(fullPath, expectedContentHash, archive));
+            {
+                var entry = new CacheEntry(fullPath, expectedContentHash, archive);
+                _archives.Add(fullPath, entry);
+                _archivesByContentHash.Add(expectedContentHash, entry);
+            }
             return archive;
         }
 
         public void Dispose()
         {
-            foreach (CacheEntry cached in _archives.Values)
+            foreach (CacheEntry cached in _archivesByContentHash.Values)
                 cached.Archive.Dispose();
             _archives.Clear();
+            _archivesByContentHash.Clear();
         }
 
         private sealed class CacheEntry

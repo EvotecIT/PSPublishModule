@@ -130,6 +130,41 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private sealed partial class VerifiedPackageArchiveCache
     {
+        internal bool TrySeedVerifiedRestoreSource(
+            string destination,
+            IReadOnlyDictionary<string, string> archivePathsByPackageKey)
+        {
+            try
+            {
+                Directory.CreateDirectory(destination);
+                foreach (KeyValuePair<string, string> package in archivePathsByPackageKey.OrderBy(
+                             entry => entry.Key,
+                             StringComparer.OrdinalIgnoreCase))
+                {
+                    string fullArchivePath = Path.GetFullPath(package.Value);
+                    if (!_archives.TryGetValue(fullArchivePath, out CacheEntry? cached))
+                        return false;
+
+                    int separator = package.Key.LastIndexOf('|');
+                    if (separator <= 0 || separator == package.Key.Length - 1)
+                        return false;
+                    string packageId = package.Key.Substring(0, separator);
+                    string packageVersion = package.Key.Substring(separator + 1);
+                    string destinationPath = Path.Combine(
+                        destination,
+                        packageId + "." + packageVersion + ".nupkg");
+                    if (File.Exists(destinationPath))
+                        return false;
+                    cached.Archive.CopyTo(destinationPath);
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         internal bool TrySeedControlledPackageSource(
             string destination,
             IReadOnlyDictionary<string, string> archivePathsByPackageKey,
