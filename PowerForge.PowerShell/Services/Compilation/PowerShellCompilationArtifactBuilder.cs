@@ -76,6 +76,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .ToArray();
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
+            var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
             ValidateExpectedDependencyLock(spec, dependencyGraph);
             if (dependencyGraph.Conflicts.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains incompatible identities: " + string.Join(" ", dependencyGraph.Conflicts));
@@ -239,7 +240,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     projectTemplate
                         .Replace("{{TARGET_FRAMEWORK}}", EscapeXml(spec.TargetFramework))
                         .Replace("{{TARGET_REFERENCE}}", PowerShellGeneratedReferenceAssemblyResolver.GetGeneratedProjectReference(spec.TargetFramework))
-                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(artifactName))
+                        .Replace("{{ARTIFACT_NAME}}", EscapeXml(generatedAssemblyName))
                         .Replace("{{ASSEMBLY_VERSION}}", EscapeXml(GetBinaryModuleAssemblyVersion(spec))),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
@@ -368,7 +369,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try
             {
-                var stagedArtifact = CopyArtifact(spec, artifactName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
                     stagedArtifact.PrimaryPath,
                     artifactName,

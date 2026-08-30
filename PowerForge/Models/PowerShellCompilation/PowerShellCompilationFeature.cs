@@ -42,6 +42,8 @@ public static class PowerShellCompilationFeatureIds
     public const string PipelineLifecycle = "pipeline.lifecycle";
     /// <summary>Runtime-bearing using statements.</summary>
     public const string RuntimeUsing = "source.using-runtime";
+    /// <summary>PowerShell class or enum declarations whose runtime type identity remains hosted.</summary>
+    public const string TypeDefinition = "source.type-definition";
     /// <summary>Source #requires directives.</summary>
     public const string RequiresDirective = "source.requires";
     /// <summary>Filter function pipeline semantics.</summary>

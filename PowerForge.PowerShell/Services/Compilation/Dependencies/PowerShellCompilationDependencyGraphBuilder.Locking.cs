@@ -285,10 +285,17 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 PowerShellCompilationDependencyNodeKind.ManagedLibrary or
                 PowerShellCompilationDependencyNodeKind.BinaryModule)
             .Where(static node => !string.IsNullOrWhiteSpace(node.Identity.Name))
-            .GroupBy(static node => node.Identity.Name, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(
+                static node => string.Join("|", node.Identity.Name, node.Identity.Edition, node.Identity.TargetFramework, node.Identity.RuntimeIdentifier),
+                StringComparer.OrdinalIgnoreCase);
         foreach (var group in groups)
         {
-            AddConflict(group, "versions", static node => node.Identity.Version);
+            AddConflict(
+                group.Where(static node =>
+                    node.Kind is PowerShellCompilationDependencyNodeKind.ExternalModule or PowerShellCompilationDependencyNodeKind.ModuleManifest ||
+                    node.Disposition != PowerShellCompilationDependencyGraphDisposition.External),
+                "versions",
+                static node => node.Identity.Version);
             foreach (var versionGroup in group.GroupBy(static node => node.Identity.Version, StringComparer.OrdinalIgnoreCase))
             {
                 var managed = versionGroup.Where(static node => node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule).ToArray();
@@ -319,7 +326,13 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                     .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 if (values.Length > 1)
-                    conflicts.Add($"Dependency '{group.Key}' has incompatible locked {identityPart}: {string.Join(", ", values)}.");
+                {
+                    var identity = group.First().Identity;
+                    var variant = string.IsNullOrWhiteSpace(identity.TargetFramework) && string.IsNullOrWhiteSpace(identity.RuntimeIdentifier)
+                        ? string.Empty
+                        : $" for variant '{identity.TargetFramework}/{identity.RuntimeIdentifier}'";
+                    conflicts.Add($"Dependency '{identity.Name}'{variant} has incompatible locked {identityPart}: {string.Join(", ", values)}.");
+                }
             }
         }
         return conflicts.OrderBy(static conflict => conflict, StringComparer.Ordinal).ToArray();

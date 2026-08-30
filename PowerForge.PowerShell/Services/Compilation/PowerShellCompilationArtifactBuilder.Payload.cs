@@ -38,7 +38,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 // version of a source dependency. Trust that explicit generated owner, not
                 // mere membership in the input graph; every other collision requires byte identity.
                 if ((existingArtifacts.TryGetValue(targetPath, out var existingArtifact) &&
-                     existingArtifact.Role.Equals("GeneratedModuleDependency", StringComparison.Ordinal)) ||
+                     (existingArtifact.Role.Equals("GeneratedModuleDependency", StringComparison.Ordinal) ||
+                      existingArtifact.Role.Equals("PrimaryModule", StringComparison.Ordinal) &&
+                      dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource)) ||
                     FilesHaveSameContent(dependency.SourcePath!, targetPath))
                     continue;
                 throw new InvalidOperationException($"Planned payload '{dependency.RelativePath}' collides with a generated artifact.");

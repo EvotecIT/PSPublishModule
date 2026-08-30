@@ -246,8 +246,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             Name = Path.GetFileName(path),
             Sha256 = sha,
             Source = relative,
-            TargetFramework = targetFramework ?? string.Empty,
-            RuntimeIdentifier = runtimeIdentifier ?? string.Empty,
+            Edition = InferPowerShellEdition(relative),
+            TargetFramework = InferTargetFramework(relative) ?? targetFramework ?? string.Empty,
+            RuntimeIdentifier = InferRuntimeIdentifier(relative) ?? runtimeIdentifier ?? string.Empty,
             Provenance = exists ? "LocalReadOnlyResolution" : "MissingLocalInput"
         };
         if (exists && kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or PowerShellCompilationDependencyNodeKind.BinaryModule)
@@ -286,6 +287,41 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         _pathNodes.Add(path, id);
         return id;
     }
+
+    private static string? InferTargetFramework(string relativePath)
+    {
+        var segments = relativePath.Replace('\\', '/').Split('/');
+        return segments.FirstOrDefault(LooksLikeTargetFramework)?.ToLowerInvariant();
+    }
+
+    private static string? InferRuntimeIdentifier(string relativePath)
+    {
+        var segments = relativePath.Replace('\\', '/').Split('/');
+        for (var index = 0; index + 1 < segments.Length; index++)
+        {
+            if (segments[index].Equals("runtimes", StringComparison.OrdinalIgnoreCase))
+                return segments[index + 1].ToLowerInvariant();
+        }
+        return null;
+    }
+
+    private static string InferPowerShellEdition(string relativePath)
+    {
+        var segments = relativePath.Replace('\\', '/').Split('/');
+        if (segments.Any(static segment =>
+                segment.Equals("PSv7", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("Core", StringComparison.OrdinalIgnoreCase)))
+            return "Core";
+        if (segments.Any(static segment =>
+                segment.Equals("PS4", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("PSv5", StringComparison.OrdinalIgnoreCase) ||
+                segment.Equals("Desktop", StringComparison.OrdinalIgnoreCase)))
+            return "Desktop";
+        return string.Empty;
+    }
+
+    private static bool LooksLikeTargetFramework(string value)
+        => value.StartsWith("net", StringComparison.OrdinalIgnoreCase) && value.Skip(3).Any(char.IsDigit);
 
     private string AddExternalNode(
         string name,

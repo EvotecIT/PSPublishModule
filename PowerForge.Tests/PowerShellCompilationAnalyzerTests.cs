@@ -114,6 +114,19 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Fact]
+    public void Analyze_RoutesFunctionsSharingAHostedTypeDefinitionToFallback()
+    {
+        using var fixture = CompilationFixture.Create(
+            "enum Choice { First = 1; Second = 2 } function Get-Choice { return [Choice]::First }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
+
+        var function = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+        Assert.False(function.IsCompilable);
+        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.TypeDefinition);
+    }
+
+    [Fact]
     public void Analyze_ReportsCommandAndUntypedParameterWithoutPartialCompilationClaim()
     {
         using var fixture = CompilationFixture.Create(

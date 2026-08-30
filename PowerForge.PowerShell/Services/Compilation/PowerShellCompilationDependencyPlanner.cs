@@ -474,7 +474,10 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     private static PowerShellCompilationDependencyKind Classify(string path)
     {
         var extension = Path.GetExtension(path);
-        if (extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase)) return PowerShellCompilationDependencyKind.ModuleManifest;
+        if (extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+            return IsModuleManifest(path)
+                ? PowerShellCompilationDependencyKind.ModuleManifest
+                : PowerShellCompilationDependencyKind.Content;
         if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) || extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase)) return PowerShellCompilationDependencyKind.PowerShellSource;
         if (extension.Equals(".css", StringComparison.OrdinalIgnoreCase)) return PowerShellCompilationDependencyKind.StyleSheet;
         if (extension.Equals(".js", StringComparison.OrdinalIgnoreCase) || extension.Equals(".mjs", StringComparison.OrdinalIgnoreCase)) return PowerShellCompilationDependencyKind.JavaScript;
@@ -506,6 +509,12 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             return true;
         }
     }
+
+    private static bool IsModuleManifest(string path)
+        => File.Exists(path) &&
+           (!string.IsNullOrWhiteSpace(ModuleManifestValueReader.ReadTopLevelString(path, "ModuleVersion")) ||
+            ModuleManifestValueReader.TryGetTopLevelString(path, "RootModule", out _) ||
+            ModuleManifestValueReader.TryGetTopLevelString(path, "ModuleToProcess", out _));
 
     private sealed class ResourceCandidate
     {

@@ -1,5 +1,7 @@
 namespace PowerForge;
 
+using System.Management.Automation.Language;
+
 /// <summary>Creates explicit hosted lifecycle contracts from canonical front-end sources.</summary>
 internal static class PowerShellAdvancedFunctionLifecyclePlanner
 {
@@ -15,7 +17,12 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
         _ = targetFramework;
         var existing = typed.Methods.Select(static method => MethodKey(method.SourcePath, method.SourceName, method.SourceLine))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var isolatedSources = typed.SourcePaths
+            .Where(CanHostLifecycleInIsolation)
+            .Select(Path.GetFullPath)
+            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var lifecycleMethods = typed.LifecycleSources
+            .Where(source => isolatedSources.Contains(Path.GetFullPath(source.SourcePath)))
             .Where(source => !existing.Contains(MethodKey(source.SourcePath, source.Name, source.SourceLine)))
             .OrderBy(static source => source.SourcePath, PowerShellCompilationPathSafety.PathComparer)
             .ThenBy(static source => source.SourceLine)
@@ -92,4 +99,14 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
 
     private static string MethodKey(string path, string name, int line)
         => Path.GetFullPath(path) + "\0" + name + "\0" + line.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static bool CanHostLifecycleInIsolation(string sourcePath)
+    {
+        var document = PowerShellSourceParser.ParseFile(sourcePath);
+        return document.SyntaxRoot.EndBlock is null || document.SyntaxRoot.EndBlock.Statements.All(static statement =>
+            statement is FunctionDefinitionAst ||
+            statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            pipeline.PipelineElements[0] is CommandAst command &&
+            PowerShellModuleExportContract.IsExportModuleMember(command));
+    }
 }

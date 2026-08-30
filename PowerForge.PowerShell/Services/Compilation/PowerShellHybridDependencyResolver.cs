@@ -29,7 +29,7 @@ internal static class PowerShellHybridDependencyResolver
         var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
         var copied = new List<PowerShellHybridDependencyCopy>();
-        foreach (var dependency in DiscoverDependencies(sourcePath, discoveryEntries, conventionalLoaders))
+        foreach (var dependency in DiscoverDependenciesCore(sourcePath, discoveryEntries, moduleScopeOnly: true, conventionalLoaders))
         {
             if (entryPaths.Contains(dependency))
                 continue;

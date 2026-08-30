@@ -23,6 +23,17 @@ internal static class PowerShellSourceSemanticValidator
                 "Source #requires directives cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
+        var typeDefinition = document.SyntaxRoot
+            .FindAll(static node => node is TypeDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<TypeDefinitionAst>()
+            .FirstOrDefault();
+        if (typeDefinition is not null)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.TypeDefinition,
+                "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+                PowerShellSourceParser.GetSpan(document, typeDefinition.Extent)));
+        }
         return diagnostics.ToArray();
     }
 }

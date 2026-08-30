@@ -59,10 +59,11 @@ internal static class PowerShellCompiledModuleManifest
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
                 .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))))
                 .Concat(conventionalSources);
-            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverDependencies(
-                sourcePath,
-                runtimeHooks,
-                conventionalLoaders: conventionalDiscovery.Loaders));
+            protectedFiles.AddRange(new[] { sourcePath }
+                .Concat(runtimeHooks)
+                .Concat(conventionalSources)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
@@ -72,7 +73,7 @@ internal static class PowerShellCompiledModuleManifest
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
-        return CollectRuntimeScriptFiles(sourceManifest);
+        return ExcludeSelectedSource(CollectRuntimeScriptFiles(sourceManifest), sourcePath, sourceManifest);
     }
 
     internal static string[] GetContainedRuntimeScriptFiles(string sourcePath, string? moduleManifestPath = null)
@@ -81,7 +82,18 @@ internal static class PowerShellCompiledModuleManifest
         if (!File.Exists(sourceManifest))
             return Array.Empty<string>();
 
-        return CollectRuntimeScriptFiles(sourceManifest);
+        return ExcludeSelectedSource(CollectRuntimeScriptFiles(sourceManifest), sourcePath, sourceManifest);
+    }
+
+    private static string[] ExcludeSelectedSource(IEnumerable<string> references, string sourcePath, string manifestPath)
+    {
+        var root = Path.GetDirectoryName(Path.GetFullPath(manifestPath)) ?? Directory.GetCurrentDirectory();
+        var selected = Path.GetFullPath(sourcePath);
+        return references.Where(reference =>
+                !PowerShellCompilationPathSafety.PathEquals(
+                    Path.GetFullPath(Path.Combine(root, NormalizeManifestRelativePath(reference))),
+                    selected))
+            .ToArray();
     }
 
     internal static string[]? Create(
@@ -145,6 +157,9 @@ internal static class PowerShellCompiledModuleManifest
             : selectedSourceCmdlets
                 .Concat(selectedCompiled)
                 .Concat(nestedModuleCmdletPatterns)
+                .Concat(rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase)
+                    ? manifestCmdlets ?? Array.Empty<string>()
+                    : Array.Empty<string>())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };

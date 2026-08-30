@@ -269,10 +269,12 @@ public sealed class PowerShellCompilationInputResolver
                 .Where(file => !runtimeHookSet.Contains(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            sourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(
-                    sourcePath,
-                    runtimeHooks.Concat(conventionalSources),
-                    conventionalLoaders: conventionalDiscovery.Loaders)
+            sourceFiles = new[] { sourcePath }
+                .Concat(runtimeHooks)
+                .Concat(conventionalSources)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies)
+                .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

@@ -126,6 +126,19 @@ public sealed partial class PowerShellCompilationAnalyzer
                 ast.Extent,
                 PowerShellCompilationFeatureIds.RequiresDirective));
         }
+        var typeDefinitions = ast.FindAll(static node => node is TypeDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<TypeDefinitionAst>()
+            .Where(definition => ReferenceEquals(definition.Parent, ast.EndBlock))
+            .ToArray();
+        if (typeDefinitions.Length > 0)
+        {
+            fileWideDiagnostics.Add(CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+                file,
+                typeDefinitions[0].Extent,
+                PowerShellCompilationFeatureIds.TypeDefinition));
+        }
         if (fileWideDiagnostics.Count > 0)
         {
             var diagnostics = fileWideDiagnostics.ToArray();

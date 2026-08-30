@@ -105,7 +105,7 @@ public sealed class PowerShellCompilationDependencyGraphTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(10, result.Manifest!.SchemaVersion);
+        Assert.Equal(11, result.Manifest!.SchemaVersion);
         Assert.True(result.Manifest.DependencyLockReviewed);
         Assert.NotNull(result.Manifest.DependencyGraph);
         Assert.Equal(expected.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
@@ -354,6 +354,59 @@ public sealed class PowerShellCompilationDependencyGraphTests
                     Culture = culture,
                     Guid = guid,
                     Sha256 = sha256
+                }
+            };
+    }
+
+    [Fact]
+    public void DependencyGraphConflictsKeepFrameworkAndRidVariantsIndependent()
+    {
+        var nodes = new[]
+        {
+            Variant("Shared.Managed", "net47", string.Empty, "1111"),
+            Variant("Shared.Managed", "netstandard2.1", string.Empty, "2222"),
+            Variant("Native.Managed", "net8.0", "win-x64", "3333"),
+            Variant("Native.Managed", "net8.0", "linux-x64", "4444"),
+            Variant("Edition.Managed", "net8.0", string.Empty, "5555", "Desktop"),
+            Variant("Edition.Managed", "net8.0", string.Empty, "6666", "Core")
+        };
+
+        Assert.Empty(PowerShellCompilationDependencyGraphBuilder.FindConflicts(nodes));
+
+        static PowerShellCompilationDependencyNode Variant(string name, string framework, string rid, string hash, string edition = "")
+            => new()
+            {
+                Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                Identity = new PowerShellCompilationDependencyIdentity
+                {
+                    Name = name,
+                    Version = "1.0.0.0",
+                    Edition = edition,
+                    TargetFramework = framework,
+                    RuntimeIdentifier = rid,
+                    Sha256 = hash
+                }
+            };
+    }
+
+    [Fact]
+    public void DependencyGraphAllowsExternalManagedReferenceVersionUnification()
+    {
+        var nodes = new[] { External("3.0.0.0"), External("7.4.6.500") };
+
+        Assert.Empty(PowerShellCompilationDependencyGraphBuilder.FindConflicts(nodes));
+
+        static PowerShellCompilationDependencyNode External(string version)
+            => new()
+            {
+                Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                Disposition = PowerShellCompilationDependencyGraphDisposition.External,
+                Identity = new PowerShellCompilationDependencyIdentity
+                {
+                    Name = "Runtime.Provided.Assembly",
+                    Version = version,
+                    TargetFramework = "net8.0",
+                    PublicKeyToken = "aaaaaaaaaaaaaaaa"
                 }
             };
     }

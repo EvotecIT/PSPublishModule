@@ -140,4 +140,28 @@ public sealed class ModuleManifestValueReaderTests
             ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifest, "Prerelease"));
     }
 
+    [Fact]
+    public void ReadTopLevelLiteralStringOrArrayOrThrow_ParsesUnwrappedCommaSeparatedLiterals()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForgeManifestValueReaderTests", Path.GetRandomFileName());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifest = Path.Combine(root, "Sample.psd1");
+            File.WriteAllText(manifest, "@{ FunctionsToExport = \"Get-First\",\"Get-Second\"; AliasesToExport = 'one','two'; VariablesToExport = '' }");
+
+            Assert.Equal(
+                new[] { "Get-First", "Get-Second" },
+                ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "FunctionsToExport"));
+            Assert.Equal(
+                new[] { "one", "two" },
+                ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "AliasesToExport"));
+            Assert.Empty(ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "VariablesToExport")!);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
 }

@@ -115,25 +115,29 @@ internal static class ModuleManifestTextParser
             return false;
 
         var trimmed = expression.Trim();
-        if (TryUnquote(trimmed, out var singleValue) && !string.IsNullOrWhiteSpace(singleValue))
+        var probeIndex = 0;
+        if (TryReadValueExpression(trimmed, ref probeIndex, out var singleExpression) &&
+            SkipTrivia(trimmed, probeIndex, treatCommasAsTrivia: true) == trimmed.Length &&
+            TryUnquote(singleExpression, out var singleValue))
         {
-            values = new[] { singleValue };
+            values = string.IsNullOrWhiteSpace(singleValue) ? Array.Empty<string>() : new[] { singleValue };
             return true;
         }
-
-        if (!IsArrayExpression(trimmed))
-            return false;
-
         var parsed = new List<string>();
-        var body = TrimCompositeWrapper(trimmed);
+        var body = IsArrayExpression(trimmed) ? TrimCompositeWrapper(trimmed) : trimmed;
         var index = 0;
         while (TryReadValueExpression(body, ref index, out var itemExpression))
         {
-            if (!TryUnquote(itemExpression, out var value) || string.IsNullOrWhiteSpace(value))
+            if (!TryUnquote(itemExpression, out var value))
                 return false;
 
-            parsed.Add(value);
+            if (!string.IsNullOrWhiteSpace(value))
+                parsed.Add(value);
         }
+
+        if (SkipTrivia(body, index, treatCommasAsTrivia: true) != body.Length ||
+            parsed.Count == 0 && !IsArrayExpression(trimmed))
+            return false;
 
         values = parsed.ToArray();
         return true;

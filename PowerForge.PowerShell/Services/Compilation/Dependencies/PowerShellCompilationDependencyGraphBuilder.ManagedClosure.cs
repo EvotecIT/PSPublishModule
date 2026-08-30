@@ -58,6 +58,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 string nodeId;
                 if (adjacent is null)
                 {
+                    var parentIdentity = _nodes[parentId].Identity;
                     nodeId = AddExternalManagedNode(
                         name,
                         reference.Version,
@@ -65,8 +66,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                         culture,
                         retargetable,
                         contentType,
-                        targetFramework!,
-                        runtimeIdentifier);
+                        parentIdentity.Edition,
+                        parentIdentity.TargetFramework,
+                        parentIdentity.RuntimeIdentifier);
                 }
                 else
                 {
@@ -129,8 +131,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string culture,
         bool retargetable,
         string contentType,
+        string edition,
         string targetFramework,
-        string? runtimeIdentifier)
+        string runtimeIdentifier)
     {
         var id = StableId(
             "external-managed",
@@ -139,7 +142,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             publicKeyToken.ToUpperInvariant(),
             PowerShellTargetRuntimeAssemblyCatalog.NormalizeCulture(culture).ToUpperInvariant(),
             retargetable.ToString(),
-            PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType).ToUpperInvariant());
+            PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType).ToUpperInvariant(),
+            edition.ToUpperInvariant(),
+            targetFramework.ToUpperInvariant(),
+            runtimeIdentifier.ToUpperInvariant());
         if (_nodes.ContainsKey(id)) return id;
         _nodes.Add(id, new PowerShellCompilationDependencyNode
         {
@@ -158,8 +164,9 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 Retargetable = retargetable,
                 ContentType = PowerShellTargetRuntimeAssemblyCatalog.NormalizeContentType(contentType),
                 Source = "External",
+                Edition = edition,
                 TargetFramework = targetFramework,
-                RuntimeIdentifier = runtimeIdentifier ?? string.Empty,
+                RuntimeIdentifier = runtimeIdentifier,
                 Provenance = "ManagedAssemblyReferenceMetadata"
             },
             Policy = new PowerShellCompilationDependencyPolicy

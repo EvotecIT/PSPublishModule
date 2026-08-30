@@ -180,6 +180,27 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
+    public void Build_HybridLifecycleDoesNotDetachFunctionsFromModuleScopeState()
+    {
+        const string source = "$script:prefix = 'value'; function Invoke-Lifecycle { [CmdletBinding()] param() process { $script:prefix } }";
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
+        var empty = new PowerShellTypedCompilationResult(
+            fixture.ScriptPath,
+            "PowerForge.Compiled",
+            "LifecycleModuleStateMethods",
+            string.Empty,
+            Array.Empty<PowerShellCompiledMethod>(),
+            Array.Empty<PowerShellCompilationDiagnostic>(),
+            new[] { fixture.ScriptPath },
+            PowerShellLifecycleSourceBinder.Bind(document, "net10.0"));
+
+        var planned = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(empty, "net10.0");
+
+        Assert.Empty(planned.Methods);
+    }
+
+    [Fact]
     public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
     {
         using var fixture = ArtifactFixture.Create(
