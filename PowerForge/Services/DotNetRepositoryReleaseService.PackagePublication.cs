@@ -74,7 +74,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return false;
     }
 
-    private bool ExecuteNuGetPublishing(
+    internal bool ExecuteNuGetPublishing(
         DotNetRepositoryReleaseSpec spec,
         DotNetRepositoryReleaseResult result,
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
@@ -102,7 +102,23 @@ public sealed partial class DotNetRepositoryReleaseService
             : spec.PublishSource!.Trim();
         result.PublishSource = source;
 
-        var orderedProjects = SortProjectsForPublish(projects);
+        if (spec.WhatIf && spec.HasPendingVersionBindingChanges)
+        {
+            result.Success = false;
+            result.ErrorMessage = "A safe NuGet publish order cannot be planned while version-binding files have pending WhatIf changes. Apply the version changes or build the packages, then use artifact-based ordering.";
+            return true;
+        }
+
+        var publishPlan = CreatePublishPlan(
+            projects,
+            usePlannedProjectGraph: spec.WhatIf,
+            configuration: spec.Configuration,
+            packStrategy: spec.PackStrategy,
+            includeSymbols: spec.IncludeSymbols,
+            packageOutputPath: string.IsNullOrWhiteSpace(spec.OutputPath)
+                ? null
+                : (Path.IsPathRooted(spec.OutputPath!) ? spec.OutputPath : Path.GetFullPath(Path.Combine(root, spec.OutputPath!))));
+        var orderedProjects = publishPlan.OrderedProjects;
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
         var packageLookup = orderedProjects
@@ -120,6 +136,7 @@ public sealed partial class DotNetRepositoryReleaseService
             detailedProgress);
         progress?.PhaseStarted(ProjectBuildProgressPhase.NuGetPublish, packages.Length, "Publishing package artifacts");
         var completed = 0;
+        var unavailablePackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var package in packages)
         {
             var item = items[package];
@@ -139,6 +156,39 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.PublishedPackages.AddRange(artifacts);
                 UpdateArtifactProgress(detailedProgress, item, ProjectBuildProgressItemState.Completed, "would publish");
                 completed++;
+                continue;
+            }
+
+            var projectPackageId = project is null ? null : GetEffectivePackageId(project);
+            var unavailableDependencies = projectPackageId is null ||
+                                          !publishPlan.DependenciesByPackageId.TryGetValue(projectPackageId, out var dependencies)
+                ? Array.Empty<string>()
+                : dependencies.Where(unavailablePackageIds.Contains).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+            if (projectPackageId is not null &&
+                (unavailablePackageIds.Contains(projectPackageId) || unavailableDependencies.Length > 0))
+            {
+                var reason = unavailableDependencies.Length > 0
+                    ? $"required selected package(s) {string.Join(", ", unavailableDependencies)} did not publish successfully"
+                    : "an earlier artifact for this project did not publish successfully";
+                var message = $"Publish blocked for {projectPackageId}: {reason}.";
+                result.Success = false;
+                unavailablePackageIds.Add(projectPackageId);
+                foreach (var artifact in artifacts)
+                {
+                    if (!result.FailedPackages.Contains(artifact, StringComparer.OrdinalIgnoreCase))
+                        result.FailedPackages.Add(artifact);
+                }
+                _logger.Warn(message);
+                if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                    project.ErrorMessage = message;
+                UpdateArtifactProgress(detailedProgress, item, ProjectBuildProgressItemState.Failed, message);
+                completed++;
+                if (spec.PublishFailFast)
+                {
+                    result.ErrorMessage = message;
+                    return true;
+                }
+
                 continue;
             }
 
@@ -171,7 +221,7 @@ public sealed partial class DotNetRepositoryReleaseService
             _logger.Info($"Publishing {Path.GetFileName(package)}...");
             var packageWatch = Stopwatch.StartNew();
             spec.RemotePublishAttempted?.Invoke();
-            var pushResult = PushPackage(
+            var pushResult = _pushPackage(
                 package,
                 spec.PublishApiKey!,
                 source,
@@ -213,6 +263,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.Success = false;
                 if (project is not null && string.IsNullOrWhiteSpace(project.ErrorMessage))
                     project.ErrorMessage = $"Publish failed for {string.Join(", ", failures.Select(Path.GetFileName))}: {pushResult.Message}";
+                if (projectPackageId is not null &&
+                    project is not null &&
+                    failures.Any(failure => project.Packages.Contains(failure, StringComparer.OrdinalIgnoreCase)))
+                {
+                    unavailablePackageIds.Add(projectPackageId);
+                }
                 if (spec.PublishFailFast)
                 {
                     if (string.IsNullOrWhiteSpace(result.ErrorMessage))

@@ -43,6 +43,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (spec is null) throw new ArgumentNullException(nameof(spec));
+            spec.HasPendingVersionBindingChanges = false;
             if (string.IsNullOrWhiteSpace(spec.RootPath))
             {
                 result.Success = false;
@@ -82,7 +83,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
-                            PackageId = ResolvePackageId(item.Path, item.Name),
+                            PackageId = ResolvePackageId(item.Path, item.Name, spec),
                             IsPackable = IsPackable(item.Path),
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
@@ -97,7 +98,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
-                    PackageId = ResolvePackageId(entry.Path, entry.Name),
+                    PackageId = ResolvePackageId(entry.Path, entry.Name, spec),
                     IsPackable = IsPackable(entry.Path)
                 });
             }
@@ -309,6 +310,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                 if (!string.Equals(content, updated, StringComparison.Ordinal))
                 {
+                    project.HasPendingVersionUpdate = true;
                     pendingVersionUpdates.Add(new KeyValuePair<DotNetRepositoryProjectResult, RepositoryTextFileUpdate>(
                         project,
                         new RepositoryTextFileUpdate(project.CsprojPath, content, updated)));
@@ -343,6 +345,7 @@ public sealed partial class DotNetRepositoryReleaseService
                         spec.VersionBindings,
                         plannedProjectContents)
                     : Array.Empty<ProjectVersionBindingFileUpdate>();
+                spec.HasPendingVersionBindingChanges = spec.WhatIf && versionBindingPlan.Any(static item => item.HasChanges);
 
                 if (spec.WhatIf)
                 {
@@ -363,6 +366,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     foreach (var pendingUpdate in pendingVersionUpdates)
                     {
                         var project = pendingUpdate.Key;
+                        project.PackageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
                         if (!string.IsNullOrWhiteSpace(project.OldVersion))
                             _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {project.NewVersion}");
                         else

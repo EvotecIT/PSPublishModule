@@ -12,6 +12,97 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseServiceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Execute_UsesSymbolPackPropertiesWhenResolvingPackageId()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "ConditionalPackage"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "ConditionalPackage.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId Condition="'$(IncludeSymbols)' == 'true' and '$(SymbolPackageFormat)' == 'snupkg'">Sample.Symbols</PackageId>
+    <PackageId Condition="'$(PackageId)' == ''">Sample.Default</PackageId>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+</Project>
+""");
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Class1.cs"), "namespace ConditionalPackage; public static class Class1 { }");
+            var outputPath = Path.Combine(root.FullName, "packages");
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = outputPath,
+                Pack = true,
+                IncludeSymbols = true,
+                Publish = false,
+                UpdateVersions = false,
+                CreateReleaseZip = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("Sample.Symbols", project.PackageId);
+            Assert.Contains(project.Packages, path => Path.GetFileName(path).Equals("Sample.Symbols.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(project.SymbolPackages, path => Path.GetFileName(path).Equals("Sample.Symbols.1.0.0.snupkg", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Execute_RefreshesPackageIdAfterApplyingVersionUpdate()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "VersionedPackage"));
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "VersionedPackage.csproj"), """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <PackageId Condition="'$(VersionPrefix)' == '1.0.0'">Sample.Old</PackageId>
+    <PackageId Condition="'$(VersionPrefix)' == '2.0.0'">Sample.New</PackageId>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+</Project>
+""");
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Class1.cs"), "namespace VersionedPackage; public static class Class1 { }");
+            var outputPath = Path.Combine(root.FullName, "packages");
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = outputPath,
+                ExpectedVersion = "2.0.0",
+                Pack = true,
+                Publish = false,
+                UpdateVersions = true,
+                CreateReleaseZip = false
+            });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal("Sample.New", project.PackageId);
+            Assert.Contains(project.Packages, path => Path.GetFileName(path).Equals("Sample.New.2.0.0.nupkg", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_preserves_one_argument_public_overload()
     {
         var overload = typeof(DotNetRepositoryReleaseService)
@@ -69,6 +160,70 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.False(File.Exists(symbols));
             Assert.Contains(pkg, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(symbols, result.PublishedPackages, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_WhatIfPublish_OrdersMultiplePlannedPackagesWithoutRequiringArtifacts()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sharedDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Shared"));
+            var sharedProject = Path.Combine(sharedDirectory.FullName, "Shared.csproj");
+            File.WriteAllText(sharedProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.Shared</PackageId>
+                    <VersionPrefix>1.2.3</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                  </PropertyGroup>
+                </Project>
+                """);
+            var appDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "App"));
+            var appProject = Path.Combine(appDirectory.FullName, "App.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <PackageId>Sample.App</PackageId>
+                    <VersionPrefix>1.2.3</VersionPrefix>
+                    <IsPackable>true</IsPackable>
+                    <SharedProjectPath>../Shared/Shared.csproj</SharedProjectPath>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="$(SharedProjectPath)" />
+                  </ItemGroup>
+                </Project>
+                """);
+            var sourceDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "NugetSource"));
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Configuration = "Release",
+                OutputPath = Path.Combine(root.FullName, "Artefacts", "packages"),
+                Pack = true,
+                Publish = true,
+                WhatIf = true,
+                PublishApiKey = "dummy",
+                PublishSource = "https://api.nuget.org/v3/index.json",
+                VersionSources = new[] { sourceDirectory.FullName },
+                SkipDuplicate = true,
+                UpdateVersions = false
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(2, result.PublishedPackages.Count);
+            Assert.Contains("Sample.Shared", Path.GetFileName(result.PublishedPackages[0]), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Sample.App", Path.GetFileName(result.PublishedPackages[1]), StringComparison.OrdinalIgnoreCase);
+            Assert.All(result.PublishedPackages, package => Assert.False(File.Exists(package)));
         }
         finally
         {
