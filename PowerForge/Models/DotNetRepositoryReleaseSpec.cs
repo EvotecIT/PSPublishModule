@@ -140,6 +140,11 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>When true, stop on the first publish/signing failure.</summary>
     public bool PublishFailFast { get; set; }
 
-    /// <summary>When true, computes plan only (no file modifications or dotnet operations).</summary>
+    /// <summary>
+    /// When true, computes a plan without modifying project files, packing, or publishing.
+    /// Planning invokes MSBuild evaluation and therefore observes evaluated properties and items,
+    /// but it does not execute custom pack targets that mutate package dependencies. Projects that
+    /// add or update references from pack targets must build packages and use artifact-based ordering.
+    /// </summary>
     public bool WhatIf { get; set; }
 }

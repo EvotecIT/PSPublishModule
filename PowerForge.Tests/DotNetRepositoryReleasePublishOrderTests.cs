@@ -193,6 +193,32 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfMatchesSymbolPackProperties()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App");
+        File.WriteAllText(app.CsprojPath, """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup Condition="'$(IncludeSymbols)' == 'true' and '$(SymbolPackageFormat)' == 'snupkg'">
+    <ProjectReference Include="../Shared/Shared.csproj" />
+  </ItemGroup>
+</Project>
+""");
+
+        var ordered = new DotNetRepositoryReleaseService(new NullLogger())
+            .SortProjectsForPublish(
+                [app, shared],
+                usePlannedProjectGraph: true,
+                configuration: "Release",
+                includeSymbols: true);
+
+        Assert.Equal(["Shared", "App"], ordered.Select(project => project.PackageId));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_WhatIfUsesInnerBuildsForMultiTargetProjects()
     {
         using var workspace = new PublishOrderWorkspace();

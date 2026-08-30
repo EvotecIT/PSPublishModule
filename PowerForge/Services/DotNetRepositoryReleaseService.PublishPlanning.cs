@@ -16,14 +16,16 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph = false,
         string? configuration = null,
-        DotNetRepositoryPackStrategy packStrategy = DotNetRepositoryPackStrategy.PerProject)
-        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy).OrderedProjects;
+        DotNetRepositoryPackStrategy packStrategy = DotNetRepositoryPackStrategy.PerProject,
+        bool includeSymbols = false)
+        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy, includeSymbols).OrderedProjects;
 
     private PublishPlan CreatePublishPlan(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         bool usePlannedProjectGraph,
         string? configuration,
-        DotNetRepositoryPackStrategy packStrategy)
+        DotNetRepositoryPackStrategy packStrategy,
+        bool includeSymbols)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -43,7 +45,7 @@ public sealed partial class DotNetRepositoryReleaseService
         foreach (var entry in byPackageId)
         {
             var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy)
+                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy, includeSymbols)
                 : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
             dependencies[entry.Key].UnionWith(selectedDependencies);
         }
@@ -166,7 +168,8 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryProjectResult project,
         IReadOnlyDictionary<string, DotNetRepositoryProjectResult> selectedPackages,
         string? configuration,
-        DotNetRepositoryPackStrategy packStrategy)
+        DotNetRepositoryPackStrategy packStrategy,
+        bool includeSymbols)
     {
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
@@ -179,7 +182,7 @@ public sealed partial class DotNetRepositoryReleaseService
             entry => entry.Key,
             pathComparer);
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, packStrategy);
+        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, packStrategy, includeSymbols);
         ValidatePlanningContract(project, outer);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
@@ -189,7 +192,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
-                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, packStrategy);
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, packStrategy, includeSymbols);
                 ValidatePlanningContract(project, evaluation);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
@@ -247,7 +250,8 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryProjectResult project,
         string? targetFramework,
         string? configuration,
-        DotNetRepositoryPackStrategy packStrategy)
+        DotNetRepositoryPackStrategy packStrategy,
+        bool includeSymbols)
     {
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
@@ -262,6 +266,11 @@ public sealed partial class DotNetRepositoryReleaseService
         };
         if (packStrategy == DotNetRepositoryPackStrategy.MSBuild)
             arguments.Add("-p:BuildProjectReferences=false");
+        if (includeSymbols)
+        {
+            arguments.Add("-p:IncludeSymbols=true");
+            arguments.Add("-p:SymbolPackageFormat=snupkg");
+        }
         if (!string.IsNullOrWhiteSpace(targetFramework))
             arguments.Add($"-p:TargetFramework={targetFramework!.Trim()}");
         if (!string.IsNullOrWhiteSpace(project.NewVersion))
