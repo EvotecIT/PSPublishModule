@@ -35,6 +35,17 @@ internal static class AppleBuildProvenance
         string projectRoot,
         GitClient git)
     {
+        var replacementRefs = git.RunRawAsync(
+                projectRoot,
+                ["for-each-ref", "--format=%(refname)", "refs/replace"])
+            .GetAwaiter()
+            .GetResult();
+        if (!replacementRefs.Succeeded ||
+            !string.IsNullOrWhiteSpace(replacementRefs.StdOut))
+        {
+            return null;
+        }
+
         var head = git.RunRawAsync(projectRoot, ["rev-parse", "HEAD"])
             .GetAwaiter()
             .GetResult();
@@ -173,6 +184,37 @@ internal static class AppleBuildProvenance
     internal static string RequireLocalSourceRevision(string sourceRoot)
         => Capture(sourceRoot).Revision;
 
+    internal static string? ResolveRepositoryRoot(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        var fullPath = Path.GetFullPath(path);
+        var workingDirectory = Directory.Exists(fullPath)
+            ? fullPath
+            : Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrWhiteSpace(workingDirectory) ||
+            !Directory.Exists(workingDirectory))
+        {
+            return null;
+        }
+
+        var git = GitClient.CreateTrustedSystemClient(
+            defaultTimeout: TimeSpan.FromSeconds(10));
+        var relativeTopLevel = git.RunRawAsync(
+                workingDirectory!,
+                ["rev-parse", "--show-cdup"])
+            .GetAwaiter()
+            .GetResult();
+        if (!relativeTopLevel.Succeeded)
+            return null;
+        // Build from the caller's path spelling so macOS aliases such as
+        // /var and /private/var do not create a false containment failure.
+        var repositoryRoot = Path.GetFullPath(Path.Combine(
+            workingDirectory!,
+            relativeTopLevel.StdOut.Trim()));
+        return Directory.Exists(repositoryRoot) ? repositoryRoot : null;
+    }
+
     internal static bool IsGitMetadataMutation(
         FileSystemEventArgs args,
         string sourceRoot,
@@ -199,9 +241,7 @@ internal static class AppleBuildProvenance
         string? sourceRevision)
     {
         var arguments = (additionalArguments ?? Array.Empty<string>()).ToList();
-        if (arguments.Any(argument => argument.StartsWith(
-                XcodeBuildSetting + "=",
-                StringComparison.OrdinalIgnoreCase)))
+        if (arguments.Any(IsOwnedXcodeBuildSettingArgument))
         {
             throw new InvalidOperationException(
                 $"{XcodeBuildSetting} is owned by PowerForge and cannot be supplied through AdditionalArguments.");
@@ -213,6 +253,21 @@ internal static class AppleBuildProvenance
 
         arguments.Insert(0, XcodeBuildSetting + "=" + normalized);
         return arguments;
+    }
+
+    private static bool IsOwnedXcodeBuildSettingArgument(string? argument)
+    {
+        var assignment = argument?.Trim();
+        if (string.IsNullOrWhiteSpace(assignment))
+            return false;
+        var equalsIndex = assignment!.IndexOf('=');
+        if (equalsIndex <= 0)
+            return false;
+        var key = assignment.Substring(0, equalsIndex).Trim();
+        var conditionIndex = key.IndexOf('[');
+        if (conditionIndex >= 0)
+            key = key.Substring(0, conditionIndex).Trim();
+        return key.Equals(XcodeBuildSetting, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeSourceRevision(string? value)

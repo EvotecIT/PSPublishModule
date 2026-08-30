@@ -36,31 +36,62 @@ public sealed class AppleBuildProvenanceTests
     [Fact]
     public void ResolveLocalSourceRevision_fails_closed_when_status_cannot_be_read()
     {
-        var requestIndex = 0;
         var runner = new StubProcessRunner(request =>
         {
-            requestIndex++;
-            return requestIndex == 1
-                ? new ProcessRunResult(
+            return request.Arguments.FirstOrDefault() switch
+            {
+                "for-each-ref" => new ProcessRunResult(
+                    0,
+                    string.Empty,
+                    string.Empty,
+                    request.FileName,
+                    TimeSpan.Zero,
+                    timedOut: false),
+                "rev-parse" => new ProcessRunResult(
                     0,
                     new string('a', 40),
                     string.Empty,
                     request.FileName,
                     TimeSpan.Zero,
-                    timedOut: false)
-                : new ProcessRunResult(
+                    timedOut: false),
+                _ => new ProcessRunResult(
                     128,
                     string.Empty,
                     "status unavailable",
                     request.FileName,
                     TimeSpan.Zero,
-                    timedOut: false);
+                    timedOut: false),
+            };
         });
         var git = GitClient.CreateTrustedSystemClient(runner, TimeSpan.FromSeconds(10));
 
         Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(
             Directory.GetCurrentDirectory(),
             git));
+    }
+
+    [Fact]
+    public void ResolveLocalSourceRevision_rejects_git_replacement_refs()
+    {
+        var root = CreateRepository();
+        try
+        {
+            var head = RunGit(root.FullName, "rev-parse", "HEAD").Trim();
+            var tree = RunGit(root.FullName, "rev-parse", "HEAD^{tree}").Trim();
+            var replacement = RunGit(
+                root.FullName,
+                "commit-tree",
+                tree,
+                "-m",
+                "replacement").Trim();
+            RunGit(root.FullName, "replace", head, replacement);
+
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     [Theory]
@@ -155,6 +186,21 @@ public sealed class AppleBuildProvenanceTests
                 ".git/index"),
             root,
             StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("POWERFORGE_SOURCE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("POWERFORGE_SOURCE_REVISION[sdk=iphoneos*]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData(" powerforge_source_revision [config=Release] = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ")]
+    public void AppendXcodeBuildSetting_rejects_all_owned_setting_variants(
+        string argument)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            AppleBuildProvenance.AppendXcodeBuildSetting(
+                [argument],
+                new string('b', 40)));
+
+        Assert.Contains("owned by PowerForge", exception.Message);
     }
 
     [Fact]

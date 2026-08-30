@@ -107,6 +107,15 @@ public sealed class AppleDeviceDeploymentService
         var buildProjectPath = projectPath;
         var workingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
         string? mirrorPath = null;
+        if (!string.IsNullOrWhiteSpace(request.BuildRoot))
+        {
+            var declaredBuildRoot = Path.GetFullPath(request.BuildRoot!);
+            EnsurePathWithinBuildRoot(
+                projectPath,
+                declaredBuildRoot,
+                FrameworkCompatibility.GetPathStringComparisonForPath(
+                    declaredBuildRoot));
+        }
         var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
         var sourcePathComparison =
             FrameworkCompatibility.GetPathStringComparisonForPath(sourceRoot);
@@ -630,8 +639,15 @@ public sealed class AppleDeviceDeploymentService
 
     private static string ResolveBuildRoot(string projectPath, string? buildRoot)
     {
+        var requestedRoot = !string.IsNullOrWhiteSpace(buildRoot)
+            ? Path.GetFullPath(buildRoot!)
+            : projectPath;
+        var repositoryRoot = AppleBuildProvenance.ResolveRepositoryRoot(
+            requestedRoot);
+        if (!string.IsNullOrWhiteSpace(repositoryRoot))
+            return repositoryRoot!;
         if (!string.IsNullOrWhiteSpace(buildRoot))
-            return Path.GetFullPath(buildRoot!);
+            return requestedRoot;
 
         var root = Directory.Exists(projectPath)
             ? Path.GetDirectoryName(projectPath)
