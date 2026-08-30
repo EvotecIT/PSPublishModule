@@ -44,7 +44,12 @@ internal static class AppleBuildProvenance
 
         var status = git.RunRawAsync(
                 projectRoot,
-                ["status", "--porcelain=v1", "--untracked-files=normal"])
+                [
+                    "status",
+                    "--porcelain=v1",
+                    "--untracked-files=normal",
+                    "--ignore-submodules=none"
+                ])
             .GetAwaiter()
             .GetResult();
         if (!status.Succeeded)
@@ -174,16 +179,20 @@ internal static class AppleBuildProvenance
         StringComparison pathComparison)
     {
         var metadataRoot = Path.Combine(Path.GetFullPath(sourceRoot), ".git");
-        return IsPathMutation(args, metadataRoot, pathComparison);
-    }
+        var destinationIsMetadata = IsPathWithin(
+            args.FullPath,
+            metadataRoot,
+            pathComparison);
+        if (args is not RenamedEventArgs renamed)
+            return destinationIsMetadata;
 
-    internal static bool IsPathMutation(
-        FileSystemEventArgs args,
-        string path,
-        StringComparison pathComparison)
-        => IsPathWithin(args.FullPath, path, pathComparison) ||
-           args is RenamedEventArgs renamed &&
-           IsPathWithin(renamed.OldFullPath, path, pathComparison);
+        // A rename is ignorable metadata churn only when both endpoints stay
+        // inside .git. Crossing the boundary mutates the build input tree.
+        return destinationIsMetadata && IsPathWithin(
+            renamed.OldFullPath,
+            metadataRoot,
+            pathComparison);
+    }
 
     internal static IReadOnlyList<string> AppendXcodeBuildSetting(
         IEnumerable<string>? additionalArguments,

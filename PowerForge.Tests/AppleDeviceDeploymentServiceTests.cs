@@ -790,6 +790,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             Assert.Equal(2, runner.Requests.Count);
             Assert.Equal("rsync-test", runner.Requests[0].FileName);
             Assert.Contains("--delete", runner.Requests[0].Arguments);
+            Assert.Contains("--delete-excluded", runner.Requests[0].Arguments);
             Assert.Contains(root.FullName + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
             Assert.Contains(mirror + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
 

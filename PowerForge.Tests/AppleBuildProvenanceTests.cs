@@ -84,6 +84,80 @@ public sealed class AppleBuildProvenanceTests
     }
 
     [Fact]
+    public void ResolveLocalSourceRevision_rejects_dirty_submodules_even_when_configured_to_ignore_all()
+    {
+        var submodule = CreateRepository();
+        var root = CreateRepository();
+        try
+        {
+            RunGit(
+                root.FullName,
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                submodule.FullName,
+                "Dependencies/Sample");
+            var modulesPath = Path.Combine(root.FullName, ".gitmodules");
+            File.AppendAllText(modulesPath, "\tignore = all\n");
+            RunGit(root.FullName, "add", ".gitmodules", "Dependencies/Sample");
+            RunGit(root.FullName, "commit", "-m", "add ignored submodule");
+
+            File.WriteAllText(
+                Path.Combine(root.FullName, "Dependencies", "Sample", "tracked.txt"),
+                "dirty submodule content");
+
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { submodule.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void IsGitMetadataMutation_ignores_only_renames_with_both_endpoints_inside_git()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.AppleBuildProvenance",
+            Guid.NewGuid().ToString("N"));
+
+        Assert.True(AppleBuildProvenance.IsGitMetadataMutation(
+            new RenamedEventArgs(
+                WatcherChangeTypes.Renamed,
+                root,
+                ".git/new.lock",
+                ".git/old.lock"),
+            root,
+            StringComparison.Ordinal));
+        Assert.False(AppleBuildProvenance.IsGitMetadataMutation(
+            new RenamedEventArgs(
+                WatcherChangeTypes.Renamed,
+                root,
+                "Sources/input.swift",
+                ".git/input.swift"),
+            root,
+            StringComparison.Ordinal));
+        Assert.False(AppleBuildProvenance.IsGitMetadataMutation(
+            new RenamedEventArgs(
+                WatcherChangeTypes.Renamed,
+                root,
+                ".git/input.swift",
+                "Sources/input.swift"),
+            root,
+            StringComparison.Ordinal));
+        Assert.True(AppleBuildProvenance.IsGitMetadataMutation(
+            new FileSystemEventArgs(
+                WatcherChangeTypes.Changed,
+                root,
+                ".git/index"),
+            root,
+            StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RejectIgnoredBuildInputs_rejects_inputs_copied_to_the_build()
     {
         var root = CreateRepository();

@@ -514,6 +514,7 @@ public sealed class AppleDeviceDeploymentService
             {
                 "-a",
                 "--delete",
+                "--delete-excluded",
                 "--exclude",
                 ".git",
                 "--exclude",
