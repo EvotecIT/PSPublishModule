@@ -23,7 +23,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (evaluatedGlobalProperties is not null &&
                 conditionAttribute.Parent is not null &&
-                IsDefinitelyInactiveMsBuildElement(
+                IsDefinitelyInactiveControlledBuildOperation(
                     conditionAttribute.Parent,
                     evaluatedGlobalProperties,
                     declaringPath))

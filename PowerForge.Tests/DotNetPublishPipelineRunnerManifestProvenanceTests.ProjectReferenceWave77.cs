@@ -153,7 +153,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 Path.Combine(libraryDirectory, "Library.cs"),
                 "public static class Library { public const int Value = 1; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
-            RunDotNet(root, $"restore \"{appProject}\" --runtime win-x64 --use-lock-file --nologo");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source and dependency graph\"");
             var plan = new DotNetPublishPlan
@@ -171,7 +171,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                             new DotNetPublishTargetCombination
                             {
                                 Framework = "net10.0",
-                                Runtime = "win-x64",
                                 Style = DotNetPublishStyle.FrameworkDependent
                             }
                         ]
@@ -189,7 +188,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "bin",
                 "Release",
                 "net8.0",
-                "win-x64",
                 "Library.dll")));
         }
         finally

@@ -17,7 +17,7 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
         {
             if (evaluatedGlobalProperties is not null &&
-                IsDefinitelyInactiveMsBuildElement(
+                IsDefinitelyInactiveControlledBuildOperation(
                     task,
                     evaluatedGlobalProperties,
                     declaringPath))

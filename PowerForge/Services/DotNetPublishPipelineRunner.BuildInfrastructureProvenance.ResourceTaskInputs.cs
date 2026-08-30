@@ -19,7 +19,7 @@ public sealed partial class DotNetPublishPipelineRunner
                      element.Name.LocalName.Equals("GenerateResource", StringComparison.OrdinalIgnoreCase)))
         {
             if (evaluatedGlobalProperties is not null &&
-                IsDefinitelyInactiveMsBuildElement(
+                IsDefinitelyInactiveControlledBuildOperation(
                     task,
                     evaluatedGlobalProperties,
                     declaringPath))

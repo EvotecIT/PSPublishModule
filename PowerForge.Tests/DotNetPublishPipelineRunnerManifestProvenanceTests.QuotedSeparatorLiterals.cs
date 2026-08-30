@@ -259,6 +259,48 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ControlledBuildInputs_RejectTargetTimeActivationOfEvaluatedInactiveCopyInput()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            string externalPath = Path.Combine(externalRoot, "payload.txt");
+            File.WriteAllText(externalPath, "untracked external payload");
+            var project = new System.Xml.Linq.XDocument(
+                new System.Xml.Linq.XElement("Project",
+                    new System.Xml.Linq.XElement("PropertyGroup",
+                        new System.Xml.Linq.XElement("UseExternal", "false")),
+                    new System.Xml.Linq.XElement("Target",
+                        new System.Xml.Linq.XAttribute("Name", "Build"),
+                        new System.Xml.Linq.XElement("PropertyGroup",
+                            new System.Xml.Linq.XElement("UseExternal", "true")),
+                        new System.Xml.Linq.XElement("Copy",
+                            new System.Xml.Linq.XAttribute(
+                                "Condition",
+                                "'$(UseExternal)' == 'true'"),
+                            new System.Xml.Linq.XAttribute("SourceFiles", externalPath),
+                            new System.Xml.Linq.XAttribute("DestinationFolder", "output")))));
+            project.Save(projectPath);
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath],
+                evaluatedGlobalProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UseExternal"] = "false"
+                }));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+            DeleteTestRepository(externalRoot);
+        }
+    }
+
+    [Fact]
     public void ControlledBuildInputs_AllowNonFileConditionWithUnevaluatedProperty()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

@@ -67,7 +67,10 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> taskInputs = document.Descendants()
             .Where(element =>
                 IsControlledBuildTaskElement(element) &&
-                !IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties))
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element,
+                    evaluatedProperties,
+                    definingProjectPath: null))
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
@@ -75,7 +78,10 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string> conditions = document.Descendants()
             .Where(element =>
                 IsControlledBuildTaskElement(element) &&
-                !IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties))
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element,
+                    evaluatedProperties,
+                    definingProjectPath: null))
             .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
@@ -195,7 +201,10 @@ public sealed partial class DotNetPublishPipelineRunner
                          element.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase) &&
                          element.Parent is not null &&
                          IsControlledBuildTaskElement(element.Parent) &&
-                         !IsDefinitelyInactiveMsBuildElement(element.Parent, evaluatedProperties) &&
+                         !IsDefinitelyInactiveControlledBuildOperation(
+                             element.Parent,
+                             evaluatedProperties,
+                             definingProjectPath: null) &&
                          !element.Parent.Name.LocalName.Equals(
                              "ReadLinesFromFile",
                              StringComparison.OrdinalIgnoreCase)))

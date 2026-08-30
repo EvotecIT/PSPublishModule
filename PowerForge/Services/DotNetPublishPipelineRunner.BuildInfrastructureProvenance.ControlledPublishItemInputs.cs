@@ -35,7 +35,7 @@ public sealed partial class DotNetPublishPipelineRunner
                      IsControlledBuildTargetItem(element, relatedDocuments)))
         {
             if (evaluatedGlobalProperties is not null &&
-                IsDefinitelyInactiveMsBuildElement(
+                IsDefinitelyInactiveControlledBuildOperation(
                     item,
                     evaluatedGlobalProperties,
                     declaringPath))

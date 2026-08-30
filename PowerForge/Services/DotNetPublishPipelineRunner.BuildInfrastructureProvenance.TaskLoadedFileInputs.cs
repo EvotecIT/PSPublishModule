@@ -20,7 +20,7 @@ public sealed partial class DotNetPublishPipelineRunner
                          ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase))))
         {
             if (evaluatedGlobalProperties is not null &&
-                IsDefinitelyInactiveMsBuildElement(
+                IsDefinitelyInactiveControlledBuildOperation(
                     task,
                     evaluatedGlobalProperties,
                     declaringPath))
