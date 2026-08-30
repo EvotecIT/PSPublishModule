@@ -287,8 +287,10 @@ public partial class WebSiteVerifierTests
                 Redirects =
                 [
                     new RedirectSpec { From = "/old/", To = "/", MatchType = RedirectMatchType.Exact },
+                    new RedirectSpec { From = "/query?id=1", To = "/", MatchType = RedirectMatchType.Exact },
                     new RedirectSpec { From = "/legacy", To = "/archive/{path}", MatchType = RedirectMatchType.Prefix },
                     new RedirectSpec { From = "/downloads/*", To = "/files/{path}", MatchType = RedirectMatchType.Wildcard },
+                    new RedirectSpec { From = "/campaign/*?source=old", To = "/archive/{path}", MatchType = RedirectMatchType.Prefix },
                     new RedirectSpec { From = "^/regex/(.*)$", To = "/archive/{path}", MatchType = RedirectMatchType.Regex }
                 ],
                 Navigation = new NavigationSpec
@@ -308,15 +310,28 @@ public partial class WebSiteVerifierTests
                                     Match = "/old/",
                                     Visibility = new NavigationVisibilitySpec { Paths = ["/old/"] }
                                 },
+                                new MenuItemSpec { Title = "Exact path with arbitrary query", Url = "/old/?id=anything" },
+                                new MenuItemSpec { Title = "Exact query", Url = "/query?id=1" },
+                                new MenuItemSpec { Title = "Wrong exact query", Url = "/query?id=2" },
+                                new MenuItemSpec { Title = "Missing exact query", Url = "/query" },
                                 new MenuItemSpec { Title = "Prefix base", Url = "/legacy" },
                                 new MenuItemSpec
                                 {
                                     Title = "Prefix descendant pattern",
                                     Url = "/legacy/guide",
-                                    Match = "/legacy/*",
-                                    Visibility = new NavigationVisibilitySpec { Paths = ["/legacy/guide"] }
+                                    Match = "/legacy/guide/**",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/legacy/guide/**"] }
                                 },
                                 new MenuItemSpec { Title = "Wildcard descendant", Url = "/downloads/tool" },
+                                new MenuItemSpec
+                                {
+                                    Title = "Wildcard narrow pattern",
+                                    Url = "/downloads/tools/latest",
+                                    Match = "/downloads/tools/**",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/downloads/tools/**"] }
+                                },
+                                new MenuItemSpec { Title = "Prefix query", Url = "/campaign/guide?source=old" },
+                                new MenuItemSpec { Title = "Wrong prefix query", Url = "/campaign/guide?source=new" },
                                 new MenuItemSpec { Title = "Invalid prefix neighbor", Url = "/legacyish/guide" },
                                 new MenuItemSpec { Title = "Invalid wildcard neighbor", Url = "/download/tool" }
                             ]
@@ -331,12 +346,21 @@ public partial class WebSiteVerifierTests
 
             Assert.False(HasMissingRouteWarning(result, "/legacy"), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, "/downloads/tool"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/old/?id=anything"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/query?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/campaign/guide?source=old"), string.Join(Environment.NewLine, result.Warnings));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("Exact pattern", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("Prefix descendant pattern", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Wildcard narrow pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.True(HasMissingRouteWarning(result, "/query?id=2"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/query"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/campaign/guide?source=new"), string.Join(Environment.NewLine, result.Warnings));
             Assert.True(HasMissingRouteWarning(result, "/legacyish/guide"), string.Join(Environment.NewLine, result.Warnings));
             Assert.True(HasMissingRouteWarning(result, "/download/tool"), string.Join(Environment.NewLine, result.Warnings));
         }

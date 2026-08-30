@@ -662,6 +662,7 @@ public static partial class WebSiteVerifier
             return NavigationRedirectRoutes.Empty;
 
         var patternRoutes = rules
+            .Where(static redirect => !TryGetNavigationRouteQuery(redirect.From, out _))
             .Select(ProjectRedirectPatternRoute)
             .Where(static route => !string.IsNullOrWhiteSpace(route))
             .Distinct(StringComparer.Ordinal)
@@ -684,27 +685,33 @@ public static partial class WebSiteVerifier
             return false;
 
         var route = NormalizeExactRouteForNavigationMatch(url);
+        var hasRouteQuery = TryGetNavigationRouteQuery(url, out var routeQuery);
         foreach (var redirect in redirects.Rules)
         {
+            var pathMatches = false;
             if (redirect.MatchType == RedirectMatchType.Exact)
             {
-                if (string.Equals(
-                        NormalizeExactRouteForNavigationMatch(redirect.From),
-                        route,
-                        StringComparison.Ordinal))
-                {
-                    return true;
-                }
-                continue;
+                pathMatches = string.Equals(
+                    NormalizeExactRouteForNavigationMatch(redirect.From),
+                    route,
+                    StringComparison.Ordinal);
+            }
+            else
+            {
+                var prefix = NormalizeRedirectPrefix(redirect.From);
+                pathMatches = prefix == "/" ||
+                              string.Equals(prefix, route, StringComparison.Ordinal) ||
+                              route.StartsWith(prefix + "/", StringComparison.Ordinal);
             }
 
-            var prefix = NormalizeRedirectPrefix(redirect.From);
-            if (prefix == "/" ||
-                string.Equals(prefix, route, StringComparison.Ordinal) ||
-                route.StartsWith(prefix + "/", StringComparison.Ordinal))
-            {
+            if (!pathMatches)
+                continue;
+
+            if (!TryGetNavigationRouteQuery(redirect.From, out var sourceQuery))
                 return true;
-            }
+
+            if (hasRouteQuery && string.Equals(sourceQuery, routeQuery, StringComparison.Ordinal))
+                return true;
         }
 
         return false;
@@ -718,6 +725,39 @@ public static partial class WebSiteVerifier
             prefix = prefix[..starIndex];
         prefix = prefix.TrimEnd('/');
         return string.IsNullOrWhiteSpace(prefix) ? "/" : prefix;
+    }
+
+    private static bool TryGetNavigationRouteQuery(string? value, out string query)
+    {
+        query = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        var hashIndex = trimmed.IndexOf('#');
+        if (hashIndex >= 0)
+            trimmed = trimmed[..hashIndex];
+
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase))
+        {
+            var absoluteValue = trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase)
+                ? "https:" + trimmed
+                : trimmed;
+            if (Uri.TryCreate(absoluteValue, UriKind.Absolute, out var absolute))
+            {
+                query = absolute.Query.TrimStart('?');
+                return !string.IsNullOrWhiteSpace(query);
+            }
+        }
+
+        var queryIndex = trimmed.IndexOf('?');
+        if (queryIndex < 0 || queryIndex == trimmed.Length - 1)
+            return false;
+
+        query = trimmed[(queryIndex + 1)..];
+        return !string.IsNullOrWhiteSpace(query);
     }
 
     private static bool TryEvaluateStaticNavigationRoute(
@@ -971,13 +1011,39 @@ public static partial class WebSiteVerifier
 
             if (routeHasWildcard &&
                 (GlobMatch(route, normalizedPattern) ||
-                 GlobMatch(route, normalizedStaticPattern)))
+                 GlobMatch(route, normalizedStaticPattern) ||
+                 IsGlobPatternCoveredBy(normalizedPattern, route) ||
+                 IsGlobPatternCoveredBy(normalizedStaticPattern, route)))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool IsGlobPatternCoveredBy(string selectorPattern, string coveringPattern)
+    {
+        var coveringWildcard = coveringPattern.IndexOf('*');
+        if (coveringWildcard < 0)
+            return false;
+
+        var coveringPrefix = coveringPattern[..coveringWildcard].TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(coveringPrefix))
+            return true;
+
+        var selectorWildcard = selectorPattern.IndexOf('*');
+        var selectorFixedPart = (selectorWildcard >= 0
+                ? selectorPattern[..selectorWildcard]
+                : selectorPattern)
+            .TrimEnd('/');
+        if (selectorFixedPart.StartsWith(coveringPrefix + "/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!string.Equals(selectorFixedPart, coveringPrefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return selectorPattern.Length == coveringPrefix.Length ||
+               selectorPattern[coveringPrefix.Length] == '/';
     }
 
     private sealed record NavigationRedirectRoutes(RedirectSpec[] Rules, string[] PatternRoutes)
