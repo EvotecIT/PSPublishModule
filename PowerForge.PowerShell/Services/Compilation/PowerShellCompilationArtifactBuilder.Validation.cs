@@ -123,10 +123,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IEnumerable<string> sourcePaths,
         PowerShellCompilationMode mode,
         string targetFramework,
+        string semanticProfileId,
         PowerShellCompilationCapability capabilities,
         IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
     {
-        var analyzer = new PowerShellCompilationAnalyzer(commandProviders);
+        var analyzer = new PowerShellCompilationAnalyzer(commandProviders, semanticProfileId);
         var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         var basePath = paths.Length == 0
             ? Directory.GetCurrentDirectory()

@@ -123,7 +123,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         IEnumerable<PowerShellCompilationCommandProviderContract> providers,
         string? nuGetPackageRoot = null)
     {
-        return new PowerShellCompilationAnalyzer(providers).Analyze(
+        return new PowerShellCompilationAnalyzer(providers, context.Manifest.SemanticProfileId).Analyze(
             input,
             artifact.Target.Mode,
             artifact.Target.TargetFramework,

@@ -9,7 +9,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
 {
     internal static PowerShellTypedCompilationResult RouteNameCollisionsToFallback(
         PowerShellTypedCompilationResult typed,
-        string? targetFramework)
+        string? targetFramework,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
         var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
@@ -51,7 +52,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
         if (excludedMethods.Count == 0)
             return typed;
 
-        var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
+        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId).TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,

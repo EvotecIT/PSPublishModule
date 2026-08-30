@@ -28,6 +28,21 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         out PowerShellRuntimeStateIntrinsicKind kind)
+        => TryClassify(
+            ast,
+            body,
+            targetFramework,
+            PowerShellCompilationSemanticOracleCatalog.Get(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId),
+            capabilities,
+            out kind);
+
+    internal static bool TryClassify(
+        Ast ast,
+        ScriptBlockAst body,
+        string? targetFramework,
+        PowerShellCompilationSemanticOracleProfile semanticProfile,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellRuntimeStateIntrinsicKind kind)
     {
         kind = PowerShellRuntimeStateIntrinsicKind.None;
         if (!capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics))
@@ -46,13 +61,13 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                 kind = PowerShellRuntimeStateIntrinsicKind.ErrorCollection;
             else if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsCoreClr;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsWindows;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsLinux", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsLinux", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsLinux;
-            else if (IsCoreTarget(targetFramework) && name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase))
+            else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsMacOS", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsMacOS;
             else if (name.Equals("WhatIfPreference", StringComparison.OrdinalIgnoreCase) &&
                      !HasLocalDefinition(body, name) &&
@@ -147,9 +162,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         };
 
     internal static string EmitStatic(PowerShellRuntimeStateIntrinsicKind kind, string targetFramework)
+        => EmitStatic(kind, targetFramework, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
+
+    internal static string EmitStatic(PowerShellRuntimeStateIntrinsicKind kind, string targetFramework, string semanticProfileId)
         => kind switch
         {
-            PowerShellRuntimeStateIntrinsicKind.PSEdition => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) ? "\"Desktop\"" : "\"Core\"",
+            PowerShellRuntimeStateIntrinsicKind.PSEdition => PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).PowerShellEdition.Equals("Desktop", StringComparison.Ordinal) ? "\"Desktop\"" : "\"Core\"",
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr => "true",
             PowerShellRuntimeStateIntrinsicKind.IsWindows => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.Windows)",
             PowerShellRuntimeStateIntrinsicKind.IsLinux => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.Linux)",
@@ -210,6 +228,9 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     private static bool IsCoreTarget(string? targetFramework)
         => targetFramework?.Equals("net8.0", StringComparison.OrdinalIgnoreCase) == true ||
            targetFramework?.Equals("net10.0", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool IsCoreProfile(PowerShellCompilationSemanticOracleProfile semanticProfile)
+        => semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7;
 
     private static bool IsActionPreference(string name)
         => name.Equals("VerbosePreference", StringComparison.OrdinalIgnoreCase) ||

@@ -560,6 +560,7 @@ internal sealed partial class PowerShellTypedLowerer
                 runtime.Type.ClrType,
                 runtime.Kind,
                 runtime.TargetFramework,
+                runtime.SemanticProfileId,
                 runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray()),
             PowerShellBoundParameterPresenceExpression presence => new PowerShellLoweredParameterPresenceExpression(presence.Span, presence.ParameterName),
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(

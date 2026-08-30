@@ -9,14 +9,28 @@ namespace PowerForge;
 internal sealed partial class PowerShellSemanticBinder
 {
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+    private readonly PowerShellCompilationSemanticOracleProfile _semanticProfile;
 
     internal PowerShellSemanticBinder()
-        : this(PowerShellCommandSemanticRegistry.Default)
+        : this(PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
     }
 
     internal PowerShellSemanticBinder(PowerShellCommandSemanticRegistry commandRegistry)
-        => _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        : this(commandRegistry, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    internal PowerShellSemanticBinder(string semanticProfileId)
+        : this(PowerShellCommandSemanticRegistry.Default, semanticProfileId)
+    {
+    }
+
+    internal PowerShellSemanticBinder(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
+    {
+        _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        _semanticProfile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
+    }
 
     private PowerShellBoundFunction? BindFunction(
         ParsedSourceDocument document,

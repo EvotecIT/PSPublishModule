@@ -44,6 +44,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     IncludeResource = context.Manifest.Resources.Include,
                     ExcludeResource = context.Manifest.Resources.Exclude,
                     TargetContract = artifact.Target,
+                    SemanticProfileId = context.Manifest.SemanticProfileId,
                     ExpectedDependencyLock = dependencyLock,
                     ProviderPackages = context.Manifest.ProviderPackages.Select(path => new PowerShellCompilationProviderPackageReference(context.Resolve(path))).ToArray(),
                     ExpectedProviderLock = providerLock,

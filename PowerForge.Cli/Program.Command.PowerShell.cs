@@ -5,13 +5,13 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellAnalyzeUsage =
-        "Usage: powerforge powershell analyze <path> [--target-contract <target.json>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+        "Usage: powerforge powershell analyze <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--semantic-profile <id>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--framework <tfm>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
     private const string PowerShellExplainUsage =
-        "Usage: powerforge powershell explain <path> [--target-contract <target.json>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
+        "Usage: powerforge powershell explain <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellDiagnoseUsage =
         "Usage: powerforge powershell diagnose <manifest.json> --failure <log.txt> [--output json]";
 
@@ -55,7 +55,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--framework", "--dependency-lock", "--expected-abi-sha256", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--semantic-profile", "--framework", "--dependency-lock", "--expected-abi-sha256", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
                 new[] { "--self-contained", "--allow-unreviewed-dependencies", "--no-build-cache", "--emit-source", "--emit-ir", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -94,6 +94,8 @@ internal static partial class Program
         try
         {
             PowerShellCompilationTargetContract? targetContract = null;
+            var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ?? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+            semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
             var targetContractPath = TryGetOptionValue(args, "--target-contract");
             if (!string.IsNullOrWhiteSpace(targetContractPath))
             {
@@ -103,6 +105,10 @@ internal static partial class Program
                     CliJson.Options)
                     ?? throw new InvalidDataException($"Target contract '{fullTargetContractPath}' did not contain a contract.");
                 targetContract = PowerShellCompilationTargetContractService.Normalize(targetContract);
+                if (args.Any(argument => argument.Equals("--semantic-profile", StringComparison.OrdinalIgnoreCase)) &&
+                    !semanticProfileId.Equals(targetContract.SemanticProfileId, StringComparison.Ordinal))
+                    return WritePowerShellError(outputJson, 2, "The explicit semantic profile conflicts with the target contract.", logger, "powershell.build");
+                semanticProfileId = targetContract.SemanticProfileId;
                 if (kindOverride.HasValue && kindOverride.Value != targetContract.ArtifactKind)
                     return WritePowerShellError(outputJson, 2, "The explicit artifact kind conflicts with the target contract.", logger, "powershell.build");
                 if (modeOverride.HasValue && modeOverride.Value != targetContract.Mode)
@@ -154,6 +160,7 @@ internal static partial class Program
                 SingleFile = !args.Any(static argument => argument.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),
                 Optimization = optimization,
                 TargetContract = targetContract,
+                SemanticProfileId = semanticProfileId,
                 UseBuildCache = !args.Any(static argument => argument.Equals("--no-build-cache", StringComparison.OrdinalIgnoreCase)),
                 BuildCacheDirectory = TryGetOptionValue(args, "--cache-directory"),
                 SignArtifact = args.Any(static argument => argument.Equals("--sign", StringComparison.OrdinalIgnoreCase)),
@@ -232,7 +239,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--target-contract", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
+                new[] { "--path", "--target-contract", "--semantic-profile", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))

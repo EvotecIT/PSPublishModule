@@ -61,7 +61,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
     internal static PowerShellTypedCompilationResult PrepareForBinaryModule(
         PowerShellTypedCompilationResult typed,
         string[]? exportedFunctions,
-        string? targetFramework)
+        string? targetFramework,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invalid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -108,7 +109,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
 
         if (invalid.Count == 0)
             return typed;
-        var filtered = new PowerShellTypedCompilationTranspiler().TranspileExcluding(
+        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId).TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,

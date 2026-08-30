@@ -185,6 +185,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// <summary>Optional explicit semantic, execution, and deployment target. When supplied, it must match the compatibility build fields.</summary>
     public PowerShellCompilationTargetContract? TargetContract { get; set; }
 
+    /// <summary>Exact named PowerShell semantic profile consumed by compilation. This value participates in target and cache identity.</summary>
+    public string SemanticProfileId { get; set; } = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+
     /// <summary>Whether the content-addressed generated-build cache may be used.</summary>
     public bool UseBuildCache { get; set; }
 

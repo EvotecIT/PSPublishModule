@@ -8,21 +8,36 @@ namespace PowerForge;
 public sealed partial class PowerShellCompilationAnalyzer
 {
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+    private readonly string _semanticProfileId;
 
     /// <summary>Creates an analyzer with the built-in deterministic command providers.</summary>
     public PowerShellCompilationAnalyzer()
-        : this(PowerShellCommandSemanticRegistry.Default)
+        : this(PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
     }
 
     /// <summary>Creates an analyzer with additional compile-time-only command providers.</summary>
     public PowerShellCompilationAnalyzer(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
-        : this(PowerShellCommandSemanticRegistry.Create(commandProviders))
+        : this(PowerShellCommandSemanticRegistry.Create(commandProviders), PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    /// <summary>Creates an analyzer with additional providers under one exact named semantic profile.</summary>
+    public PowerShellCompilationAnalyzer(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders, string semanticProfileId)
+        : this(PowerShellCommandSemanticRegistry.Create(commandProviders), semanticProfileId)
     {
     }
 
     internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry)
-        => _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        : this(commandRegistry, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
+    {
+        _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+    }
 
     private static readonly HashSet<string> SupportedBinaryOperators = new(StringComparer.Ordinal)
     {

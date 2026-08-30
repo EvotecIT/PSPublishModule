@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellProjectUsage =
-        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
+        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
 
     private static int CommandPowerShellProject(string[] args, bool outputJson, ILogger logger)
     {
@@ -60,7 +60,7 @@ internal static partial class Program
     {
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--project", "--name", "--kind", "--mode", "--framework", "--rid", "--optimization", "--output" },
+                new[] { "--project", "--name", "--kind", "--mode", "--semantic-profile", "--framework", "--rid", "--optimization", "--output" },
                 new[] { "--self-contained", "--no-single-file", "--json", "--output-json" },
                 out var sourcePath,
                 out var argumentError))
@@ -91,6 +91,8 @@ internal static partial class Program
                 return WritePowerShellError(outputJson, 2, "Optimization must be None, Trimmed, or NativeAot.", logger, "powershell.project.init");
             var framework = TryGetOptionValue(args, "--framework") ?? (kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict ? "net10.0" : "net8.0");
             var selfContained = args.Any(static value => value.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)) || optimization != PowerShellCompilationExecutableOptimization.None;
+            var semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
+                TryGetOptionValue(args, "--semantic-profile") ?? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId).ProfileId;
             var target = PowerShellCompilationTargetContractService.Create(
                 kind,
                 mode,
@@ -99,7 +101,8 @@ internal static partial class Program
                 selfContained,
                 !args.Any(static value => value.Equals("--no-single-file", StringComparison.OrdinalIgnoreCase)),
                 optimization,
-                explicitContract: true);
+                explicitContract: true,
+                semanticProfileId: semanticProfileId);
             var projectName = TryGetOptionValue(args, "--name") ?? Path.GetFileNameWithoutExtension(Directory.Exists(fullSource) ? fullSource.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : fullSource);
             var manifestService = new PowerShellCompilationProjectManifestService();
             var manifest = manifestService.Create(projectPath, fullSource, projectName, target);

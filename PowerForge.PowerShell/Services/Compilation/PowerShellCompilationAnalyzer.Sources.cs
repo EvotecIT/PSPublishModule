@@ -188,7 +188,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry);
+            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId);
         return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 

@@ -13,7 +13,7 @@ internal static partial class Program
         }
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--target-contract", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
+                new[] { "--path", "--target-contract", "--semantic-profile", "--kind", "--mode", "--framework", "--out", "--output-directory", "--resource-mode", "--include-resource", "--exclude-resource", "--output" },
                 new[] { "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -84,6 +84,16 @@ internal static partial class Program
             return false;
         }
         PowerShellCompilationTargetContract? target = null;
+        var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ?? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+        try
+        {
+            semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
         var targetPath = TryGetOptionValue(args, "--target-contract");
         if (!string.IsNullOrWhiteSpace(targetPath))
         {
@@ -93,6 +103,10 @@ internal static partial class Program
                 target = JsonSerializer.Deserialize<PowerShellCompilationTargetContract>(File.ReadAllText(fullTargetPath), CliJson.Options)
                          ?? throw new InvalidDataException($"Target contract '{fullTargetPath}' was empty.");
                 target = PowerShellCompilationTargetContractService.Normalize(target);
+                if (args.Any(argument => argument.Equals("--semantic-profile", StringComparison.OrdinalIgnoreCase)) &&
+                    !semanticProfileId.Equals(target.SemanticProfileId, StringComparison.Ordinal))
+                    throw new InvalidDataException("The explicit semantic profile conflicts with the target contract.");
+                semanticProfileId = target.SemanticProfileId;
             }
             catch (Exception ex)
             {
@@ -140,7 +154,7 @@ internal static partial class Program
             error = $"Unknown resource mode '{resourceValue}'. Use Declared, CompleteModule, or None.";
             return false;
         }
-        request = new PowerShellAnalysisRequest(path, kind, mode, resourceMode, target);
+        request = new PowerShellAnalysisRequest(path, kind, mode, resourceMode, semanticProfileId, target);
         error = string.Empty;
         return true;
     }
@@ -153,7 +167,7 @@ internal static partial class Program
             request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,
             allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
                                               request.Mode != PowerShellCompilationMode.Strict);
-        return new PowerShellCompilationAnalyzer().Analyze(
+        return new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), request.SemanticProfileId).Analyze(
             resolved,
             request.Mode,
             request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? "net8.0",
@@ -173,7 +187,7 @@ internal static partial class Program
             request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,
             allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
                                               request.Mode != PowerShellCompilationMode.Strict);
-        var plan = new PowerShellCompilationAnalyzer().Analyze(
+        var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), request.SemanticProfileId).Analyze(
             resolved,
             request.Mode,
             targetFramework,
@@ -192,5 +206,6 @@ internal static partial class Program
         PowerShellCompilationArtifactKind? Kind,
         PowerShellCompilationMode Mode,
         PowerShellCompilationResourceMode ResourceMode,
+        string SemanticProfileId,
         PowerShellCompilationTargetContract? TargetContract);
 }

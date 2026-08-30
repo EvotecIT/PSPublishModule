@@ -13,9 +13,10 @@ internal static class PowerShellTypedExecutableEmitter
         string sourcePath,
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
-        string targetFramework)
+        string targetFramework,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
-        var compilation = PowerShellTypedExecutableCompiler.Compile(sourcePath, sourcePaths, plan, targetFramework);
+        var compilation = PowerShellTypedExecutableCompiler.Compile(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId);
         var contract = compilation.EntryPoint;
         var method = compilation.EntryPointMethod;
         PowerShellTypedExecutableOutputPolicy.EnsureSupported(method.ReturnType);

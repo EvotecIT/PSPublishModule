@@ -11,7 +11,8 @@ internal static class PowerShellTypedExecutableCompiler
         string entryPointPath,
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
-        string targetFramework)
+        string targetFramework,
+        string semanticProfileId)
     {
         if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
@@ -41,7 +42,7 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateCommands(entrySource.Path, statements, byName);
 
         var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
-        var semantic = new PowerShellSemanticCompilationPipeline().Compile(
+        var semantic = new PowerShellSemanticCompilationPipeline(semanticProfileId).Compile(
             parsed.Values.Select(static source => source.Document).Append(entryDocument),
             targetFramework,
             Capabilities);

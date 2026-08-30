@@ -12,12 +12,22 @@ internal sealed class PowerShellSemanticCompilationPipeline
     private readonly PowerShellBoundCSharpBackend _backend;
 
     internal PowerShellSemanticCompilationPipeline()
-        : this(new PowerShellSemanticBinder(), new PowerShellBoundOptimizer(), new PowerShellSemanticAnalyzer(), new PowerShellTypedLowerer(), new PowerShellBoundCSharpBackend())
+        : this(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    internal PowerShellSemanticCompilationPipeline(string semanticProfileId)
+        : this(new PowerShellSemanticBinder(semanticProfileId), new PowerShellBoundOptimizer(), new PowerShellSemanticAnalyzer(), new PowerShellTypedLowerer(), new PowerShellBoundCSharpBackend())
     {
     }
 
     internal PowerShellSemanticCompilationPipeline(PowerShellCommandSemanticRegistry commandRegistry)
-        : this(new PowerShellSemanticBinder(commandRegistry), new PowerShellBoundOptimizer(), new PowerShellSemanticAnalyzer(), new PowerShellTypedLowerer(), new PowerShellBoundCSharpBackend())
+        : this(commandRegistry, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+    {
+    }
+
+    internal PowerShellSemanticCompilationPipeline(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
+        : this(new PowerShellSemanticBinder(commandRegistry, semanticProfileId), new PowerShellBoundOptimizer(), new PowerShellSemanticAnalyzer(), new PowerShellTypedLowerer(), new PowerShellBoundCSharpBackend())
     {
     }
 

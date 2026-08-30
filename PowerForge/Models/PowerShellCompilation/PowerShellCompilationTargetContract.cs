@@ -35,7 +35,10 @@ public enum PowerShellCompilationDeploymentModel
 public sealed class PowerShellCompilationTargetContract
 {
     /// <summary>Target-contract schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
+
+    /// <summary>Exact named PowerShell semantic profile consumed by binding, lowering, providers, and cache identity.</summary>
+    public string SemanticProfileId { get; set; } = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
 
     /// <summary>Artifact shape governed by this target.</summary>
     public PowerShellCompilationArtifactKind ArtifactKind { get; set; }
@@ -136,7 +139,8 @@ public static class PowerShellCompilationTargetContractService
         bool selfContained,
         bool singleFile,
         PowerShellCompilationExecutableOptimization optimization,
-        bool explicitContract)
+        bool explicitContract,
+        string? semanticProfileId = null)
     {
         var rid = runtimeIdentifier?.Trim() ?? string.Empty;
         var framework = targetFramework?.Trim() ?? string.Empty;
@@ -156,8 +160,13 @@ public static class PowerShellCompilationTargetContractService
                 or PowerShellCompilationDeploymentModel.NativeAot
                 ? PowerShellCompilationRuntimeRequirement.None
                 : PowerShellCompilationRuntimeRequirement.DotNet;
+        var profile = PowerShellCompilationSemanticOracleCatalog.Get(
+            string.IsNullOrWhiteSpace(semanticProfileId)
+                ? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+                : semanticProfileId!.Trim());
         var contract = new PowerShellCompilationTargetContract
         {
+            SemanticProfileId = profile.ProfileId,
             ArtifactKind = kind,
             Mode = mode,
             TargetFramework = framework,
@@ -179,7 +188,10 @@ public static class PowerShellCompilationTargetContractService
     public static PowerShellCompilationTargetContract Normalize(PowerShellCompilationTargetContract contract)
     {
         if (contract is null) throw new ArgumentNullException(nameof(contract));
-        if (contract.SchemaVersion is not 1 and not 2) throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
+        if (contract.SchemaVersion is not 1 and not 2 and not 3) throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
+        var originalSchema = contract.SchemaVersion;
+        if (originalSchema < 3) contract.SemanticProfileId = string.Empty;
+        else contract.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(contract.SemanticProfileId).ProfileId;
         contract.TargetFramework = contract.TargetFramework?.Trim() ?? string.Empty;
         contract.RuntimeIdentifier = contract.RuntimeIdentifier?.Trim() ?? string.Empty;
         contract.OperatingSystem = contract.OperatingSystem?.Trim() ?? string.Empty;
@@ -202,7 +214,10 @@ public static class PowerShellCompilationTargetContractService
             contract.Deployment,
             contract.TargetFramework,
             contract.RuntimeIdentifier);
-        contract.SchemaVersion = 2;
+        contract.SchemaVersion = 3;
+        contract.SemanticProfileId = originalSchema < 3
+            ? PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+            : PowerShellCompilationSemanticOracleCatalog.Get(contract.SemanticProfileId).ProfileId;
         contract.Explicit = true;
         contract.ContractSha256 = ComputeSha256(contract);
         return contract;
@@ -222,15 +237,20 @@ public static class PowerShellCompilationTargetContractService
     public static string ComputeSha256(PowerShellCompilationTargetContract contract)
     {
         if (contract is null) throw new ArgumentNullException(nameof(contract));
-        if (contract.SchemaVersion is not 1 and not 2)
+        if (contract.SchemaVersion is not 1 and not 2 and not 3)
             throw new InvalidOperationException($"Unsupported PowerShell compilation target-contract schema {contract.SchemaVersion}.");
         var values = new List<object>
         {
-            contract.SchemaVersion, contract.ArtifactKind, contract.Mode, contract.TargetFramework,
+            contract.SchemaVersion
+        };
+        if (contract.SchemaVersion >= 3) values.Add(contract.SemanticProfileId);
+        values.AddRange(new object[]
+        {
+            contract.ArtifactKind, contract.Mode, contract.TargetFramework,
             contract.RuntimeIdentifier, contract.OperatingSystem, contract.Architecture,
             contract.RuntimeRequirement, contract.Deployment, contract.SingleFile,
             contract.AllowsPowerShellRuntimeEvaluation
-        };
+        });
         if (contract.SchemaVersion == 1) values.Add(contract.Explicit);
         values.Add(contract.SupportLevel);
         var text = new StringBuilder();

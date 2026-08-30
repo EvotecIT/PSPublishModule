@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    private static PowerShellBoundExpression? BindExpression(
+    private PowerShellBoundExpression? BindExpression(
         ParsedSourceDocument document,
         Ast syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
@@ -23,6 +23,7 @@ internal sealed partial class PowerShellSemanticBinder
                 syntax,
                 functionBody,
                 targetFramework,
+                _semanticProfile,
                 capabilities,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 diagnostics,

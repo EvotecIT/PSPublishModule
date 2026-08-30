@@ -6,6 +6,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
         SourceSpan span,
         PowerShellRuntimeStateIntrinsicKind kind,
         string targetFramework,
+        string semanticProfileId,
         PowerShellBoundExpression[] arguments)
         : base(
             span,
@@ -23,11 +24,13 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
     {
         Kind = kind;
         TargetFramework = targetFramework;
+        SemanticProfileId = semanticProfileId;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
     }
 
     internal PowerShellRuntimeStateIntrinsicKind Kind { get; }
     internal string TargetFramework { get; }
+    internal string SemanticProfileId { get; }
     internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
     internal bool RequiresHostBinding => KindRequiresHostBinding(Kind);
 

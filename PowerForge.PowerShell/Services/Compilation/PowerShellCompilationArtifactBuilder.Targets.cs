@@ -34,6 +34,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         if (target.ArtifactKind != spec.Kind || target.Mode != spec.Mode)
             throw new ArgumentException("The explicit PowerShell compilation target kind and mode must match the build request.", nameof(spec));
         spec.TargetFramework = target.TargetFramework;
+        spec.SemanticProfileId = target.SemanticProfileId;
         spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? null : target.RuntimeIdentifier;
         spec.SingleFile = target.SingleFile;
         spec.SelfContained = target.Deployment is PowerShellCompilationDeploymentModel.SelfContained or
@@ -62,7 +63,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 spec.SelfContained,
                 spec.SingleFile,
                 spec.Optimization,
-                explicitContract: false)
+                explicitContract: false,
+                spec.SemanticProfileId)
             : PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
         var expected = PowerShellCompilationTargetContractService.Create(
             spec.Kind,
@@ -72,8 +74,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             spec.SelfContained,
             spec.SingleFile,
             spec.Optimization,
-            explicitContract: target.Explicit);
+            explicitContract: target.Explicit,
+            spec.SemanticProfileId);
         if (target.ArtifactKind != expected.ArtifactKind || target.Mode != expected.Mode ||
+            !target.SemanticProfileId.Equals(expected.SemanticProfileId, StringComparison.Ordinal) ||
             !target.TargetFramework.Equals(expected.TargetFramework, StringComparison.OrdinalIgnoreCase) ||
             !target.RuntimeIdentifier.Equals(expected.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) ||
             target.RuntimeRequirement != expected.RuntimeRequirement || target.Deployment != expected.Deployment ||

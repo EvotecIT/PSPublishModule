@@ -9,13 +9,14 @@ internal static class PowerShellRuntimeStateSemanticBinder
         Ast syntax,
         ScriptBlockAst body,
         string? targetFramework,
+        PowerShellCompilationSemanticOracleProfile semanticProfile,
         PowerShellCompilationCapability capabilities,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         out PowerShellBoundExpression? bound)
     {
         bound = null;
-        if (!PowerShellRuntimeStateIntrinsicPolicy.TryClassify(syntax, body, targetFramework, capabilities, out var kind))
+        if (!PowerShellRuntimeStateIntrinsicPolicy.TryClassify(syntax, body, targetFramework, semanticProfile, capabilities, out var kind))
             return false;
 
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
@@ -54,6 +55,7 @@ internal static class PowerShellRuntimeStateSemanticBinder
             span,
             kind,
             targetFramework ?? string.Empty,
+            semanticProfile.ProfileId,
             arguments.Select(static argument => argument!).ToArray());
         return true;
     }

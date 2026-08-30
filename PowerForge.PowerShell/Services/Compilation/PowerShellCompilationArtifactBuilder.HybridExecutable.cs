@@ -13,13 +13,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationDependency[] dependencyPlan,
         PowerShellCompilationCommandProviderContract[] commandProviders)
     {
-        var typed = new PowerShellTypedCompilationTranspiler(commandProviders).TranspileForBinaryModule(
+        var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileForBinaryModule(
             compilationSourcePaths,
             "PowerForge.Compiled",
             PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
             spec.TargetFramework);
-        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework);
-        typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework);
+        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId);
+        typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId);
         File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(false));
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),
