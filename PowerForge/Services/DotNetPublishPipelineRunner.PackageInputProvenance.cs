@@ -427,24 +427,47 @@ public sealed partial class DotNetPublishPipelineRunner
             var committedPackageHashes = new Dictionary<string, string>(
                 hashes,
                 StringComparer.OrdinalIgnoreCase);
+            var sdkDownloadPackageHashes = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
             var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AddSdkManagedPackageHashes(
+                projectPath,
                 properties,
-                projectDirectory,
                 allRoots,
                 committedPackageHashes,
-                hashes,
+                sdkDownloadPackageHashes,
                 sdkManagedPackageKeys);
             if (allRoots.Count == 0)
-                return !hasCommittedLock && hashes.Count == 0;
+                return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
-                    hashes,
+                    committedPackageHashes,
                     archives,
                     out Dictionary<string, string> archivePathsByPackageKey))
             {
                 return false;
             }
+            if (!TryPrimeLockedPackageArchives(
+                    allRoots,
+                    sdkDownloadPackageHashes,
+                    archives,
+                    out Dictionary<string, string> sdkDownloadArchivePaths))
+            {
+                return false;
+            }
+            foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
+            {
+                if (archivePathsByPackageKey.TryGetValue(entry.Key, out string? existingPath) &&
+                    !Path.GetFullPath(existingPath).Equals(
+                        Path.GetFullPath(entry.Value),
+                        IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                {
+                    return false;
+                }
+                archivePathsByPackageKey[entry.Key] = entry.Value;
+            }
+            foreach (KeyValuePair<string, string> entry in sdkDownloadPackageHashes)
+                AddPackageHash(entry.Key, entry.Value, hashes);
             catalog = new VerifiedPackageInputCatalog(
                 allRoots,
                 hashes,

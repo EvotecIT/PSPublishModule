@@ -6,67 +6,196 @@ namespace PowerForge;
 public sealed partial class DotNetPublishPipelineRunner
 {
     private static void AddSdkManagedPackageHashes(
+        string projectPath,
         JsonElement properties,
-        string projectDirectory,
         IEnumerable<string> packageRoots,
         IReadOnlyDictionary<string, string> committedPackageHashes,
         Dictionary<string, string> hashes,
         HashSet<string> sdkManagedPackageKeys)
     {
-        string assetsPath = ReadEvaluatedPath(properties, "ProjectAssetsFile", projectDirectory)
-            ?? Path.Combine(projectDirectory, "obj", "project.assets.json");
-        try
+        if (!TryReadTrustedSdkRestoreGraph(projectPath, properties, out JsonDocument? document) ||
+            document is null)
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(assetsPath));
-            var autoReferenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var downloads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (document.RootElement.TryGetProperty("project", out JsonElement project) &&
-                project.TryGetProperty("frameworks", out JsonElement frameworks) &&
-                frameworks.ValueKind == JsonValueKind.Object)
-            {
-                foreach (JsonProperty framework in frameworks.EnumerateObject())
-                {
-                    if (framework.Value.TryGetProperty("dependencies", out JsonElement dependencies) &&
-                        dependencies.ValueKind == JsonValueKind.Object)
-                    {
-                        foreach (JsonProperty dependency in dependencies.EnumerateObject())
-                        {
-                            if (dependency.Value.TryGetProperty("autoReferenced", out JsonElement value) &&
-                                value.ValueKind == JsonValueKind.True)
-                            {
-                                autoReferenced.Add(dependency.Name);
-                            }
-                        }
-                    }
+            return;
+        }
 
-                    AddSdkDownloadDependencies(framework.Value, downloads);
-                }
+        using (document)
+        {
+            if (!TryReadRestoreGraphProject(document.RootElement, projectPath, out JsonElement project) ||
+                !project.TryGetProperty("frameworks", out JsonElement frameworks) ||
+                frameworks.ValueKind != JsonValueKind.Object)
+            {
+                return;
             }
 
-            if (autoReferenced.Count > 0 &&
-                document.RootElement.TryGetProperty("libraries", out JsonElement libraries) &&
-                libraries.ValueKind == JsonValueKind.Object)
+            var downloads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (JsonProperty framework in frameworks.EnumerateObject())
             {
-                foreach (JsonProperty library in libraries.EnumerateObject())
-                    AddAutoReferencedPackageHash(
-                        library,
-                        autoReferenced,
-                        committedPackageHashes,
-                        hashes,
-                        sdkManagedPackageKeys);
+                if (framework.Value.TryGetProperty("dependencies", out JsonElement dependencies) &&
+                    dependencies.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (JsonProperty dependency in dependencies.EnumerateObject())
+                        AddTrustedAutoReferencedPackageKeys(
+                            dependency,
+                            committedPackageHashes,
+                            sdkManagedPackageKeys);
+                }
+
+                AddSdkDownloadDependencies(framework.Value, downloads);
             }
 
             foreach (string download in downloads)
-                AddSdkDownloadPackageHash(
-                    download,
-                    packageRoots,
-                    committedPackageHashes,
-                    hashes,
-                    sdkManagedPackageKeys);
+                AddSdkDownloadPackageHash(download, packageRoots, hashes);
+        }
+    }
+
+    private static bool TryReadTrustedSdkRestoreGraph(
+        string projectPath,
+        JsonElement properties,
+        out JsonDocument? document)
+    {
+        document = null;
+        string temporaryRoot = Path.Combine(
+            Path.GetTempPath(),
+            "pf-rg-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string intermediateRoot = Directory.CreateDirectory(
+                Path.Combine(temporaryRoot, "obj")).FullName + Path.DirectorySeparatorChar;
+            string graphPath = Path.Combine(temporaryRoot, "restore-graph.json");
+            var arguments = new List<string>
+            {
+                "msbuild",
+                projectPath,
+                "-nologo",
+                "-maxCpuCount:1",
+                "-nodeReuse:false",
+                "-verbosity:quiet",
+                "-noAutoResponse",
+                "-target:GenerateRestoreGraphFile",
+                "-p:RestoreGraphOutputPath=" + EscapeMsBuildPropertyValue(graphPath),
+                "-p:MSBuildProjectExtensionsPath=" + EscapeMsBuildPropertyValue(intermediateRoot)
+            };
+            foreach (string propertyName in new[]
+                     {
+                         "Configuration",
+                         "TargetFramework",
+                         "RuntimeIdentifier",
+                         "RuntimeIdentifiers",
+                         "SelfContained",
+                         "UseAppHost",
+                         "UseWPF",
+                         "UseWindowsForms",
+                         "PublishSingleFile",
+                         "PublishTrimmed",
+                         "PublishAot",
+                         "PublishReadyToRun"
+                     })
+            {
+                if (properties.TryGetProperty(propertyName, out JsonElement value) &&
+                    value.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    arguments.Add(
+                        "-p:" + propertyName + "=" + EscapeMsBuildPropertyValue(value.GetString()!));
+                }
+            }
+
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(projectPath)!,
+                arguments,
+                environmentVariables: null,
+                TimeSpan.FromMinutes(2));
+            if (process.ExitCode != 0 || process.TimedOut || !File.Exists(graphPath))
+                return false;
+
+            document = JsonDocument.Parse(File.ReadAllText(graphPath));
+            return true;
         }
         catch
         {
-            // Only an exact SDK-managed package hash can extend the committed lock.
+            document?.Dispose();
+            document = null;
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temporaryRoot))
+                    Directory.Delete(temporaryRoot, recursive: true);
+            }
+            catch
+            {
+                // A leftover temporary restore graph cannot make a package trusted.
+            }
+        }
+    }
+
+    private static bool TryReadRestoreGraphProject(
+        JsonElement root,
+        string projectPath,
+        out JsonElement project)
+    {
+        project = default;
+        if (!root.TryGetProperty("projects", out JsonElement projects) ||
+            projects.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        string fullProjectPath = Path.GetFullPath(projectPath);
+        foreach (JsonProperty candidate in projects.EnumerateObject())
+        {
+            string candidatePath;
+            try
+            {
+                candidatePath = Path.GetFullPath(candidate.Name);
+            }
+            catch
+            {
+                continue;
+            }
+            if (!candidatePath.Equals(
+                    fullProjectPath,
+                    IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                continue;
+            }
+            project = candidate.Value;
+            return true;
+        }
+        return false;
+    }
+
+    private static void AddTrustedAutoReferencedPackageKeys(
+        JsonProperty dependency,
+        IReadOnlyDictionary<string, string> committedPackageHashes,
+        HashSet<string> sdkManagedPackageKeys)
+    {
+        if (!dependency.Value.TryGetProperty("autoReferenced", out JsonElement autoReferenced) ||
+            autoReferenced.ValueKind != JsonValueKind.True ||
+            !dependency.Value.TryGetProperty("version", out JsonElement version) ||
+            version.ValueKind != JsonValueKind.String ||
+            !VersionRange.TryParse(version.GetString()!, out VersionRange? range))
+        {
+            return;
+        }
+
+        foreach (KeyValuePair<string, string> package in committedPackageHashes)
+        {
+            int separator = package.Key.LastIndexOf('|');
+            if (separator <= 0 || separator == package.Key.Length - 1 ||
+                !package.Key.Substring(0, separator).Equals(
+                    dependency.Name,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !NuGetVersion.TryParse(package.Key.Substring(separator + 1), out NuGetVersion? resolved) ||
+                !range.Satisfies(resolved))
+            {
+                continue;
+            }
+            sdkManagedPackageKeys.Add(package.Key);
         }
     }
 
@@ -100,42 +229,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
-    private static void AddAutoReferencedPackageHash(
-        JsonProperty library,
-        HashSet<string> autoReferenced,
-        IReadOnlyDictionary<string, string> committedPackageHashes,
-        Dictionary<string, string> hashes,
-        HashSet<string> sdkManagedPackageKeys)
-    {
-        int separator = library.Name.LastIndexOf('/');
-        if (separator <= 0 || separator == library.Name.Length - 1)
-            return;
-
-        string packageId = library.Name.Substring(0, separator);
-        if (!autoReferenced.Contains(packageId) ||
-            !library.Value.TryGetProperty("type", out JsonElement type) ||
-            !string.Equals(type.GetString(), "package", StringComparison.OrdinalIgnoreCase) ||
-            !library.Value.TryGetProperty("sha512", out JsonElement sha512) ||
-            sha512.ValueKind != JsonValueKind.String)
-        {
-            return;
-        }
-
-        string packageKey = packageId + "|" + library.Name.Substring(separator + 1);
-        AddPackageHash(packageKey, sha512.GetString(), hashes);
-        AddSdkManagedPackageKey(
-            packageKey,
-            sha512.GetString(),
-            committedPackageHashes,
-            sdkManagedPackageKeys);
-    }
-
     private static void AddSdkDownloadPackageHash(
         string packageKey,
         IEnumerable<string> packageRoots,
-        IReadOnlyDictionary<string, string> committedPackageHashes,
-        Dictionary<string, string> hashes,
-        HashSet<string> sdkManagedPackageKeys)
+        Dictionary<string, string> hashes)
     {
         string[] parts = packageKey.Split('|');
         if (parts.Length != 2)
@@ -181,25 +278,6 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         AddPackageHash(packageKey, discoveredHash, hashes);
-        AddSdkManagedPackageKey(
-            packageKey,
-            discoveredHash,
-            committedPackageHashes,
-            sdkManagedPackageKeys);
-    }
-
-    private static void AddSdkManagedPackageKey(
-        string packageKey,
-        string? expectedHash,
-        IReadOnlyDictionary<string, string> committedPackageHashes,
-        HashSet<string> sdkManagedPackageKeys)
-    {
-        if (!string.IsNullOrWhiteSpace(expectedHash) &&
-            committedPackageHashes.TryGetValue(packageKey, out string? actualHash) &&
-            string.Equals(actualHash, expectedHash, StringComparison.Ordinal))
-        {
-            sdkManagedPackageKeys.Add(packageKey);
-        }
     }
 
     private static void AddPackageHash(
