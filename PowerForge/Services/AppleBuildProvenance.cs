@@ -51,10 +51,12 @@ internal static class AppleBuildProvenance
             return null;
         return string.IsNullOrWhiteSpace(status.StdOut)
             ? revision
-            : revision + "-dirty";
+            : null;
     }
 
-    internal static void RejectIgnoredBuildInputs(string sourceRoot)
+    internal static void RejectIgnoredBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories)
     {
         var root = Path.GetFullPath(sourceRoot);
         var git = GitClient.CreateTrustedSystemClient(
@@ -75,7 +77,7 @@ internal static class AppleBuildProvenance
 
         var unexpected = ignored.StdOut
             .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(path => !IsExcludedGeneratedPath(path))
+            .Where(path => !excludesGeneratedDirectories || !IsExcludedGeneratedPath(path))
             .Take(5)
             .ToArray();
         if (unexpected.Length == 0)
@@ -84,7 +86,44 @@ internal static class AppleBuildProvenance
         throw new InvalidOperationException(
             "Apple build inputs include Git-ignored files that are not bound by the source revision: " +
             string.Join(", ", unexpected) +
-            ". Track them, remove them, or move generated output under .build, .swiftpm, build, or DerivedData before building.");
+            ". Track or remove them before building.");
+    }
+
+    internal static void RejectSymbolicLinkBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories)
+    {
+        var root = Path.GetFullPath(sourceRoot);
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(root);
+
+        while (pendingDirectories.Count > 0)
+        {
+            var directory = pendingDirectories.Pop();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var relativePath = FrameworkCompatibility
+                    .GetRelativePath(root, entry)
+                    .Replace('\\', '/');
+                if (relativePath.Equals(".git", StringComparison.Ordinal) ||
+                    relativePath.StartsWith(".git/", StringComparison.Ordinal) ||
+                    excludesGeneratedDirectories && IsExcludedGeneratedPath(relativePath))
+                {
+                    continue;
+                }
+
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Apple build inputs must not contain symbolic links or reparse points: '{relativePath}'. " +
+                        "Replace the link with content inside the source root before building.");
+                }
+
+                if ((attributes & FileAttributes.Directory) != 0)
+                    pendingDirectories.Push(entry);
+            }
+        }
     }
 
     internal static Snapshot Capture(string sourceRoot)
@@ -94,7 +133,7 @@ internal static class AppleBuildProvenance
         if (revision is null)
         {
             throw new InvalidOperationException(
-                $"Apple source provenance is required, but '{root}' is not a readable Git working tree with a full HEAD revision.");
+                $"Apple source provenance is required, but '{root}' is not a readable, clean Git working tree with a full HEAD revision.");
         }
         return new Snapshot(root, revision);
     }
@@ -154,13 +193,10 @@ internal static class AppleBuildProvenance
         if (string.IsNullOrWhiteSpace(normalized))
             return null;
 
-        var commit = normalized!.EndsWith("-dirty", StringComparison.Ordinal)
-            ? normalized.Substring(0, normalized.Length - "-dirty".Length)
-            : normalized;
-        if (!GitObjectId.IsFull(commit))
+        if (!GitObjectId.IsFull(normalized!))
         {
             throw new ArgumentException(
-                "SourceRevision must be a full SHA-1 or SHA-256 Git object ID, optionally followed by '-dirty'.",
+                "SourceRevision must be a full SHA-1 or SHA-256 Git object ID from a clean working tree.",
                 nameof(value));
         }
         return normalized;

@@ -122,7 +122,12 @@ public sealed class AppleDeviceDeploymentService
                 ignoredMutation: args =>
                     AppleBuildProvenance.IsGitMetadataMutation(args, sourceRoot));
             sourceSnapshot = AppleBuildProvenance.Capture(sourceRoot);
-            AppleBuildProvenance.RejectIgnoredBuildInputs(sourceRoot);
+            AppleBuildProvenance.RejectIgnoredBuildInputs(
+                sourceRoot,
+                excludesGeneratedDirectories: true);
+            AppleBuildProvenance.RejectSymbolicLinkBuildInputs(
+                sourceRoot,
+                excludesGeneratedDirectories: true);
             var mirror = await MirrorBuildRootAsync(projectPath, request, cancellationToken).ConfigureAwait(false);
             if (!mirror.ProcessResult.Succeeded)
             {
@@ -137,17 +142,34 @@ public sealed class AppleDeviceDeploymentService
                 };
             }
 
-            sourceMonitor.ValidateNoChanges(
-                () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
-
-            buildProjectPath = RewritePath(projectPath, mirror.SourceRoot, mirror.MirrorPath);
-            workingDirectory = mirror.MirrorPath;
-            mirrorPath = mirror.MirrorPath;
-            buildInputMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
+            var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
                 "The Apple build mirror completed without an active source monitor.");
+            try
+            {
+                sourceMonitor.ValidateNoChanges(
+                    () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+
+                buildProjectPath = RewritePath(projectPath, mirror.SourceRoot, mirror.MirrorPath);
+                workingDirectory = mirror.MirrorPath;
+                mirrorPath = mirror.MirrorPath;
+                buildInputMonitor = mirrorMonitor;
+            }
+            catch
+            {
+                mirrorMonitor.Dispose();
+                throw;
+            }
         }
         else
         {
+            EnsureOutputPathDoesNotContainBuildRoot(
+                derivedDataPath,
+                sourceRoot,
+                nameof(request.DerivedDataPath));
+            EnsureOutputPathDoesNotContainBuildRoot(
+                appPath,
+                sourceRoot,
+                nameof(request.AppPath));
             var sourceMonitor = new AppleReleaseSourceMutationMonitor(
                 sourceRoot,
                 "local Apple source",
@@ -160,7 +182,12 @@ public sealed class AppleDeviceDeploymentService
             try
             {
                 sourceSnapshot = AppleBuildProvenance.Capture(sourceRoot);
-                AppleBuildProvenance.RejectIgnoredBuildInputs(sourceRoot);
+                AppleBuildProvenance.RejectIgnoredBuildInputs(
+                    sourceRoot,
+                    excludesGeneratedDirectories: false);
+                AppleBuildProvenance.RejectSymbolicLinkBuildInputs(
+                    sourceRoot,
+                    excludesGeneratedDirectories: false);
                 buildInputMonitor = sourceMonitor;
             }
             catch
@@ -649,6 +676,24 @@ public sealed class AppleDeviceDeploymentService
             current = Path.GetDirectoryName(current)
                 ?? throw new InvalidOperationException(
                     $"Unable to verify ProjectPath '{fullProjectPath}' against BuildRoot '{fullSourceRoot}'.");
+        }
+    }
+
+    private static void EnsureOutputPathDoesNotContainBuildRoot(
+        string outputPath,
+        string sourceRoot,
+        string parameterName)
+    {
+        var fullOutputPath = Path.GetFullPath(outputPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullSourceRoot = Path.GetFullPath(sourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = GetPathComparison();
+        if (fullSourceRoot.Equals(fullOutputPath, comparison) ||
+            fullSourceRoot.StartsWith(EnsureTrailingDirectorySeparator(fullOutputPath), comparison))
+        {
+            throw new InvalidOperationException(
+                $"{parameterName} '{fullOutputPath}' must not contain BuildRoot '{fullSourceRoot}'.");
         }
     }
 

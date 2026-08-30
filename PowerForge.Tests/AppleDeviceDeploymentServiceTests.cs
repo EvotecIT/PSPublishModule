@@ -230,6 +230,47 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task BuildAsync_rejects_a_tracked_build_input_symlink_that_escapes_the_source_root()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.BuildRoot", Guid.NewGuid().ToString("N")));
+        var external = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.ExternalInput", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var externalInput = Path.Combine(external.FullName, "Local.xcconfig");
+            File.WriteAllText(externalInput, "SETTING = external");
+            File.CreateSymbolicLink(Path.Combine(root.FullName, "Local.xcconfig"), externalInput);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("Local.xcconfig", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("symbolic link", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { external.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_ignored_build_inputs_before_rsync_or_xcodebuild()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -259,6 +300,88 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
         finally
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_ignored_generated_inputs_without_a_build_mirror()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), ".build/\n");
+            InitializeGitRepository(root.FullName);
+            Directory.CreateDirectory(Path.Combine(root.FullName, ".build"));
+            File.WriteAllText(
+                Path.Combine(root.FullName, ".build", "generated.xcconfig"),
+                "SETTING = local");
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = Path.Combine(
+                        Path.GetTempPath(),
+                        "PowerForge.Tests.DerivedData",
+                        Guid.NewGuid().ToString("N"))
+                }));
+
+            Assert.Contains(".build/generated.xcconfig", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BuildAsync_rejects_output_paths_that_contain_the_build_root(bool useDerivedDataPath)
+    {
+        var parent = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), "PowerForge.Tests.OutputRoot", Guid.NewGuid().ToString("N")));
+        var root = Directory.CreateDirectory(Path.Combine(parent.FullName, "source"));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+            var safeDerivedDataPath = Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge.Tests.DerivedData",
+                Guid.NewGuid().ToString("N"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = useDerivedDataPath ? parent.FullName : safeDerivedDataPath,
+                    AppPath = useDerivedDataPath ? null : parent.FullName
+                }));
+
+            Assert.Contains(
+                useDerivedDataPath ? nameof(AppleAppBuildRequest.DerivedDataPath) : nameof(AppleAppBuildRequest.AppPath),
+                exception.Message,
+                StringComparison.Ordinal);
+            Assert.Contains("must not contain BuildRoot", exception.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { parent.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
 

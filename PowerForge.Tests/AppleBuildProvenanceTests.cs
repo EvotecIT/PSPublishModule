@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class AppleBuildProvenanceTests
 {
     [Fact]
-    public void ResolveLocalSourceRevision_distinguishes_clean_and_dirty_builds()
+    public void ResolveLocalSourceRevision_requires_a_clean_working_tree()
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -25,7 +25,7 @@ public sealed class AppleBuildProvenanceTests
             Assert.Equal(head, AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
 
             File.WriteAllText(Path.Combine(root.FullName, "untracked.txt"), "dirty");
-            Assert.Equal(head + "-dirty", AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
         }
         finally
         {
@@ -77,10 +77,37 @@ public sealed class AppleBuildProvenanceTests
             File.WriteAllText(Path.Combine(root.FullName, ".build", "cache"), "generated");
 
             var exception = Assert.Throws<InvalidOperationException>(
-                () => AppleBuildProvenance.RejectIgnoredBuildInputs(root.FullName));
+                () => AppleBuildProvenance.RejectIgnoredBuildInputs(
+                    root.FullName,
+                    excludesGeneratedDirectories: true));
 
             Assert.Contains("local.xcconfig", exception.Message, StringComparison.Ordinal);
             Assert.DoesNotContain(".build/cache", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void RejectIgnoredBuildInputs_rejects_generated_directories_for_live_builds()
+    {
+        var root = CreateRepository();
+        try
+        {
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), ".build/\n");
+            RunGit(root.FullName, "add", ".gitignore");
+            RunGit(root.FullName, "commit", "-m", "ignore generated input");
+            Directory.CreateDirectory(Path.Combine(root.FullName, ".build"));
+            File.WriteAllText(Path.Combine(root.FullName, ".build", "generated.xcconfig"), "SETTING = local");
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => AppleBuildProvenance.RejectIgnoredBuildInputs(
+                    root.FullName,
+                    excludesGeneratedDirectories: false));
+
+            Assert.Contains(".build/generated.xcconfig", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
