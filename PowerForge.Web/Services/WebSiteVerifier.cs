@@ -188,7 +188,8 @@ public static partial class WebSiteVerifier
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
         var staticRoutes = DiscoverStaticHtmlRoutes(spec, plan.RootPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var navigationRoutes = routes.Keys.Concat(staticRoutes);
+        var generatedFeatureRoutes = DiscoverGeneratedFeatureRoutes(spec, routes.Count > 0);
+        var navigationRoutes = routes.Keys.Concat(staticRoutes).Concat(generatedFeatureRoutes);
         ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);

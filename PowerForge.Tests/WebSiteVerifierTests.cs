@@ -12,6 +12,7 @@ public partial class WebSiteVerifierTests
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<h1>Home</h1>");
             File.WriteAllText(Path.Combine(root, "apps.html"), "<h1>Apps</h1>");
+            File.WriteAllText(Path.Combine(root, "About # Żółć.htm"), "<h1>About</h1>");
             var content = Path.Combine(root, "content");
             Directory.CreateDirectory(content);
             File.WriteAllText(Path.Combine(content, "pipeline.md"), "---\ntitle: Pipeline\nslug: pipeline\n---\n\nPipeline");
@@ -30,10 +31,12 @@ public partial class WebSiteVerifierTests
                 [
                     new CollectionSpec { Name = "pages", Input = "content", Output = "/ingestion" }
                 ],
+                Features = ["search"],
                 StaticAssets =
                 [
-                    new StaticAssetSpec { Source = "index.html", Destination = "index.html" },
+                    new StaticAssetSpec { Source = "index.html", Destination = "./" },
                     new StaticAssetSpec { Source = "apps.html", Destination = "ingestion/apps.html" },
+                    new StaticAssetSpec { Source = "About # Żółć.htm", Destination = "nested/../" },
                     new StaticAssetSpec { Source = "static-docs", Destination = "ingestion/docs" }
                 ],
                 Navigation = new NavigationSpec
@@ -48,8 +51,10 @@ public partial class WebSiteVerifierTests
                             [
                                 new MenuItemSpec { Title = "Home", Url = "/" },
                                 new MenuItemSpec { Title = "Apps", Url = "/ingestion/apps.html" },
+                                new MenuItemSpec { Title = "About", Url = "/About%20%23%20%C5%BB%C3%B3%C5%82%C4%87.htm" },
                                 new MenuItemSpec { Title = "Docs", Url = "/ingestion/docs/" },
-                                new MenuItemSpec { Title = "Conventional", Url = "/ingestion/conventional/" }
+                                new MenuItemSpec { Title = "Conventional", Url = "/ingestion/conventional/" },
+                                new MenuItemSpec { Title = "Search", Url = "/search/" }
                             ]
                         }
                     ]
@@ -68,10 +73,16 @@ public partial class WebSiteVerifierTests
                 warning.Contains("/ingestion/apps.html", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/About%20%23%20%C5%BB%C3%B3%C5%82%C4%87.htm", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("/ingestion/docs/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("/ingestion/conventional/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/search/", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
             var allMappings = spec.StaticAssets;
@@ -79,6 +90,12 @@ public partial class WebSiteVerifierTests
             var resultWithoutApps = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
             Assert.Contains(resultWithoutApps.Warnings, warning =>
                 warning.Contains("/ingestion/apps.html", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            spec.StaticAssets = allMappings.Where(mapping => mapping.Source != "About # Żółć.htm").ToArray();
+            var resultWithoutAbout = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutAbout.Warnings, warning =>
+                warning.Contains("/About%20%23%20%C5%BB%C3%B3%C5%82%C4%87.htm", StringComparison.OrdinalIgnoreCase) &&
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
             spec.StaticAssets = allMappings.Where(mapping => mapping.Source != "static-docs").ToArray();
@@ -95,6 +112,14 @@ public partial class WebSiteVerifierTests
                 warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
 
             File.WriteAllText(Path.Combine(conventional, "INDEX.HTML"), "<h1>Conventional</h1>");
+            spec.Features = [];
+            spec.StaticAssets = allMappings;
+            var resultWithoutSearch = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+            Assert.Contains(resultWithoutSearch.Warnings, warning =>
+                warning.Contains("/search/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+
+            spec.Features = ["search"];
             spec.StaticAssets = spec.StaticAssets.Where(mapping => mapping.Source != "index.html").ToArray();
             var resultWithoutStaticHome = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
             Assert.Contains(resultWithoutStaticHome.Warnings, warning =>
@@ -124,7 +149,7 @@ public partial class WebSiteVerifierTests
                 BaseUrl = "https://example.test",
                 StaticAssets =
                 [
-                    new StaticAssetSpec { Source = "index.html", Destination = "index.html" },
+                    new StaticAssetSpec { Source = "index.html", Destination = "./" },
                     new StaticAssetSpec { Source = "apps.html", Destination = "apps.html" }
                 ],
                 Navigation = new NavigationSpec

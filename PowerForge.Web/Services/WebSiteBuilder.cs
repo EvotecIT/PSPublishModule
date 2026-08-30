@@ -402,8 +402,6 @@ public static partial class WebSiteBuilder
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return;
 
-        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
-
         foreach (var asset in spec.StaticAssets)
         {
             if (string.IsNullOrWhiteSpace(asset.Source))
@@ -416,41 +414,54 @@ public static partial class WebSiteBuilder
             if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
                 continue;
 
-            var destination = (asset.Destination ?? string.Empty).TrimStart('/', '\\');
+            if (!TryResolveStaticAssetTargetPath(outputRoot, sourcePath, asset.Destination, out var targetPath))
+            {
+                Trace.TraceWarning($"Skipping static asset copy outside output root: {asset.Source} -> {asset.Destination}");
+                continue;
+            }
+
             if (File.Exists(sourcePath))
             {
                 RejectLinkedAsset(new FileInfo(sourcePath));
-                var destPath = string.IsNullOrWhiteSpace(destination)
-                    ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
-                    : (Path.HasExtension(destination)
-                        ? Path.Combine(outputRoot, destination)
-                        : Path.Combine(outputRoot, destination, Path.GetFileName(sourcePath)));
-                destPath = Path.GetFullPath(destPath);
-                if (!IsPathWithinRoot(normalizedOutputRoot, destPath))
-                {
-                    Trace.TraceWarning($"Skipping static asset file copy outside output root: {asset.Source} -> {asset.Destination}");
-                    continue;
-                }
-
-                var destDir = Path.GetDirectoryName(destPath);
+                var destDir = Path.GetDirectoryName(targetPath);
                 if (!string.IsNullOrWhiteSpace(destDir))
                     Directory.CreateDirectory(destDir);
 
-                CopyFileIfChanged(sourcePath, destPath);
+                CopyFileIfChanged(sourcePath, targetPath);
                 continue;
             }
 
-            var targetRoot = string.IsNullOrWhiteSpace(destination)
+            CopyDirectory(sourcePath, targetPath);
+        }
+    }
+
+    internal static bool TryResolveStaticAssetTargetPath(
+        string outputRoot,
+        string sourcePath,
+        string? configuredDestination,
+        out string targetPath)
+    {
+        targetPath = string.Empty;
+        if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+            return false;
+
+        var destination = (configuredDestination ?? string.Empty).TrimStart('/', '\\');
+        var candidate = File.Exists(sourcePath)
+            ? string.IsNullOrWhiteSpace(destination)
+                ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
+                : Path.HasExtension(destination)
+                    ? Path.Combine(outputRoot, destination)
+                    : Path.Combine(outputRoot, destination, Path.GetFileName(sourcePath))
+            : string.IsNullOrWhiteSpace(destination)
                 ? outputRoot
                 : Path.Combine(outputRoot, destination);
-            targetRoot = Path.GetFullPath(targetRoot);
-            if (!IsPathWithinRoot(normalizedOutputRoot, targetRoot))
-            {
-                Trace.TraceWarning($"Skipping static asset directory copy outside output root: {asset.Source} -> {asset.Destination}");
-                continue;
-            }
-            CopyDirectory(sourcePath, targetRoot);
-        }
+
+        candidate = Path.GetFullPath(candidate);
+        if (!IsPathWithinRoot(NormalizeRootPathForSink(outputRoot), candidate))
+            return false;
+
+        targetPath = candidate;
+        return true;
     }
 
     internal static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)

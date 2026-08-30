@@ -4,6 +4,7 @@ public static partial class WebSiteVerifier
 {
     private static IEnumerable<string> DiscoverStaticHtmlRoutes(SiteSpec spec, string rootPath)
     {
+        var projectionRoot = Path.GetFullPath(Path.Combine(rootPath, ".powerforge-static-route-projection"));
         if (!WebSiteBuilder.HasExplicitConventionalStaticMapping(spec, rootPath))
         {
             var conventionalRoot = Path.GetFullPath(Path.Combine(rootPath, "static"));
@@ -37,13 +38,14 @@ public static partial class WebSiteVerifier
             if (File.Exists(sourcePath))
             {
                 WebSiteBuilder.RejectLinkedAsset(new FileInfo(sourcePath));
-                var destination = string.IsNullOrWhiteSpace(mapping.Destination)
-                    ? Path.GetFileName(sourcePath)
-                    : Path.HasExtension(mapping.Destination)
-                        ? mapping.Destination
-                        : Path.Combine(mapping.Destination, Path.GetFileName(sourcePath));
+                if (!WebSiteBuilder.TryResolveStaticAssetTargetPath(
+                        projectionRoot,
+                        sourcePath,
+                        mapping.Destination,
+                        out var targetPath))
+                    continue;
 
-                foreach (var route in GetStaticHtmlRoutes(destination))
+                foreach (var route in GetStaticHtmlRoutes(Path.GetRelativePath(projectionRoot, targetPath)))
                     yield return route;
                 continue;
             }
@@ -51,12 +53,17 @@ public static partial class WebSiteVerifier
             if (!Directory.Exists(sourcePath))
                 continue;
 
+            if (!WebSiteBuilder.TryResolveStaticAssetTargetPath(
+                    projectionRoot,
+                    sourcePath,
+                    mapping.Destination,
+                    out var targetRoot))
+                continue;
+
             foreach (var file in EnumerateStaticHtmlFiles(sourcePath))
             {
-                var destination = string.IsNullOrWhiteSpace(mapping.Destination)
-                    ? file
-                    : Path.Combine(mapping.Destination, file);
-                foreach (var route in GetStaticHtmlRoutes(destination))
+                var projectedFile = Path.Combine(targetRoot, file);
+                foreach (var route in GetStaticHtmlRoutes(Path.GetRelativePath(projectionRoot, projectedFile)))
                     yield return route;
             }
         }
@@ -70,7 +77,7 @@ public static partial class WebSiteVerifier
         foreach (var file in root.EnumerateFiles())
         {
             WebSiteBuilder.RejectLinkedAsset(file);
-            if (string.Equals(file.Extension, ".html", StringComparison.OrdinalIgnoreCase))
+            if (IsHtmlExtension(file.Extension))
                 yield return file.Name;
         }
 
@@ -86,8 +93,7 @@ public static partial class WebSiteVerifier
 
     private static IEnumerable<string> GetStaticHtmlRoutes(string destination)
     {
-        if (string.IsNullOrWhiteSpace(destination) ||
-            !string.Equals(Path.GetExtension(destination), ".html", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(destination) || !IsHtmlExtension(Path.GetExtension(destination)))
         {
             yield break;
         }
@@ -98,13 +104,32 @@ public static partial class WebSiteVerifier
             normalized.Split('/').Any(segment => segment == ".."))
             yield break;
 
-        var fileRoute = "/" + normalized;
+        var encoded = string.Join(
+            "/",
+            normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+        var fileRoute = "/" + encoded;
         yield return fileRoute;
 
-        if (!string.Equals(Path.GetFileName(normalized), "index.html", StringComparison.OrdinalIgnoreCase))
+        var fileName = Path.GetFileName(normalized);
+        if (!string.Equals(fileName, "index.html", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(fileName, "index.htm", StringComparison.OrdinalIgnoreCase))
             yield break;
 
-        var directory = Path.GetDirectoryName(normalized)?.Replace('\\', '/').Trim('/');
+        var directory = Path.GetDirectoryName(encoded)?.Replace('\\', '/').Trim('/');
         yield return string.IsNullOrWhiteSpace(directory) ? "/" : "/" + directory + "/";
+    }
+
+    private static bool IsHtmlExtension(string? extension) =>
+        string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> DiscoverGeneratedFeatureRoutes(SiteSpec spec, bool hasContentItems)
+    {
+        if (hasContentItems && (spec.Features ?? Array.Empty<string>()).Any(feature =>
+                string.Equals(feature?.Trim(), "search", StringComparison.OrdinalIgnoreCase)))
+        {
+            yield return "/search/index.html";
+            yield return "/search/";
+        }
     }
 }
