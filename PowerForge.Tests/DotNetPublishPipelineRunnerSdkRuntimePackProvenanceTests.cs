@@ -142,17 +142,39 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         MethodInfo appendOwned = typeof(DotNetPublishPipelineRunner).GetMethod(
             "AppendSdkEvidenceOwnedProperties",
             BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo appendSyntheticIsolation = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "AppendSyntheticSdkEvidenceProjectIsolationProperties",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
 
         append.Invoke(null, [arguments, properties.RootElement, effectiveProperties]);
         appendOwned.Invoke(
             null,
             [arguments, "C:\\isolated\\obj\\", "C:\\isolated\\NuGet.Config", "C:\\isolated\\verified"]);
+        appendSyntheticIsolation.Invoke(null, [arguments]);
 
         Assert.Contains("-p:EnableWindowsTargeting=true", arguments);
         Assert.Contains("-p:TargetLatestRuntimePatch=false", arguments);
         Assert.Contains("-p:TargetFramework=net10.0", arguments);
         Assert.Single(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("-p:RestoreSources=C:\\isolated\\verified", arguments);
+        Assert.Contains("-p:ImportDirectoryBuildProps=false", arguments);
+        Assert.Contains("-p:ImportDirectoryBuildTargets=false", arguments);
+        Assert.Contains("-p:ImportDirectoryPackagesProps=false", arguments);
+    }
+
+    [Theory]
+    [InlineData("Microsoft.NET.ILLink.Tasks", true)]
+    [InlineData("Package.Snapshot", false)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SdkEvidence_AutoReferencedBypassRequiresSdkOwnedPackageIdentity(
+        string packageId,
+        bool expected)
+    {
+        MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "IsTrustedSdkAutoReferencedPackageId",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        Assert.Equal(expected, Assert.IsType<bool>(method.Invoke(null, [packageId])));
     }
 
     [Fact]

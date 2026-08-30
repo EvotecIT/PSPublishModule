@@ -30,6 +30,13 @@ public sealed partial class DotNetPublishPipelineRunner
         },
         StringComparer.OrdinalIgnoreCase);
 
+    private static readonly HashSet<string> TrustedSdkAutoReferencedPackageIds = new(
+        new[]
+        {
+            "Microsoft.NET.ILLink.Tasks"
+        },
+        StringComparer.OrdinalIgnoreCase);
+
     private static string? AddSdkManagedPackageHashes(
         string projectPath,
         JsonElement properties,
@@ -356,6 +363,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (dependency.Value.TryGetProperty("autoReferenced", out JsonElement autoReferenced) &&
                         autoReferenced.ValueKind == JsonValueKind.True)
                     {
+                        if (!IsTrustedSdkAutoReferencedPackageId(dependency.Name))
+                            continue;
                         if (!TryAddSdkEvidencePackageKey(
                                 dependency.Name,
                                 dependency.Value,
@@ -403,6 +412,9 @@ public sealed partial class DotNetPublishPipelineRunner
         packageKeys.Add(packageId + "|" + range.MinVersion.ToNormalizedString());
         return true;
     }
+
+    private static bool IsTrustedSdkAutoReferencedPackageId(string packageId)
+        => TrustedSdkAutoReferencedPackageIds.Contains(packageId);
 
     private static bool TryWriteSdkEvidenceNuGetConfig(
         string configPath,
@@ -498,6 +510,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 intermediateRoot,
                 configPath,
                 restoreSource);
+            AppendSyntheticSdkEvidenceProjectIsolationProperties(arguments);
             arguments.Add("-p:NuGetAudit=false");
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -511,6 +524,14 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static void AppendSyntheticSdkEvidenceProjectIsolationProperties(
+        ICollection<string> arguments)
+    {
+        arguments.Add("-p:ImportDirectoryBuildProps=false");
+        arguments.Add("-p:ImportDirectoryBuildTargets=false");
+        arguments.Add("-p:ImportDirectoryPackagesProps=false");
     }
 
     private static void TryDeleteSdkEvidenceRoot(string? path)
@@ -577,6 +598,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (!dependency.Value.TryGetProperty("autoReferenced", out JsonElement autoReferenced) ||
             autoReferenced.ValueKind != JsonValueKind.True ||
+            !IsTrustedSdkAutoReferencedPackageId(dependency.Name) ||
             !dependency.Value.TryGetProperty("version", out JsonElement version) ||
             version.ValueKind != JsonValueKind.String ||
             !VersionRange.TryParse(version.GetString()!, out VersionRange? range))
