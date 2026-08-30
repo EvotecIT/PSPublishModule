@@ -54,8 +54,8 @@ public static partial class WebSiteVerifier
         {
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
-            var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            ValidateNavigationLint(spec, localization, plan, staticOnlyRoutes, warnings, staticOnlyRoutes.Length > 0);
+            var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
+            ValidateNavigationLint(spec, localization, plan, staticOnlyRoutes, warnings, staticOnlyRoutes.Length > 0, staticOnlyRoutes);
             return new WebVerifyResult
             {
                 Success = true,
@@ -187,12 +187,12 @@ public static partial class WebSiteVerifier
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
-        var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
         var generatedFeatureRoutes = DiscoverGeneratedFeatureRoutes(
             spec,
             collectionRoutes.Values.SelectMany(static values => values));
         var navigationRoutes = routes.Keys.Concat(staticRoutes).Concat(generatedFeatureRoutes);
-        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0);
+        ValidateNavigationLint(spec, localization, plan, navigationRoutes, warnings, staticRoutes.Length > 0, staticRoutes);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 

@@ -271,6 +271,91 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_MatchesStaticRoutesWithHostAccuratePathSemantics()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-paths-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assets = Path.Combine(root, "assets");
+            Directory.CreateDirectory(assets);
+            Directory.CreateDirectory(Path.Combine(assets, "docs"));
+            File.WriteAllText(Path.Combine(assets, "Guide.html"), "<h1>Guide</h1>");
+            File.WriteAllText(Path.Combine(assets, "legacy.htm"), "<h1>Legacy</h1>");
+            File.WriteAllText(Path.Combine(assets, "terms+conditions.html"), "<h1>Terms</h1>");
+            File.WriteAllText(Path.Combine(assets, "manual.pdf"), "PDF");
+            File.WriteAllText(Path.Combine(assets, "docs", "index.html"), "<h1>Docs</h1>");
+
+            var spec = new SiteSpec
+            {
+                Name = "Static path semantics",
+                BaseUrl = "https://example.test",
+                StaticAssets = [new StaticAssetSpec { Source = "assets", Destination = "assets" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Exact case", Url = "/assets/Guide.html" },
+                                new MenuItemSpec { Title = "Wrong case", Url = "/assets/guide.html" },
+                                new MenuItemSpec { Title = "Exact PDF", Url = "/assets/manual.pdf" },
+                                new MenuItemSpec { Title = "PDF with slash", Url = "/assets/manual.pdf/" },
+                                new MenuItemSpec { Title = "Literal reserved character", Url = "/assets/terms+conditions.html" },
+                                new MenuItemSpec { Title = "Encoded reserved character", Url = "/assets/terms%2Bconditions.html" },
+                                new MenuItemSpec { Title = "HTML extensionless", Url = "/assets/Guide" },
+                                new MenuItemSpec { Title = "HTM extensionless", Url = "/assets/legacy" },
+                                new MenuItemSpec { Title = "Directory alias without slash", Url = "/assets/docs" },
+                                new MenuItemSpec { Title = "Wrong-case directory alias", Url = "/assets/Docs/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/assets/guide.html'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/assets/manual.pdf/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("points to '/assets/Docs/'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            foreach (var validUrl in new[]
+                     {
+                         "/assets/Guide.html",
+                         "/assets/manual.pdf",
+                         "/assets/terms+conditions.html",
+                         "/assets/terms%2Bconditions.html",
+                         "/assets/Guide",
+                         "/assets/legacy",
+                         "/assets/docs"
+                     })
+            {
+                Assert.DoesNotContain(result.Warnings, warning =>
+                    warning.Contains($"points to '{validUrl}'", StringComparison.Ordinal) &&
+                    warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_RegistersSearchOnlyForSearchableContent()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-search-route-" + Guid.NewGuid().ToString("N"));

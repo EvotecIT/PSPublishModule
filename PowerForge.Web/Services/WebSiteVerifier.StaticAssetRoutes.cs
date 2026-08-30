@@ -108,6 +108,13 @@ public static partial class WebSiteVerifier
         yield return fileRoute;
 
         var fileName = Path.GetFileName(normalized);
+        var extension = Path.GetExtension(fileName);
+        if (string.Equals(extension, ".html", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".htm", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return "/" + encoded[..^extension.Length];
+        }
+
         if (!string.Equals(fileName, "index.html", StringComparison.Ordinal))
             yield break;
 
