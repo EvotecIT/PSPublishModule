@@ -9,7 +9,9 @@ internal sealed class PowerShellLoweredClrMemberExpression : PowerShellLoweredEx
         string memberName,
         bool isStatic,
         PowerShellLoweredExpression? receiver,
-        PowerShellClrReceiverBehavior receiverBehavior)
+        PowerShellClrReceiverBehavior receiverBehavior,
+        string dictionaryTemporary,
+        string valueTemporary)
         : base(span, clrType)
     {
         DeclaringType = declaringType;
@@ -17,6 +19,8 @@ internal sealed class PowerShellLoweredClrMemberExpression : PowerShellLoweredEx
         IsStatic = isStatic;
         Receiver = receiver;
         ReceiverBehavior = receiverBehavior;
+        DictionaryTemporary = dictionaryTemporary ?? string.Empty;
+        ValueTemporary = valueTemporary ?? string.Empty;
     }
 
     internal Type DeclaringType { get; }
@@ -24,6 +28,8 @@ internal sealed class PowerShellLoweredClrMemberExpression : PowerShellLoweredEx
     internal bool IsStatic { get; }
     internal PowerShellLoweredExpression? Receiver { get; }
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }
+    internal string DictionaryTemporary { get; }
+    internal string ValueTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLoweredExpression

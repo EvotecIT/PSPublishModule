@@ -587,10 +587,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private static string EmitDictionaryKeyLookup(PowerShellLoweredClrMemberExpression member, string receiver, bool hasClrFallback)
     {
         var name = PowerShellCSharpLiteral.QuoteString(member.MemberName);
+        var dictionaryTemporary = member.DictionaryTemporary;
+        var valueTemporary = member.ValueTemporary;
+        if (dictionaryTemporary.Length == 0 || valueTemporary.Length == 0)
+            throw new InvalidOperationException("Lowered dictionary member lookup is missing collision-free temporary names.");
+        if (member.ClrType == typeof(string) && member.DeclaringType == typeof(Dictionary<string, string>))
+            return $"new global::System.Func<string>(() => {{ var {dictionaryTemporary} = (global::System.Collections.Generic.Dictionary<string, string>?)({receiver}); return {dictionaryTemporary} is not null && {dictionaryTemporary}.TryGetValue({name}, out var {valueTemporary}) ? ({valueTemporary} ?? string.Empty) : string.Empty; }})()";
         var fallback = hasClrFallback
-            ? $"(object?)(({PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType)})__pf_dictionary).{member.MemberName}"
+            ? $"(object?)(({PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType)}){dictionaryTemporary}).{member.MemberName}"
             : "null";
-        return $"new global::System.Func<object?>(() => {{ var __pf_dictionary = (global::System.Collections.IDictionary?)({receiver}); return __pf_dictionary is null ? null : __pf_dictionary.Contains({name}) ? __pf_dictionary[{name}] : {fallback}; }})()";
+        return $"new global::System.Func<object?>(() => {{ var {dictionaryTemporary} = (global::System.Collections.IDictionary?)({receiver}); return {dictionaryTemporary} is null ? null : {dictionaryTemporary}.Contains({name}) ? {dictionaryTemporary}[{name}] : {fallback}; }})()";
     }
 
     private static string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)

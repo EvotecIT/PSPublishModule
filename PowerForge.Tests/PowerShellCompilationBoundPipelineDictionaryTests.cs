@@ -58,7 +58,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(typeof(object), member.Type.ClrType);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("Contains(\"Count\")", source, StringComparison.Ordinal);
-        Assert.Contains("__pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("[\"Count\"]", source, StringComparison.Ordinal);
         Assert.DoesNotContain("(Map).Count", source, StringComparison.Ordinal);
     }
 
@@ -75,7 +75,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
             Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[1]).Expression);
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
-        Assert.Contains("__pf_dictionary.Contains(\"Missing\") ?", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(\"Missing\") ?", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -109,8 +109,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[2]).Expression);
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
-        Assert.Contains("((global::System.Collections.Specialized.OrderedDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(\"Count\") ?", source, StringComparison.Ordinal);
+        Assert.Contains("[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("global::System.Collections.Specialized.OrderedDictionary", source, StringComparison.Ordinal);
+        Assert.Contains(".Count", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -124,8 +126,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
-        Assert.Contains("((global::System.Collections.Specialized.OrderedDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(\"Count\") ?", source, StringComparison.Ordinal);
+        Assert.Contains("[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("global::System.Collections.Specialized.OrderedDictionary", source, StringComparison.Ordinal);
+        Assert.Contains(".Count", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,7 +149,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("__pf_dictionary.Contains(\"AjaxSessionKey\")", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(\"AjaxSessionKey\")", source, StringComparison.Ordinal);
         Assert.DoesNotContain("PSObject.AsPSObject", source, StringComparison.Ordinal);
     }
 
@@ -167,8 +171,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
         Assert.False(member.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes));
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
-        Assert.Contains("((global::System.Collections.IDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(\"Count\") ?", source, StringComparison.Ordinal);
+        Assert.Contains("[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("global::System.Collections.IDictionary", source, StringComparison.Ordinal);
+        Assert.Contains(".Count", source, StringComparison.Ordinal);
         Assert.DoesNotContain("(Map).Count", source, StringComparison.Ordinal);
     }
 

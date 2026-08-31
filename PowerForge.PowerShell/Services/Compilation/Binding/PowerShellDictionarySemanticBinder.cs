@@ -133,6 +133,11 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
             return null;
         }
+        if (target.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934", "The bounded runtime-free Get-Help metadata view is immutable.", span));
+            return null;
+        }
         if (target.Type.ClrType.IsArray && target.Type.ClrType.GetArrayRank() != 1)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2705", "Typed indexing supports one-dimensional CLR arrays only.", target.Span));

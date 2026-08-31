@@ -125,6 +125,60 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         Assert.Equal("42", Assert.Single(observation.Success).Value);
     }
 
+    [Theory]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void RuntimeFreeCommentHelpExecutesAcrossTargets(string targetFramework)
+    {
+        var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/comment-based-help");
+        using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, targetFramework),
+            "BoundedCommentHelp" + targetFramework.Replace(".", string.Empty, StringComparison.Ordinal),
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework,
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var observation = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            build);
+        Assert.Equal("42", Assert.Single(observation.Success).Value);
+    }
+
+    [Fact]
+    public void RuntimeFreeCommentHelpLookupAvoidsAuthoredTemporaryCollisions()
+    {
+        const string source = "function Get-Documented {\n<#\n.SYNOPSIS\nDocumented.\n#>\n42\n}\n[string] $__pf_dictionary = 'authored'; [string] $__pf_value = 'authored'; $Help = Get-Help Get-Documented; if ($__pf_dictionary -cne 'authored' -or $__pf_value -cne 'authored' -or $Help.Name -cne 'Get-Documented' -or $Help.Synopsis -cne 'Documented.') { return -1 }; Get-Documented";
+        using var fixture = OracleFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, "collision"),
+            "BoundedCommentHelpCollision",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = "net10.0",
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var observation = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            build);
+        Assert.Equal("42", Assert.Single(observation.Success).Value);
+    }
+
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesFunctionGraphCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/function-graph", "BoundedFunctionGraphOracle");
@@ -164,6 +218,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesPipelineLifecycleCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/pipeline-lifecycle", "BoundedPipelineLifecycleOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesCommentHelpCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/comment-based-help", "BoundedCommentHelpOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()

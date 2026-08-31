@@ -6,7 +6,7 @@ function Get-DocumentedValue {
     42
 }
 $Help = Get-Help Get-DocumentedValue
-if ($Help.Synopsis -notlike 'Returns the minimized semantic value.*') {
-    throw 'The comment-based help synopsis was not discovered.'
+if ($Help.Name -cne 'Get-DocumentedValue' -or $Help.Synopsis -cne 'Returns the minimized semantic value.') {
+    return -1
 }
 Get-DocumentedValue

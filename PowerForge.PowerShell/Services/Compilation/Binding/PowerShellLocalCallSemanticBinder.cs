@@ -24,6 +24,7 @@ internal sealed class PowerShellLocalCallSignature
         bool isAdvanced,
         PowerShellCompilationCommandBinding commandBinding,
         Type? declaredReturnType,
+        PowerShellBoundHelpMetadata? help,
         int pipelineLifecycleParameterIndex = -1)
     {
         Symbol = symbol;
@@ -31,6 +32,7 @@ internal sealed class PowerShellLocalCallSignature
         IsAdvanced = isAdvanced;
         CommandBinding = commandBinding;
         DeclaredReturnType = declaredReturnType;
+        Help = help;
         PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
     }
 
@@ -39,6 +41,7 @@ internal sealed class PowerShellLocalCallSignature
     internal bool IsAdvanced { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredReturnType { get; private set; }
+    internal PowerShellBoundHelpMetadata? Help { get; }
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
 
@@ -93,6 +96,7 @@ internal static class PowerShellLocalCallSemanticBinder
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
             PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
             declaredReturnType,
+            PowerShellCommentHelpBinder.Bind(function),
             pipelineLifecycleParameterIndex);
     }
 

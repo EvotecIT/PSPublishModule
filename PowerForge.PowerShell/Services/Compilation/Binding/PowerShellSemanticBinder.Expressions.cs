@@ -189,6 +189,13 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities,
                     diagnostics);
+            case CommandAst command when PowerShellCommentHelpSemanticBinder.IsCommand(command):
+                return PowerShellCommentHelpSemanticBinder.Bind(
+                    document,
+                    command,
+                    functions,
+                    capabilities,
+                    diagnostics);
             case CommandAst command when TryGetLocalFunction(command, functions, out var target):
                 return PowerShellLocalCallSemanticBinder.Bind(
                     document,

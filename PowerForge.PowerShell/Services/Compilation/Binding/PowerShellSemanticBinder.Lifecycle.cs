@@ -33,7 +33,7 @@ internal sealed partial class PowerShellSemanticBinder
             pipelineParameter.Name.VariablePath.UserPath,
             StringComparison.OrdinalIgnoreCase));
         var arrayType = sourceParameter.Type.ClrType.MakeArrayType();
-        var locals = DeclareLocals(document, function, symbols, capabilities)
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities)
             .Append(new PowerShellBoundLocal(sourceParameter.Symbol, sourceParameter.Type))
             .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
             .ToArray();

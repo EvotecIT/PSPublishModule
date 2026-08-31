@@ -27,6 +27,11 @@ internal static class PowerShellClrMemberSemanticBinder
         if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)
             return null;
         if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
+        if (target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934", "The bounded runtime-free Get-Help metadata view is immutable.", span));
+            return null;
+        }
         if (target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
         {
             var propertyValue = bindExpression(syntax.Right, knownProperty.ClrType == typeof(object) ? null : knownProperty.ClrType);
@@ -113,6 +118,19 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        {
+            if (!target.Receiver.Type.TryGetKnownProperty(name, out var helpProperty))
+                return Reject(diagnostics, "PSB2933", $"The bounded runtime-free Get-Help contract does not expose property '{name}'.", span);
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                name,
+                false,
+                target.Receiver,
+                PowerShellClrReceiverBehavior.DictionaryKeyLookup,
+                helpProperty);
+        }
         var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
                     (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
         var members = GetReadableMembers(target.Type, name, flags, targetFramework);
@@ -199,6 +217,8 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+            return Reject(diagnostics, "PSB2934", "The bounded runtime-free Get-Help metadata view does not expose mutable CLR dictionary methods.", span);
         if (target.Receiver is PowerShellBoundRuntimeStateExpression { Kind: PowerShellRuntimeStateIntrinsicKind.ErrorCollection })
             return Reject(diagnostics, "PSB2620", "The bounded $Error collection is a read-only invocation snapshot; method invocation remains on the PowerShell runtime path.", span);
         if (!target.IsStatic && target.Type == typeof(PSObject))

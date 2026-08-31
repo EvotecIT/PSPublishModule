@@ -51,7 +51,8 @@ internal enum PowerShellDictionaryValueKind
 {
     None,
     String,
-    Object
+    Object,
+    HelpMetadata
 }
 
 internal sealed class PowerShellTypeFact

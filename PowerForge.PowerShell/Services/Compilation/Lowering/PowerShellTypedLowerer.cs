@@ -678,7 +678,13 @@ internal sealed partial class PowerShellTypedLowerer
                 member.MemberName,
                 member.IsStatic,
                 member.Receiver is null ? null : LowerExpression(member.Receiver, functions, names, targetCapabilities),
-                member.ReceiverBehavior),
+                member.ReceiverBehavior,
+                member.ReceiverBehavior is PowerShellClrReceiverBehavior.DictionaryKeyLookup or PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback
+                    ? names.Allocate("pf_dictionary")
+                    : string.Empty,
+                member.ReceiverBehavior is PowerShellClrReceiverBehavior.DictionaryKeyLookup or PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback
+                    ? names.Allocate("pf_value")
+                    : string.Empty),
             PowerShellBoundClrInvocationExpression invocation => new PowerShellLoweredClrInvocationExpression(
                 invocation.Span,
                 invocation.Type.ClrType,

@@ -307,6 +307,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                             out _,
                             out _))
                         break;
+                    if (capabilities.HasFlag(PowerShellCompilationCapability.ExecutableParameterBinding) &&
+                        PowerShellCommentHelpSemanticBinder.TryGetTargetName(command, out var helpTarget) &&
+                        localFunctionNames?.Contains(helpTarget) == true)
+                        break;
                     if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
                         (command.InvocationOperator == TokenKind.Dot ||
                          commandName is not null && localFunctionNames?.Contains(commandName) == true))
