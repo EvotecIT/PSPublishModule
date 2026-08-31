@@ -7,7 +7,7 @@ namespace PowerForge.Tests;
 public sealed class AppleLocalBuildSourceTrustTests
 {
     [Fact]
-    public void ValidateLocalBuildInputContainment_ignores_an_unrelated_target_script_phase()
+    public void ValidateLocalBuildInputContainment_rejects_an_unrelated_target_script_phase_fail_closed()
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -15,16 +15,24 @@ public sealed class AppleLocalBuildSourceTrustTests
             Guid.NewGuid().ToString("N")));
         try
         {
-            var project = WriteTargetScopedProject(
-                root.FullName,
-                selectedTargetDependsOnUnsafeTarget: false);
+            var project = WriteMixedProjectWithUnsafeTarget(root.FullName);
             InitializeGitRepository(root.FullName, writeInputs: null);
 
-            new AppleReleaseSourceTrustService()
-                .ValidateLocalBuildInputContainment(
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService()
+                    .ValidateLocalBuildInputContainment(
                     root.FullName,
                     project,
-                    "CasaRay");
+                    "CasaRay"));
+
+            Assert.Contains(
+                "complete referenced Xcode project",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "shell-script build phases",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -33,7 +41,7 @@ public sealed class AppleLocalBuildSourceTrustTests
     }
 
     [Fact]
-    public void ValidateLocalBuildInputContainment_rejects_a_dependency_script_phase()
+    public void ValidateLocalBuildInputContainment_rejects_unused_absolute_project_inputs_fail_closed()
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -41,20 +49,48 @@ public sealed class AppleLocalBuildSourceTrustTests
             Guid.NewGuid().ToString("N")));
         try
         {
-            var project = WriteTargetScopedProject(
+            var project = Directory.CreateDirectory(Path.Combine(
                 root.FullName,
-                selectedTargetDependsOnUnsafeTarget: true);
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                """
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = PBXFileReference;
+                            path = /tmp/Unrelated.xcconfig;
+                            sourceTree = "<absolute>";
+                        };
+                    };
+                }
+                """);
+            var schemeRoot = Directory.CreateDirectory(Path.Combine(
+                project.FullName,
+                "xcshareddata",
+                "xcschemes"));
+            File.WriteAllText(
+                Path.Combine(schemeRoot.FullName, "CasaRay.xcscheme"),
+                "<Scheme />");
             InitializeGitRepository(root.FullName, writeInputs: null);
 
             var error = Assert.Throws<InvalidOperationException>(() =>
                 new AppleReleaseSourceTrustService()
                     .ValidateLocalBuildInputContainment(
                         root.FullName,
-                        project,
+                        project.FullName,
                         "CasaRay"));
 
             Assert.Contains(
-                "shell-script build phases",
+                "complete referenced Xcode project",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "Absolute Xcode project inputs",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "separate project",
                 error.Message,
                 StringComparison.OrdinalIgnoreCase);
         }
@@ -231,20 +267,14 @@ public sealed class AppleLocalBuildSourceTrustTests
         RunGit(workingDirectory, "commit", "-m", "fixture");
     }
 
-    private static string WriteTargetScopedProject(
-        string root,
-        bool selectedTargetDependsOnUnsafeTarget)
+    private static string WriteMixedProjectWithUnsafeTarget(string root)
     {
         const string selectedTarget = "AA0000000000000000000001";
         const string unsafeTarget = "AA0000000000000000000002";
         const string scriptPhase = "AA0000000000000000000003";
-        const string dependency = "AA0000000000000000000004";
         var project = Directory.CreateDirectory(Path.Combine(
             root,
             "CasaRay.xcodeproj"));
-        var selectedDependencies = selectedTargetDependsOnUnsafeTarget
-            ? dependency
-            : string.Empty;
         File.WriteAllText(
             Path.Combine(project.FullName, "project.pbxproj"),
             $$"""
@@ -254,7 +284,7 @@ public sealed class AppleLocalBuildSourceTrustTests
                         isa = PBXNativeTarget;
                         buildPhases = ();
                         buildRules = ();
-                        dependencies = ({{selectedDependencies}});
+                        dependencies = ();
                         productType = "com.apple.product-type.application";
                     };
                     {{unsafeTarget}} = {
@@ -267,10 +297,6 @@ public sealed class AppleLocalBuildSourceTrustTests
                     {{scriptPhase}} = {
                         isa = PBXShellScriptBuildPhase;
                         files = ();
-                    };
-                    {{dependency}} = {
-                        isa = PBXTargetDependency;
-                        target = {{unsafeTarget}};
                     };
                 };
             }

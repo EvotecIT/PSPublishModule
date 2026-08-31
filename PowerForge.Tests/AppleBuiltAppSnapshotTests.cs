@@ -55,9 +55,10 @@ public sealed class AppleBuiltAppSnapshotTests
         try
         {
             using var snapshot = AppleBuiltAppSnapshot.Create(root.FullName);
+            var store = CreateResultStore(derivedData);
 
-            var first = AppleBuiltAppResultStore.Preserve(snapshot, derivedData);
-            var second = AppleBuiltAppResultStore.Preserve(snapshot, derivedData);
+            var first = AppleBuiltAppResultStore.Preserve(snapshot, store);
+            var second = AppleBuiltAppResultStore.Preserve(snapshot, store);
 
             Assert.Equal(first, second);
             Assert.Equal("approved", File.ReadAllText(Path.Combine(second, payload)));
@@ -78,11 +79,12 @@ public sealed class AppleBuiltAppSnapshotTests
         try
         {
             using var snapshot = AppleBuiltAppSnapshot.Create(root.FullName);
-            var retained = AppleBuiltAppResultStore.Preserve(snapshot, derivedData);
+            var store = CreateResultStore(derivedData);
+            var retained = AppleBuiltAppResultStore.Preserve(snapshot, store);
             File.WriteAllText(Path.Combine(retained, payload), "replacement");
 
             var error = Assert.Throws<InvalidOperationException>(() =>
-                AppleBuiltAppResultStore.Preserve(snapshot, derivedData));
+                AppleBuiltAppResultStore.Preserve(snapshot, store));
 
             Assert.Contains(
                 "does not match the provenance-bound build",
@@ -111,9 +113,10 @@ public sealed class AppleBuiltAppSnapshotTests
         {
             using var firstSnapshot = AppleBuiltAppSnapshot.Create(firstApp.FullName);
             using var secondSnapshot = AppleBuiltAppSnapshot.Create(secondApp.FullName);
+            var store = CreateResultStore(derivedData);
 
-            var first = AppleBuiltAppResultStore.Preserve(firstSnapshot, derivedData);
-            var second = AppleBuiltAppResultStore.Preserve(secondSnapshot, derivedData);
+            var first = AppleBuiltAppResultStore.Preserve(firstSnapshot, store);
+            var second = AppleBuiltAppResultStore.Preserve(secondSnapshot, store);
 
             Assert.NotEqual(first, second);
             Assert.Equal("First.app", Path.GetFileName(first));
@@ -125,6 +128,56 @@ public sealed class AppleBuiltAppSnapshotTests
         {
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void Preserve_rejects_derived_data_replaced_by_a_symlink()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = CreateAppFixture(out _);
+        var derivedData = Path.Combine(root.Parent!.FullName, "DerivedData");
+        var displacedDerivedData = Path.Combine(
+            root.Parent.FullName,
+            "DerivedData.original");
+        var redirected = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.BuiltAppResultRedirect",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            using var snapshot = AppleBuiltAppSnapshot.Create(root.FullName);
+            var store = CreateResultStore(derivedData);
+            Directory.Move(derivedData, displacedDerivedData);
+            Directory.CreateSymbolicLink(derivedData, redirected.FullName);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                AppleBuiltAppResultStore.Preserve(snapshot, store));
+
+            Assert.Contains(
+                "DerivedDataPath changed",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(redirected.EnumerateFileSystemInfos());
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(derivedData) || File.Exists(derivedData))
+                    Directory.Delete(derivedData);
+            }
+            catch { /* best effort */ }
+            try { root.Parent!.Delete(recursive: true); } catch { /* best effort */ }
+            try { redirected.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static AppleStableDirectoryIdentity CreateResultStore(string path)
+    {
+        Directory.CreateDirectory(path);
+        return AppleStableDirectoryIdentity.Capture(path, "DerivedDataPath");
     }
 
     private static DirectoryInfo CreateAppFixture(out string payload)

@@ -143,14 +143,17 @@ internal sealed class AppleBuiltAppCopySnapshot
 internal sealed class AppleAppBuildOperation : IDisposable
 {
     private readonly string? _ownedBuildOutputRoot;
+    private readonly AppleStableDirectoryIdentity? _derivedDataDirectory;
 
     internal AppleAppBuildOperation(
         AppleAppBuildResult result,
         AppleBuiltAppSnapshot? productSnapshot,
+        AppleStableDirectoryIdentity? derivedDataDirectory,
         string? ownedBuildOutputRoot = null)
     {
         Result = result;
         ProductSnapshot = productSnapshot;
+        _derivedDataDirectory = derivedDataDirectory;
         _ownedBuildOutputRoot = ownedBuildOutputRoot;
     }
 
@@ -166,10 +169,15 @@ internal sealed class AppleAppBuildOperation : IDisposable
     {
         if (!Result.Succeeded || ProductSnapshot is null)
             return Result.AppPath;
+        if (_derivedDataDirectory is null)
+        {
+            throw new InvalidOperationException(
+                "A successful Apple deployment build did not retain its validated DerivedData identity.");
+        }
 
         Result.AppPath = AppleBuiltAppResultStore.Preserve(
             ProductSnapshot,
-            Result.DerivedDataPath);
+            _derivedDataDirectory);
         return Result.AppPath;
     }
 

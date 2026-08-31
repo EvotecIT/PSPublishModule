@@ -495,6 +495,91 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         }
     }
 
+    [Fact]
+    public async Task BuildAsync_revalidates_derived_data_before_xcodebuild_starts()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var derivedData = ExternalOutputPath(root, "DerivedData");
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new DerivedDataPreStartSwapRunner(root.FullName);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = derivedData,
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                    }));
+
+            Assert.Contains(
+                "DerivedDataPath changed",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.True(Directory.Exists(Path.Combine(root.FullName, ".git")));
+            Assert.False(runner.ProcessStarted);
+            Assert.Single(runner.Requests);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(derivedData) || File.Exists(derivedData))
+                    Directory.Delete(derivedData);
+            }
+            catch { /* best effort */ }
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private sealed class DerivedDataPreStartSwapRunner : IProcessRunner
+    {
+        private readonly string _sourceRoot;
+
+        internal DerivedDataPreStartSwapRunner(string sourceRoot)
+        {
+            _sourceRoot = sourceRoot;
+        }
+
+        internal List<ProcessRunRequest> Requests { get; } = new();
+
+        internal bool ProcessStarted { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var argumentIndex = request.Arguments
+                .ToList()
+                .IndexOf("-derivedDataPath");
+            var path = request.Arguments[argumentIndex + 1];
+            Directory.Delete(path, recursive: true);
+            Directory.CreateSymbolicLink(path, _sourceRoot);
+
+            request.InvokePreStartBoundary();
+            ProcessStarted = true;
+            return Task.FromResult(Success("unexpected"));
+        }
+    }
+
     private sealed class MirrorPreStartSwapRunner : IProcessRunner
     {
         private readonly string _sourceRoot;

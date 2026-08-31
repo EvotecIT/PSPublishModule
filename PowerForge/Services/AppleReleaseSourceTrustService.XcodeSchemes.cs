@@ -4,7 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
-    private XcodeSchemeTargetScope EnsureTrackedSharedScheme(
+    private void EnsureTrackedSharedScheme(
         string repositoryRoot,
         string projectRoot,
         AppleAppConfiguration app,
@@ -47,10 +47,10 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         EnsureTrackedFile(repositoryRoot, candidates[0], $"Apple app '{app.Name}' shared scheme");
-        return ValidateScheme(repositoryRoot, candidates[0], metadataPaths);
+        ValidateScheme(repositoryRoot, candidates[0], metadataPaths);
     }
 
-    private XcodeSchemeTargetScope ValidateScheme(
+    private void ValidateScheme(
         string repositoryRoot,
         string schemePath,
         IReadOnlyCollection<string> metadataPaths)
@@ -91,55 +91,6 @@ internal sealed partial class AppleReleaseSourceTrustService
             }
         }
 
-        var targets = new List<XcodeTargetReference>();
-        foreach (var buildableReference in document.Descendants()
-                     .Where(element => element.Name.LocalName.Equals(
-                         "BuildActionEntry",
-                         StringComparison.Ordinal))
-                     .SelectMany(entry => entry.Descendants().Where(element =>
-                         element.Name.LocalName.Equals(
-                             "BuildableReference",
-                             StringComparison.Ordinal))))
-        {
-            var blueprintIdentifier = buildableReference
-                .Attribute("BlueprintIdentifier")?.Value;
-            var referencedContainer = buildableReference
-                .Attribute("ReferencedContainer")?.Value;
-            if (string.IsNullOrWhiteSpace(blueprintIdentifier) ||
-                string.IsNullOrWhiteSpace(referencedContainer))
-            {
-                throw new InvalidOperationException(
-                    $"Xcode scheme build entries must identify a target and its project container: {schemePath}");
-            }
-
-            var targetContainer = ResolveSchemeContainer(
-                referencedContainer!,
-                containerRoot);
-            if (!targetContainer.EndsWith(
-                    ".xcodeproj",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Xcode scheme build target references must identify an Xcode project: {targetContainer}");
-            }
-            var targetMetadataPath = Path.GetFullPath(Path.Combine(
-                targetContainer,
-                "project.pbxproj"));
-            if (!knownMetadata.Contains(targetMetadataPath))
-            {
-                throw new InvalidOperationException(
-                    $"Xcode scheme build target is outside the validated project/workspace graph: {targetContainer}");
-            }
-            targets.Add(new XcodeTargetReference(
-                targetMetadataPath,
-                ParsePbxObjectIdentifier(
-                    blueprintIdentifier!,
-                    "scheme BlueprintIdentifier")));
-        }
-
-        return new XcodeSchemeTargetScope(
-            targets.Count > 0,
-            targets);
     }
 
     private static string? FindXcodeContainer(string schemePath)

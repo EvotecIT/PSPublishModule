@@ -8,15 +8,18 @@ internal static class AppleBuiltAppResultStore
 {
     internal static string Preserve(
         AppleBuiltAppSnapshot snapshot,
-        string derivedDataPath)
+        AppleStableDirectoryIdentity derivedDataDirectory)
     {
+        if (derivedDataDirectory is null)
+            throw new ArgumentNullException(nameof(derivedDataDirectory));
+
+        derivedDataDirectory.ValidateUnchanged();
         snapshot.ValidateUnchanged();
         var identity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
             snapshot.AppPath,
             "private built Apple app snapshot");
         var outputRoot = Path.Combine(
-            AppleReleaseArtifactService.ResolvePhysicalPath(
-                Path.GetFullPath(derivedDataPath)),
+            derivedDataDirectory.Path,
             "PowerForge",
             "DeploymentProducts");
         var bundleName = Path.GetFileName(snapshot.AppPath);
@@ -28,7 +31,9 @@ internal static class AppleBuiltAppResultStore
             retainedRoot,
             bundleName);
 
+        derivedDataDirectory.ValidateUnchanged();
         Directory.CreateDirectory(outputRoot);
+        derivedDataDirectory.ValidateUnchanged();
         EnsurePathHasNoLinkedAncestor(
             outputRoot,
             "Apple deployment result store");

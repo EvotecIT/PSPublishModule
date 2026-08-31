@@ -120,6 +120,7 @@ public sealed partial class AppleDeviceDeploymentService
 
         var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform, request.ArchiveVariant);
         var derivedDataPath = ResolveDerivedDataPath(request);
+        var resultDerivedDataPath = derivedDataPath;
         var deploymentProductRoot = bindProductForDeployment
             ? Path.Combine(
                 Path.GetTempPath(),
@@ -127,12 +128,12 @@ public sealed partial class AppleDeviceDeploymentService
                 "apple-local-products",
                 Guid.NewGuid().ToString("N"))
             : null;
-        var productDirectory = deploymentProductRoot ?? Path.Combine(
+        string productDirectory = deploymentProductRoot ?? Path.Combine(
             derivedDataPath,
             "Build",
             "Products",
             GetProductDirectory(request));
-        var appPath = deploymentProductRoot is null
+        string appPath = deploymentProductRoot is null
             ? ResolveAppPath(request, derivedDataPath)
             : Path.Combine(productDirectory, ResolveProductName(request) + ".app");
         if (deploymentProductRoot is not null)
@@ -209,12 +210,13 @@ public sealed partial class AppleDeviceDeploymentService
                         {
                             AppPath = appPath,
                             Destination = destination,
-                            DerivedDataPath = derivedDataPath,
+                            DerivedDataPath = resultDerivedDataPath,
                             BuildMirrorPath = mirror.MirrorPath,
                             SourceRevision = sourceSnapshot.Revision,
                             ProcessResult = mirror.ProcessResult
                         },
                         productSnapshot: null,
+                        derivedDataDirectory: null,
                         ownedBuildOutputRoot: deploymentProductRoot);
                 }
 
@@ -293,6 +295,14 @@ public sealed partial class AppleDeviceDeploymentService
         using var liveSourceMonitorLease = liveSourceMonitor;
 
         Directory.CreateDirectory(derivedDataPath);
+        var derivedDataDirectory = AppleStableDirectoryIdentity.Capture(
+            derivedDataPath,
+            nameof(request.DerivedDataPath));
+        EnsureOutputPathOutsideBuildRoot(
+            derivedDataDirectory.Path,
+            sourceRoot,
+            nameof(request.DerivedDataPath),
+            sourcePathComparison);
         if (deploymentProductRoot is not null)
         {
             Directory.CreateDirectory(deploymentProductRoot);
@@ -362,12 +372,22 @@ public sealed partial class AppleDeviceDeploymentService
                 args,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
                 isolateGitConfiguration: packageSnapshot is not null);
+            processRequest.SetPreStartBoundary(() =>
+            {
+                derivedDataDirectory.ValidateUnchanged();
+                EnsureOutputPathOutsideBuildRoot(
+                    derivedDataDirectory.Path,
+                    sourceRoot,
+                    nameof(request.DerivedDataPath),
+                    sourcePathComparison);
+            });
             if (bindProductForDeployment)
             {
                 processRequest.SetCompletionBoundary(completionResult =>
                 {
                     if (!completionResult.Succeeded)
                         return;
+                    derivedDataDirectory.ValidateUnchanged();
                     var producedAppPath = ResolveBuiltAppPath(
                         request,
                         productDirectory,
@@ -394,6 +414,7 @@ public sealed partial class AppleDeviceDeploymentService
                         : () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
                 liveSourceMonitor?.ValidateNoChanges(
                     () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                derivedDataDirectory.ValidateUnchanged();
                 if (bindProductForDeployment && productSnapshot is null)
                 {
                     throw new InvalidOperationException(
@@ -411,12 +432,13 @@ public sealed partial class AppleDeviceDeploymentService
                 {
                     AppPath = resolvedAppPath,
                     Destination = destination,
-                    DerivedDataPath = derivedDataPath,
+                    DerivedDataPath = resultDerivedDataPath,
                     BuildMirrorPath = mirrorPath,
                     SourceRevision = sourceSnapshot.Revision,
                     ProcessResult = result
                 },
                 productSnapshot,
+                derivedDataDirectory,
                 deploymentProductRoot);
         }
         catch

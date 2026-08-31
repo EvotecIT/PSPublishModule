@@ -87,34 +87,50 @@ internal sealed partial class AppleReleaseSourceTrustService
         IReadOnlyCollection<string> metadataPaths,
         IReadOnlyCollection<string> generatedOutputPaths)
     {
-        var selectedTargets = new List<XcodeTargetReference>();
-        var targetScopeComplete = true;
         foreach (var app in apps.Where(static value => value.Enabled && !string.IsNullOrWhiteSpace(value.ProjectPath)))
         {
-            var schemeScope = EnsureTrackedSharedScheme(
+            EnsureTrackedSharedScheme(
                 repositoryRoot,
                 projectRoot,
                 app,
                 metadataPaths);
-            targetScopeComplete &= schemeScope.IsComplete;
-            selectedTargets.AddRange(schemeScope.Targets);
         }
-
-        var executionScopes = targetScopeComplete && selectedTargets.Count > 0
-            ? ResolveExecutionMetadataScopes(metadataPaths, selectedTargets)
-            : null;
 
         foreach (var metadataPath in metadataPaths.Where(path =>
                      path.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase) && File.Exists(path)))
+        {
+            ValidateWholeProjectGraph(
+                repositoryRoot,
+                metadataPath,
+                metadataPaths,
+                generatedOutputPaths);
+        }
+    }
+
+    private void ValidateWholeProjectGraph(
+        string repositoryRoot,
+        string metadataPath,
+        IReadOnlyCollection<string> metadataPaths,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        try
         {
             ValidateProjectGraph(
                 repositoryRoot,
                 metadataPath,
                 metadataPaths,
-                generatedOutputPaths,
-                executionScopes is null
-                    ? null
-                    : executionScopes[Path.GetFullPath(metadataPath)]);
+                generatedOutputPaths);
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or FileNotFoundException)
+        {
+            throw new InvalidOperationException(
+                "Exact-source Apple builds conservatively attest the complete referenced Xcode project because " +
+                "xcodebuild does not expose an authoritative pre-build selected-target input graph. " +
+                "Fix the reported project input; if it belongs only to an unrelated target, move that target or input " +
+                "into a separate project before retrying. " +
+                exception.Message,
+                exception);
         }
     }
 
@@ -168,8 +184,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         string repositoryRoot,
         string metadataPath,
         IReadOnlyCollection<string> metadataPaths,
-        IReadOnlyCollection<string> generatedOutputPaths,
-        ISet<string>? executionMetadataScope)
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
         var packageLockPaths = ResolveEffectivePackageLockPaths(metadataPath, metadataPaths);
@@ -219,14 +234,10 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (var item in objects.Values)
         {
-            if (executionMetadataScope is null ||
-                executionMetadataScope.Contains(item.Id))
-            {
-                EnsureExecutionMetadataAccepted(
-                    item.Isa,
-                    metadataPath,
-                    _validationScope);
-            }
+            EnsureExecutionMetadataAccepted(
+                item.Isa,
+                metadataPath,
+                _validationScope);
 
             if (item.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
             {

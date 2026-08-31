@@ -113,7 +113,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     metadataPaths,
                     Array.Empty<string>());
 
-                var schemeScope = EnsureTrackedSharedScheme(
+                EnsureTrackedSharedScheme(
                     root,
                     root,
                     new AppleAppConfiguration
@@ -123,26 +123,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                         Scheme = scheme
                     },
                     metadataPaths);
-                var executionScopes = schemeScope.IsComplete &&
-                                      schemeScope.Targets.Count > 0
-                    ? ResolveExecutionMetadataScopes(
-                        metadataPaths,
-                        schemeScope.Targets)
-                    : null;
 
                 foreach (var projectMetadata in metadataPaths.Where(path =>
                              path.EndsWith(
                                  "project.pbxproj",
                                  StringComparison.OrdinalIgnoreCase)))
                 {
-                    ValidateProjectGraph(
+                    ValidateWholeProjectGraph(
                         root,
                         projectMetadata,
                         metadataPaths,
-                        Array.Empty<string>(),
-                        executionScopes is null
-                            ? null
-                            : executionScopes[Path.GetFullPath(projectMetadata)]);
+                        Array.Empty<string>());
                 }
             }
             finally
