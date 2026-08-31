@@ -16,7 +16,7 @@ internal sealed partial class PowerShellSemanticBinder
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
-            .Where(static group => HasTypedEndBlockShape(group.Single().Syntax.Body))
+            .Where(group => HasTypedFunctionShape(group.Single().Syntax.Body, capabilities))
             .ToDictionary(
                 static group => group.Key,
                 group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
@@ -90,11 +90,12 @@ internal sealed partial class PowerShellSemanticBinder
             OrderDiagnostics(diagnostics));
     }
 
-    private static bool HasTypedEndBlockShape(ScriptBlockAst body)
-        => body.DynamicParamBlock is null &&
-           body.BeginBlock is null &&
-           body.ProcessBlock is null &&
-           GetCleanBlock(body) is null;
+    private static bool HasTypedFunctionShape(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
+        => (body.DynamicParamBlock is null &&
+            body.BeginBlock is null &&
+            body.ProcessBlock is null &&
+            GetCleanBlock(body) is null) ||
+           PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(body, capabilities, out _, out _);
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;

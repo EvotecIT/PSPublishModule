@@ -321,7 +321,8 @@ internal sealed partial class PowerShellTypedLowerer
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
-                yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
+                if (!forEachLoop.DeclareVariable)
+                    yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
                 foreach (var assignment in EnumerateAssignments(forEachLoop.Body).Where(item => item.Key != forEachLoop.Variable.StableKey)) yield return assignment;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)
@@ -371,7 +372,8 @@ internal sealed partial class PowerShellTypedLowerer
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
-                yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
+                if (!forEachLoop.DeclareVariable)
+                    yield return (forEachLoop.Variable.StableKey, forEachLoop.Span.StartOffset);
                 foreach (var nested in EnumerateAssignments(forEachLoop.Body)) yield return nested;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)

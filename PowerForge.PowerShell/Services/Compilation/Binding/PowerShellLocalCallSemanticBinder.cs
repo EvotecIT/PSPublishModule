@@ -23,13 +23,15 @@ internal sealed class PowerShellLocalCallSignature
         PowerShellLocalCallParameter[] parameters,
         bool isAdvanced,
         PowerShellCompilationCommandBinding commandBinding,
-        Type? declaredReturnType)
+        Type? declaredReturnType,
+        int pipelineLifecycleParameterIndex = -1)
     {
         Symbol = symbol;
         Parameters = parameters;
         IsAdvanced = isAdvanced;
         CommandBinding = commandBinding;
         DeclaredReturnType = declaredReturnType;
+        PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -37,6 +39,8 @@ internal sealed class PowerShellLocalCallSignature
     internal bool IsAdvanced { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredReturnType { get; private set; }
+    internal int PipelineLifecycleParameterIndex { get; }
+    internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
 
     internal bool RefineReturnType(Type type)
     {
@@ -74,12 +78,22 @@ internal static class PowerShellLocalCallSemanticBinder
             out _,
             out _);
         declaredReturnType ??= InferReturnType(function, parameters);
+        var pipelineLifecycleParameterIndex = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(
+            function.Body,
+            capabilities,
+            out var pipelineParameter,
+            out _)
+            ? Array.FindIndex(parameters, parameter => parameter.Symbol.Name.Equals(
+                pipelineParameter.Name.VariablePath.UserPath,
+                StringComparison.OrdinalIgnoreCase))
+            : -1;
         return new PowerShellLocalCallSignature(
             symbol,
             parameters,
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
             PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
-            declaredReturnType);
+            declaredReturnType,
+            pipelineLifecycleParameterIndex);
     }
 
     internal static Type? InferReturnType(
@@ -164,6 +178,8 @@ internal static class PowerShellLocalCallSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
+        if (signature.IsPipelineLifecycle)
+            return Reject(diagnostics, "PSB2920", $"Local function '{signature.Symbol.Name}' has a begin/process/end lifecycle and must be invoked through a bounded typed input pipeline.", span);
         if (command.Redirections.Count != 0)
             return Reject(diagnostics, "PSB2801", "Typed local function calls do not support stream redirection.", span);
         if (signature.Parameters.SelectMany(static parameter => parameter.Contract.Bindings)

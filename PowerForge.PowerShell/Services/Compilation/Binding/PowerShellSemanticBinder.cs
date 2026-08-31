@@ -57,8 +57,30 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
         var symbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(StringComparer.OrdinalIgnoreCase);
-        var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, capabilities);
+        var hasRuntimeFreeLifecycle = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(
+            function.Body,
+            capabilities,
+            out var pipelineParameter,
+            out _);
+        var bindingCapabilities = hasRuntimeFreeLifecycle
+            ? capabilities | PowerShellCompilationCapability.PipelineParameterBinding
+            : capabilities;
+        var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, bindingCapabilities);
         if (parameters is null) return null;
+        if (hasRuntimeFreeLifecycle)
+            return BindRuntimeFreePipelineLifecycleFunction(
+                document,
+                function,
+                functionSymbol,
+                functions,
+                diagnostics,
+                targetFramework,
+                bindingCapabilities,
+                declaredOutputType,
+                symbols,
+                parameters,
+                pipelineParameter,
+                functionDiagnosticStart);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
@@ -242,7 +264,7 @@ internal sealed partial class PowerShellSemanticBinder
         int? excludedTailOffset = null)
     {
         var locals = new List<PowerShellBoundLocal>();
-        var assignments = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
+        var assignments = GetFunctionStatements(function.Body)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
             .OrderBy(static assignment => assignment.Extent.StartOffset);
@@ -265,7 +287,7 @@ internal sealed partial class PowerShellSemanticBinder
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(local);
         }
-        var loops = (function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>())
+        var loops = GetFunctionStatements(function.Body)
             .SelectMany(static statement => statement.FindAll(static node => node is ForEachStatementAst, searchNestedScriptBlocks: false))
             .Cast<ForEachStatementAst>()
             .OrderBy(static loop => loop.Extent.StartOffset);
@@ -627,6 +649,31 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities,
                 out var enumeration))
             return enumeration;
+        if (statement is PipelineAst lifecyclePipeline &&
+            IsRuntimeFreePipelineLifecycleInvocation(lifecyclePipeline, functions))
+        {
+            var invocation = BindRuntimeFreePipelineLifecycleInvocation(
+                document,
+                lifecyclePipeline,
+                symbols,
+                functions,
+                diagnostics,
+                targetFramework,
+                capabilities);
+            if (invocation is null) return null;
+            if (!isTerminal)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSB2924",
+                    "Runtime-free lifecycle success output must be the terminal result of its enclosing typed function.",
+                    PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent)));
+                return null;
+            }
+            return new PowerShellBoundReturnStatement(
+                PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent),
+                invocation,
+                emitsValue: invocation.Type.ClrType != typeof(void));
+        }
         if (statement is PipelineAst pipeline)
         {
             var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);

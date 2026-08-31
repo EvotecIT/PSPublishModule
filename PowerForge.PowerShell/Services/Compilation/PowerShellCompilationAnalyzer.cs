@@ -193,6 +193,10 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var localVariables = CollectLocalVariables(root);
+        var runtimeFreeLifecycle = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(root, capabilities, out _, out _);
+        var unitCapabilities = runtimeFreeLifecycle
+            ? capabilities | PowerShellCompilationCapability.PipelineParameterBinding
+            : capabilities;
         var parameters = AnalyzeParameters(
             root.ParamBlock,
             root,
@@ -200,18 +204,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             diagnostics,
             localVariables,
             targetFramework,
-            capabilities,
+            unitCapabilities,
             localFunctionNames,
             kind == PowerShellCompilationUnitKind.Script);
 
-        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
-        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+        AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
+        AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
+        AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
+        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
 
         foreach (var statement in executableStatements)
         {
-            AnalyzeNode(statement, root, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
+            AnalyzeNode(statement, root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames);
         }
 
         return new PowerShellCompilationUnitPlan(
@@ -584,17 +588,21 @@ public sealed partial class PowerShellCompilationAnalyzer
         HashSet<string> localVariables,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        ISet<string>? localFunctionNames)
+        ISet<string>? localFunctionNames,
+        bool reportLifecycleDiagnostic)
     {
         if (block is null)
             return;
 
-        diagnostics.Add(CreateDiagnostic(
-            PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
-            $"The '{blockName}' block requires PowerShell pipeline lifecycle semantics.",
-            file,
-            block.Extent,
-            PowerShellCompilationFeatureIds.PipelineLifecycle));
+        if (reportLifecycleDiagnostic)
+        {
+            diagnostics.Add(CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.UnsupportedSyntax,
+                $"The '{blockName}' block requires PowerShell pipeline lifecycle semantics.",
+                file,
+                block.Extent,
+                PowerShellCompilationFeatureIds.PipelineLifecycle));
+        }
         foreach (var statement in block.Statements)
             AnalyzeNode(statement, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
     }
