@@ -100,6 +100,35 @@ public sealed class GitHubServerBackupActionTests
     }
 
     [Fact]
+    public async Task GitRetry_ShouldRecoverFromTransientFailuresAndCleanTerminalPartialClone()
+    {
+        var testScript = GetRepoPath("PowerForge.Tests", "Scripts", "Test-GitWithRetry.ps1");
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "pwsh",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(testScript);
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        Assert.NotNull(process);
+        var standardOutput = process.StandardOutput.ReadToEndAsync();
+        var standardError = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await process.WaitForExitAsync(timeout.Token);
+
+        Assert.True(
+            process.ExitCode == 0,
+            $"Git retry contract failed with exit code {process.ExitCode}.{Environment.NewLine}{await standardOutput}{Environment.NewLine}{await standardError}");
+    }
+
+    [Fact]
     public void Repository_ShouldHaveOneBackupImplementation()
     {
         Assert.False(File.Exists(GetRepoPath(".github", "workflows", "powerforge-server-backup.yml")));

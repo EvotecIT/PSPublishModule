@@ -18,7 +18,8 @@ function Invoke-GitWithRetry {
         [Parameter(Mandatory)][string] $Operation,
         [Parameter(Mandatory)][string[]] $Arguments,
         [string] $ResetPath,
-        [ValidateRange(1, 5)][int] $MaxAttempts = 3
+        [ValidateRange(1, 5)][int] $MaxAttempts = 3,
+        [ValidateRange(0, 60)][int] $RetryDelaySeconds = 5
     )
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
@@ -33,10 +34,13 @@ function Invoke-GitWithRetry {
         }
         if ($attempt -lt $MaxAttempts) {
             Write-Warning "$Operation failed with exit code $exitCode; retrying ($attempt/$MaxAttempts)."
-            Start-Sleep -Seconds ($attempt * 5)
+            Start-Sleep -Seconds ($attempt * $RetryDelaySeconds)
         }
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($ResetPath) -and (Test-Path -LiteralPath $ResetPath)) {
+        Remove-Item -LiteralPath $ResetPath -Recurse -Force
+    }
     throw "$Operation failed after $MaxAttempts attempts with exit code $exitCode."
 }
 
