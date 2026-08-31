@@ -30,6 +30,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-ArithmeticValue { [int] $Value = 6; $Value *= 7; return $Value }",
             "Get_ArithmeticValue",
             "42"
+        },
+        {
+            "expandable-string",
+            "function Get-ExpandableStringResult { [string] $Value = '42'; return [string]::CompareOrdinal(\"value=$Value\", 'value=42') }",
+            "Get_ExpandableStringResult",
+            "0"
         }
     };
 
@@ -82,6 +88,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesArithmeticCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-arithmetic", "BoundedArithmeticOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesExpandableStringCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/expandable-string", "BoundedExpandableStringOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()

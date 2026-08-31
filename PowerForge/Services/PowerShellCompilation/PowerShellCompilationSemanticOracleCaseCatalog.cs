@@ -45,7 +45,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("parameter-metadata", PowerShellCompilationFeatureIds.ParameterMetadata);
         yield return Case("parameter-binding", PowerShellCompilationFeatureIds.ParameterBinding);
         yield return Case("conversion", PowerShellCompilationFeatureIds.Conversion);
-        yield return Case("expandable-string", PowerShellCompilationFeatureIds.ExpandableString);
+        yield return Case("expandable-string", PowerShellCompilationFeatureIds.ExpandableString, expectedValue: "0");
         yield return Case("assignment-target", PowerShellCompilationFeatureIds.AssignmentTarget, expectedValue: "0");
         yield return Case("switch-flags", PowerShellCompilationFeatureIds.SwitchFlags);
         yield return Case("catch-filter", PowerShellCompilationFeatureIds.CatchFilter);
