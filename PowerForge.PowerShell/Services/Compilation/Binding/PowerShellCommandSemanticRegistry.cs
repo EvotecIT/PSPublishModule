@@ -281,8 +281,8 @@ internal sealed class PowerShellCommandSemanticRegistry
                     : "Write" + contract.Stream;
                 if (!contract.Adapter.Operation.Equals(expectedOperation, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' operation '{contract.Adapter.Operation}' does not match stream '{contract.Stream}' operation '{expectedOperation}'.");
-                if (contract.Adapter.Dependencies.Length > 0)
-                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' declares adapter dependencies that cannot yet be locked and certified. Dependency-bearing providers require the Milestone 16 provider package contract.");
+                if (contract.Adapter.Dependencies.Length > 0 && contract.Adapter.EntryPoint is null)
+                    throw new InvalidOperationException($"Runtime-free built-in provider '{contract.ProviderId}' cannot declare external adapter dependencies.");
                 if (contract.Parameters.Length != 1)
                     throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must declare exactly one value parameter shape.");
             }

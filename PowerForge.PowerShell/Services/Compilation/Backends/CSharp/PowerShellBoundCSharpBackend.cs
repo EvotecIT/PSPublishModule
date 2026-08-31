@@ -177,30 +177,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
                 return;
             case PowerShellLoweredStreamWriteStatement stream:
-                var sink = stream.Kind switch
-                {
-                    PowerShellStreamCommandKind.Success => "__writeOutput",
-                    PowerShellStreamCommandKind.Verbose => "__writeVerbose",
-                    PowerShellStreamCommandKind.Debug => "__writeDebug",
-                    PowerShellStreamCommandKind.Warning => "__writeWarning",
-                    PowerShellStreamCommandKind.Information => "__writeInformation",
-                    PowerShellStreamCommandKind.Host => "__writeHost",
-                    PowerShellStreamCommandKind.Error => "__writeError",
-                    _ => throw new InvalidOperationException($"Stream kind '{stream.Kind}' has no C# host binding.")
-                };
-                builder.Append(prefix).Append(sink).Append('(');
-                if (stream.Kind == PowerShellStreamCommandKind.Success)
-                    builder.Append("(object?)").Append(EmitExpression(stream.Message));
-                else
-                {
-                    var entryPoint = stream.Provider.Adapter.EntryPoint;
-                    if (entryPoint is not null)
-                        builder.Append("global::").Append(entryPoint.TypeName).Append('.').Append(entryPoint.MethodName).Append('(');
-                    builder.Append("global::System.Convert.ToString(").Append(EmitExpression(stream.Message))
-                        .Append(", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty");
-                    if (entryPoint is not null) builder.Append(')');
-                }
-                builder.AppendLine(");");
+                EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier);
                 return;
             case PowerShellLoweredCommandRegionStatement region:
                 builder.Append(prefix).Append("__invokePowerShellRegion(")

@@ -191,6 +191,7 @@ public sealed class PowerShellCompilationProviderPackageReader
         var manifest = JsonSerializer.Deserialize<PowerShellCompilationProviderPackageManifest>(manifestBytes, options)
             ?? throw new InvalidOperationException($"Provider package '{path}' contains an empty manifest.");
         ValidateManifest(manifest, policy, path, semanticProfileId);
+        PowerShellCompilationProviderContractValidator.Validate(manifest);
         ValidatePackageMetadata(packageReader, files, manifest, path);
         var assemblies = ValidateAssemblies(packageReader, files, manifest, path);
         ValidateAdapterEntryPoints(packageReader, manifest, path);
@@ -242,21 +243,28 @@ public sealed class PowerShellCompilationProviderPackageReader
         if (!Version.TryParse(manifest.PackageVersion, out var packageVersion) || packageVersion.Build < 0 || packageVersion.Revision >= 0)
             throw new InvalidOperationException($"Provider package '{path}' must use a three-part public PackageVersion.");
         ApplyIdentityPolicy(manifest, policy, path);
-        if (manifest.SemanticProfiles.Length == 0)
+        if (manifest.SemanticProfiles is null || manifest.SemanticProfiles.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one semantic profile.");
-        if (manifest.SourceSemanticProfiles.Length == 0)
+        if (manifest.SourceSemanticProfiles is null || manifest.SourceSemanticProfiles.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one source semantic profile.");
         var sourceProfiles = manifest.SourceSemanticProfiles
             .Select(static profile => PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId)
             .ToArray();
         if (!sourceProfiles.Contains(semanticProfileId, StringComparer.Ordinal))
             throw new InvalidOperationException($"Provider package '{path}' does not support source semantic profile '{semanticProfileId}'.");
-        if (manifest.Assemblies.Length == 0)
+        if (manifest.Assemblies is null || manifest.Assemblies.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one provider assembly.");
-        if (manifest.Providers.Length == 0)
+        if (manifest.Providers is null || manifest.Providers.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one provider contract.");
 
-        foreach (var dependency in manifest.Dependencies)
+        var dependencies = manifest.Dependencies ?? Array.Empty<PowerShellCompilationProviderDependency>();
+        var duplicateDependency = dependencies
+            .GroupBy(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateDependency is not null)
+            throw new InvalidOperationException(
+                $"Provider package '{path}' declares dependency '{duplicateDependency.Key}' more than once.");
+        foreach (var dependency in dependencies)
         {
             Require(dependency.PackageId, "Dependency.PackageId", path);
             Require(dependency.Version, "Dependency.Version", path);
@@ -265,22 +273,7 @@ public sealed class PowerShellCompilationProviderPackageReader
                 throw new InvalidOperationException($"Provider package '{path}' dependency '{dependency.PackageId}' must use an exact three-part public version.");
         }
         foreach (var provider in manifest.Providers)
-        {
-            Require(provider.ProviderId, "Provider.ProviderId", path);
-            Require(provider.ProviderVersion, "Provider.ProviderVersion", path);
-            Require(provider.FeatureId, "Provider.FeatureId", path);
-            Require(provider.CommandName, "Provider.CommandName", path);
-            if (!provider.CompileTimeOnly || provider.MayExecuteSource || provider.MayImportSourceModules)
-                throw new InvalidOperationException($"Provider '{provider.ProviderId}' must be compile-time-only and may not execute or import source.");
-            if (provider.Adapter is null || string.IsNullOrWhiteSpace(provider.Adapter.SemanticProfile))
-                throw new InvalidOperationException($"Provider '{provider.ProviderId}' must declare an adapter semantic profile.");
-            if (!manifest.SemanticProfiles.Contains(provider.Adapter.SemanticProfile, StringComparer.Ordinal))
-                throw new InvalidOperationException($"Provider '{provider.ProviderId}' targets undeclared semantic profile '{provider.Adapter.SemanticProfile}'.");
-            if (provider.Adapter.RuntimeFree && provider.Adapter.EntryPoint is null)
-                throw new InvalidOperationException($"Runtime-free provider '{provider.ProviderId}' must declare an executable adapter entry point.");
             ApplyProviderPolicy(provider.ProviderId, policy, path);
-        }
-        EnsureUniqueProviders(manifest.Providers);
     }
 
     private static void ValidateAdapterEntryPoints(
@@ -294,8 +287,6 @@ public sealed class PowerShellCompilationProviderPackageReader
             var assemblyPath = NormalizePath(entryPoint.AssemblyPath);
             if (!manifest.Assemblies.Any(assembly => NormalizePath(assembly.Path).Equals(assemblyPath, StringComparison.Ordinal)))
                 throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point references undeclared assembly '{entryPoint.AssemblyPath}'.");
-            if (provider.Stream.Equals("Success", StringComparison.Ordinal))
-                throw new InvalidOperationException($"Provider '{provider.ProviderId}' executable string adapter cannot target the Success stream.");
             if (!IsQualifiedIdentifier(entryPoint.TypeName) || !IsIdentifier(entryPoint.MethodName))
                 throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point is not a safe CLR/C# identifier.");
             byte[] bytes;
@@ -327,19 +318,32 @@ public sealed class PowerShellCompilationProviderPackageReader
                         matches.Add(method);
                 }
             }
-            if (matches.Count != 1 || !HasStringTransformSignature(reader, matches[0]))
-                throw new InvalidOperationException($"Provider '{provider.ProviderId}' entry point must be one public static non-generic string Method(string).");
+            var collection = provider.Stream.Equals("Success", StringComparison.Ordinal) &&
+                             provider.Cardinality == PowerShellCompilationCommandCardinality.Collection;
+            if (matches.Count != 1 || !HasStringTransformSignature(reader, matches[0], collection))
+                throw new InvalidOperationException(
+                    $"Provider '{provider.ProviderId}' entry point must be one public static non-generic " +
+                    (collection ? "string[] Method(string)." : "string Method(string)."));
         }
     }
 
-    private static bool HasStringTransformSignature(MetadataReader reader, MethodDefinition method)
+    private static bool HasStringTransformSignature(MetadataReader reader, MethodDefinition method, bool collection)
     {
         var blob = reader.GetBlobReader(method.Signature);
         var header = blob.ReadSignatureHeader();
         if (header.IsGeneric) return false;
         if (blob.ReadCompressedInteger() != 1) return false;
-        return blob.ReadSignatureTypeCode() == SignatureTypeCode.String &&
-               blob.ReadSignatureTypeCode() == SignatureTypeCode.String;
+        if (collection)
+        {
+            if (blob.ReadSignatureTypeCode() != SignatureTypeCode.SZArray ||
+                blob.ReadSignatureTypeCode() != SignatureTypeCode.String)
+                return false;
+        }
+        else if (blob.ReadSignatureTypeCode() != SignatureTypeCode.String)
+        {
+            return false;
+        }
+        return blob.ReadSignatureTypeCode() == SignatureTypeCode.String;
     }
 
     private static bool IsQualifiedIdentifier(string value)
@@ -377,6 +381,29 @@ public sealed class PowerShellCompilationProviderPackageReader
             !string.Equals(license.Attribute("type")?.Value, "expression", StringComparison.OrdinalIgnoreCase) ||
             !license.Value.Trim().Equals(manifest.LicenseExpression, StringComparison.Ordinal))
             throw new InvalidOperationException($"Provider package '{packagePath}' manifest identity, publisher, or license conflicts with its NuGet metadata.");
+
+        var nuspecDependencies = metadata
+            .Descendants()
+            .Where(static element => element.Name.LocalName == "dependency")
+            .Select(element => new
+            {
+                PackageId = element.Attribute("id")?.Value.Trim() ?? string.Empty,
+                Version = element.Attribute("version")?.Value.Trim() ?? string.Empty
+            })
+            .ToArray();
+        if (nuspecDependencies.Any(static dependency => string.IsNullOrWhiteSpace(dependency.PackageId) ||
+                                                        string.IsNullOrWhiteSpace(dependency.Version)) ||
+            nuspecDependencies.GroupBy(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase)
+                .Any(static group => group.Count() > 1))
+            throw new InvalidOperationException($"Provider package '{packagePath}' contains ambiguous NuGet dependency metadata.");
+        var declaredDependencies = (manifest.Dependencies ?? Array.Empty<PowerShellCompilationProviderDependency>())
+            .ToDictionary(static dependency => dependency.PackageId, StringComparer.OrdinalIgnoreCase);
+        if (nuspecDependencies.Length != declaredDependencies.Count ||
+            nuspecDependencies.Any(dependency =>
+                !declaredDependencies.TryGetValue(dependency.PackageId, out var declared) ||
+                !dependency.Version.Equals("[" + declared.Version + "]", StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                $"Provider package '{packagePath}' dependency identities or exact versions conflict with its NuGet metadata.");
     }
 
     private static PowerShellCompilationProviderAssembly[] ValidateAssemblies(

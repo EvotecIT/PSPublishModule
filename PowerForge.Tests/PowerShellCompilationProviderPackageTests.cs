@@ -1,13 +1,17 @@
 using System.Security.Cryptography;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using PowerForge;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerShellCompilationProviderPackageTests
+public sealed partial class PowerShellCompilationProviderPackageTests
 {
     [Fact]
     public void SdkConformanceKitProducesOrderStableEvidenceAndRejectsAmbiguousRegistration()
@@ -90,6 +94,13 @@ public sealed class PowerShellCompilationProviderPackageTests
             }
         };
         fixture.Manifest.Providers = new[] { firstProvider, secondProvider };
+        fixture.Manifest.Dependencies = new[]
+        {
+            new PowerShellCompilationProviderDependency { PackageId = "Generic.Runtime.A", Version = "1.0.0", ContentHash = "sha512-runtime-a" },
+            new PowerShellCompilationProviderDependency { PackageId = "Generic.Runtime.Z", Version = "1.0.0", ContentHash = "sha512-runtime-z" },
+            new PowerShellCompilationProviderDependency { PackageId = "Generic.Warning.Runtime.A", Version = "1.0.0", ContentHash = "sha512-warning-a" },
+            new PowerShellCompilationProviderDependency { PackageId = "Generic.Warning.Runtime.Z", Version = "1.0.0", ContentHash = "sha512-warning-z" }
+        };
         var first = fixture.BuildPackage("first.nupkg");
         fixture.Manifest.Providers = new[] { secondProvider, firstProvider };
         Array.Reverse(firstProvider.ModuleNames);
@@ -175,85 +186,56 @@ public sealed class PowerShellCompilationProviderPackageTests
         Assert.Contains("public static non-generic string", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Theory]
-    [InlineData(PowerShellCompilationMode.Strict)]
-    [InlineData(PowerShellCompilationMode.Hybrid)]
-    public void ArtifactBuildRequiresReviewedProviderLockAndExecutesAdapter(PowerShellCompilationMode mode)
+    [Fact]
+    public void ReaderAppliesCanonicalContractValidationToManuallyAuthoredPackages()
     {
-        using var providerFixture = ProviderFixture.Create();
-        var packagePath = providerFixture.PackagePath("provider.nupkg");
-        var resolution = providerFixture.BuildPackage("provider.nupkg");
-        using var artifactFixture = ScriptFixture.Create("function Write-PackageNotice { Write-PackageNoticeCore 'locked' }");
-        var reference = new PowerShellCompilationProviderPackageReference(packagePath);
-        var unlocked = new PowerShellCompilationBuildSpec(
-            artifactFixture.ScriptPath,
-            artifactFixture.OutputPath,
-            "UnreviewedProvider" + mode,
-            PowerShellCompilationArtifactKind.Library,
-            mode,
-            allowUnreviewedDependencyResolution: true)
-        {
-            ProviderPackages = new[] { reference }
-        };
-
-        var unlockedResult = new PowerShellCompilationArtifactBuilder().Build(unlocked);
-        Assert.False(unlockedResult.Succeeded);
-        Assert.Contains("reviewed provider lock", unlockedResult.Error, StringComparison.OrdinalIgnoreCase);
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-            artifactFixture.ScriptPath,
-            artifactFixture.OutputPath,
-            "ReviewedProvider" + mode,
-            PowerShellCompilationArtifactKind.Library,
-            mode,
-            allowUnreviewedDependencyResolution: true)
-        {
-            ProviderPackages = new[] { reference },
-            ExpectedProviderLock = resolution.Lock,
-            ProviderTrustPolicy = new PowerShellCompilationProviderTrustPolicy
+        using var fixture = ProviderFixture.Create();
+        var packagePath = fixture.PackagePath("forged-contract.nupkg");
+        fixture.BuildPackage("forged-contract.nupkg");
+        RewriteJsonEntry<PowerShellCompilationProviderPackageManifest>(
+            packagePath,
+            PowerShellCompilationProviderPackageReader.ManifestPath,
+            manifest =>
             {
-                AllowedPackageIds = new[] { "Generic.Semantic.Provider" },
-                AllowedProviderIds = new[] { "generic.command.stream.notice" },
-                AllowedPublishers = new[] { "Generic Publisher" },
-                AllowedLicenseExpressions = new[] { "MIT" }
-            }
-        });
-
-        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.ProviderLockReviewed);
-        Assert.Equal(resolution.Lock.LockSha256, result.Manifest.ProviderLock!.LockSha256);
-        Assert.Equal(resolution.Lock.LockSha256, result.Manifest.Reproduction!.ProviderLockSha256);
-        Assert.Single(result.Manifest.CommandProviders, static provider => provider.ProviderId == "generic.command.stream.notice");
-        var sbomPath = Assert.Single(result.Manifest.Files, static file => file.Role == "Sbom").Path;
-        var provenancePath = Assert.Single(result.Manifest.Files, static file => file.Role == "BuildProvenance").Path;
-        Assert.Contains("Generic.Semantic.Provider", File.ReadAllText(sbomPath), StringComparison.Ordinal);
-        Assert.Contains(resolution.Lock.LockSha256, File.ReadAllText(provenancePath), StringComparison.OrdinalIgnoreCase);
-        var providerRuntime = Assert.Single(result.Manifest.Files, static file => file.Role == "CompilerProviderRuntime");
-        Assert.Equal(Assert.Single(resolution.Lock.Packages).Assemblies[0].Sha256, providerRuntime.Sha256);
-
-        var loadContext = new ArtifactLoadContext(Path.GetDirectoryName(result.ArtifactPath!)!);
-        try
-        {
-            var assembly = loadContext.LoadFromAssemblyPath(result.ArtifactPath!);
-            var method = assembly.GetType("PowerForge.Compiled.ReviewedProvider" + mode + "Methods", throwOnError: true)!
-                .GetMethod("Write_PackageNotice", BindingFlags.Public | BindingFlags.Static)!;
-            var information = new List<string>();
-            method.Invoke(null, new object[]
-            {
-                (Action<object?>)(_ => { }),
-                (Action<string>)(_ => { }),
-                (Action<string>)(_ => { }),
-                (Action<string>)(_ => { }),
-                (Action<string>)(information.Add),
-                (Action<string>)(_ => { }),
-                (Action<string>)(_ => { })
+                var provider = Assert.Single(manifest.Providers);
+                provider.Stream = "Success";
+                provider.Output = PowerShellCompilationCommandOutput.None;
+                provider.Cardinality = PowerShellCompilationCommandCardinality.None;
             });
-            Assert.Equal(new[] { "provider:locked" }, information);
-        }
-        finally
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationProviderPackageReader().Resolve(
+            new[] { new PowerShellCompilationProviderPackageReference(packagePath) }));
+
+        Assert.Contains("Success-stream", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderReconcilesExactNuGetDependencyIdentityAndVersion()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.Manifest.Dependencies = new[]
         {
-            loadContext.Unload();
-        }
+            new PowerShellCompilationProviderDependency
+            {
+                PackageId = "Generic.Runtime.Dependency",
+                Version = "1.0.0",
+                ContentHash = "sha512-reviewed-content-identity"
+            }
+        };
+        var packagePath = fixture.PackagePath("forged-dependency.nupkg");
+        fixture.BuildPackage("forged-dependency.nupkg");
+        RewriteTextEntry(
+            packagePath,
+            "Generic.Semantic.Provider.nuspec",
+            content => content.Replace(
+                "id=\"Generic.Runtime.Dependency\" version=\"[1.0.0]\"",
+                "id=\"Generic.Runtime.Dependency\" version=\"[1.0.1]\"",
+                StringComparison.Ordinal));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationProviderPackageReader().Resolve(
+            new[] { new PowerShellCompilationProviderPackageReference(packagePath) }));
+
+        Assert.Contains("dependency identities or exact versions", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -278,6 +260,69 @@ public sealed class PowerShellCompilationProviderPackageTests
         using var algorithm = SHA256.Create();
         return Convert.ToHexString(algorithm.ComputeHash(stream)).ToLowerInvariant();
     }
+
+    private static void RewriteJsonEntry<T>(string packagePath, string entryPath, Action<T> update)
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = false, WriteIndented = true };
+        options.Converters.Add(new JsonStringEnumConverter());
+        RewriteTextEntry(packagePath, entryPath, content =>
+        {
+            var value = JsonSerializer.Deserialize<T>(content, options)
+                ?? throw new InvalidDataException($"Archive entry '{entryPath}' was empty.");
+            update(value);
+            return JsonSerializer.Serialize(value, options);
+        });
+    }
+
+    private static void RewriteTextEntry(string packagePath, string entryPath, Func<string, string> update)
+    {
+        using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Update);
+        var entry = archive.GetEntry(entryPath) ?? throw new InvalidDataException($"Archive entry '{entryPath}' was absent.");
+        string content;
+        using (var reader = new StreamReader(entry.Open(), Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: false))
+            content = reader.ReadToEnd();
+        entry.Delete();
+        var replacement = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        replacement.LastWriteTime = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        using var writer = new StreamWriter(replacement.Open(), new UTF8Encoding(false));
+        writer.Write(update(content));
+    }
+
+    private static PowerShellCompilationCommandProviderContract Provider(
+        string providerId,
+        string commandName,
+        string stream,
+        string methodName,
+        PowerShellCompilationCommandOutput output = PowerShellCompilationCommandOutput.None,
+        PowerShellCompilationCommandCardinality cardinality = PowerShellCompilationCommandCardinality.None,
+        PowerShellCompilationCommandErrors errors = PowerShellCompilationCommandErrors.None)
+        => new()
+        {
+            ProviderId = providerId,
+            ProviderVersion = "1.0",
+            FeatureId = "provider-matrix-" + providerId,
+            Family = PowerShellCompilationCommandFamily.Stream,
+            CommandName = commandName,
+            Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Value", Position = 0 } },
+            Output = output,
+            Cardinality = cardinality,
+            Stream = stream,
+            Errors = errors,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = stream == "Success" ? "WriteOutput" : "Write" + stream,
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" +
+                                  PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true,
+                EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
+                {
+                    AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.dll",
+                    TypeName = "Generic.Semantic.Provider.NoticeAdapter",
+                    MethodName = methodName
+                }
+            }
+        };
 
     private sealed class ProviderFixture : IDisposable
     {

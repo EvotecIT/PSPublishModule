@@ -50,7 +50,9 @@ public sealed class PowerShellCompilationProviderDependency
     /// <summary>Exact three-part public package version.</summary>
     public string Version { get; set; } = string.Empty;
 
-    /// <summary>Immutable NuGet content hash or equivalent package content identity.</summary>
+    /// <summary>
+    /// Reviewed NuGet content identity. Project restore reconciles it with NuGet's resolved lock and acquired package bytes.
+    /// </summary>
     public string ContentHash { get; set; } = string.Empty;
 }
 

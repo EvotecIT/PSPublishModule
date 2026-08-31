@@ -71,7 +71,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
         provider.Adapter.Dependencies = new[] { "Unreviewed.Adapter.Dependency" };
         var dependencyError = Assert.Throws<InvalidOperationException>(() =>
             new PowerShellCommandSemanticRegistry(new[] { provider }));
-        Assert.Contains("cannot yet be locked and certified", dependencyError.Message, StringComparison.Ordinal);
+        Assert.Contains("built-in provider", dependencyError.Message, StringComparison.Ordinal);
     }
 
     [Fact]
