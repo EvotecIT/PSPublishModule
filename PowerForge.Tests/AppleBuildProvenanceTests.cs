@@ -94,6 +94,123 @@ public sealed class AppleBuildProvenanceTests
         }
     }
 
+    [Fact]
+    public void ResolveLocalSourceRevision_rejects_mode_changes_hidden_by_git_config()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = CreateRepository();
+        try
+        {
+            RunGit(root.FullName, "update-index", "--chmod=+x", "tracked.txt");
+            RunGit(root.FullName, "commit", "-m", "mark executable");
+            RunGit(root.FullName, "config", "core.fileMode", "false");
+            var path = Path.Combine(root.FullName, "tracked.txt");
+            var mode = File.GetUnixFileMode(path);
+            File.SetUnixFileMode(
+                path,
+                mode & ~(
+                    UnixFileMode.UserExecute |
+                    UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherExecute));
+
+            Assert.True(string.IsNullOrWhiteSpace(
+                RunGit(root.FullName, "status", "--porcelain")));
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveLocalSourceRevision_rejects_clean_filter_transformed_bytes()
+    {
+        var root = CreateRepository();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, ".gitattributes"),
+                "tracked.txt text\n");
+            File.WriteAllText(
+                Path.Combine(root.FullName, "tracked.txt"),
+                "line one\nline two\n");
+            RunGit(root.FullName, "add", ".gitattributes", "tracked.txt");
+            RunGit(root.FullName, "commit", "-m", "normalize tracked input");
+            RunGit(root.FullName, "config", "core.autocrlf", "true");
+            File.Delete(Path.Combine(root.FullName, "tracked.txt"));
+            RunGit(root.FullName, "checkout", "--", "tracked.txt");
+
+            Assert.True(string.IsNullOrWhiteSpace(
+                RunGit(root.FullName, "status", "--porcelain")));
+            Assert.Contains(
+                "\r\n",
+                File.ReadAllText(Path.Combine(root.FullName, "tracked.txt")),
+                StringComparison.Ordinal);
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ResolveLocalSourceRevision_rejects_external_hard_link_aliases()
+    {
+        var root = CreateRepository();
+        var external = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.AppleBuildProvenance.External",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var trackedPath = Path.Combine(root.FullName, "tracked.txt");
+            var externalPath = Path.Combine(external.FullName, "tracked.txt");
+            File.WriteAllBytes(externalPath, File.ReadAllBytes(trackedPath));
+            File.Delete(trackedPath);
+            TestFileLink.CreateHardLink(trackedPath, externalPath);
+
+            Assert.True(string.IsNullOrWhiteSpace(
+                RunGit(root.FullName, "status", "--porcelain")));
+            Assert.Null(AppleBuildProvenance.ResolveLocalSourceRevision(root.FullName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { external.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateUnchanged_rejects_a_transient_external_hard_link_alias()
+    {
+        var root = CreateRepository();
+        var external = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.AppleBuildProvenance.External",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var snapshot = AppleBuildProvenance.Capture(root.FullName);
+            var alias = Path.Combine(external.FullName, "tracked.txt");
+            TestFileLink.CreateHardLink(
+                alias,
+                Path.Combine(root.FullName, "tracked.txt"));
+            File.Delete(alias);
+
+            Assert.Throws<InvalidOperationException>(() =>
+                AppleBuildProvenance.ValidateUnchanged(snapshot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { external.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData("--assume-unchanged")]
     [InlineData("--skip-worktree")]

@@ -744,6 +744,116 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task BuildAsync_keeps_live_source_monitored_during_mirrored_xcodebuild()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var mirrorRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Mirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            var projectFile = Path.Combine(project.FullName, "project.pbxproj");
+            File.WriteAllText(projectFile, "clean");
+            InitializeGitRepository(root.FullName);
+            var processIndex = 0;
+            var runner = new CapturingProcessRunner(_ =>
+            {
+                processIndex++;
+                if (processIndex == 2)
+                {
+                    File.WriteAllText(projectFile, "transient");
+                    File.WriteAllText(projectFile, "clean");
+                }
+                return Success("ok");
+            });
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        UseBuildMirror = true,
+                        BuildRoot = root.FullName,
+                        BuildMirrorPath = Path.Combine(mirrorRoot.FullName, "mirror"),
+                        RsyncExecutable = "rsync-test",
+                        XcodeBuildExecutable = "xcodebuild-test"
+                    }));
+
+            Assert.Contains("source changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_mirror_alias_to_the_source_before_rsync()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var mirrorRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Mirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                "clean");
+            InitializeGitRepository(root.FullName);
+            var mirror = Path.Combine(mirrorRoot.FullName, "mirror");
+            Directory.CreateSymbolicLink(mirror, root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        UseBuildMirror = true,
+                        BuildRoot = root.FullName,
+                        BuildMirrorPath = mirror,
+                        RsyncExecutable = "rsync-test",
+                        XcodeBuildExecutable = "xcodebuild-test"
+                    }));
+
+            Assert.Contains("physically overlap", exception.Message, StringComparison.Ordinal);
+            Assert.True(Directory.Exists(Path.Combine(root.FullName, ".git")));
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_discovers_single_app_when_product_name_differs_from_scheme()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

@@ -10,15 +10,22 @@ internal static class AppleBuildProvenance
 
     internal sealed class Snapshot
     {
-        internal Snapshot(string rootPath, string revision)
+        internal Snapshot(
+            string rootPath,
+            string revision,
+            IReadOnlyDictionary<string, string> trackedFileMutationIdentities)
         {
             RootPath = rootPath;
             Revision = revision;
+            TrackedFileMutationIdentities = trackedFileMutationIdentities;
         }
 
         internal string RootPath { get; }
 
         internal string Revision { get; }
+
+        internal IReadOnlyDictionary<string, string>
+            TrackedFileMutationIdentities { get; }
     }
 
     internal static string? ResolveLocalSourceRevision(string projectRoot)
@@ -71,6 +78,8 @@ internal static class AppleBuildProvenance
             .GetAwaiter()
             .GetResult();
         if (!indexFlags.Succeeded || HasHiddenTrackedFiles(indexFlags.StdOut))
+            return null;
+        if (!TrackedWorkingTreeMatchesIndex(projectRoot, git))
             return null;
         return string.IsNullOrWhiteSpace(status.StdOut)
             ? revision
@@ -168,13 +177,29 @@ internal static class AppleBuildProvenance
             throw new InvalidOperationException(
                 $"Apple source provenance is required, but '{root}' is not a readable, clean Git working tree with a full HEAD revision.");
         }
-        return new Snapshot(root, revision);
+        var mutationIdentities = CaptureTrackedFileMutationIdentities(root)
+            ?? throw new InvalidOperationException(
+                $"Apple source provenance is required, but tracked file identities in '{root}' could not be captured safely.");
+        return new Snapshot(root, revision, mutationIdentities);
     }
 
     internal static void ValidateUnchanged(Snapshot snapshot)
     {
         var current = ResolveLocalSourceRevision(snapshot.RootPath);
-        if (!string.Equals(current, snapshot.Revision, StringComparison.Ordinal))
+        var currentMutationIdentities = current is null
+            ? null
+            : CaptureTrackedFileMutationIdentities(snapshot.RootPath);
+        if (!string.Equals(current, snapshot.Revision, StringComparison.Ordinal) ||
+            currentMutationIdentities is null ||
+            snapshot.TrackedFileMutationIdentities.Count !=
+                currentMutationIdentities.Count ||
+            snapshot.TrackedFileMutationIdentities.Any(pair =>
+                !currentMutationIdentities.TryGetValue(
+                    pair.Key,
+                    out var currentIdentity) ||
+                !pair.Value.Equals(
+                    currentIdentity,
+                    StringComparison.Ordinal)))
         {
             throw new InvalidOperationException(
                 "Apple source changed while PowerForge was preparing or running xcodebuild. Discard the product and rebuild from a stable working tree.");
@@ -313,6 +338,180 @@ internal static class AppleBuildProvenance
                 return true;
         }
         return false;
+    }
+
+    private static bool TrackedWorkingTreeMatchesIndex(
+        string projectRoot,
+        GitClient git)
+    {
+        var staged = git.RunRawAsync(
+                projectRoot,
+                ["ls-files", "--stage", "-z"])
+            .GetAwaiter()
+            .GetResult();
+        if (!staged.Succeeded)
+            return false;
+
+        var trackedFiles = new List<(
+            string RelativePath,
+            string FullPath,
+            string ObjectId,
+            bool Executable)>();
+        foreach (var entry in staged.StdOut.Split(
+                     new[] { '\0' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = entry.IndexOf('\t');
+            if (separator < 0)
+                return false;
+            var metadata = entry.Substring(0, separator).Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (metadata.Length != 3 || metadata[2] != "0")
+                return false;
+            if (metadata[0] != "100644" && metadata[0] != "100755")
+                continue;
+            var relativePath = entry.Substring(separator + 1);
+            var fullPath = Path.GetFullPath(Path.Combine(
+                projectRoot,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!File.Exists(fullPath))
+                return false;
+            trackedFiles.Add((
+                relativePath,
+                fullPath,
+                metadata[1],
+                metadata[0] == "100755"));
+        }
+
+        try
+        {
+            var hardLinkCounts = ExistingFilePathIdentityResolver
+                .ResolveHardLinkCounts(trackedFiles
+                    .Select(static file => file.FullPath)
+                    .ToArray());
+            if (hardLinkCounts.Any(static count => count != 1))
+                return false;
+        }
+        catch
+        {
+            return false;
+        }
+
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+        {
+            const UnixFileMode executeBits =
+                UnixFileMode.UserExecute |
+                UnixFileMode.GroupExecute |
+                UnixFileMode.OtherExecute;
+            foreach (var file in trackedFiles)
+            {
+                var isExecutable = (File.GetUnixFileMode(file.FullPath) &
+                    executeBits) != 0;
+                if (isExecutable != file.Executable)
+                    return false;
+            }
+        }
+#endif
+
+        const int batchSize = 64;
+        for (var offset = 0; offset < trackedFiles.Count; offset += batchSize)
+        {
+            var batch = trackedFiles.Skip(offset).Take(batchSize).ToArray();
+            var arguments = new List<string>
+            {
+                "hash-object",
+                "--no-filters",
+                "--"
+            };
+            arguments.AddRange(batch.Select(static file => file.RelativePath));
+            var hashes = git.RunRawAsync(projectRoot, arguments)
+                .GetAwaiter()
+                .GetResult();
+            if (!hashes.Succeeded)
+                return false;
+            var actual = hashes.StdOut.Split(
+                new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (actual.Length != batch.Length)
+                return false;
+            for (var index = 0; index < batch.Length; index++)
+            {
+                if (!actual[index].Trim().Equals(
+                        batch[index].ObjectId,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static IReadOnlyDictionary<string, string>?
+        CaptureTrackedFileMutationIdentities(string projectRoot)
+    {
+        var git = GitClient.CreateTrustedSystemClient(
+            defaultTimeout: TimeSpan.FromSeconds(10));
+        var staged = git.RunRawAsync(
+                projectRoot,
+                ["ls-files", "--stage", "-z"])
+            .GetAwaiter()
+            .GetResult();
+        if (!staged.Succeeded)
+            return null;
+
+        var trackedFiles = new List<(string RelativePath, string FullPath)>();
+        foreach (var entry in staged.StdOut.Split(
+                     new[] { '\0' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = entry.IndexOf('\t');
+            if (separator < 0)
+                return null;
+            var metadata = entry.Substring(0, separator).Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (metadata.Length != 3 || metadata[2] != "0")
+                return null;
+            if (metadata[0] != "100644" && metadata[0] != "100755")
+                continue;
+            var relativePath = entry.Substring(separator + 1);
+            var fullPath = Path.GetFullPath(Path.Combine(
+                projectRoot,
+                relativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!File.Exists(fullPath))
+                return null;
+            trackedFiles.Add((relativePath, fullPath));
+        }
+
+        try
+        {
+            var hardLinkCounts = ExistingFilePathIdentityResolver
+                .ResolveHardLinkCounts(trackedFiles
+                    .Select(static file => file.FullPath)
+                    .ToArray());
+            if (hardLinkCounts.Any(static count => count != 1))
+                return null;
+            var result = new Dictionary<string, string>(
+                Path.DirectorySeparatorChar == '\\'
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal);
+            foreach (var file in trackedFiles)
+            {
+                result.Add(
+                    file.RelativePath,
+                    ExistingFilePathIdentityResolver
+                        .ResolveStatus(file.FullPath)
+                        .MutationIdentity);
+            }
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static bool IsExcludedGeneratedPath(string path)

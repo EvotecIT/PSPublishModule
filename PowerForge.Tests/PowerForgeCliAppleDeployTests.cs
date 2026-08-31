@@ -120,6 +120,65 @@ public sealed class PowerForgeCliAppleDeployTests
         }
     }
 
+    [Fact]
+    public async Task AppleDeploy_plan_uses_the_execution_repository_root()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var appRoot = Directory.CreateDirectory(Path.Combine(tempRoot, "App"));
+            Directory.CreateDirectory(Path.Combine(appRoot.FullName, "Sample.xcodeproj"));
+            var configPath = Path.Combine(appRoot.FullName, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            File.WriteAllText(
+                Path.Combine(tempRoot, ".gitignore"),
+                "RepositoryLocal.xcconfig\n");
+            InitializeGitRepository(tempRoot);
+            File.WriteAllText(
+                Path.Combine(tempRoot, "RepositoryLocal.xcconfig"),
+                "SETTING = local");
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains(
+                "RepositoryLocal.xcconfig",
+                result.StdErr + result.StdOut,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string workingDirectory, string arguments)
     {
         using var process = new Process

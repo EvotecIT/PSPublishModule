@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Builds, installs, launches, and discovers Apple devices through xcodebuild and xcrun devicectl.
 /// </summary>
-public sealed class AppleDeviceDeploymentService
+public sealed partial class AppleDeviceDeploymentService
 {
     private static readonly Regex DeviceLineRegex = new(
         @"^(?<name>.+?)\s{2,}(?<hostname>\S+)\s{2,}(?<identifier>[0-9A-Fa-f-]{36})\s{2,}(?<state>.+?)\s{2,}(?<model>.+)$",
@@ -135,10 +135,11 @@ public sealed class AppleDeviceDeploymentService
             sourcePathComparison);
         AppleBuildProvenance.Snapshot sourceSnapshot;
         AppleReleaseSourceMutationMonitor buildInputMonitor;
+        AppleReleaseSourceMutationMonitor? liveSourceMonitor = null;
 
         if (request.UseBuildMirror)
         {
-            using var sourceMonitor = new AppleReleaseSourceMutationMonitor(
+            var sourceMonitor = new AppleReleaseSourceMutationMonitor(
                 sourceRoot,
                 "local Apple source",
                 "rsync",
@@ -148,46 +149,69 @@ public sealed class AppleDeviceDeploymentService
                         args,
                         sourceRoot,
                         sourcePathComparison));
-            sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
-                sourceRoot,
-                excludesGeneratedDirectories: true);
-            var mirror = await MirrorBuildRootAsync(
-                projectPath,
-                request,
-                sourcePathComparison,
-                cancellationToken).ConfigureAwait(false);
-            if (!mirror.ProcessResult.Succeeded)
-            {
-                return new AppleAppBuildResult
-                {
-                    AppPath = appPath,
-                    Destination = destination,
-                    DerivedDataPath = derivedDataPath,
-                    BuildMirrorPath = mirror.MirrorPath,
-                    SourceRevision = sourceSnapshot.Revision,
-                    ProcessResult = mirror.ProcessResult
-                };
-            }
-
-            var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
-                "The Apple build mirror completed without an active source monitor.");
             try
             {
-                sourceMonitor.ValidateNoChanges(
-                    () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
-
-                buildProjectPath = RewritePath(
+                sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
+                    sourceRoot,
+                    excludesGeneratedDirectories: true);
+                var mirror = await MirrorBuildRootAsync(
                     projectPath,
-                    mirror.SourceRoot,
-                    mirror.MirrorPath,
-                    sourcePathComparison);
-                workingDirectory = mirror.MirrorPath;
-                mirrorPath = mirror.MirrorPath;
-                buildInputMonitor = mirrorMonitor;
+                    request,
+                    sourcePathComparison,
+                    cancellationToken).ConfigureAwait(false);
+                if (!mirror.ProcessResult.Succeeded)
+                {
+                    sourceMonitor.Dispose();
+                    return new AppleAppBuildResult
+                    {
+                        AppPath = appPath,
+                        Destination = destination,
+                        DerivedDataPath = derivedDataPath,
+                        BuildMirrorPath = mirror.MirrorPath,
+                        SourceRevision = sourceSnapshot.Revision,
+                        ProcessResult = mirror.ProcessResult
+                    };
+                }
+
+                var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
+                    "The Apple build mirror completed without an active source monitor.");
+                AppleReleaseSourceMutationMonitor? continuedSourceMonitor = null;
+                try
+                {
+                    continuedSourceMonitor = new AppleReleaseSourceMutationMonitor(
+                        sourceRoot,
+                        "local Apple source",
+                        "xcodebuild",
+                        "Discard the product and rebuild from a stable working tree.",
+                        ignoredMutation: args =>
+                            AppleBuildProvenance.IsGitMetadataMutation(
+                                args,
+                                sourceRoot,
+                                sourcePathComparison));
+                    sourceMonitor.ValidateNoChanges(
+                        () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                    sourceMonitor.Dispose();
+
+                    buildProjectPath = RewritePath(
+                        projectPath,
+                        mirror.SourceRoot,
+                        mirror.MirrorPath,
+                        sourcePathComparison);
+                    workingDirectory = mirror.MirrorPath;
+                    mirrorPath = mirror.MirrorPath;
+                    buildInputMonitor = mirrorMonitor;
+                    liveSourceMonitor = continuedSourceMonitor;
+                }
+                catch
+                {
+                    continuedSourceMonitor?.Dispose();
+                    mirrorMonitor.Dispose();
+                    throw;
+                }
             }
             catch
             {
-                mirrorMonitor.Dispose();
+                sourceMonitor.Dispose();
                 throw;
             }
         }
@@ -217,6 +241,7 @@ public sealed class AppleDeviceDeploymentService
             }
         }
         using var buildInputMonitorLease = buildInputMonitor;
+        using var liveSourceMonitorLease = liveSourceMonitor;
 
         Directory.CreateDirectory(derivedDataPath);
 
@@ -260,6 +285,8 @@ public sealed class AppleDeviceDeploymentService
                 request.UseBuildMirror
                     ? null
                     : () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+            liveSourceMonitor?.ValidateNoChanges(
+                () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
         }
 
         return new AppleAppBuildResult
@@ -494,77 +521,6 @@ public sealed class AppleDeviceDeploymentService
         return matches[0].Identifier;
     }
 
-    private async Task<MirrorResult> MirrorBuildRootAsync(
-        string projectPath,
-        AppleAppBuildRequest request,
-        StringComparison sourcePathComparison,
-        CancellationToken cancellationToken)
-    {
-        var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
-        var mirrorPath = ResolveBuildMirrorPath(request);
-        var normalizedSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        var normalizedMirrorPath = EnsureTrailingDirectorySeparator(Path.GetFullPath(mirrorPath));
-        if (normalizedMirrorPath.StartsWith(
-                normalizedSourceRoot,
-                sourcePathComparison))
-            throw new InvalidOperationException("BuildMirrorPath must not be inside the mirrored build root.");
-
-        Directory.CreateDirectory(mirrorPath);
-        var mutationMonitor = new AppleReleaseSourceMutationMonitor(
-            mirrorPath,
-            "local Apple build mirror",
-            "xcodebuild",
-            "Discard the product and rebuild the mirror.",
-            enableImmediately: false);
-
-        try
-        {
-            var args = new List<string>
-            {
-                "-a",
-                "--delete",
-                "--delete-excluded",
-                "--exclude",
-                ".git",
-                "--exclude",
-                ".build",
-                "--exclude",
-                ".swiftpm",
-                "--exclude",
-                "build",
-                "--exclude",
-                "DerivedData",
-                normalizedSourceRoot,
-                normalizedMirrorPath
-            };
-
-            var result = await _processRunner.RunAsync(
-                new ProcessRunRequest(
-                    NormalizeExecutable(request.RsyncExecutable, "rsync"),
-                    sourceRoot,
-                    args,
-                    request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-                cancellationToken).ConfigureAwait(false);
-            if (!result.Succeeded)
-            {
-                mutationMonitor.Dispose();
-                return new MirrorResult(sourceRoot, mirrorPath, result, null);
-            }
-
-            _ = mutationMonitor.CaptureExpectedProducerOutput(
-                () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
-                    mirrorPath,
-                    "local Apple build mirror"),
-                "rsync");
-            return new MirrorResult(sourceRoot, mirrorPath, result, mutationMonitor);
-        }
-        catch
-        {
-            mutationMonitor.Dispose();
-            throw;
-        }
-    }
-
     private static string ResolveDestination(
         string? destination,
         string? deviceIdentifier,
@@ -658,32 +614,7 @@ public sealed class AppleDeviceDeploymentService
         return Path.GetFullPath(root!);
     }
 
-    private static string ResolveBuildMirrorPath(AppleAppBuildRequest request)
-    {
-        if (!string.IsNullOrWhiteSpace(request.BuildMirrorPath))
-            return Path.GetFullPath(request.BuildMirrorPath!);
-
-        var safeScheme = SanitizePathPart(request.Scheme);
-        var uniqueSuffix = Guid.NewGuid().ToString("N").Substring(0, 12);
-        return Path.Combine(Path.GetTempPath(), "powerforge-apple-build-mirror", $"{safeScheme}-{uniqueSuffix}");
-    }
-
-    private static string RewritePath(
-        string path,
-        string sourceRoot,
-        string mirrorPath,
-        StringComparison sourcePathComparison)
-    {
-        var fullPath = Path.GetFullPath(path);
-        var fullSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        if (!fullPath.StartsWith(fullSourceRoot, sourcePathComparison))
-            return fullPath;
-
-        var relative = fullPath.Substring(fullSourceRoot.Length);
-        return Path.Combine(mirrorPath, relative);
-    }
-
-    private static void EnsurePathWithinBuildRoot(
+    internal static void EnsurePathWithinBuildRoot(
         string projectPath,
         string sourceRoot,
         StringComparison sourcePathComparison)
@@ -800,26 +731,4 @@ public sealed class AppleDeviceDeploymentService
         return path + Path.DirectorySeparatorChar;
     }
 
-    private sealed class MirrorResult
-    {
-        public MirrorResult(
-            string sourceRoot,
-            string mirrorPath,
-            ProcessRunResult processResult,
-            AppleReleaseSourceMutationMonitor? mutationMonitor)
-        {
-            SourceRoot = sourceRoot;
-            MirrorPath = mirrorPath;
-            ProcessResult = processResult;
-            MutationMonitor = mutationMonitor;
-        }
-
-        public string SourceRoot { get; }
-
-        public string MirrorPath { get; }
-
-        public ProcessRunResult ProcessResult { get; }
-
-        public AppleReleaseSourceMutationMonitor? MutationMonitor { get; }
-    }
 }

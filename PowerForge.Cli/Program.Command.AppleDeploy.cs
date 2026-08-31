@@ -60,6 +60,11 @@ internal static partial class Program
             var projectPath = ResolvePathFromBase(projectRoot, selectedTarget.ProjectPath);
             if (!Directory.Exists(projectPath) && !File.Exists(projectPath))
                 throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
+            AppleDeviceDeploymentService.EnsurePathWithinBuildRoot(
+                projectPath,
+                projectRoot,
+                FrameworkCompatibility.GetPathStringComparisonForPath(
+                    projectRoot));
 
             var profile = SelectAppleDeployProfile(local, TryGetOptionValue(argv, "--profile"));
             var configuration = TryGetOptionValue(argv, "--configuration") ?? local.Configuration;
@@ -78,6 +83,8 @@ internal static partial class Program
             var buildMirrorPath = useBuildMirror ? Path.Combine(localRoot, "Source") : null;
             var installRoot = TryGetOptionValue(argv, "--install-root") ?? local.InstallRoot;
             var planOnly = argv.Any(static value => value.Equals("--plan", StringComparison.OrdinalIgnoreCase));
+            var provenanceRoot = AppleBuildProvenance.ResolveRepositoryRoot(
+                projectRoot) ?? projectRoot;
 
             var cliResult = new AppleLocalDeploymentCliResult
             {
@@ -92,7 +99,7 @@ internal static partial class Program
                 DerivedDataPath = derivedDataPath,
                 SourceRevision = planOnly
                     ? AppleBuildProvenance.CaptureBuildInputs(
-                        projectRoot,
+                        provenanceRoot,
                         excludesGeneratedDirectories: useBuildMirror).Revision
                     : null,
                 Device = deviceIdentifier ?? device,
