@@ -1,5 +1,5 @@
-$Values = [int[]] (0, 0)
-$Values[1] = 40
-$Holder = [pscustomobject] @{ Result = 0 }
-$Holder.Result = 2
-$Values[1] + $Holder.Result
+$Values = [string[]] ('value', 'old')
+$Values[1] = '42'
+$Holder = [System.UriBuilder]::new('https://example.test')
+$Holder.Host = [string]::Concat($Values)
+[string]::CompareOrdinal($Holder.Host, 'value42')
