@@ -30,43 +30,50 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
-    public void RuntimeFreeArtifactObserverQualifiesReadOnlyRuntimeStateCaseAgainstPinnedHost()
+    public void RuntimeFreeArtifactObserverQualifiesReadOnlyRuntimeStateCasesAgainstPinnedHost()
     {
-        var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/runtime-read-only-state");
-        using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
-        var pin = PowerShellCompilationSemanticHostArtifactPinCatalog.Get(
-            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
-        var interpreted = new PowerShellCompilationSemanticOracleRunner().Observe(
-            new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
-            {
-                HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
-                ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
-            });
-        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            Path.Combine(fixture.RootPath, "strict"),
-            "ReadOnlyRuntimeStateOracle",
-            PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict,
-            allowUnreviewedDependencyResolution: true)
+        foreach (var caseId in new[]
         {
-            TargetFramework = "net10.0",
-            SemanticProfileId = pin.ProfileId,
-            SingleFile = false
-        });
+            "PowerForge.Semantic/runtime-process-user-culture-state",
+            "PowerForge.Semantic/runtime-read-only-state"
+        })
+        {
+            var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get(caseId);
+            using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
+            var pin = PowerShellCompilationSemanticHostArtifactPinCatalog.Get(
+                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
+            var interpreted = new PowerShellCompilationSemanticOracleRunner().Observe(
+                new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
+                {
+                    HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
+                    ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                });
+            var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                fixture.ScriptPath,
+                Path.Combine(fixture.RootPath, "strict"),
+                "ReadOnlyRuntimeStateOracle",
+                PowerShellCompilationArtifactKind.Executable,
+                PowerShellCompilationMode.Strict,
+                allowUnreviewedDependencyResolution: true)
+            {
+                TargetFramework = "net10.0",
+                SemanticProfileId = pin.ProfileId,
+                SingleFile = false
+            });
 
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
-        var strict = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(pin.ProfileId, build);
-        var allowed = new[] { "Encoding", "ExitCode" };
-        Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(interpreted, strict, allowed));
-        var differences = PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
-            semanticCase.FeatureId,
-            new[] { interpreted, strict },
-            allowed,
-            "The interpreted script has no enclosing process exit contract and host encoding differs from the Strict UTF-8 executable contract.");
-        Assert.Equal(
-            new[] { "Encoding", "ExitCode" },
-            differences.Select(static difference => difference.Path).OrderBy(static path => path, StringComparer.Ordinal));
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+            var strict = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(pin.ProfileId, build);
+            var allowed = new[] { "Encoding", "ExitCode" };
+            Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(interpreted, strict, allowed));
+            var differences = PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
+                semanticCase.FeatureId,
+                new[] { interpreted, strict },
+                allowed,
+                "The interpreted script has no enclosing process exit contract and host encoding differs from the Strict UTF-8 executable contract.");
+            Assert.Equal(
+                new[] { "Encoding", "ExitCode" },
+                differences.Select(static difference => difference.Path).OrderBy(static path => path, StringComparer.Ordinal));
+        }
     }
 }

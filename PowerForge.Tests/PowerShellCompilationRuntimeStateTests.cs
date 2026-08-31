@@ -67,6 +67,28 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_StrictExecutableLowersProcessUserAndCultureStateWithoutPowerShellRuntime()
+    {
+        const string caseId = "PowerForge.Semantic/runtime-process-user-culture-state";
+        using var fixture = ArtifactFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(caseId));
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ProcessUserCultureStateExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = "net10.0"
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var run = Run(result.ArtifactPath!, Array.Empty<string>());
+        Assert.Equal((0, "True", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+        Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+    }
+
+    [Fact]
     public void Build_StrictExecutableReadsOneBoundedEnvironmentValueWithoutPowerShellRuntime()
     {
         const string variable = "POWERFORGE_RUNTIME_STATE_PROOF";
@@ -185,6 +207,49 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
         var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
+
+        Assert.Equal(0, original.ExitCode);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);
+        Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+    }
+
+    [Theory]
+    [InlineData("net8.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_BinaryModulePreservesProcessUserAndCultureState(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        using var fixture = ArtifactFixture.Create(
+            "function Get-ProcessUserCultureState { return @(($PID -gt 0), $HOME, $PSCulture, $PSUICulture) }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.ProcessUserCultureState",
+            "CompiledPowerShell",
+            targetFramework);
+
+        var method = Assert.Single(typed.Methods);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+        Assert.Empty(typed.Diagnostics);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ProcessUserCultureState",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        const string command = "Get-ProcessUserCultureState";
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
 
         Assert.Equal(0, original.ExitCode);
         Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);

@@ -58,6 +58,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("operator-comparison", "operator.comparison", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("operator-logical", "operator.logical", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("pipeline-enumeration", "pipeline.enumeration");
+        yield return Case("runtime-process-user-culture-state", "runtime.read-only-state", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("runtime-read-only-state", "runtime.read-only-state");
     }
 

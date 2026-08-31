@@ -12,6 +12,10 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     IsMacOS,
     PSVersion,
     PSVersionMajor,
+    ProcessId,
+    HomeDirectory,
+    CurrentCulture,
+    CurrentUICulture,
     WhatIfPreference,
     ActionPreference,
     ConfirmPreference,
@@ -62,6 +66,14 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                 kind = PowerShellRuntimeStateIntrinsicKind.ErrorCollection;
             else if (name.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
+            else if (name.Equals("PID", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.ProcessId;
+            else if (name.Equals("HOME", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.HomeDirectory;
+            else if (name.Equals("PSCulture", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.CurrentCulture;
+            else if (name.Equals("PSUICulture", StringComparison.OrdinalIgnoreCase))
+                kind = PowerShellRuntimeStateIntrinsicKind.CurrentUICulture;
             else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsCoreCLR", StringComparison.OrdinalIgnoreCase))
                 kind = PowerShellRuntimeStateIntrinsicKind.IsCoreClr;
             else if (IsCoreTarget(targetFramework) && IsCoreProfile(semanticProfile) && name.Equals("IsWindows", StringComparison.OrdinalIgnoreCase))
@@ -160,6 +172,10 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.PSEdition => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.PSVersion => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
+            PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
+            PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
+            PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
+            PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.ActionPreference => typeof(System.Management.Automation.ActionPreference),
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
@@ -187,6 +203,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.IsMacOS => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.OSX)",
             PowerShellRuntimeStateIntrinsicKind.PSVersion => "__psVersion",
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => EmitPowerShellMajorVersion(semanticProfileId),
+            PowerShellRuntimeStateIntrinsicKind.ProcessId => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+                ? "global::System.Diagnostics.Process.GetCurrentProcess().Id"
+                : "global::System.Environment.ProcessId",
+            PowerShellRuntimeStateIntrinsicKind.HomeDirectory => "global::System.Environment.GetFolderPath(global::System.Environment.SpecialFolder.UserProfile)",
+            PowerShellRuntimeStateIntrinsicKind.CurrentCulture => "global::System.Globalization.CultureInfo.CurrentCulture.Name",
+            PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => "global::System.Globalization.CultureInfo.CurrentUICulture.Name",
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => "__whatIfPreference",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };

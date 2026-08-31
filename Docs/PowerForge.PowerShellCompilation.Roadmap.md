@@ -1173,6 +1173,7 @@ Evidence: Strict generated-module tests execute array concatenation, `ArrayList`
 - [x] `$Error` as one read-only per-invocation collection snapshot with mutation and method invocation rejected.
 - [x] supported preference variables: verbose, debug, warning, information, error-action, progress, and confirm.
 - [x] read-only environment-variable access with environment-provider mutation rejected.
+- [x] read-only process, user-home, and current culture/UI-culture values with assignment still rejected.
 - [x] closures and hosted command regions with statically proven captures.
 - [x] explicit mutation and lifetime boundaries for environment, variable-provider, script, global, private, and `$Error` state.
 
@@ -1180,7 +1181,7 @@ Arbitrary global state, variable-provider escapes, uninspectable closures, and d
 
 Exit gate: supported runtime state is represented in the IR and propagated through call graphs without special emitter checks.
 
-Evidence: runtime-state expressions lower through one intrinsic policy, generated cmdlets capture one invocation-state dictionary, typed local calls receive the same snapshot, and net8/PowerShell 7 plus net472/PowerShell 5.1 differential tests cover preferences, common-parameter overrides (including the hosts' distinct `-Debug` behavior), and `$Error` where those hosts are available.
+Evidence: runtime-state expressions lower through one intrinsic policy, generated cmdlets capture one invocation-state dictionary, typed local calls receive the same snapshot, and net8/PowerShell 7 plus net472/PowerShell 5.1 differential tests cover process identity, user home, current culture/UI culture, preferences, common-parameter overrides (including the hosts' distinct `-Debug` behavior), and `$Error` where those hosts are available. The expanded 60-observation pinned-host matrix reviews the new process/user/culture case under every semantic profile.
 
 ## Milestone 13 — Run generic coverage waves
 
@@ -1414,7 +1415,7 @@ The canonical semantic pipeline is established, but its profile, provider, oracl
 
 1. [x] **Integrate and rebaseline:** integrate `origin/main`, pin SDK 10.0.303 without roll-forward, and rerun the focused compiler, oracle/provider/project, public/external packet, multi-TFM, line-size, and artifact gates on the resulting head.
 2. [x] **Close one-brain correctness:** effective profiles, canonical NuGet/signer trust, provider ABI 4, shared corpus acquisition, responsibility splits, structured exact-host per-feature oracles, full bounded provider conformance, Strict NativeAOT adapter execution, and one representative external filesystem operation are complete.
-3. [ ] **Run value-ranked semantic waves:** compatible `#requires` is complete; continue with runtime scope, typed member/invoke-member expressions, pipeline syntax/lifecycle, parameter typing, and common provider shapes. Every change must use parser → binder → bound IR → lowering → backend and the exact profile/oracle path.
+3. [ ] **Run value-ranked semantic waves:** compatible `#requires` and bounded read-only process/user/culture state are complete; broad dynamic scope remains intentionally runtime-backed. Continue with typed member/invoke-member expressions, pipeline syntax/lifecycle, parameter typing, and common provider shapes. Every change must use parser → binder → bound IR → lowering → backend and the exact profile/oracle path. The current external packet remains at 4/185 emitted units and 4/173 emitted functions after this bounded state expansion, so semantic breadth and measured workload benefit remain separate claims.
 4. [ ] **Prove user benefit:** packet baselines, two emitted-command qualifications from unrelated workloads, and the realistic Windows/Linux Strict application are complete; add the fixed three-family Hybrid benefit packet and the remaining Strict semantic/performance matrix. Safe fallback remains required, but 0%-emission compatibility is not the success metric for this step.
 5. [ ] **Qualify ecosystems:** finish the signed external-module/wrapper, executable directory/CIM provider, supported authentication, and remote-management target matrix through the same provider and clean-target contracts.
 6. [ ] **Release only with authority:** after useful-benefit and clean-consumer gates pass, use an explicitly authorized lane to publish and prove compiler/core/CLI/provider install, upgrade, rollback, and clean-consumer use. No publication is authorized by this roadmap work.
