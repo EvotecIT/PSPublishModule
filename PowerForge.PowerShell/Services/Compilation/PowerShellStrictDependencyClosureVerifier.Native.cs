@@ -24,7 +24,8 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             .ToArray();
         foreach (var import in executable.ImportedLibraries)
         {
-            var reviewed = reviewedNative.FirstOrDefault(node => NativeNamesMatch(import, node.Identity.Name));
+            var reviewed = reviewedNative.FirstOrDefault(node =>
+                PowerShellNativeLibraryName.CanResolve(request.RuntimeIdentifier, import, node.Identity.Name));
             if (reviewed is not null)
             {
                 result.ReviewedNativeImports.Add("NativeAOT:" + import + "->" + reviewed.Identity.Source);
@@ -45,6 +46,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         IEnumerable<NativeLibraryInspection> nativeLibraries,
         PowerShellCompilationDependencyClosure result)
     {
+        var deliveredLibraries = nativeLibraries.ToArray();
         var reviewed = request.DependencyGraph.Nodes
             .Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.NativeLibrary &&
                                   node.Exists &&
@@ -52,23 +54,58 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                                   node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal) &&
                                   !string.IsNullOrWhiteSpace(node.Identity.Sha256))
             .ToArray();
-        foreach (var native in nativeLibraries)
+        var reviewedProviderAssets = (request.ProviderLock?.Packages ?? Array.Empty<PowerShellCompilationProviderPackageLockEntry>())
+            .SelectMany(package => (package.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAsset>())
+                .Select(asset => new { package.PackageId, Asset = asset }))
+            .ToArray();
+        foreach (var native in deliveredLibraries)
         {
             var match = reviewed.FirstOrDefault(node =>
-                NativeNamesMatch(native.Name, node.Identity.Name) &&
+                PowerShellNativeLibraryName.FileNamesEqual(request.RuntimeIdentifier, native.Name, node.Identity.Name) &&
                 native.ContentSha256.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase));
-            if (match is null)
+            string? reviewedSource = null;
+            if (match is not null)
+            {
+                reviewedSource = match.Identity.Source;
+            }
+            else
+            {
+                var providerMatch = reviewedProviderAssets.FirstOrDefault(candidate =>
+                    PowerShellNativeLibraryName.FileNamesEqual(request.RuntimeIdentifier, native.Name, candidate.Asset.FileName) &&
+                    native.ContentSha256.Equals(candidate.Asset.Sha256, StringComparison.OrdinalIgnoreCase));
+                if (providerMatch is not null)
+                    reviewedSource = "Provider:" + providerMatch.PackageId + ":" + providerMatch.Asset.Path;
+            }
+            if (reviewedSource is null)
             {
                 result.Limitations.Add(
-                    $"Native dependency certification remains fail-closed because delivered native dependency '{native.Name}' does not match an exact SHA-256 content identity in the reviewed runtime-pack graph.");
+                    $"Native dependency certification remains fail-closed because delivered native dependency '{native.Name}' does not match an exact SHA-256 content identity in the reviewed runtime-pack or provider lock.");
                 continue;
             }
+
             result.DeliveredNativeDependencies.Add(new PowerShellCompilationDeliveredNativeDependency
             {
                 Name = native.Name,
                 DeliveredSha256 = native.ContentSha256,
-                ReviewedSource = match.Identity.Source
+                ReviewedSource = reviewedSource
             });
+            foreach (var import in native.ImportedLibraries)
+            {
+                var deliveredImport = deliveredLibraries.FirstOrDefault(candidate =>
+                    PowerShellNativeLibraryName.CanResolve(request.RuntimeIdentifier, import, candidate.Name));
+                if (deliveredImport is not null)
+                {
+                    result.ReviewedNativeImports.Add(native.Name + ":" + import + "->" + deliveredImport.Name);
+                    continue;
+                }
+                if (PowerShellTargetNativeAbiCatalog.Contains(request.RuntimeIdentifier, import))
+                {
+                    result.TargetAbiNativeImports.Add(native.Name + ":" + import);
+                    continue;
+                }
+                throw new InvalidOperationException(
+                    $"Reviewed native dependency '{native.DisplayPath}' imports '{import}', which is neither another delivered reviewed native asset nor part of the explicit '{request.RuntimeIdentifier}' target operating-system ABI.");
+            }
         }
     }
 
@@ -96,16 +133,34 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                                   node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal) &&
                                   !string.IsNullOrWhiteSpace(node.Identity.Sha256))
             .ToArray();
+        var reviewedProviderAssemblies = (request.ProviderLock?.Packages ?? Array.Empty<PowerShellCompilationProviderPackageLockEntry>())
+            .SelectMany(static package => package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
+            .ToArray();
+        var reviewedProviderNative = (request.ProviderLock?.Packages ?? Array.Empty<PowerShellCompilationProviderPackageLockEntry>())
+            .SelectMany(static package => package.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAsset>())
+            .ToArray();
         foreach (var assembly in assemblies)
         foreach (var import in assembly.NativeImports.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (!reviewedManaged.Contains(assembly.Identity.StableKey))
+            var providerCaller = reviewedProviderAssemblies.Any(candidate =>
+                candidate.AssemblyName.Equals(assembly.Identity.Name, StringComparison.OrdinalIgnoreCase) &&
+                candidate.AssemblyVersion.Equals(assembly.Identity.Version.ToString(), StringComparison.Ordinal) &&
+                candidate.PublicKeyToken.Equals(assembly.Identity.PublicKeyToken, StringComparison.OrdinalIgnoreCase));
+            if (!reviewedManaged.Contains(assembly.Identity.StableKey) && !providerCaller)
                 throw new InvalidOperationException(
-                    $"Strict runtime-free managed dependency '{assembly.DisplayPath}' imports native library '{import}'. Native dependency certification remains fail-closed because only exact reviewed .NET runtime-pack callers may use the target native ABI.");
-            var nativeSource = reviewedNative.FirstOrDefault(node => NativeNamesMatch(import, node.Identity.Name));
+                    $"Strict runtime-free managed dependency '{assembly.DisplayPath}' imports native library '{import}'. Native dependency certification remains fail-closed because only exact reviewed .NET runtime-pack or provider-lock callers may use the target native ABI.");
+            var nativeSource = reviewedNative.FirstOrDefault(node =>
+                PowerShellNativeLibraryName.CanResolve(request.RuntimeIdentifier, import, node.Identity.Name));
             if (nativeSource is not null)
             {
                 result.ReviewedNativeImports.Add(assembly.Identity.Name + ":" + import + "->" + nativeSource.Identity.Source);
+                continue;
+            }
+            var providerNativeSource = reviewedProviderNative.FirstOrDefault(asset =>
+                PowerShellNativeLibraryName.CanResolve(request.RuntimeIdentifier, import, asset.FileName));
+            if (providerNativeSource is not null)
+            {
+                result.ReviewedNativeImports.Add(assembly.Identity.Name + ":" + import + "->Provider:" + providerNativeSource.Path);
                 continue;
             }
             if (PowerShellTargetNativeAbiCatalog.Contains(request.RuntimeIdentifier, import))
@@ -119,26 +174,22 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         }
     }
 
-    private static bool NativeNamesMatch(string left, string right)
-    {
-        var leftName = Path.GetFileName(left);
-        var rightName = Path.GetFileName(right);
-        if (leftName.Equals(rightName, StringComparison.OrdinalIgnoreCase)) return true;
-        return rightName.StartsWith(leftName + ".", StringComparison.OrdinalIgnoreCase) ||
-               leftName.StartsWith(rightName + ".", StringComparison.OrdinalIgnoreCase);
-    }
-
     private sealed class NativeLibraryInspection
     {
-        internal NativeLibraryInspection(string name, string displayPath, string contentSha256)
+        internal NativeLibraryInspection(
+            string name,
+            string displayPath,
+            PowerShellCompilationNativeExecutableEvidence inspection)
         {
             Name = name;
             DisplayPath = displayPath;
-            ContentSha256 = contentSha256;
+            ContentSha256 = inspection.Sha256;
+            ImportedLibraries = inspection.ImportedLibraries;
         }
 
         internal string Name { get; }
         internal string DisplayPath { get; }
         internal string ContentSha256 { get; }
+        internal string[] ImportedLibraries { get; }
     }
 }

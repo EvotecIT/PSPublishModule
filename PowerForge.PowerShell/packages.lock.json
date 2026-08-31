@@ -2,16 +2,6 @@
   "version": 1,
   "dependencies": {
     ".NETFramework,Version=v4.7.2": {
-      "Microsoft.Management.Infrastructure": {
-        "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
-          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
-        }
-      },
       "Microsoft.NETFramework.ReferenceAssemblies": {
         "type": "Direct",
         "requested": "[1.0.3, )",
@@ -68,6 +58,15 @@
           "System.Formats.Asn1": "10.0.11",
           "System.Memory": "4.6.3",
           "System.Runtime.CompilerServices.Unsafe": "6.1.2"
+        }
+      },
+      "Microsoft.Management.Infrastructure": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
+          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
         }
       },
       "Microsoft.Management.Infrastructure.Runtime.Unix": {
@@ -245,19 +244,16 @@
           "System.Text.Json": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )",
+          "System.Text.Json": "[10.0.11, )"
+        }
       }
     },
     "net10.0": {
-      "Microsoft.Management.Infrastructure": {
-        "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
-          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
-        }
-      },
       "Microsoft.PowerShell.SDK": {
         "type": "Direct",
         "requested": "[7.6.5, )",
@@ -404,6 +400,15 @@
         "type": "Transitive",
         "resolved": "10.0.5",
         "contentHash": "91t1kPt6F+1cTJ4dZFY89BopLr1JyGlZ2pROIkIuyE28jUXhdelOzn22UwvNk8EwW/9x8D7GXyLqiMJShgIGhQ=="
+      },
+      "Microsoft.Management.Infrastructure": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
+          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
+        }
       },
       "Microsoft.Management.Infrastructure.CimCmdlets": {
         "type": "Transitive",
@@ -986,19 +991,15 @@
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )"
+        }
       }
     },
     "net8.0": {
-      "Microsoft.Management.Infrastructure": {
-        "type": "Direct",
-        "requested": "[3.0.0, )",
-        "resolved": "3.0.0",
-        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
-        "dependencies": {
-          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
-          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
-        }
-      },
       "Microsoft.PowerShell.SDK": {
         "type": "Direct",
         "requested": "[7.4.18, )",
@@ -1118,6 +1119,15 @@
         "type": "Transitive",
         "resolved": "8.0.29",
         "contentHash": "kvCEbMV6fkpbDT3UpdUN/FZGHPla5mRQjhiVBk+KlKFAhq01nsQawp/mdDCSfTDxT6dImBVUVrLP8g2cmMKmsQ=="
+      },
+      "Microsoft.Management.Infrastructure": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "cGZi0q5IujCTVYKo9h22Pw+UwfZDV82HXO8HTxMG2HqntPlT3Ls8jY6punLp4YzCypJNpfCAu2kae3TIyuAiJw==",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure.Runtime.Unix": "3.0.0",
+          "Microsoft.Management.Infrastructure.Runtime.Win": "3.0.0"
+        }
       },
       "Microsoft.Management.Infrastructure.CimCmdlets": {
         "type": "Transitive",
@@ -1686,6 +1696,12 @@
           "System.Security.Cryptography.Pkcs": "[10.0.11, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
+        }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     }

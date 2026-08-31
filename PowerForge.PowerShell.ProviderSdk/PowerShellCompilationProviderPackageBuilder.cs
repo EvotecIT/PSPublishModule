@@ -26,6 +26,31 @@ public sealed class PowerShellCompilationProviderAssemblyInput
     public string PackagePath { get; }
 }
 
+/// <summary>One RID-specific native asset selected for deterministic provider-package creation.</summary>
+public sealed class PowerShellCompilationProviderNativeAssetInput
+{
+    /// <summary>Creates a provider native-asset input.</summary>
+    public PowerShellCompilationProviderNativeAssetInput(string sourcePath, string packagePath, string runtimeIdentifier)
+    {
+        SourcePath = string.IsNullOrWhiteSpace(sourcePath)
+            ? throw new ArgumentException("A provider native-asset source path is required.", nameof(sourcePath))
+            : Path.GetFullPath(sourcePath.Trim().Trim('"'));
+        PackagePath = string.IsNullOrWhiteSpace(packagePath)
+            ? throw new ArgumentException("A provider native-asset package path is required.", nameof(packagePath))
+            : packagePath.Replace('\\', '/').TrimStart('/');
+        RuntimeIdentifier = string.IsNullOrWhiteSpace(runtimeIdentifier)
+            ? throw new ArgumentException("A provider native-asset runtime identifier is required.", nameof(runtimeIdentifier))
+            : runtimeIdentifier.Trim().ToLowerInvariant();
+    }
+
+    /// <summary>Full source asset path.</summary>
+    public string SourcePath { get; }
+    /// <summary>Package-relative asset path.</summary>
+    public string PackagePath { get; }
+    /// <summary>Exact runtime identifier.</summary>
+    public string RuntimeIdentifier { get; }
+}
+
 /// <summary>Deterministic provider-package creation request.</summary>
 public sealed class PowerShellCompilationProviderPackageBuildRequest
 {
@@ -48,6 +73,9 @@ public sealed class PowerShellCompilationProviderPackageBuildRequest
 
     /// <summary>Managed provider assemblies to include.</summary>
     public PowerShellCompilationProviderAssemblyInput[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssemblyInput>();
+
+    /// <summary>RID-specific native assets to include.</summary>
+    public PowerShellCompilationProviderNativeAssetInput[] NativeAssets { get; set; } = Array.Empty<PowerShellCompilationProviderNativeAssetInput>();
 }
 
 /// <summary>
@@ -73,12 +101,29 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             if (assembly.PackagePath.Contains("../", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Provider assembly package path '{assembly.PackagePath}' is unsafe.");
         }
+        foreach (var asset in request.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAssetInput>())
+        {
+            if (!File.Exists(asset.SourcePath)) throw new FileNotFoundException("Provider native asset was not found.", asset.SourcePath);
+            if (asset.PackagePath.Contains("../", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Provider native-asset package path '{asset.PackagePath}' is unsafe.");
+            if (request.Assemblies.Any(assembly => assembly.PackagePath.Equals(asset.PackagePath, StringComparison.Ordinal)))
+                throw new InvalidOperationException($"Provider package path '{asset.PackagePath}' is selected as both a managed assembly and native asset.");
+        }
+        var duplicateNativePath = (request.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAssetInput>())
+            .GroupBy(static asset => asset.PackagePath, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateNativePath is not null)
+            throw new InvalidOperationException($"Provider native-asset package path '{duplicateNativePath.Key}' is selected more than once.");
 
         var assemblies = request.Assemblies
             .OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal)
             .Select(static assembly => PowerShellCompilationProviderPackageReader.InspectAssembly(assembly.SourcePath, assembly.PackagePath))
             .ToArray();
-        var manifest = CreateCanonicalManifest(request.Manifest, assemblies);
+        var nativeAssets = (request.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAssetInput>())
+            .OrderBy(static asset => asset.PackagePath, StringComparer.Ordinal)
+            .Select(static asset => PowerShellCompilationProviderPackageReader.InspectNativeAsset(asset.SourcePath, asset.PackagePath, asset.RuntimeIdentifier))
+            .ToArray();
+        var manifest = CreateCanonicalManifest(request.Manifest, assemblies, nativeAssets);
         _ = new PowerShellCompilationProviderConformanceKit().Validate(manifest);
         var directory = Path.GetDirectoryName(request.OutputPath);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -93,6 +138,8 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 AddText(archive, PowerShellCompilationProviderPackageReader.ManifestPath, SerializeManifest(manifest));
                 foreach (var assembly in request.Assemblies.OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal))
                     AddFile(archive, assembly.PackagePath, assembly.SourcePath);
+                foreach (var asset in (request.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAssetInput>()).OrderBy(static asset => asset.PackagePath, StringComparer.Ordinal))
+                    AddFile(archive, asset.PackagePath, asset.SourcePath);
             }
             _ = new PowerShellCompilationProviderPackageReader().Resolve(
                 new[] { new PowerShellCompilationProviderPackageReference(temporary) },
@@ -122,7 +169,8 @@ public sealed class PowerShellCompilationProviderPackageBuilder
 
     private static PowerShellCompilationProviderPackageManifest CreateCanonicalManifest(
         PowerShellCompilationProviderPackageManifest source,
-        PowerShellCompilationProviderAssembly[] assemblies)
+        PowerShellCompilationProviderAssembly[] assemblies,
+        PowerShellCompilationProviderNativeAsset[] nativeAssets)
         => new()
         {
             SchemaVersion = source.SchemaVersion,
@@ -144,6 +192,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 .OrderBy(static value => value, StringComparer.Ordinal)
                 .ToArray(),
             Assemblies = assemblies,
+            NativeAssets = nativeAssets,
             Dependencies = (source.Dependencies ?? Array.Empty<PowerShellCompilationProviderDependency>())
                 .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
                 .ThenBy(static dependency => dependency.Version, StringComparer.Ordinal)

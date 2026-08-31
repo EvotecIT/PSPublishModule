@@ -13,7 +13,7 @@ internal static class PowerShellTargetNativeAbiCatalog
     private static readonly HashSet<string> WindowsLibraries = new(StringComparer.OrdinalIgnoreCase)
     {
         "__Internal", "QCall", "advapi32.dll", "bcrypt.dll", "crypt32.dll", "dbghelp.dll",
-        "iphlpapi.dll", "kernel32.dll", "ncrypt.dll", "netapi32.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
+        "iphlpapi.dll", "kernel32.dll", "mi.dll", "mimofcodec.dll", "msvcrt.dll", "ncrypt.dll", "netapi32.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
         "oleaut32.dll", "powrprof.dll", "psapi.dll", "secur32.dll", "shell32.dll", "shlwapi.dll",
         "ucrtbase.dll", "user32.dll", "userenv.dll", "version.dll", "winhttp.dll", "winmm.dll", "ws2_32.dll"
     };

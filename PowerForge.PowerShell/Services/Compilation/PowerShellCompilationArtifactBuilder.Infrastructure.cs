@@ -198,6 +198,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
         internal CopiedArtifact WithAdditionalFiles(IEnumerable<PowerShellCompilationArtifactFile> files)
             => new(PrimaryPath, Files.Concat(files).ToArray());
+
+        internal CopiedArtifact WithReplacementFiles(IEnumerable<PowerShellCompilationArtifactFile> files)
+        {
+            var replacements = files.ToArray();
+            if (replacements.Length == 0) return this;
+            var retained = Files.Where(existing => !replacements.Any(replacement =>
+                PowerShellCompilationPathSafety.PathEquals(existing.Path, replacement.Path)));
+            return new CopiedArtifact(PrimaryPath, retained.Concat(replacements).ToArray());
+        }
     }
 
     private sealed class GeneratedBuildProcessResult

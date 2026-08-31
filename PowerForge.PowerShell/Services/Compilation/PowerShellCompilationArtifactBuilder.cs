@@ -70,7 +70,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             failureStage = PowerShellCompilationFailureStage.Dependency;
             var providerResolution = ResolveProviderPackages(spec);
             var providerRuntimeAssemblies = PrepareProviderRuntimeAssemblies(workspace, providerResolution);
-            var providerProjectReferences = CreateProviderProjectReferences(providerRuntimeAssemblies);
+            var providerRuntimeNativeAssets = PrepareProviderRuntimeNativeAssets(workspace, providerResolution);
+            var providerProjectReferences = CreateProviderProjectReferences(providerRuntimeAssemblies, providerRuntimeNativeAssets);
             var commandProviderInputs = spec.CommandProviders
                 .Concat(providerResolution.Providers)
                 .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
@@ -385,11 +386,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
-                stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyProviderRuntimeAssemblies(
+                stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeAssemblies(
                     spec,
                     stagedArtifact.PrimaryPath,
-                    providerRuntimeAssemblies,
-                    stagedArtifact.Files));
+                    providerRuntimeAssemblies));
+                stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeNativeAssets(
+                    stagedArtifact.PrimaryPath,
+                    providerRuntimeNativeAssets));
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
                     stagedArtifact.PrimaryPath,
                     artifactName,

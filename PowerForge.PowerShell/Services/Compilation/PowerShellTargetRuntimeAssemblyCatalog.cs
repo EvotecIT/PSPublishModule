@@ -35,6 +35,36 @@ internal static class PowerShellTargetRuntimeAssemblyCatalog
         return identities;
     }
 
+    internal static IReadOnlyCollection<string> ReadCompatibleSignedKeys(string targetFramework)
+        => ReadCompatibleSignedVersions(targetFramework).Keys.ToArray();
+
+    internal static IReadOnlyDictionary<string, Version> ReadCompatibleSignedVersions(string targetFramework)
+    {
+        PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(targetFramework);
+        var identities = new Dictionary<string, Version>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in PowerShellGeneratedTypePolicy.GetTargetRuntimeAssemblyPaths(targetFramework))
+        {
+            using var stream = File.OpenRead(path);
+            using var pe = new PEReader(stream);
+            if (!pe.HasMetadata) continue;
+            var reader = pe.GetMetadataReader();
+            if (!reader.IsAssembly) continue;
+            var definition = reader.GetAssemblyDefinition();
+            var publicKey = reader.GetBlobBytes(definition.PublicKey);
+            if (publicKey.Length == 0) continue;
+            var key = CreateCompatibleSignedKey(
+                reader.GetString(definition.Name),
+                ComputePublicKeyToken(publicKey),
+                definition.Culture.IsNil ? string.Empty : reader.GetString(definition.Culture),
+                GetContentType(definition.Flags));
+            if (!identities.TryGetValue(key, out var version) || definition.Version > version)
+                identities[key] = definition.Version;
+        }
+        if (identities.Count == 0)
+            throw new InvalidOperationException($"Target framework '{targetFramework}' did not expose any certifiable signed reference-assembly identities.");
+        return identities;
+    }
+
     internal static string CreateStableKey(
         string name,
         Version version,
@@ -43,6 +73,13 @@ internal static class PowerShellTargetRuntimeAssemblyCatalog
         bool retargetable = false,
         string? contentType = null)
         => $"{name}|{version}|{publicKeyToken}|{NormalizeCulture(culture)}|{retargetable}|{NormalizeContentType(contentType)}";
+
+    internal static string CreateCompatibleSignedKey(
+        string name,
+        string publicKeyToken,
+        string culture = "",
+        string? contentType = null)
+        => $"{name}|{publicKeyToken}|{NormalizeCulture(culture)}|{NormalizeContentType(contentType)}";
 
     internal static string NormalizeCulture(string? culture)
         => string.IsNullOrWhiteSpace(culture) ? "neutral" : culture!.Trim();

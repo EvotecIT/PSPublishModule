@@ -67,15 +67,47 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return result.ToArray();
     }
 
-    private static string CreateProviderProjectReferences(IEnumerable<ProviderRuntimeAssembly> assemblies)
-        => string.Join(Environment.NewLine, assemblies.Select(assembly =>
-            $"<Reference Include=\"{EscapeXml(assembly.Evidence.AssemblyName)}\"><HintPath>{EscapeXml(assembly.Path)}</HintPath><Private>true</Private></Reference>"));
+    private static ProviderRuntimeNativeAsset[] PrepareProviderRuntimeNativeAssets(
+        string workspace,
+        PowerShellCompilationProviderResolution resolution)
+    {
+        if (resolution.RuntimeNativeAssets.Length == 0) return Array.Empty<ProviderRuntimeNativeAsset>();
+        var root = Path.Combine(workspace, "provider-native-runtime");
+        Directory.CreateDirectory(root);
+        var result = new List<ProviderRuntimeNativeAsset>();
+        foreach (var resolved in resolution.RuntimeNativeAssets)
+        {
+            var target = Path.Combine(root, resolved.Asset.FileName);
+            using (var package = ZipFile.OpenRead(resolved.PackagePath))
+            {
+                var archivePath = resolved.Asset.Path.Replace('\\', '/');
+                var entries = package.Entries.Where(entry => entry.FullName.Replace('\\', '/').Equals(archivePath, StringComparison.Ordinal)).ToArray();
+                if (entries.Length != 1)
+                    throw new InvalidOperationException($"Provider package '{resolved.PackagePath}' no longer contains exactly one locked native asset '{archivePath}'.");
+                using var source = entries[0].Open();
+                using var destination = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None);
+                source.CopyTo(destination);
+            }
+            if (!ComputeSha256(target).Equals(resolved.Asset.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Extracted provider native asset '{resolved.Asset.Path}' no longer matches its locked SHA-256.");
+            result.Add(new ProviderRuntimeNativeAsset(target, resolved.Asset));
+        }
+        return result.ToArray();
+    }
+
+    private static string CreateProviderProjectReferences(
+        IEnumerable<ProviderRuntimeAssembly> assemblies,
+        IEnumerable<ProviderRuntimeNativeAsset> nativeAssets)
+        => string.Join(Environment.NewLine,
+            assemblies.Select(assembly =>
+                    $"<Reference Include=\"{EscapeXml(assembly.Evidence.AssemblyName)}\"><HintPath>{EscapeXml(assembly.Path)}</HintPath><Private>true</Private></Reference>")
+                .Concat(nativeAssets.Select(asset =>
+                    $"<None Include=\"{EscapeXml(asset.Path)}\"><Link>{EscapeXml(asset.Evidence.FileName)}</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory><ExcludeFromSingleFile>true</ExcludeFromSingleFile></None>")));
 
     private static PowerShellCompilationArtifactFile[] CopyProviderRuntimeAssemblies(
         PowerShellCompilationBuildSpec spec,
         string primaryPath,
-        IEnumerable<ProviderRuntimeAssembly> assemblies,
-        IReadOnlyCollection<PowerShellCompilationArtifactFile> existingFiles)
+        IEnumerable<ProviderRuntimeAssembly> assemblies)
     {
         if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.SingleFile)
             return Array.Empty<PowerShellCompilationArtifactFile>();
@@ -88,8 +120,25 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (!File.Exists(target)) File.Copy(assembly.Path, target, overwrite: false);
             if (!ComputeSha256(target).Equals(assembly.Evidence.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Published provider runtime assembly '{target}' does not match its locked SHA-256.");
-            if (existingFiles.Any(file => PowerShellCompilationPathSafety.PathEquals(file.Path, target))) continue;
             result.Add(CreateArtifactFile(target, "CompilerProviderRuntime"));
+        }
+        return result.ToArray();
+    }
+
+    private static PowerShellCompilationArtifactFile[] CopyProviderRuntimeNativeAssets(
+        string primaryPath,
+        IEnumerable<ProviderRuntimeNativeAsset> nativeAssets)
+    {
+        var targetDirectory = Path.GetDirectoryName(primaryPath)
+            ?? throw new InvalidOperationException("Generated artifact has no output directory.");
+        var result = new List<PowerShellCompilationArtifactFile>();
+        foreach (var asset in nativeAssets)
+        {
+            var target = Path.Combine(targetDirectory, asset.Evidence.FileName);
+            if (!File.Exists(target)) File.Copy(asset.Path, target, overwrite: false);
+            if (!ComputeSha256(target).Equals(asset.Evidence.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Published provider native asset '{target}' does not match its locked SHA-256.");
+            result.Add(CreateArtifactFile(target, "CompilerProviderNativeRuntime"));
         }
         return result.ToArray();
     }
@@ -104,5 +153,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
         internal string Path { get; }
         internal PowerShellCompilationProviderAssembly Evidence { get; }
+    }
+
+    private sealed class ProviderRuntimeNativeAsset
+    {
+        internal ProviderRuntimeNativeAsset(string path, PowerShellCompilationProviderNativeAsset evidence)
+        {
+            Path = path;
+            Evidence = evidence;
+        }
+
+        internal string Path { get; }
+        internal PowerShellCompilationProviderNativeAsset Evidence { get; }
     }
 }

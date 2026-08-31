@@ -3,12 +3,21 @@ using System.Text;
 
 namespace PowerForge;
 
-/// <summary>Reads native executable headers and import tables without loading target code.</summary>
+/// <summary>Reads native executable or library headers and import tables without loading target code.</summary>
 internal static class PowerShellNativeExecutableInspector
 {
     internal static PowerShellCompilationNativeExecutableEvidence Inspect(string path, string runtimeIdentifier)
     {
         var bytes = File.ReadAllBytes(path);
+        return Inspect(bytes, runtimeIdentifier, path);
+    }
+
+    internal static PowerShellCompilationNativeExecutableEvidence Inspect(
+        byte[] bytes,
+        string runtimeIdentifier,
+        string owner)
+    {
+        if (bytes is null) throw new ArgumentNullException(nameof(bytes));
         PowerShellCompilationNativeExecutableEvidence evidence;
         if (bytes.Length >= 2 && bytes[0] == (byte)'M' && bytes[1] == (byte)'Z')
             evidence = InspectPe(bytes);
@@ -17,7 +26,7 @@ internal static class PowerShellNativeExecutableInspector
         else if (bytes.Length >= 4 && ReadUInt32(bytes, 0) == 0xfeedfacf)
             evidence = InspectMachO(bytes);
         else
-            throw new InvalidDataException($"Native executable '{path}' does not use a supported PE, ELF, or 64-bit Mach-O container.");
+            throw new InvalidDataException($"Native binary '{owner}' does not use a supported PE, ELF, or 64-bit Mach-O container.");
         EnsureArchitecture(runtimeIdentifier, evidence.Architecture);
         evidence.Sha256 = ComputeSha256(bytes);
         return evidence;

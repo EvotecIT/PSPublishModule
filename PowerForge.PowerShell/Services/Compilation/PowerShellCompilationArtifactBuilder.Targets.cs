@@ -200,7 +200,25 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 redistributable = package.Redistributable,
                 supportedRuntimeIdentifiers = package.SupportedRuntimeIdentifiers,
                 package.PackageSha256,
-                package.ManifestSha256
+                package.ManifestSha256,
+                assemblies = package.Assemblies.Select(static assembly => new
+                {
+                    path = assembly.Path,
+                    assembly.Sha256,
+                    assembly.AssemblyName,
+                    assembly.AssemblyVersion,
+                    assembly.PublicKeyToken
+                }).ToArray(),
+                nativeAssets = package.NativeAssets.Select(static asset => new
+                {
+                    path = asset.Path,
+                    asset.Sha256,
+                    asset.RuntimeIdentifier,
+                    asset.FileName,
+                    asset.Format,
+                    asset.Architecture,
+                    asset.ImportedLibraries
+                }).ToArray()
             }).ToArray(),
             resolvedPackages = resolvedPackages.Select(static package => new
             {
@@ -278,6 +296,36 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         new { name = "powerforge:supportedRuntimeIdentifiers", value = string.Join(",", package.SupportedRuntimeIdentifiers) }
                     }
                 }))
+                .Concat(providerLock.Packages.SelectMany(static package => package.Assemblies.Select(assembly => (object)new
+                {
+                    type = "library",
+                    name = assembly.AssemblyName,
+                    version = assembly.AssemblyVersion,
+                    hashes = new object[] { new { alg = "SHA-256", content = assembly.Sha256 } },
+                    properties = new[]
+                    {
+                        new { name = "powerforge:disposition", value = "CompilerProviderRuntime" },
+                        new { name = "powerforge:providerPackage", value = package.PackageId },
+                        new { name = "powerforge:packagePath", value = assembly.Path },
+                        new { name = "powerforge:publicKeyToken", value = assembly.PublicKeyToken }
+                    }
+                })))
+                .Concat(providerLock.Packages.SelectMany(static package => package.NativeAssets.Select(asset => (object)new
+                {
+                    type = "file",
+                    name = asset.FileName,
+                    hashes = new object[] { new { alg = "SHA-256", content = asset.Sha256 } },
+                    properties = new[]
+                    {
+                        new { name = "powerforge:disposition", value = "CompilerProviderNativeRuntime" },
+                        new { name = "powerforge:providerPackage", value = package.PackageId },
+                        new { name = "powerforge:packagePath", value = asset.Path },
+                        new { name = "powerforge:runtimeIdentifier", value = asset.RuntimeIdentifier },
+                        new { name = "powerforge:nativeFormat", value = asset.Format },
+                        new { name = "powerforge:nativeArchitecture", value = asset.Architecture },
+                        new { name = "powerforge:nativeImports", value = string.Join(",", asset.ImportedLibraries) }
+                    }
+                })))
                 .ToArray()
         }, EvidenceJsonOptions), new UTF8Encoding(false));
         return new[]

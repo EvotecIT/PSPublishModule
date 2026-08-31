@@ -61,7 +61,7 @@ public sealed class PowerShellManagementProviderTests
     [Fact]
     public void TypedCimAdapterQueriesLocalProviderAndReturnsPortableProperties()
     {
-        var result = new PowerShellManagementProviderAdapter().Execute(new PowerShellManagementRequest
+        using var result = new PowerShellManagementProviderAdapter().Execute(new PowerShellManagementRequest
         {
             Operation = PowerShellManagementOperation.Query,
             Namespace = "root/cimv2",
@@ -76,6 +76,9 @@ public sealed class PowerShellManagementProviderTests
         Assert.Equal("Win32_OperatingSystem", instance.ClassName);
         Assert.Contains(instance.Properties, static property => property.Name == "Caption" && !string.IsNullOrWhiteSpace(property.Value));
         Assert.Contains(instance.Properties, static property => property.Name == "Version" && !string.IsNullOrWhiteSpace(property.Value));
+        Assert.NotNull(instance.RuntimeInstance);
+        result.Dispose();
+        Assert.Null(instance.RuntimeInstance);
     }
 
     [Fact]
@@ -94,6 +97,69 @@ public sealed class PowerShellManagementProviderTests
     }
 
     [Fact]
+    public void TypedCimAdapterReusesCallerSessionWithoutDisposingItAndBoundsEnumeration()
+    {
+        using var session = Microsoft.Management.Infrastructure.CimSession.Create(null);
+        var adapter = new PowerShellManagementProviderAdapter();
+        using var bounded = adapter.Execute(new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Enumerate,
+            ClassName = "Win32_Process",
+            ResultLimit = 2,
+            Session = session,
+            TimeoutSeconds = 30
+        });
+
+        Assert.False(bounded.OwnedSessionDisposed);
+        Assert.Equal(2, bounded.Instances.Length);
+        using var reuse = adapter.Execute(new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Query,
+            Query = "SELECT Caption FROM Win32_OperatingSystem",
+            Session = session,
+            TimeoutSeconds = 30
+        });
+        Assert.False(reuse.OwnedSessionDisposed);
+        Assert.Single(reuse.Instances);
+    }
+
+    [Fact]
+    public void TypedCimAdapterDisposesTransferredInstancesWhenEnumerationOrInputProjectionFails()
+    {
+        using var session = Microsoft.Management.Infrastructure.CimSession.Create(null);
+        var raw = session.QueryInstances(
+                "root/cimv2",
+                "WQL",
+                "SELECT Caption FROM Win32_OperatingSystem")
+            .First();
+        var enumerationFailure = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellManagementProviderAdapter.ToPortableInstances(FailAfter(raw)));
+        Assert.Equal("synthetic-enumeration-failure", enumerationFailure.Message);
+        Assert.Throws<ObjectDisposedException>(() => _ = raw.CimInstanceProperties.Count);
+
+        var adapter = new PowerShellManagementProviderAdapter();
+        var invalidInput = Assert.Throws<ArgumentException>(() => adapter.Execute(new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Create,
+            ClassName = "Win32_Environment",
+            Properties = new[]
+            {
+                new PowerShellManagementProperty { Name = "Name", TypeName = "String", Value = "unused" },
+                new PowerShellManagementProperty { Name = "UserName", TypeName = "NotACimType", Value = "unused" }
+            },
+            TimeoutSeconds = 10
+        }));
+        Assert.Contains("CIM type", invalidInput.Message, StringComparison.OrdinalIgnoreCase);
+        using var recovery = adapter.Execute(new PowerShellManagementRequest
+        {
+            Operation = PowerShellManagementOperation.Query,
+            Query = "SELECT Caption FROM Win32_OperatingSystem",
+            TimeoutSeconds = 30
+        });
+        Assert.Single(recovery.Instances);
+    }
+
+    [Fact]
     public void ManagementContractCoversOperationsTransportsAuthenticationAndCleanup()
     {
         var contract = PowerShellManagementProviderAdapter.Contract;
@@ -104,9 +170,16 @@ public sealed class PowerShellManagementProviderTests
         Assert.True(contract.AcceptsRuntimeSession);
         Assert.True(contract.SupportsCancellation);
         Assert.True(contract.DeterministicCleanup);
-        Assert.Equal("PowerForge.Management/1", contract.Serialization);
+        Assert.Equal("PowerForge.Management/2", contract.Serialization);
         Assert.DoesNotContain(contract.Authentication, authentication =>
             authentication.ToString().Equals("Certificate", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IEnumerable<Microsoft.Management.Infrastructure.CimInstance> FailAfter(
+        Microsoft.Management.Infrastructure.CimInstance instance)
+    {
+        yield return instance;
+        throw new InvalidOperationException("synthetic-enumeration-failure");
     }
 
     [Fact]
@@ -138,9 +211,7 @@ public sealed class PowerShellManagementProviderTests
             ClassName = "Ignored",
             Transport = PowerShellManagementTransport.Dcom,
             Authentication = PowerShellManagementAuthentication.Basic,
-            Credential = new System.Management.Automation.PSCredential(
-                "ignored",
-                password)
+            Credential = new PowerShellManagementCredential("ignored", password)
         };
         Assert.Throws<ArgumentException>(() => adapter.Execute(unsupportedDcomCombination));
     }

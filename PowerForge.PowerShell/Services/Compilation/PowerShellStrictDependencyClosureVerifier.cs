@@ -49,6 +49,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         };
         var targetRuntimeAssemblies = PowerShellTargetRuntimeAssemblyCatalog.ReadStableKeys(request.TargetFramework)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var compatibleSignedRuntimeAssemblies = PowerShellTargetRuntimeAssemblyCatalog.ReadCompatibleSignedVersions(request.TargetFramework);
         var managedAssemblies = new List<ManagedAssemblyInspection>();
         var nativeLibraries = new List<NativeLibraryInspection>();
         foreach (var file in request.Files.OrderBy(static file => file.Path, StringComparer.OrdinalIgnoreCase))
@@ -89,7 +90,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 else
                 {
                     result.NativeLibraries++;
-                    nativeLibraries.Add(new NativeLibraryInspection(Path.GetFileName(file.Path), file.Path, ComputeSha256(file.Path)));
+                    nativeLibraries.Add(new NativeLibraryInspection(
+                        Path.GetFileName(file.Path),
+                        file.Path,
+                        PowerShellNativeExecutableInspector.Inspect(file.Path, request.RuntimeIdentifier)));
                 }
                 continue;
             }
@@ -104,7 +108,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             if (IsNativeLibrary(file.Path))
             {
                 result.NativeLibraries++;
-                nativeLibraries.Add(new NativeLibraryInspection(Path.GetFileName(file.Path), file.Path, ComputeSha256(file.Path)));
+                nativeLibraries.Add(new NativeLibraryInspection(
+                    Path.GetFileName(file.Path),
+                    file.Path,
+                    PowerShellNativeExecutableInspector.Inspect(file.Path, request.RuntimeIdentifier)));
                 continue;
             }
 
@@ -125,7 +132,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 result.Limitations.Add($"Runtime dependency format is not currently certifiable: {Path.GetFileName(file.Path)}");
         }
 
-        VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies);
+        VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
         VerifyReviewedDependencyGraph(request, managedAssemblies, result);
         VerifyReviewedNativeDependencyGraph(request, nativeLibraries, result);
         VerifyNativeReferenceClosure(request, managedAssemblies, result);
@@ -209,7 +216,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         result.ArtifactFormat = $"DotNetSingleFile/{manifest.MajorVersion}.{manifest.MinorVersion}";
         result.BundledEntries += manifest.Entries.Count;
         foreach (var entry in manifest.Entries)
-            VerifyBundleEntry(stream, entry, path, result, managedAssemblies, nativeLibraries);
+            VerifyBundleEntry(stream, entry, path, request.RuntimeIdentifier, result, managedAssemblies, nativeLibraries);
         return true;
     }
 
@@ -334,6 +341,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         Stream stream,
         DotNetBundleEntry entry,
         string bundlePath,
+        string runtimeIdentifier,
         PowerShellCompilationDependencyClosure result,
         ICollection<ManagedAssemblyInspection> managedAssemblies,
         ICollection<NativeLibraryInspection> nativeLibraries)
@@ -352,7 +360,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 break;
             case DotNetBundleFileType.NativeBinary:
                 result.NativeLibraries++;
-                nativeLibraries.Add(new NativeLibraryInspection(entry.RelativePath, bundlePath + "!" + entry.RelativePath, ComputeSha256(bytes)));
+                nativeLibraries.Add(new NativeLibraryInspection(
+                    entry.RelativePath,
+                    bundlePath + "!" + entry.RelativePath,
+                    PowerShellNativeExecutableInspector.Inspect(bytes, runtimeIdentifier, bundlePath + "!" + entry.RelativePath)));
                 break;
             case DotNetBundleFileType.RuntimeConfigJson:
             case DotNetBundleFileType.Symbols:
@@ -470,7 +481,8 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
 
     private static void VerifyManagedReferenceClosure(
         IReadOnlyCollection<ManagedAssemblyInspection> assemblies,
-        ISet<string> targetRuntimeAssemblies)
+        ISet<string> targetRuntimeAssemblies,
+        IReadOnlyDictionary<string, Version> compatibleSignedRuntimeAssemblies)
     {
         var delivered = assemblies.Select(static assembly => assembly.Identity.StableKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -478,7 +490,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         foreach (var reference in assembly.References.GroupBy(static reference => reference.StableKey, StringComparer.OrdinalIgnoreCase).Select(static group => group.First()))
         {
             if (delivered.Contains(reference.StableKey) || targetRuntimeAssemblies.Contains(reference.StableKey) ||
-                IsResolvedRuntimeFacadeReference(reference, assemblies, targetRuntimeAssemblies)) continue;
+                IsResolvedRuntimeFacadeReference(reference, assemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies)) continue;
             throw new InvalidOperationException(
                 $"Strict runtime-free managed dependency '{assembly.DisplayPath}' references missing managed assembly '{reference.DisplayName}'. The delivered closure must contain that exact assembly identity or classify its signed identity as part of the target runtime.");
         }
@@ -582,10 +594,19 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
     private static bool IsResolvedRuntimeFacadeReference(
         AssemblyIdentity reference,
         IEnumerable<ManagedAssemblyInspection> assemblies,
-        ISet<string> targetRuntimeAssemblies)
+        ISet<string> targetRuntimeAssemblies,
+        IReadOnlyDictionary<string, Version> compatibleSignedRuntimeAssemblies)
     {
-        if (reference.Version != new Version(0, 0, 0, 0) || string.IsNullOrWhiteSpace(reference.PublicKeyToken))
-            return false;
+        if (string.IsNullOrWhiteSpace(reference.PublicKeyToken)) return false;
+        var compatibleKey = PowerShellTargetRuntimeAssemblyCatalog.CreateCompatibleSignedKey(
+            reference.Name,
+            reference.PublicKeyToken,
+            reference.Culture,
+            reference.ContentType);
+        if (compatibleSignedRuntimeAssemblies.TryGetValue(compatibleKey, out var targetVersion) &&
+            targetVersion >= reference.Version)
+            return true;
+        if (reference.Version != new Version(0, 0, 0, 0)) return false;
         return assemblies.Any(candidate =>
             targetRuntimeAssemblies.Contains(candidate.Identity.StableKey) &&
             candidate.Identity.Name.Equals(reference.Name, StringComparison.OrdinalIgnoreCase) &&

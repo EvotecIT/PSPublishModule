@@ -18,7 +18,7 @@ namespace PowerForge;
 /// <summary>
 /// Reads and locks explicitly selected PowerForge provider packages without loading or executing their assemblies.
 /// </summary>
-public sealed class PowerShellCompilationProviderPackageReader
+public sealed partial class PowerShellCompilationProviderPackageReader
 {
     /// <summary>Canonical package-relative provider manifest path.</summary>
     public const string ManifestPath = "powerforge/provider.json";
@@ -62,12 +62,14 @@ public sealed class PowerShellCompilationProviderPackageReader
         var packages = new List<PowerShellCompilationProviderPackageLockEntry>();
         var providers = new List<PowerShellCompilationCommandProviderContract>();
         var runtimeAssemblies = new List<PowerShellCompilationResolvedProviderAssembly>();
+        var runtimeNativeAssets = new List<PowerShellCompilationResolvedProviderNativeAsset>();
         foreach (var reference in references)
         {
             var package = Read(reference.Path, policy, semanticProfile, runtimeIdentifier);
             packages.Add(package.Lock);
             providers.AddRange(package.Providers);
             runtimeAssemblies.AddRange(package.RuntimeAssemblies);
+            runtimeNativeAssets.AddRange(package.RuntimeNativeAssets);
         }
 
         EnsureUniqueProviders(providers);
@@ -76,6 +78,18 @@ public sealed class PowerShellCompilationProviderPackageReader
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicateAssembly is not null)
             throw new InvalidOperationException($"Provider assembly identity '{duplicateAssembly.Key}' is supplied by more than one package assembly.");
+        var duplicateNativeAsset = runtimeNativeAssets
+            .GroupBy(static asset => asset.Asset.FileName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateNativeAsset is not null)
+            throw new InvalidOperationException($"Provider native asset file name '{duplicateNativeAsset.Key}' is supplied more than once for the selected target.");
+        var duplicateRuntimeFile = runtimeAssemblies
+            .Select(static assembly => assembly.Assembly.AssemblyName + ".dll")
+            .Concat(runtimeNativeAssets.Select(static asset => asset.Asset.FileName))
+            .GroupBy(static fileName => fileName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateRuntimeFile is not null)
+            throw new InvalidOperationException($"Provider runtime file name '{duplicateRuntimeFile.Key}' collides across the selected managed and native closure.");
         var providerLock = new PowerShellCompilationProviderLock
         {
             SemanticProfileId = semanticProfile,
@@ -92,6 +106,10 @@ public sealed class PowerShellCompilationProviderPackageReader
             RuntimeAssemblies = runtimeAssemblies
                 .OrderBy(static assembly => assembly.PackageId, StringComparer.Ordinal)
                 .ThenBy(static assembly => assembly.Assembly.Path, StringComparer.Ordinal)
+                .ToArray(),
+            RuntimeNativeAssets = runtimeNativeAssets
+                .OrderBy(static asset => asset.PackageId, StringComparer.Ordinal)
+                .ThenBy(static asset => asset.Asset.Path, StringComparer.Ordinal)
                 .ToArray()
         };
     }
@@ -124,6 +142,18 @@ public sealed class PowerShellCompilationProviderPackageReader
                     Assemblies = (package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
                         .OrderBy(static assembly => assembly.Path, StringComparer.Ordinal)
                         .Select(static assembly => new { assembly.Path, assembly.Sha256, assembly.AssemblyName, assembly.AssemblyVersion, assembly.PublicKeyToken }),
+                    NativeAssets = (package.NativeAssets ?? Array.Empty<PowerShellCompilationProviderNativeAsset>())
+                        .OrderBy(static asset => asset.Path, StringComparer.Ordinal)
+                        .Select(static asset => new
+                        {
+                            asset.Path,
+                            asset.Sha256,
+                            asset.RuntimeIdentifier,
+                            asset.FileName,
+                            asset.Format,
+                            asset.Architecture,
+                            ImportedLibraries = (asset.ImportedLibraries ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal)
+                        }),
                     Dependencies = (package.Dependencies ?? Array.Empty<PowerShellCompilationProviderDependency>())
                         .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
                         .Select(static dependency => new { dependency.PackageId, dependency.Version, dependency.ContentHash }),
@@ -201,6 +231,7 @@ public sealed class PowerShellCompilationProviderPackageReader
         PowerShellCompilationProviderContractValidator.Validate(manifest);
         ValidatePackageMetadata(packageReader, files, manifest, path);
         var assemblies = ValidateAssemblies(packageReader, files, manifest, path);
+        var nativeAssets = ValidateNativeAssets(packageReader, files, manifest, path, runtimeIdentifier);
         ValidateAdapterEntryPoints(packageReader, manifest, path);
 
         return new ProviderPackage(
@@ -221,6 +252,7 @@ public sealed class PowerShellCompilationProviderPackageReader
                     .OrderBy(static value => value, StringComparer.Ordinal)
                     .ToArray(),
                 Assemblies = assemblies,
+                NativeAssets = nativeAssets,
                 Dependencies = manifest.Dependencies
                     .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
                     .ToArray(),
@@ -234,6 +266,12 @@ public sealed class PowerShellCompilationProviderPackageReader
                 PackageId = manifest.PackageId,
                 PackagePath = Path.GetFullPath(path),
                 Assembly = assembly
+            }).ToArray(),
+            nativeAssets.Select(asset => new PowerShellCompilationResolvedProviderNativeAsset
+            {
+                PackageId = manifest.PackageId,
+                PackagePath = Path.GetFullPath(path),
+                Asset = asset
             }).ToArray());
     }
 
@@ -288,6 +326,18 @@ public sealed class PowerShellCompilationProviderPackageReader
             throw new InvalidOperationException($"Provider package '{path}' does not support source semantic profile '{semanticProfileId}'.");
         if (manifest.Assemblies is null || manifest.Assemblies.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one provider assembly.");
+        if (manifest.NativeAssets is null)
+            throw new InvalidOperationException($"Provider package '{path}' has a null NativeAssets collection.");
+        if (manifest.NativeAssets.Length > 0 && normalizedRuntimeIdentifiers.Length == 0)
+            throw new InvalidOperationException($"Provider package '{path}' carries native assets but declares no supported runtime identifier.");
+        var duplicateNativePath = manifest.NativeAssets.GroupBy(static asset => NormalizePath(asset.Path), StringComparer.Ordinal).FirstOrDefault(static group => group.Count() > 1);
+        if (duplicateNativePath is not null)
+            throw new InvalidOperationException($"Provider package '{path}' declares native asset path '{duplicateNativePath.Key}' more than once.");
+        foreach (var asset in manifest.NativeAssets)
+        {
+            if (!normalizedRuntimeIdentifiers.Contains(asset.RuntimeIdentifier, StringComparer.Ordinal))
+                throw new InvalidOperationException($"Provider package '{path}' native asset '{asset.Path}' targets undeclared runtime identifier '{asset.RuntimeIdentifier}'.");
+        }
         if (manifest.Providers is null || manifest.Providers.Length == 0)
             throw new InvalidOperationException($"Provider package '{path}' must declare at least one provider contract.");
 
@@ -640,15 +690,18 @@ public sealed class PowerShellCompilationProviderPackageReader
         internal ProviderPackage(
             PowerShellCompilationCommandProviderContract[] providers,
             PowerShellCompilationProviderPackageLockEntry providerLock,
-            PowerShellCompilationResolvedProviderAssembly[] runtimeAssemblies)
+            PowerShellCompilationResolvedProviderAssembly[] runtimeAssemblies,
+            PowerShellCompilationResolvedProviderNativeAsset[] runtimeNativeAssets)
         {
             Providers = providers;
             Lock = providerLock;
             RuntimeAssemblies = runtimeAssemblies;
+            RuntimeNativeAssets = runtimeNativeAssets;
         }
 
         internal PowerShellCompilationCommandProviderContract[] Providers { get; }
         internal PowerShellCompilationProviderPackageLockEntry Lock { get; }
         internal PowerShellCompilationResolvedProviderAssembly[] RuntimeAssemblies { get; }
+        internal PowerShellCompilationResolvedProviderNativeAsset[] RuntimeNativeAssets { get; }
     }
 }

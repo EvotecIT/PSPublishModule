@@ -337,10 +337,17 @@
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )",
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.124, )",
+          "PowerForge": "[3.0.126, )",
+          "PowerForge.PowerShell.Provider.Management": "[3.0.126, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )",
+          "System.Text.Json": "[10.0.11, )"
+        }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )",
           "System.Text.Json": "[10.0.11, )"
         }
       }
@@ -1147,10 +1154,16 @@
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )",
           "Microsoft.PowerShell.SDK": "[7.6.5, )",
-          "PowerForge": "[3.0.124, )",
+          "PowerForge": "[3.0.126, )",
+          "PowerForge.PowerShell.Provider.Management": "[3.0.126, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
+        }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     },
@@ -1916,10 +1929,16 @@
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Management.Infrastructure": "[3.0.0, )",
           "Microsoft.PowerShell.SDK": "[7.4.18, )",
-          "PowerForge": "[3.0.124, )",
+          "PowerForge": "[3.0.126, )",
+          "PowerForge.PowerShell.Provider.Management": "[3.0.126, )",
           "System.Security.Cryptography.Xml": "[10.0.11, )"
+        }
+      },
+      "powerforge.powershell.provider.management": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Management.Infrastructure": "[3.0.0, )"
         }
       }
     }

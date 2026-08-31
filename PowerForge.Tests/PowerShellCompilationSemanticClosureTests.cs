@@ -205,6 +205,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     {
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "ld-linux-x86-64.so.2"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "api-ms-win-crt-runtime-l1-1-0.dll"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "msvcrt.dll"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "mi.dll"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "mimofcodec.dll"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "unreviewed.so"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "unreviewed.dll"));
     }
@@ -361,6 +364,24 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.NotEqual(conventional, retargetable);
         Assert.NotEqual(conventional, windowsRuntime);
         Assert.NotEqual(retargetable, windowsRuntime);
+    }
+
+    [Fact]
+    public void CompatibleSignedRuntimeIdentityIgnoresOnlyVersionAndRetargetableFlags()
+    {
+        var first = PowerShellTargetRuntimeAssemblyCatalog.CreateCompatibleSignedKey(
+            "System.Runtime", "b03f5f7f11d50a3a", "neutral", "Default");
+        var second = PowerShellTargetRuntimeAssemblyCatalog.CreateCompatibleSignedKey(
+            "System.Runtime", "b03f5f7f11d50a3a", "neutral", "Default");
+        var differentToken = PowerShellTargetRuntimeAssemblyCatalog.CreateCompatibleSignedKey(
+            "System.Runtime", "31bf3856ad364e35", "neutral", "Default");
+        var differentContentType = PowerShellTargetRuntimeAssemblyCatalog.CreateCompatibleSignedKey(
+            "System.Runtime", "b03f5f7f11d50a3a", "neutral", "WindowsRuntime");
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, differentToken);
+        Assert.NotEqual(first, differentContentType);
+        Assert.Contains(first, PowerShellTargetRuntimeAssemblyCatalog.ReadCompatibleSignedKeys("net10.0"));
     }
 
     [Fact]

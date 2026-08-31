@@ -22,6 +22,17 @@ public sealed class PowerShellCompilationResolvedProviderAssembly
     public PowerShellCompilationProviderAssembly Assembly { get; set; } = new();
 }
 
+/// <summary>One validated RID-specific native asset delivered by a provider package.</summary>
+public sealed class PowerShellCompilationResolvedProviderNativeAsset
+{
+    /// <summary>Provider package identity.</summary>
+    public string PackageId { get; set; } = string.Empty;
+    /// <summary>Full source package path.</summary>
+    public string PackagePath { get; set; } = string.Empty;
+    /// <summary>Locked package-relative native-asset evidence.</summary>
+    public PowerShellCompilationProviderNativeAsset Asset { get; set; } = new();
+}
+
 /// <summary>One managed assembly delivered by a provider package.</summary>
 public sealed class PowerShellCompilationProviderAssembly
 {
@@ -39,6 +50,25 @@ public sealed class PowerShellCompilationProviderAssembly
 
     /// <summary>Declared public-key token, or empty for an unsigned assembly.</summary>
     public string PublicKeyToken { get; set; } = string.Empty;
+}
+
+/// <summary>One exact RID-specific native runtime asset carried by a provider package.</summary>
+public sealed class PowerShellCompilationProviderNativeAsset
+{
+    /// <summary>Package-relative asset path.</summary>
+    public string Path { get; set; } = string.Empty;
+    /// <summary>Asset file SHA-256.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+    /// <summary>Exact runtime identifier for which the asset is valid.</summary>
+    public string RuntimeIdentifier { get; set; } = string.Empty;
+    /// <summary>File name used beside the generated artifact.</summary>
+    public string FileName { get; set; } = string.Empty;
+    /// <summary>Inspected native container format: PE, ELF, or MachO.</summary>
+    public string Format { get; set; } = string.Empty;
+    /// <summary>Architecture encoded in the native header.</summary>
+    public string Architecture { get; set; } = string.Empty;
+    /// <summary>Exact native libraries declared by the import/load table.</summary>
+    public string[] ImportedLibraries { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>One exact transitive dependency declared by a provider package.</summary>
@@ -94,6 +124,9 @@ public sealed class PowerShellCompilationProviderPackageManifest
 
     /// <summary>Managed provider assemblies carried by the package.</summary>
     public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
+
+    /// <summary>RID-specific native runtime assets carried by the package.</summary>
+    public PowerShellCompilationProviderNativeAsset[] NativeAssets { get; set; } = Array.Empty<PowerShellCompilationProviderNativeAsset>();
 
     /// <summary>Exact transitive package closure required by the provider.</summary>
     public PowerShellCompilationProviderDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationProviderDependency>();
@@ -187,6 +220,9 @@ public sealed class PowerShellCompilationProviderPackageLockEntry
     /// <summary>Exact assembly closure.</summary>
     public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
 
+    /// <summary>Exact RID-specific native runtime assets.</summary>
+    public PowerShellCompilationProviderNativeAsset[] NativeAssets { get; set; } = Array.Empty<PowerShellCompilationProviderNativeAsset>();
+
     /// <summary>Exact package dependency closure.</summary>
     public PowerShellCompilationProviderDependency[] Dependencies { get; set; } = Array.Empty<PowerShellCompilationProviderDependency>();
 
@@ -221,4 +257,7 @@ public sealed class PowerShellCompilationProviderResolution
 
     /// <summary>Validated runtime assemblies to extract into generated projects without loading them in the compiler.</summary>
     public PowerShellCompilationResolvedProviderAssembly[] RuntimeAssemblies { get; set; } = Array.Empty<PowerShellCompilationResolvedProviderAssembly>();
+
+    /// <summary>Validated native runtime assets to extract without executing package content.</summary>
+    public PowerShellCompilationResolvedProviderNativeAsset[] RuntimeNativeAssets { get; set; } = Array.Empty<PowerShellCompilationResolvedProviderNativeAsset>();
 }
