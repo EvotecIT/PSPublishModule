@@ -51,13 +51,15 @@ public sealed class AppleMacAppDeploymentService
         var deployment = new AppleMacAppDeploymentResult { Build = build };
         if (!build.Succeeded)
             return deployment;
+        var productSnapshot = buildOperation.ProductSnapshot ?? throw new InvalidOperationException(
+            "The successful macOS build did not retain its provenance-bound app snapshot.");
 
         var installedAppPath = Path.Combine(Path.GetFullPath(request.InstallRoot), Path.GetFileName(build.AppPath));
         using var installLock = AppleMacAppBundleReplacement.AcquireInstallLock(installedAppPath);
         var install = await InstallAsync(
             request,
-            buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
-            buildOperation.ProductSnapshot,
+            productSnapshot.AppPath,
+            productSnapshot,
             cancellationToken).ConfigureAwait(false);
         install.SourceAppPath = build.AppPath;
         deployment.Install = install;
@@ -71,7 +73,7 @@ public sealed class AppleMacAppDeploymentService
     private async Task<AppleMacAppInstallResult> InstallAsync(
         AppleMacAppDeploymentRequest request,
         string sourceAppPath,
-        AppleBuiltAppSnapshot? productSnapshot,
+        AppleBuiltAppSnapshot productSnapshot,
         CancellationToken cancellationToken)
     {
         var source = Path.GetFullPath(sourceAppPath);
@@ -82,9 +84,15 @@ public sealed class AppleMacAppDeploymentService
         Directory.CreateDirectory(installRoot);
         var destination = Path.Combine(installRoot, Path.GetFileName(source));
         var suffix = Guid.NewGuid().ToString("N");
-        var stage = Path.Combine(installRoot, $".{Path.GetFileName(source)}.powerforge-stage-{suffix}");
+        var stageRoot = Path.Combine(installRoot, $".{Path.GetFileName(source)}.powerforge-stage-{suffix}");
+        var stage = Path.Combine(stageRoot, Path.GetFileName(source));
         var backup = Path.Combine(installRoot, $".{Path.GetFileName(source)}.powerforge-backup-{suffix}");
         var recoveryWarning = AppleMacAppBundleReplacement.RecoverInterruptedReplacement(destination);
+        Directory.CreateDirectory(stageRoot);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(stageRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
 
         var copy = await _processRunner.RunAsync(
             new ProcessRunRequest(
@@ -102,7 +110,7 @@ public sealed class AppleMacAppDeploymentService
         };
         if (!copy.Succeeded)
         {
-            AppleMacAppBundleReplacement.TryDeleteDirectory(stage, out _);
+            AppleMacAppBundleReplacement.TryDeleteDirectory(stageRoot, out _);
             return result;
         }
         if (!Directory.Exists(stage))
@@ -110,8 +118,15 @@ public sealed class AppleMacAppDeploymentService
 
         try
         {
-            productSnapshot?.ValidateUnchanged();
-            var replacementWarning = AppleMacAppBundleReplacement.Replace(stage, destination, backup);
+            var stageSnapshot = productSnapshot.CaptureVerifiedCopy(
+                stage,
+                "staged macOS app");
+            productSnapshot.ValidateUnchanged();
+            var replacementWarning = AppleMacAppBundleReplacement.Replace(
+                stage,
+                destination,
+                backup,
+                stageSnapshot.ValidateUnchanged);
             result.Succeeded = true;
             result.Warning = string.Join(" ", new[] { recoveryWarning, replacementWarning }.Where(static value => !string.IsNullOrWhiteSpace(value)));
             if (string.IsNullOrWhiteSpace(result.Warning))
@@ -120,8 +135,8 @@ public sealed class AppleMacAppDeploymentService
         }
         finally
         {
-            if (Directory.Exists(stage))
-                AppleMacAppBundleReplacement.TryDeleteDirectory(stage, out _);
+            if (Directory.Exists(stageRoot))
+                AppleMacAppBundleReplacement.TryDeleteDirectory(stageRoot, out _);
         }
     }
 

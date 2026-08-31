@@ -75,12 +75,65 @@ internal sealed class AppleBuiltAppSnapshot : IDisposable
         }
     }
 
+    internal AppleBuiltAppCopySnapshot CaptureVerifiedCopy(
+        string copiedAppPath,
+        string description)
+    {
+        var identity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            copiedAppPath,
+            description);
+        if (!identity.Sha256.Equals(_expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The {description} does not match the provenance-bound built app. " +
+                "Discard the deployment and rebuild the app.");
+        }
+        return new AppleBuiltAppCopySnapshot(
+            copiedAppPath,
+            description,
+            identity);
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
         _disposed = true;
         _snapshot.Dispose();
+    }
+}
+
+/// <summary>
+/// Binds an installer-owned app copy to the exact content and physical identity
+/// captured after the copy completed.
+/// </summary>
+internal sealed class AppleBuiltAppCopySnapshot
+{
+    private readonly string _appPath;
+    private readonly string _description;
+    private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _identity;
+
+    internal AppleBuiltAppCopySnapshot(
+        string appPath,
+        string description,
+        AppleArchiveUploadSnapshot.SnapshotIdentity identity)
+    {
+        _appPath = Path.GetFullPath(appPath);
+        _description = description;
+        _identity = identity;
+    }
+
+    internal void ValidateUnchanged()
+    {
+        var current = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            _appPath,
+            _description);
+        if (!_identity.Equals(current))
+        {
+            throw new InvalidOperationException(
+                $"The {_description} changed before atomic installation. " +
+                "The existing app was preserved; discard the deployment and rebuild the app.");
+        }
     }
 }
 

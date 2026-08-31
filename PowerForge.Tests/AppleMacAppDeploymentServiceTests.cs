@@ -251,13 +251,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
     }
 
     private static void CopyDirectory(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.EnumerateFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
-        foreach (var directory in Directory.EnumerateDirectories(source))
-            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
-    }
+        => AppleArtifactCopy.CopyDirectory(source, destination);
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
