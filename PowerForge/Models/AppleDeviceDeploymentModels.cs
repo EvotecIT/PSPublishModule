@@ -82,7 +82,10 @@ public class AppleAppBuildRequest
     /// <summary>DerivedData path. When omitted, a unique temporary path is generated.</summary>
     public string? DerivedDataPath { get; set; }
 
-    /// <summary>Expected app path. When omitted, DerivedData, Configuration, Platform, and ProductName are used.</summary>
+    /// <summary>
+    /// Expected app path for standalone builds. Exact-source deployment rejects
+    /// this override and binds a private xcodebuild product directory instead.
+    /// </summary>
     public string? AppPath { get; set; }
 
     /// <summary>

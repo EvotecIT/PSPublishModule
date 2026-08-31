@@ -268,9 +268,10 @@ public sealed class PowerForgeCliAppleDeployTests
         Directory.CreateDirectory(tempRoot);
         try
         {
-            var project = Directory.CreateDirectory(Path.Combine(tempRoot, "Sample.xcodeproj"));
+            var appRoot = Directory.CreateDirectory(Path.Combine(tempRoot, "App"));
+            var project = Directory.CreateDirectory(Path.Combine(appRoot.FullName, "Sample.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            var configPath = Path.Combine(appRoot.FullName, "powerforge.release.json");
             File.WriteAllText(configPath, """
             {
               "SchemaVersion": 1,

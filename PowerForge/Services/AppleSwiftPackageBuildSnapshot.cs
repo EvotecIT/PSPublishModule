@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Owns the private Swift package materialization consumed by one exact-source Xcode archive.
+/// Owns the private Swift package materialization consumed by one exact-source Xcode build.
 /// </summary>
 internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 {
@@ -32,6 +32,14 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     internal string ArchiveDerivedDataPath => Path.Combine(RootPath, "ArchiveDerivedData");
 
     internal IReadOnlyDictionary<string, string?> EnvironmentVariables => _environmentVariables;
+
+    internal static bool HasApprovedRemotePackages(string projectPath)
+    {
+        var repositoryRoot = FindRepositoryRoot(projectPath);
+        return new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
+            repositoryRoot,
+            DiscoverApprovedPackageLocks(repositoryRoot, projectPath)).Count > 0;
+    }
 
     internal static async Task<AppleSwiftPackageBuildSnapshot> CreateAsync(
         IProcessRunner processRunner,
@@ -83,8 +91,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             monitor = new AppleReleaseSourceMutationMonitor(
                 sourcePackagesPath,
                 "materialized Swift package root",
-                "xcodebuild archive",
-                "Discard the archive and resolve the exact package graph again.",
+                "xcodebuild exact-source build",
+                "Discard the Apple product and resolve the exact package graph again.",
                 enableImmediately: false);
             AppleArchiveUploadSnapshot.SnapshotIdentity? materializedPackagesIdentity = null;
             var processRequest = new ProcessRunRequest(
@@ -110,7 +118,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 {
                     throw new InvalidOperationException(
                         "The materialized Swift package root changed while its exact package graph was being validated. " +
-                        "Discard the archive and resolve the exact package graph again.");
+                        "Discard the Apple product and resolve the exact package graph again.");
                 }
                 monitor.ValidateNoChanges();
                 progress?.Invoke("Pinned Swift package graph validated");
@@ -159,13 +167,22 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         arguments.Add("-skipPackageUpdates");
     }
 
+    internal void AppendLocalBuildArguments(ICollection<string> arguments)
+    {
+        arguments.Add("-clonedSourcePackagesDirPath");
+        arguments.Add(SourcePackagesPath);
+        arguments.Add("-onlyUsePackageVersionsFromResolvedFile");
+        arguments.Add("-disableAutomaticPackageResolution");
+        arguments.Add("-skipPackageUpdates");
+    }
+
     internal void ValidateUnchanged()
     {
         var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
         if (!actual.Equals(_materializedPackagesIdentity))
         {
             throw new InvalidOperationException(
-                "The materialized Swift package root changed before xcodebuild archive. " +
+                "The materialized Swift package root changed before the exact-source xcodebuild completed. " +
                 "A transient write or hard-link alias invalidates the exact package graph.");
         }
         _monitor.ValidateNoChanges();

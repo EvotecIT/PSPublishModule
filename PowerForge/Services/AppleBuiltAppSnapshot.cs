@@ -142,17 +142,28 @@ internal sealed class AppleBuiltAppCopySnapshot
 /// </summary>
 internal sealed class AppleAppBuildOperation : IDisposable
 {
+    private readonly string? _ownedBuildOutputRoot;
+
     internal AppleAppBuildOperation(
         AppleAppBuildResult result,
-        AppleBuiltAppSnapshot? productSnapshot)
+        AppleBuiltAppSnapshot? productSnapshot,
+        string? ownedBuildOutputRoot = null)
     {
         Result = result;
         ProductSnapshot = productSnapshot;
+        _ownedBuildOutputRoot = ownedBuildOutputRoot;
     }
 
     internal AppleAppBuildResult Result { get; }
 
     internal AppleBuiltAppSnapshot? ProductSnapshot { get; }
 
-    public void Dispose() => ProductSnapshot?.Dispose();
+    public void Dispose()
+    {
+        ProductSnapshot?.Dispose();
+        if (!string.IsNullOrWhiteSpace(_ownedBuildOutputRoot))
+        {
+            try { AppleArtifactCopy.DeleteOwnedDirectory(_ownedBuildOutputRoot!); } catch { /* best effort private cleanup */ }
+        }
+    }
 }

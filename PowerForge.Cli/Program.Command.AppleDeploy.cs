@@ -92,9 +92,9 @@ internal static partial class Program
             {
                 AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
                     resolvedInstallRoot,
-                    projectRoot,
+                    provenanceRoot,
                     nameof(AppleMacAppDeploymentRequest.InstallRoot),
-                    FrameworkCompatibility.GetPathStringComparisonForPath(projectRoot));
+                    FrameworkCompatibility.GetPathStringComparisonForPath(provenanceRoot));
             }
             AppleBuildProvenance.Snapshot? planSnapshot = null;
             if (planOnly)

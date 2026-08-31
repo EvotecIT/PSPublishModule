@@ -63,13 +63,14 @@ internal static class AppleTrustedExecutionEnvironment
         string operation,
         string workingDirectory,
         IReadOnlyList<string> arguments,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        bool isolateGitConfiguration = false)
         => new(
             ResolveSystemTool(executable, defaultName, trustedPath, operation),
             workingDirectory,
             arguments,
             timeout,
-            Create(),
+            Create(isolateGitConfiguration),
             captureOutput: true,
             captureError: true,
             inheritEnvironment: false);

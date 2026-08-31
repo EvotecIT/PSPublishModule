@@ -1117,7 +1117,9 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
+            var derived = ExternalOutputPath(root, "DerivedData");
+            var app = Directory.CreateDirectory(Path.Combine(
+                derived, "Build", "Products", "Debug-iphoneos", "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -1132,7 +1134,7 @@ App installed:
             {
                 ProjectPath = project.FullName,
                 Scheme = "Tactra",
-                AppPath = app.FullName,
+                DerivedDataPath = derived,
                 DeviceIdentifier = "device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
@@ -1171,7 +1173,9 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
+            var derived = ExternalOutputPath(root, "DerivedData");
+            var app = Directory.CreateDirectory(Path.Combine(
+                derived, "Build", "Products", "Debug-iphoneos", "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -1186,7 +1190,7 @@ App installed:
             {
                 ProjectPath = project.FullName,
                 Scheme = "Tactra",
-                AppPath = app.FullName,
+                DerivedDataPath = derived,
                 Destination = "id=device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
@@ -1217,7 +1221,9 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(ExternalOutputPath(root, "CasaRay.app"));
+            var derived = ExternalOutputPath(root, "DerivedData");
+            _ = Directory.CreateDirectory(Path.Combine(
+                derived, "Build", "Products", "Debug-iphoneos", "CasaRay.app"));
             var runner = new CapturingProcessRunner(request => request.Arguments.Contains("install")
                 ? Success("App installed:\n• bundleID: com.evotecit.casaray\n")
                 : Success("ok"));
@@ -1228,7 +1234,7 @@ App installed:
             {
                 ProjectPath = project.FullName,
                 Scheme = "CasaRay",
-                AppPath = app.FullName,
+                DerivedDataPath = derived,
                 DeviceIdentifier = "device-1",
                 BundleIdentifier = "com.evotecit.casaray",
                 Launch = true,
@@ -1265,7 +1271,9 @@ App installed:
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(ExternalOutputPath(root, "Tactra.app"));
+            var derived = ExternalOutputPath(root, "DerivedData");
+            _ = Directory.CreateDirectory(Path.Combine(
+                derived, "Build", "Products", "Debug-iphoneos", "Tactra.app"));
             var runner = new CapturingProcessRunner(request =>
             {
                 if (request.Arguments.Contains("install"))
@@ -1294,7 +1302,7 @@ App installed:
             {
                 ProjectPath = project.FullName,
                 Scheme = "Tactra",
-                AppPath = app.FullName,
+                DerivedDataPath = derived,
                 DeviceIdentifier = "device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
@@ -1412,7 +1420,12 @@ App installed:
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            return Task.FromResult(_execute(request));
+            request.InvokeStartBoundary();
+            var result = _execute(request);
+            if (result.Succeeded)
+                AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
         }
     }
 }

@@ -366,7 +366,12 @@ public sealed partial class AppleMacAppDeploymentServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            return Task.FromResult(_execute(request));
+            request.InvokeStartBoundary();
+            var result = _execute(request);
+            if (result.Succeeded)
+                AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
         }
     }
 }

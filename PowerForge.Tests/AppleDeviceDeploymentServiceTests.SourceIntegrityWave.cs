@@ -100,6 +100,40 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
+    public async Task DeployAsync_rejects_a_caller_selected_app_path_before_building()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var staleApp = Directory.CreateDirectory(ExternalOutputPath(root, "Stale.app"));
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).DeployAsync(
+                    new AppleAppDeviceDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        AppPath = staleApp.FullName
+                    }));
+
+            Assert.Contains("does not accept AppPath", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_additional_xcodebuild_arguments_before_tools_run()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -315,7 +349,9 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var app = Directory.CreateDirectory(ExternalOutputPath(root, "CasaRay.app"));
+            var derived = ExternalOutputPath(root, "DerivedData");
+            var app = Directory.CreateDirectory(Path.Combine(
+                derived, "Build", "Products", "Debug-iphoneos", "CasaRay.app"));
             var payload = Path.Combine(app.FullName, "payload");
             File.WriteAllText(payload, "approved");
             InitializeGitRepository(root.FullName);
@@ -337,7 +373,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                     {
                         ProjectPath = project.FullName,
                         Scheme = "CasaRay",
-                        AppPath = app.FullName,
+                        DerivedDataPath = derived,
                         DeviceIdentifier = "device-1",
                         BundleIdentifier = "com.evotecit.casaray",
                         Launch = false,
