@@ -88,7 +88,100 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         }
     }
 
-    private static LocalPackageBuildFixture CreateLocalPackageBuildFixture()
+    [Fact]
+    public async Task DeployAsync_ignores_an_unrelated_repository_root_package_lock()
+    {
+        var fixture = CreateLocalPackageBuildFixture(
+            bindPackageToSelectedProject: false);
+        try
+        {
+            var runner = new LocalPackageBuildRunner(
+                fixture.RemoteRoot,
+                fixture.RemoteUrl,
+                mutateDuringBuild: false);
+
+            var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
+                new AppleAppDeviceDeploymentRequest
+                {
+                    ProjectPath = fixture.ProjectPath,
+                    Scheme = "CasaRay",
+                    ProductName = "CasaRay",
+                    DerivedDataPath = fixture.DerivedDataPath,
+                    DeviceIdentifier = "device-1",
+                    BundleIdentifier = "com.evotecit.casaray",
+                    Launch = false,
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                    XcrunExecutable = "/usr/bin/xcrun"
+                });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.DoesNotContain(
+                runner.Requests,
+                request => request.Arguments.Contains(
+                    "-resolvePackageDependencies"));
+            Assert.DoesNotContain(
+                "-clonedSourcePackagesDirPath",
+                runner.Requests[0].Arguments);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Package_snapshot_includes_a_root_lock_referenced_by_the_selected_local_package()
+    {
+        var fixture = CreateLocalPackageBuildFixture(
+            bindPackageToSelectedProject: false);
+        try
+        {
+            var root = Path.GetDirectoryName(fixture.ProjectPath)!;
+            var revision = ReadGit(
+                fixture.RemoteRoot,
+                "rev-parse",
+                "HEAD").Trim();
+            File.WriteAllText(
+                Path.Combine(fixture.ProjectPath, "project.pbxproj"),
+                """
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = XCLocalSwiftPackageReference;
+                            relativePath = .;
+                        };
+                    };
+                }
+                """);
+            File.WriteAllText(
+                Path.Combine(root, "Package.swift"),
+                $$"""
+                // swift-tools-version: 6.0
+                import PackageDescription
+                let package = Package(
+                    name: "App",
+                    dependencies: [
+                        .package(url: "{{fixture.RemoteUrl}}", revision: "{{revision}}")
+                    ]
+                )
+                """);
+            RunGit(root, "add", ".");
+            RunGit(root, "commit", "-m", "bind local package graph");
+
+            var approved = AppleSwiftPackageBuildSnapshot
+                .ReadApprovedRemotePackages(fixture.ProjectPath);
+
+            Assert.Equal(revision, Assert.Single(approved).Value);
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    private static LocalPackageBuildFixture CreateLocalPackageBuildFixture(
+        bool bindPackageToSelectedProject = true)
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -113,8 +206,15 @@ public sealed partial class AppleDeviceDeploymentServiceTests
 
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var lockDirectory = bindPackageToSelectedProject
+                ? Directory.CreateDirectory(Path.Combine(
+                    project.FullName,
+                    "project.xcworkspace",
+                    "xcshareddata",
+                    "swiftpm")).FullName
+                : root.FullName;
             File.WriteAllText(
-                Path.Combine(root.FullName, "Package.resolved"),
+                Path.Combine(lockDirectory, "Package.resolved"),
                 System.Text.Json.JsonSerializer.Serialize(new
                 {
                     pins = new[]

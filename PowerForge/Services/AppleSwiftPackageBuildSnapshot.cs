@@ -33,12 +33,14 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal IReadOnlyDictionary<string, string?> EnvironmentVariables => _environmentVariables;
 
-    internal static bool HasApprovedRemotePackages(string projectPath)
+    internal static IReadOnlyDictionary<string, string> ReadApprovedRemotePackages(
+        string projectPath)
     {
         var repositoryRoot = FindRepositoryRoot(projectPath);
-        return new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
-            repositoryRoot,
-            DiscoverApprovedPackageLocks(repositoryRoot, projectPath)).Count > 0;
+        return new AppleReleaseSourceTrustService()
+            .ReadApprovedLocalBuildPackageRevisions(
+                repositoryRoot,
+                projectPath);
     }
 
     internal static async Task<AppleSwiftPackageBuildSnapshot> CreateAsync(
@@ -47,6 +49,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         string projectPath,
         bool isWorkspace,
         string scheme,
+        IReadOnlyDictionary<string, string> approvedPackageRevisions,
         TimeSpan timeout,
         CancellationToken cancellationToken,
         Action<string>? progress = null)
@@ -66,10 +69,6 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
-            var repositoryRoot = FindRepositoryRoot(projectPath);
-            var approvedPackageRevisions = new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
-                repositoryRoot,
-                DiscoverApprovedPackageLocks(repositoryRoot, projectPath));
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {
@@ -265,22 +264,6 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         _disposed = true;
         _monitor.Dispose();
         try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after archive */ }
-    }
-
-    private static IEnumerable<string> DiscoverApprovedPackageLocks(string repositoryRoot, string projectPath)
-    {
-        var project = Path.GetFullPath(projectPath);
-        var projectDirectory = Path.GetDirectoryName(project)
-            ?? throw new InvalidOperationException($"Xcode project path has no parent: {project}");
-        return new[]
-            {
-                Path.Combine(repositoryRoot, "Package.resolved"),
-                Path.Combine(projectDirectory, "Package.resolved"),
-                Path.Combine(project, "xcshareddata", "swiftpm", "Package.resolved"),
-                Path.Combine(project, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
-            }
-            .Distinct(Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-            .Where(File.Exists);
     }
 
     private static string FindRepositoryRoot(string startPath)

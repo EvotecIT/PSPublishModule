@@ -92,12 +92,16 @@ public sealed partial class AppleAppArchiveService
             if (request.RequireExactPackageSnapshot)
             {
                 AppleSwiftPackageBuildSnapshot.RejectConflictingArguments(additionalArguments);
+                var approvedPackageRevisions =
+                    AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
+                        projectPath);
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
                         _processRunner,
                         xcodeBuildExecutable,
                         projectPath,
                         request.IsWorkspace,
                         request.Scheme.Trim(),
+                        approvedPackageRevisions,
                         timeout,
                         cancellationToken,
                         request.Progress)

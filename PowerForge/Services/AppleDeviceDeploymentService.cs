@@ -329,7 +329,10 @@ public sealed partial class AppleDeviceDeploymentService
 
         try
         {
-            if (AppleSwiftPackageBuildSnapshot.HasApprovedRemotePackages(projectPath))
+            var approvedPackageRevisions =
+                AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
+                    projectPath);
+            if (approvedPackageRevisions.Count > 0)
             {
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
                         _processRunner,
@@ -337,6 +340,7 @@ public sealed partial class AppleDeviceDeploymentService
                         projectPath,
                         request.IsWorkspace,
                         request.Scheme.Trim(),
+                        approvedPackageRevisions,
                         request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
                         cancellationToken)
                     .ConfigureAwait(false);
