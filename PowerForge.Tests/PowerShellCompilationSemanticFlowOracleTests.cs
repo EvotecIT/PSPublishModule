@@ -24,6 +24,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-LogicalValue { return $true -and -not $false }",
             "Get_LogicalValue",
             "True"
+        },
+        {
+            "operator-arithmetic",
+            "function Get-ArithmeticValue { [int] $Value = 6; $Value *= 7; return $Value }",
+            "Get_ArithmeticValue",
+            "42"
         }
     };
 
@@ -72,6 +78,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesLogicalCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-logical", "BoundedLogicalOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesArithmeticCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-arithmetic", "BoundedArithmeticOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()
