@@ -96,14 +96,16 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             }
             _ = new PowerShellCompilationProviderPackageReader().Resolve(
                 new[] { new PowerShellCompilationProviderPackageReference(temporary) },
-                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault());
+                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault(),
+                runtimeIdentifier: manifest.SupportedRuntimeIdentifiers.FirstOrDefault());
             if (File.Exists(request.OutputPath))
                 File.Replace(temporary, request.OutputPath, destinationBackupFileName: null);
             else
                 File.Move(temporary, request.OutputPath);
             return new PowerShellCompilationProviderPackageReader().Resolve(
                 new[] { new PowerShellCompilationProviderPackageReference(request.OutputPath) },
-                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault());
+                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault(),
+                runtimeIdentifier: manifest.SupportedRuntimeIdentifiers.FirstOrDefault());
         }
         finally
         {
@@ -129,6 +131,11 @@ public sealed class PowerShellCompilationProviderPackageBuilder
             PackageVersion = source.PackageVersion,
             Publisher = source.Publisher,
             LicenseExpression = source.LicenseExpression,
+            Redistributable = source.Redistributable,
+            SupportedRuntimeIdentifiers = (source.SupportedRuntimeIdentifiers ?? Array.Empty<string>())
+                .Select(static value => value.Trim().ToLowerInvariant())
+                .OrderBy(static value => value, StringComparer.Ordinal)
+                .ToArray(),
             SemanticProfiles = (source.SemanticProfiles ?? Array.Empty<string>())
                 .OrderBy(static value => value, StringComparer.Ordinal)
                 .ToArray(),

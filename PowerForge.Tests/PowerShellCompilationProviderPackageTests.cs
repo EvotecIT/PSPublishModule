@@ -136,8 +136,10 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             new PowerShellCompilationProviderDependency { PackageId = "Generic.Warning.Runtime.A", Version = "1.0.0", ContentHash = "sha512-warning-a" },
             new PowerShellCompilationProviderDependency { PackageId = "Generic.Warning.Runtime.Z", Version = "1.0.0", ContentHash = "sha512-warning-z" }
         };
+        fixture.Manifest.SupportedRuntimeIdentifiers = new[] { "win-x64", "linux-x64" };
         var first = fixture.BuildPackage("first.nupkg");
         fixture.Manifest.Providers = new[] { secondProvider, firstProvider };
+        Array.Reverse(fixture.Manifest.SupportedRuntimeIdentifiers);
         Array.Reverse(firstProvider.ModuleNames);
         Array.Reverse(firstProvider.Aliases);
         Array.Reverse(firstProvider.Parameters[0].Aliases);
@@ -155,9 +157,12 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         Assert.Equal(PowerShellCompilationProviderAbi.CurrentVersion, package.ProviderAbiVersion);
         Assert.Equal("Unsigned", package.Signature);
         Assert.Equal("MIT", package.LicenseExpression);
+        Assert.True(package.Redistributable);
+        Assert.Equal(new[] { "linux-x64", "win-x64" }, package.SupportedRuntimeIdentifiers);
         Assert.NotEmpty(package.PackageSha256);
         Assert.NotEmpty(package.ManifestSha256);
         Assert.NotEmpty(first.Lock.LockSha256);
+        Assert.Equal(3, first.Lock.SchemaVersion);
         Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, first.Lock.SemanticProfileId);
         Assert.Equal(first.Lock.LockSha256, second.Lock.LockSha256);
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.notice");
@@ -552,6 +557,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 PackageVersion = "1.0.0",
                 Publisher = "Generic Publisher",
                 LicenseExpression = "MIT",
+                Redistributable = true,
                 SourceSemanticProfiles = new[]
                 {
                     PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId

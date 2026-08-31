@@ -24,7 +24,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var resolution = new PowerShellCompilationProviderPackageReader().Resolve(
             references,
             spec.ProviderTrustPolicy ?? new PowerShellCompilationProviderTrustPolicy(),
-            spec.SemanticProfileId);
+            spec.SemanticProfileId,
+            spec.RuntimeIdentifier);
+        var nonRedistributable = resolution.Lock.Packages.FirstOrDefault(static package => !package.Redistributable);
+        if (nonRedistributable is not null)
+            throw new InvalidOperationException(
+                $"Provider package '{nonRedistributable.PackageId}' is not approved for redistribution and cannot be delivered in a generated artifact.");
         if (spec.ExpectedProviderLock is not null)
             PowerShellCompilationProviderPackageReader.EnsureMatches(spec.ExpectedProviderLock, resolution.Lock);
         return resolution;

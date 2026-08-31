@@ -48,7 +48,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             item.TargetName.Equals(artifact.Name, StringComparison.Ordinal));
         if (!resolvedLock.Sha256.Equals(manifest.ResolvedPackageLockSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Built artifact NuGet closure identity differs from the exact project restore lock.");
-        var currentProviders = ResolveProviders(context);
+        var currentProviders = ResolveProviders(context, artifact);
         var currentInput = ResolveInput(context, artifact);
         var currentPlan = CreatePlan(context, artifact, currentInput, currentProviders.Providers, environment.PackageRoot);
         if (!currentPlan.CanProceed ||

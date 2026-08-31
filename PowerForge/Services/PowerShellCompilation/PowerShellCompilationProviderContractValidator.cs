@@ -17,8 +17,8 @@ public static class PowerShellCompilationProviderContractValidator
         if (manifest is null) throw new ArgumentNullException(nameof(manifest));
         if (manifest.Providers is null || manifest.Providers.Length == 0)
             throw new InvalidOperationException("Provider conformance requires at least one command contract.");
-        if (manifest.SchemaVersion != 2 || manifest.SourceSemanticProfiles is null || manifest.SourceSemanticProfiles.Length == 0)
-            throw new InvalidOperationException("Provider conformance requires schema 2 and at least one named source semantic profile.");
+        if (manifest.SchemaVersion != 3 || manifest.SourceSemanticProfiles is null || manifest.SourceSemanticProfiles.Length == 0)
+            throw new InvalidOperationException("Provider conformance requires schema 3 and at least one named source semantic profile.");
         _ = manifest.SourceSemanticProfiles
             .Select(static profile => PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId)
             .ToArray();

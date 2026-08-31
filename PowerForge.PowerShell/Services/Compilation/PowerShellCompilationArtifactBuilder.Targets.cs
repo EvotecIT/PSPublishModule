@@ -197,6 +197,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 package.Signature,
                 package.Publisher,
                 package.LicenseExpression,
+                redistributable = package.Redistributable,
+                supportedRuntimeIdentifiers = package.SupportedRuntimeIdentifiers,
                 package.PackageSha256,
                 package.ManifestSha256
             }).ToArray(),
@@ -271,7 +273,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         new { name = "powerforge:publisher", value = package.Publisher },
                         new { name = "powerforge:signature", value = package.Signature },
                         new { name = "powerforge:signerFingerprint", value = package.SignerFingerprint },
-                        new { name = "powerforge:providerAbi", value = package.ProviderAbiVersion }
+                        new { name = "powerforge:providerAbi", value = package.ProviderAbiVersion },
+                        new { name = "powerforge:redistributable", value = package.Redistributable.ToString() },
+                        new { name = "powerforge:supportedRuntimeIdentifiers", value = string.Join(",", package.SupportedRuntimeIdentifiers) }
                     }
                 }))
                 .ToArray()

@@ -201,6 +201,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     public void ArtifactBuildRequiresReviewedProviderLockAndExecutesAdapter(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
+        providerFixture.Manifest.SupportedRuntimeIdentifiers = Array.Empty<string>();
         var packagePath = providerFixture.PackagePath("provider.nupkg");
         var resolution = providerFixture.BuildPackage("provider.nupkg");
         using var artifactFixture = ScriptFixture.Create("function Write-PackageNotice { Write-PackageNoticeCore 'locked' }");
@@ -247,7 +248,10 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         var sbomPath = Assert.Single(result.Manifest.Files, static file => file.Role == "Sbom").Path;
         var provenancePath = Assert.Single(result.Manifest.Files, static file => file.Role == "BuildProvenance").Path;
         Assert.Contains("Generic.Semantic.Provider", File.ReadAllText(sbomPath), StringComparison.Ordinal);
+        Assert.Contains("powerforge:redistributable", File.ReadAllText(sbomPath), StringComparison.Ordinal);
+        Assert.Contains("powerforge:supportedRuntimeIdentifiers", File.ReadAllText(sbomPath), StringComparison.Ordinal);
         Assert.Contains(resolution.Lock.LockSha256, File.ReadAllText(provenancePath), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("supportedRuntimeIdentifiers", File.ReadAllText(provenancePath), StringComparison.Ordinal);
         var providerRuntime = Assert.Single(result.Manifest.Files, static file => file.Role == "CompilerProviderRuntime");
         Assert.Equal(Assert.Single(resolution.Lock.Packages).Assemblies[0].Sha256, providerRuntime.Sha256);
 

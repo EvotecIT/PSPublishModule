@@ -42,7 +42,8 @@ public sealed class PowerShellCompilationProviderPackageReader
     public PowerShellCompilationProviderResolution Resolve(
         IEnumerable<PowerShellCompilationProviderPackageReference> packageReferences,
         PowerShellCompilationProviderTrustPolicy? trustPolicy = null,
-        string? semanticProfileId = null)
+        string? semanticProfileId = null,
+        string? runtimeIdentifier = null)
     {
         if (packageReferences is null) throw new ArgumentNullException(nameof(packageReferences));
         var references = packageReferences
@@ -63,7 +64,7 @@ public sealed class PowerShellCompilationProviderPackageReader
         var runtimeAssemblies = new List<PowerShellCompilationResolvedProviderAssembly>();
         foreach (var reference in references)
         {
-            var package = Read(reference.Path, policy, semanticProfile);
+            var package = Read(reference.Path, policy, semanticProfile, runtimeIdentifier);
             packages.Add(package.Lock);
             providers.AddRange(package.Providers);
             runtimeAssemblies.AddRange(package.RuntimeAssemblies);
@@ -117,6 +118,9 @@ public sealed class PowerShellCompilationProviderPackageReader
                     package.SignerFingerprint,
                     package.Publisher,
                     package.LicenseExpression,
+                    package.Redistributable,
+                    SupportedRuntimeIdentifiers = (package.SupportedRuntimeIdentifiers ?? Array.Empty<string>())
+                        .OrderBy(static value => value, StringComparer.Ordinal),
                     Assemblies = (package.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
                         .OrderBy(static assembly => assembly.Path, StringComparer.Ordinal)
                         .Select(static assembly => new { assembly.Path, assembly.Sha256, assembly.AssemblyName, assembly.AssemblyVersion, assembly.PublicKeyToken }),
@@ -149,7 +153,8 @@ public sealed class PowerShellCompilationProviderPackageReader
     private static ProviderPackage Read(
         string path,
         PowerShellCompilationProviderTrustPolicy policy,
-        string semanticProfileId)
+        string semanticProfileId,
+        string? runtimeIdentifier)
     {
         if (!File.Exists(path)) throw new FileNotFoundException("PowerForge provider package was not found.", path);
         var packageBytes = File.ReadAllBytes(path);
@@ -187,11 +192,12 @@ public sealed class PowerShellCompilationProviderPackageReader
             manifestStream.CopyTo(memory);
             manifestBytes = memory.ToArray();
         }
+        ValidateDistributionFields(manifestBytes, path);
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = false };
         options.Converters.Add(new JsonStringEnumConverter());
         var manifest = JsonSerializer.Deserialize<PowerShellCompilationProviderPackageManifest>(manifestBytes, options)
             ?? throw new InvalidOperationException($"Provider package '{path}' contains an empty manifest.");
-        ValidateManifest(manifest, policy, path, semanticProfileId);
+        ValidateManifest(manifest, policy, path, semanticProfileId, runtimeIdentifier);
         PowerShellCompilationProviderContractValidator.Validate(manifest);
         ValidatePackageMetadata(packageReader, files, manifest, path);
         var assemblies = ValidateAssemblies(packageReader, files, manifest, path);
@@ -210,6 +216,10 @@ public sealed class PowerShellCompilationProviderPackageReader
                 SignerFingerprint = signerFingerprint,
                 Publisher = manifest.Publisher,
                 LicenseExpression = manifest.LicenseExpression,
+                Redistributable = manifest.Redistributable,
+                SupportedRuntimeIdentifiers = manifest.SupportedRuntimeIdentifiers
+                    .OrderBy(static value => value, StringComparer.Ordinal)
+                    .ToArray(),
                 Assemblies = assemblies,
                 Dependencies = manifest.Dependencies
                     .OrderBy(static dependency => dependency.PackageId, StringComparer.Ordinal)
@@ -231,16 +241,39 @@ public sealed class PowerShellCompilationProviderPackageReader
         PowerShellCompilationProviderPackageManifest manifest,
         PowerShellCompilationProviderTrustPolicy policy,
         string path,
-        string semanticProfileId)
+        string semanticProfileId,
+        string? runtimeIdentifier)
     {
-        if (manifest.SchemaVersion != 2)
-            throw new InvalidOperationException($"Provider package '{path}' uses unsupported manifest schema '{manifest.SchemaVersion}'.");
+        if (manifest.SchemaVersion != 3)
+            throw new InvalidOperationException($"Provider package '{path}' uses unsupported manifest schema '{manifest.SchemaVersion}'; rebuild it with the current provider SDK so distribution trust is explicit.");
         if (!string.Equals(manifest.ProviderAbiVersion, PowerShellCompilationProviderAbi.CurrentVersion, StringComparison.Ordinal))
             throw new InvalidOperationException($"Provider package '{path}' targets ABI '{manifest.ProviderAbiVersion}', expected '{PowerShellCompilationProviderAbi.CurrentVersion}'.");
         Require(manifest.PackageId, "PackageId", path);
         Require(manifest.PackageVersion, "PackageVersion", path);
         Require(manifest.Publisher, "Publisher", path);
         Require(manifest.LicenseExpression, "LicenseExpression", path);
+        if (policy.RequireRedistributable && !manifest.Redistributable)
+            throw new InvalidOperationException($"Provider package '{path}' is not approved for redistribution by the selected trust policy.");
+        if (manifest.SupportedRuntimeIdentifiers is null)
+            throw new InvalidOperationException($"Provider package '{path}' has a null SupportedRuntimeIdentifiers collection.");
+        var normalizedRuntimeIdentifiers = manifest.SupportedRuntimeIdentifiers
+            .Select(static value => (value ?? string.Empty).Trim().ToLowerInvariant())
+            .ToArray();
+        if (normalizedRuntimeIdentifiers.Any(static value => value.Length == 0 ||
+                                                           !System.Text.RegularExpressions.Regex.IsMatch(value, "^[a-z0-9]+(?:[.-][a-z0-9]+)*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)))
+            throw new InvalidOperationException($"Provider package '{path}' contains an invalid supported runtime identifier.");
+        if (!manifest.SupportedRuntimeIdentifiers.SequenceEqual(normalizedRuntimeIdentifiers, StringComparer.Ordinal))
+            throw new InvalidOperationException($"Provider package '{path}' supported runtime identifiers must use canonical lowercase RID spelling without surrounding whitespace.");
+        if (normalizedRuntimeIdentifiers.Distinct(StringComparer.Ordinal).Count() != normalizedRuntimeIdentifiers.Length)
+            throw new InvalidOperationException($"Provider package '{path}' contains duplicate supported runtime identifiers.");
+        var requestedRuntimeIdentifier = runtimeIdentifier?.Trim().ToLowerInvariant();
+        if (normalizedRuntimeIdentifiers.Length > 0)
+        {
+            if (string.IsNullOrWhiteSpace(requestedRuntimeIdentifier))
+                throw new InvalidOperationException($"Provider package '{path}' is restricted to exact runtime identifiers and cannot be resolved for a RID-less artifact target.");
+            if (!normalizedRuntimeIdentifiers.Contains(requestedRuntimeIdentifier, StringComparer.Ordinal))
+                throw new InvalidOperationException($"Provider package '{path}' does not support runtime identifier '{runtimeIdentifier}'.");
+        }
         if (!Version.TryParse(manifest.PackageVersion, out var packageVersion) || packageVersion.Build < 0 || packageVersion.Revision >= 0)
             throw new InvalidOperationException($"Provider package '{path}' must use a three-part public PackageVersion.");
         ApplyIdentityPolicy(manifest, policy, path);
@@ -275,6 +308,20 @@ public sealed class PowerShellCompilationProviderPackageReader
         }
         foreach (var provider in manifest.Providers)
             ApplyProviderPolicy(provider.ProviderId, policy, path);
+    }
+
+    private static void ValidateDistributionFields(byte[] manifestBytes, string path)
+    {
+        using var document = JsonDocument.Parse(manifestBytes);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException($"Provider package '{path}' manifest must be a JSON object.");
+        var properties = document.RootElement.EnumerateObject().ToArray();
+        var redistribution = properties.Where(static property => property.NameEquals("Redistributable")).ToArray();
+        var runtimeIdentifiers = properties.Where(static property => property.NameEquals("SupportedRuntimeIdentifiers")).ToArray();
+        if (redistribution.Length != 1 || redistribution[0].Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+            runtimeIdentifiers.Length != 1 || runtimeIdentifiers[0].Value.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException(
+                $"Provider package '{path}' must explicitly declare one Boolean Redistributable field and one SupportedRuntimeIdentifiers array; rebuild it with the current provider SDK.");
     }
 
     private static void ValidateAdapterEntryPoints(

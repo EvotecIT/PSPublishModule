@@ -63,7 +63,7 @@ public sealed class PowerShellCompilationProviderDependency
 public sealed class PowerShellCompilationProviderPackageManifest
 {
     /// <summary>Provider-package manifest schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>PowerForge provider ABI version.</summary>
     public string ProviderAbiVersion { get; set; } = PowerShellCompilationProviderAbi.CurrentVersion;
@@ -79,6 +79,12 @@ public sealed class PowerShellCompilationProviderPackageManifest
 
     /// <summary>SPDX-compatible license expression.</summary>
     public string LicenseExpression { get; set; } = string.Empty;
+
+    /// <summary>Whether the reviewed package license and publisher policy permit redistribution in generated artifacts.</summary>
+    public bool Redistributable { get; set; }
+
+    /// <summary>Optional exact runtime identifiers on which this provider package may be delivered. Empty means RID-portable.</summary>
+    public string[] SupportedRuntimeIdentifiers { get; set; } = Array.Empty<string>();
 
     /// <summary>Semantic profiles accepted by this package.</summary>
     public string[] SemanticProfiles { get; set; } = Array.Empty<string>();
@@ -137,6 +143,9 @@ public sealed class PowerShellCompilationProviderTrustPolicy
 
     /// <summary>Whether an unsigned provider package is rejected.</summary>
     public bool RequirePackageSignature { get; set; }
+
+    /// <summary>Whether provider packages must explicitly declare reviewed redistribution permission.</summary>
+    public bool RequireRedistributable { get; set; }
 }
 
 /// <summary>Locked identity and trust evidence for one provider package.</summary>
@@ -169,6 +178,12 @@ public sealed class PowerShellCompilationProviderPackageLockEntry
     /// <summary>License expression.</summary>
     public string LicenseExpression { get; set; } = string.Empty;
 
+    /// <summary>Reviewed redistribution disposition copied from the canonical provider manifest.</summary>
+    public bool Redistributable { get; set; }
+
+    /// <summary>Exact supported runtime identifiers copied into the reviewed lock. Empty means RID-portable.</summary>
+    public string[] SupportedRuntimeIdentifiers { get; set; } = Array.Empty<string>();
+
     /// <summary>Exact assembly closure.</summary>
     public PowerShellCompilationProviderAssembly[] Assemblies { get; set; } = Array.Empty<PowerShellCompilationProviderAssembly>();
 
@@ -183,7 +198,7 @@ public sealed class PowerShellCompilationProviderPackageLockEntry
 public sealed class PowerShellCompilationProviderLock
 {
     /// <summary>Provider-lock schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Exact PowerShell source semantic profile used to select this provider set.</summary>
     public string SemanticProfileId { get; set; } = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;

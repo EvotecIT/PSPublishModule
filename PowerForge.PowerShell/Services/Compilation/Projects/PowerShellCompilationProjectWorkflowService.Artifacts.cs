@@ -13,7 +13,6 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
         var environment = ReadEnvironment(context);
-        var providers = ResolveProviders(context);
         var results = new List<PowerShellCompilationProjectTargetResult>();
         foreach (var artifact in SelectArtifacts(context, targetNames))
         {

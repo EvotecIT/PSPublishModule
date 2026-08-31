@@ -21,7 +21,6 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         IEnumerable<string>? targetNames = null)
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
-        var providers = ResolveProviders(context);
         var profile = string.IsNullOrWhiteSpace(boundaryProfilePath)
             ? null
             : ReadJson<PowerShellCompilationBoundaryRuntimeProfile>(Path.GetFullPath(boundaryProfilePath!.Trim().Trim('"')));
@@ -30,6 +29,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
+                var providers = ResolveProviders(context, artifact);
                 var input = ResolveInput(context, artifact);
                 var plan = CreatePlan(context, artifact, input, providers.Providers);
                 var recommendation = new PowerShellCompilationProfileRecommendationService().Create(plan, artifact.Target, profile);
@@ -49,12 +49,12 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     public PowerShellCompilationProjectResult Lock(string projectPath, IEnumerable<string>? targetNames = null)
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
-        var providers = ResolveProviders(context);
         var results = new List<PowerShellCompilationProjectTargetResult>();
         foreach (var artifact in SelectArtifacts(context, targetNames))
         {
             try
             {
+                var providers = ResolveProviders(context, artifact);
                 var input = ResolveInput(context, artifact);
                 var plan = CreatePlan(context, artifact, input, providers.Providers);
                 if (!plan.CanProceed)
@@ -83,12 +83,12 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         bool explain)
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
-        var providers = ResolveProviders(context);
         var results = new List<PowerShellCompilationProjectTargetResult>();
         foreach (var artifact in SelectArtifacts(context, targetNames))
         {
             try
             {
+                var providers = ResolveProviders(context, artifact);
                 var input = ResolveInput(context, artifact);
                 var plan = CreatePlan(context, artifact, input, providers.Providers);
                 object evidence = explain
@@ -155,11 +155,13 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                                               artifact.Target.Mode != PowerShellCompilationMode.Strict);
 
     private static PowerShellCompilationProviderResolution ResolveProviders(
-        PowerShellCompilationProjectManifestService.ProjectContext context)
+        PowerShellCompilationProjectManifestService.ProjectContext context,
+        PowerShellCompilationProjectArtifact artifact)
         => new PowerShellCompilationProviderPackageReader().Resolve(
             context.Manifest.ProviderPackages.Select(path => new PowerShellCompilationProviderPackageReference(context.Resolve(path))),
             context.Manifest.ProviderTrust,
-            context.Manifest.SemanticProfileId);
+            context.Manifest.SemanticProfileId,
+            artifact.Target.RuntimeIdentifier);
 
     private static PowerShellCompilationProjectArtifact[] SelectArtifacts(
         PowerShellCompilationProjectManifestService.ProjectContext context,
