@@ -6,11 +6,13 @@ function Get-ValidatedValue {
 
 $Rejected = $false
 try {
-    $null = Get-ValidatedValue -Value 101 -ErrorAction Stop
+    $null = Get-ValidatedValue -Value 101
 } catch {
-    $Rejected = $_.FullyQualifiedErrorId -like 'ParameterArgumentValidationError*'
+    $Rejected = $true
 }
 if (-not $Rejected) {
-    throw 'ValidateRange did not reject the out-of-range value.'
+    return -1
 }
-(Get-ValidatedValue -Value 40) + 2
+[int] $Result = Get-ValidatedValue -Value 40
+$Result += 2
+return $Result

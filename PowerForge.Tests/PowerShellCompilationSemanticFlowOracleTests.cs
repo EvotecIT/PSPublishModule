@@ -48,6 +48,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-SwitchFlagValue { switch -Regex ('forty-two') { '^forty' { return 42 } default { return -1 } } }",
             "Get_SwitchFlagValue",
             "42"
+        },
+        {
+            "parameter-metadata",
+            "function Get-ValidatedValue { [CmdletBinding()] param([ValidateRange(1, 100)][int] $Value) return $Value } function Get-MetadataResult { [bool] $Rejected = $false; try { $null = Get-ValidatedValue -Value 101 } catch { $Rejected = $true }; if (-not $Rejected) { return -1 }; [int] $Result = Get-ValidatedValue -Value 40; $Result += 2; return $Result }",
+            "Get_MetadataResult",
+            "42"
         }
     };
 
@@ -112,6 +118,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesSwitchFlagsCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/switch-flags", "BoundedSwitchFlagsOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesParameterMetadataCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/parameter-metadata", "BoundedParameterMetadataOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()
