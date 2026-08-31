@@ -72,6 +72,7 @@ public static partial class WebSiteVerifier
         var warnings = new List<string>();
         var localization = ResolveLocalizationConfig(spec, warnings);
         var builderState = WebSiteBuilder.BuildVerificationState(spec, plan, options ?? WebJson.Options);
+        var useObservedArtifactRoutes = HasGeneratedArtifactRoot(generatedSiteRoot);
         var builderProjectContentSources = builderState.Items
             .Where(static item =>
                 item is not null &&
@@ -88,14 +89,19 @@ public static partial class WebSiteVerifier
         {
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
-            var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath)
-                .Concat(DiscoverGeneratedArtifactRoutes(generatedSiteRoot))
+            var staticOnlyRoutes = (useObservedArtifactRoutes
+                    ? DiscoverGeneratedArtifactRoutes(generatedSiteRoot)
+                    : DiscoverStaticAssetRoutes(spec, plan.RootPath))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var staticOnlyRedirects = DiscoverGeneratedNavigationRedirects(builderState.Redirects).ToArray();
             var staticOnlyFileRoutes = staticOnlyRoutes
-                .Concat(DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath))
-                .Concat(DiscoverGeneratedSiteDataRoutes(spec))
+                .Concat(useObservedArtifactRoutes
+                    ? Array.Empty<string>()
+                    : DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath))
+                .Concat(useObservedArtifactRoutes
+                    ? Array.Empty<string>()
+                    : DiscoverGeneratedSiteDataRoutes(spec))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             ValidateNavigationLint(
@@ -338,31 +344,40 @@ public static partial class WebSiteVerifier
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
-        var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath)
-            .Concat(DiscoverGeneratedArtifactRoutes(generatedSiteRoot))
+        var staticRoutes = (useObservedArtifactRoutes
+                ? DiscoverGeneratedArtifactRoutes(generatedSiteRoot)
+                : DiscoverStaticAssetRoutes(spec, plan.RootPath))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         var builderRoutes = builderState.Items
             .Where(static item => item is not null)
             .Select(ProjectBuilderContentRoute)
             .ToArray();
-        var generatedFeatureRoutes = DiscoverGeneratedFeatureRoutes(
-            spec,
-            builderRoutes);
+        var generatedFeatureRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedFeatureRoutes(spec, builderRoutes).ToArray();
         var publishableRoutes = builderRoutes
             .Where(static route => !route.Draft)
             .ToArray();
-        var generatedOutputRoutes = DiscoverGeneratedOutputRoutes(
-            spec,
-            publishableRoutes);
-        var generatedResourceRoutes = DiscoverGeneratedResourceRoutes(
-            publishableRoutes);
-        var generatedSearchDataRoutes = DiscoverGeneratedSearchDataRoutes(
-            publishableRoutes);
-        var generatedThemeAssetRoutes = DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath);
-        var generatedSiteDataRoutes = DiscoverGeneratedSiteDataRoutes(spec);
+        var generatedOutputRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedOutputRoutes(spec, publishableRoutes).ToArray();
+        var generatedResourceRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedResourceRoutes(publishableRoutes).ToArray();
+        var generatedSearchDataRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedSearchDataRoutes(publishableRoutes).ToArray();
+        var generatedThemeAssetRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath).ToArray();
+        var generatedSiteDataRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedSiteDataRoutes(spec).ToArray();
         var generatedRedirects = DiscoverGeneratedNavigationRedirects(builderState.Redirects).ToArray();
-        var generatedSocialCardRoutes = DiscoverGeneratedSocialCardRoutes(spec, plan, builderState.Items);
+        var generatedSocialCardRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : DiscoverGeneratedSocialCardRoutes(spec, plan, builderState.Items).ToArray();
         var fileRoutes = staticRoutes
             .Concat(generatedFeatureRoutes.Where(static route => !route.EndsWith("/", StringComparison.Ordinal)))
             .Concat(generatedOutputRoutes)
@@ -373,12 +388,14 @@ public static partial class WebSiteVerifier
             .Concat(generatedSocialCardRoutes)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var navigationRoutes = publishableRoutes
-            .Where(route => EmitsIndexHtml(spec, route))
-            .Where(static route => !IsBuiltNotFoundRoute(route.Route))
-            .Select(static route => route.Route)
-            .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)))
-            .ToArray();
+        var navigationRoutes = useObservedArtifactRoutes
+            ? Array.Empty<string>()
+            : publishableRoutes
+                .Where(route => EmitsIndexHtml(spec, route))
+                .Where(static route => !IsBuiltNotFoundRoute(route.Route))
+                .Select(static route => route.Route)
+                .Concat(generatedFeatureRoutes.Where(static route => route.EndsWith("/", StringComparison.Ordinal)))
+                .ToArray();
         ValidateNavigationLint(
             spec,
             localization,

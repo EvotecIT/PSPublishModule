@@ -2,6 +2,9 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteVerifier
 {
+    private static bool HasGeneratedArtifactRoot(string? generatedSiteRoot) =>
+        !string.IsNullOrWhiteSpace(generatedSiteRoot) && Directory.Exists(generatedSiteRoot);
+
     private static CollectionRoute ProjectBuilderContentRoute(ContentItem item)
     {
         var taxonomyTerm = item.Kind == PageKind.Term &&
@@ -104,10 +107,10 @@ public static partial class WebSiteVerifier
 
     private static IEnumerable<string> DiscoverGeneratedArtifactRoutes(string? generatedSiteRoot)
     {
-        if (string.IsNullOrWhiteSpace(generatedSiteRoot) || !Directory.Exists(generatedSiteRoot))
+        if (!HasGeneratedArtifactRoot(generatedSiteRoot))
             yield break;
 
-        var root = Path.GetFullPath(generatedSiteRoot);
+        var root = Path.GetFullPath(generatedSiteRoot!);
         foreach (var file in EnumerateStaticFiles(root))
         {
             foreach (var route in GetStaticAssetRoutes(file))

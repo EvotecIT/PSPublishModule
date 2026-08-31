@@ -623,8 +623,11 @@ public static partial class WebSiteVerifier
         if (MatchesGeneratedRedirectRoute(url, knownRedirectRoutes))
             return true;
 
-        if (TryEvaluateStaticNavigationRoute(url, knownStaticRoutes, out var staticMatch))
-            return staticMatch;
+        var staticMatch = EvaluateStaticNavigationRoute(url, knownStaticRoutes);
+        if (staticMatch == StaticNavigationRouteMatch.Exact)
+            return true;
+        if (staticMatch == StaticNavigationRouteMatch.CaseCollision)
+            return false;
 
         if (localization is null || string.IsNullOrWhiteSpace(navigationLanguage))
             return false;
@@ -647,7 +650,7 @@ public static partial class WebSiteVerifier
         if (MatchesGeneratedRedirectRoute(generatedRoute, knownRedirectRoutes))
             return true;
 
-        return TryEvaluateStaticNavigationRoute(generatedRoute, knownStaticRoutes, out staticMatch) && staticMatch;
+        return EvaluateStaticNavigationRoute(generatedRoute, knownStaticRoutes) == StaticNavigationRouteMatch.Exact;
     }
 
     private static NavigationRedirectRoutes BuildNavigationRedirectRoutes(IEnumerable<RedirectSpec>? redirects)
@@ -778,14 +781,12 @@ public static partial class WebSiteVerifier
         return !string.IsNullOrWhiteSpace(query);
     }
 
-    private static bool TryEvaluateStaticNavigationRoute(
+    private static StaticNavigationRouteMatch EvaluateStaticNavigationRoute(
         string url,
-        IReadOnlySet<string>? knownStaticRoutes,
-        out bool matches)
+        IReadOnlySet<string>? knownStaticRoutes)
     {
-        matches = false;
         if (knownStaticRoutes is null || knownStaticRoutes.Count == 0)
-            return false;
+            return StaticNavigationRouteMatch.None;
 
         var normalizedUrl = NormalizeStaticRouteForNavigationMatch(url);
         foreach (var route in knownStaticRoutes)
@@ -794,21 +795,28 @@ public static partial class WebSiteVerifier
             var routeCandidate = directoryAlias && route.Length > 1 ? route.TrimEnd('/') : route;
             var urlCandidate = directoryAlias && normalizedUrl.Length > 1 ? normalizedUrl.TrimEnd('/') : normalizedUrl;
             if (string.Equals(routeCandidate, urlCandidate, StringComparison.Ordinal))
-            {
-                matches = true;
-                return true;
-            }
+                return StaticNavigationRouteMatch.Exact;
         }
 
         var relaxedUrl = normalizedUrl.Length > 1 ? normalizedUrl.TrimEnd('/') : normalizedUrl;
         foreach (var route in knownStaticRoutes)
         {
             var relaxedRoute = route.Length > 1 ? route.TrimEnd('/') : route;
-            if (string.Equals(relaxedRoute, relaxedUrl, StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (!string.Equals(relaxedRoute, relaxedUrl, StringComparison.Ordinal) &&
+                string.Equals(relaxedRoute, relaxedUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                return StaticNavigationRouteMatch.CaseCollision;
+            }
         }
 
-        return false;
+        return StaticNavigationRouteMatch.None;
+    }
+
+    private enum StaticNavigationRouteMatch
+    {
+        None,
+        Exact,
+        CaseCollision
     }
 
     private static string NormalizeStaticRouteForNavigationMatch(string? value)

@@ -1005,6 +1005,144 @@ public partial class WebSiteVerifierTests
         }
     }
 
+    [Fact]
+    public void Verify_ObservedArtifactsExcludeLanguagesOmittedFromBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-filtered-language-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "en"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pl"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "en", "guide.md"), "---\ntitle: Guide\n---\nEnglish guide.");
+            File.WriteAllText(Path.Combine(root, "content", "pl", "guide.md"), "---\ntitle: Poradnik\n---\nPolish guide.");
+            const string excludedPage = "/en/guide/";
+            const string renderedPage = "/pl/guide/";
+            const string excludedSearchShard = "/search/en/index.json";
+            const string renderedSearchShard = "/search/pl/index.json";
+            var spec = new SiteSpec
+            {
+                Name = "Filtered language artifact",
+                BaseUrl = "https://example.test",
+                Features = ["search"],
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Prefix = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl" }
+                    ]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "English", Url = excludedPage },
+                                new MenuItemSpec { Title = "Polish", Url = renderedPage },
+                                new MenuItemSpec { Title = "English search", Url = excludedSearchShard },
+                                new MenuItemSpec { Title = "Polish search", Url = renderedSearchShard }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot, language: "pl");
+            var planned = WebSiteVerifier.Verify(spec, plan);
+            var observed = WebSiteVerifier.Verify(
+                spec,
+                plan,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web),
+                outputRoot);
+
+            Assert.False(File.Exists(Path.Combine(outputRoot, "en", "guide", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "pl", "guide", "index.html")));
+            Assert.False(File.Exists(Path.Combine(outputRoot, "search", "en", "index.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "search", "pl", "index.json")));
+            Assert.False(HasMissingRouteWarning(planned, excludedPage), string.Join(Environment.NewLine, planned.Warnings));
+            Assert.False(HasMissingRouteWarning(planned, excludedSearchShard), string.Join(Environment.NewLine, planned.Warnings));
+            Assert.True(HasMissingRouteWarning(observed, excludedPage), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.True(HasMissingRouteWarning(observed, excludedSearchShard), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, renderedPage), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, renderedSearchShard), string.Join(Environment.NewLine, observed.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_LocalizedPublicRouteContinuesPastStaticShapeNearMiss()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-localized-static-near-miss-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pl"));
+        Directory.CreateDirectory(Path.Combine(root, "static"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "pl", "contact.md"), "---\ntitle: Kontakt\n---\nKontakt.");
+            File.WriteAllText(Path.Combine(root, "static", "contact.html"), "<h1>Static contact</h1>");
+            const string publicRoute = "/contact/";
+            var spec = new SiteSpec
+            {
+                Name = "Localized static near miss",
+                BaseUrl = "https://example.test",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Prefix = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl", RenderAtRoot = true }
+                    ]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main-pl",
+                            Items = [new MenuItemSpec { Title = "Kontakt", Url = publicRoute }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, publicRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     private static bool HasMissingRouteWarning(WebVerifyResult result, string route)
         => result.Warnings.Any(warning =>
             warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
