@@ -1,13 +1,25 @@
-function Add-Values {
+function Get-LeftValue {
     param(
         [Alias('L')][int] $Left,
         [int] $Right
     )
-    "$Left`:$Right"
+    $Left
 }
-$Exact = Add-Values -Right 2 -Left 40
-$AliasAndAbbreviation = Add-Values -Rig 4 -L 38
-if ($Exact -ne '40:2' -or $AliasAndAbbreviation -ne '38:4') {
-    throw 'Exact, alias, or abbreviated parameter binding did not preserve parameter identity.'
+function Get-RightValue {
+    param(
+        [Alias('L')][int] $Left,
+        [int] $Right
+    )
+    $Right
 }
-42
+function Test-ParameterBinding {
+    $ExactLeft = Get-LeftValue -Right 2 -Left 40
+    $ExactRight = Get-RightValue -Right 2 -Left 40
+    $AliasLeft = Get-LeftValue -Rig 4 -L 38
+    $AbbreviatedRight = Get-RightValue -Rig 4 -L 38
+    if ($ExactLeft -eq 40 -and $ExactRight -eq 2 -and $AliasLeft -eq 38 -and $AbbreviatedRight -eq 4) {
+        return 42
+    }
+    return 0
+}
+Test-ParameterBinding
