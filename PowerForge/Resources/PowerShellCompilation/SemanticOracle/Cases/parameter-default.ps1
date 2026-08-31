@@ -1,2 +1,2 @@
-param([int] $Value = 41)
-$Value + 1
+param([int] $Value = 42)
+$Value
