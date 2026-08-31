@@ -305,7 +305,14 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
                     {
                       "slug": "dotnetonly",
                       "surfaces": { "apiDotNet": true, "apiPowerShell": false },
+                      "links": { "apiDotNet": "https://example.invalid/dotnetonly/api/" },
                       "artifacts": { "api": "WebsiteArtifacts/apidocs" }
+                    },
+                    {
+                      "slug": "traversal",
+                      "surfaces": { "apiDotNet": true },
+                      "links": { "apiDotNet": "https://example.invalid/traversal/api/" },
+                      "artifacts": { "api": "../outside-api" }
                     }
                   ]
                 }
@@ -314,6 +321,10 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             var sourceApi = Path.Combine(root, "projects-sources", "dotnetonly", "WebsiteArtifacts", "apidocs");
             Directory.CreateDirectory(sourceApi);
             File.WriteAllText(Path.Combine(sourceApi, "Library.xml"), "<doc />");
+
+            var outsideApi = Path.Combine(root, "projects-sources", "outside-api");
+            Directory.CreateDirectory(outsideApi);
+            File.WriteAllText(Path.Combine(outsideApi, "Secret.xml"), "<doc />");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -328,7 +339,6 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
                       "syncDocs": false,
                       "syncApi": true,
                       "apiRoot": "./data/apidocs",
-                      "sourceApiPaths": ["WebsiteArtifacts/apidocs"],
                       "syncExamples": false,
                       "onlyLocalLinks": true,
                       "failOnMissingApiSource": true
@@ -339,11 +349,12 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
-            Assert.True(result.Success);
+            Assert.True(result.Success, result.Steps[0].Message);
             Assert.Single(result.Steps);
             Assert.True(result.Steps[0].Success);
             Assert.Contains("api=1/1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "dotnetonly", "Library.xml")));
+            Assert.False(File.Exists(Path.Combine(root, "data", "apidocs", "traversal", "Secret.xml")));
         }
         finally
         {
