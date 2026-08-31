@@ -177,7 +177,14 @@
       "id": "strict-multifile-application",
       "entryPoint": "StrictApplication/Main.ps1",
       "expectedOutput": "READY|42|15|3|high",
-      "scenarioFamily": "multifile-domain-aggregation-reporting"
+      "scenarioFamily": "multifile-domain-aggregation-reporting",
+      "qualification": {
+        "resourceInclude": "report-label.txt",
+        "resourceOutput": "READY|42|15|3|high|resource-ok",
+        "failureArgument": "-Fail",
+        "failureMarker": "strict-application-requested-failure",
+        "startupSamples": 6
+      }
     }
   ]
 }

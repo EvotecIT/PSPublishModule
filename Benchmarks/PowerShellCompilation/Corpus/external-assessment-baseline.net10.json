@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "292a6617c4281e59d52cf7266e9815c89befb5073887ae86228b9b2824ea07b5",
+  "packetSha256": "ab354b9f511bdd16e817d64697cdee4081594349f4c49d9594924cf17367f529",
   "recordedOn": "2026-08-31",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
@@ -113,6 +113,24 @@
       "emittedFunctions": 1,
       "droppedEligibleFunctions": 3,
       "fallbackFunctions": 23
+    },
+    {
+      "id": "github-api-client-helpers",
+      "workloadKind": "Script",
+      "scenarioFamily": "github-api-client-utilities",
+      "acquisitionSha256": "f5b7dae55fdd932f4460762e794849fe1f1e6c6083e36509dfbcba676ce7fb15",
+      "sourceFingerprint": "a5f8c9ed3e1ab708fed8f075eb2b1ab4210d9578ab3216015c01631c987b09a5",
+      "sourceFiles": 1,
+      "totalUnits": 11,
+      "emittedUnits": 1,
+      "runtimeFallbackUnits": 11,
+      "parseErrorFiles": 0,
+      "postEmissionEvaluated": true,
+      "totalFunctions": 10,
+      "analyzerEligibleFunctions": 1,
+      "emittedFunctions": 1,
+      "droppedEligibleFunctions": 0,
+      "fallbackFunctions": 10
     }
   ],
   "interpretation": {

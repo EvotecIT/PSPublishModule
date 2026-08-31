@@ -35,6 +35,23 @@ function Quote-PowerShellLiteral {
     return "'" + $Value.Replace("'", "''") + "'"
 }
 
+function New-QualificationInvocation {
+    param(
+        [string] $ImportPath,
+        [string] $ImportSurface,
+        [string] $ProbeScript,
+        [string] $SetupScript
+    )
+
+    $load = if ($ImportSurface -eq 'DotSource') {
+        '. ' + (Quote-PowerShellLiteral $ImportPath)
+    } else {
+        'Import-Module -Name ' + (Quote-PowerShellLiteral $ImportPath) + ' -Force -ErrorAction Stop'
+    }
+    $segments = @($SetupScript, $load, $ProbeScript) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    return $segments -join '; '
+}
+
 $PacketPath = [IO.Path]::GetFullPath($PacketPath)
 $packet = Get-Content -LiteralPath $PacketPath -Raw | ConvertFrom-Json
 if ($packet.schemaVersion -ne 1) { throw "Unsupported external-assessment schema $($packet.schemaVersion)." }
@@ -84,8 +101,27 @@ try {
             } else {
                 'Manifest'
             }
-            if ($importSurface -notin @('Manifest', 'RootModuleDirect')) {
-                throw "Unsupported qualification import surface '$importSurface'."
+            $originalImportSurface = if ($null -ne $entry.qualification.PSObject.Properties['originalImportSurface']) {
+                [string] $entry.qualification.originalImportSurface
+            } else {
+                $importSurface
+            }
+            $compiledImportSurface = if ($null -ne $entry.qualification.PSObject.Properties['compiledImportSurface']) {
+                [string] $entry.qualification.compiledImportSurface
+            } else {
+                $importSurface
+            }
+            $supportedSurfaces = @('Manifest', 'RootModuleDirect', 'DotSource', 'TypedAssembly')
+            if ($originalImportSurface -notin $supportedSurfaces -or $compiledImportSurface -notin $supportedSurfaces) {
+                throw "Unsupported qualification import surfaces '$originalImportSurface' and '$compiledImportSurface'."
+            }
+            if ($originalImportSurface -eq 'TypedAssembly') {
+                throw 'TypedAssembly is valid only for the generated artifact surface.'
+            }
+            $setupScript = if ($null -ne $entry.qualification.PSObject.Properties['setupScript']) {
+                [string] $entry.qualification.setupScript
+            } else {
+                ''
             }
             $sourceRoot = Join-Path $WorkspacePath ('extract/' + $entry.acquisition.sha256)
             $qualificationEntryPoint = if ($null -ne $entry.qualification.PSObject.Properties['entryPoint']) {
@@ -106,15 +142,21 @@ try {
             }
 
             $compiledImportPath = [string] $build.artifactPath
-            if ($importSurface -eq 'RootModuleDirect') {
+            if ($compiledImportSurface -eq 'RootModuleDirect') {
                 $artifactRoot = Split-Path -Parent $compiledImportPath
                 $compiledManifest = Import-PowerShellDataFile -LiteralPath $compiledImportPath
                 if ([string]::IsNullOrWhiteSpace($compiledManifest.RootModule)) { throw 'Generated module manifest declares no root module.' }
                 $compiledImportPath = Assert-ContainedPath -Root $artifactRoot -Path (Join-Path $artifactRoot $compiledManifest.RootModule) -Label 'Qualification generated root module'
                 if (-not (Test-Path -LiteralPath $compiledImportPath -PathType Leaf)) { throw "Generated root module does not exist: $compiledImportPath" }
+            } elseif ($compiledImportSurface -eq 'TypedAssembly') {
+                $typedAssemblies = @($build.manifest.files | Where-Object role -eq 'TypedAssembly')
+                if ($typedAssemblies.Count -ne 1) { throw 'Generated qualification artifact does not contain exactly one typed assembly.' }
+                $artifactRoot = Split-Path -Parent ([string] $build.artifactPath)
+                $compiledImportPath = Assert-ContainedPath -Root $artifactRoot -Path ([string] $typedAssemblies[0].path) -Label 'Qualification generated typed assembly'
+                if (-not (Test-Path -LiteralPath $compiledImportPath -PathType Leaf)) { throw "Generated typed assembly does not exist: $compiledImportPath" }
             }
-            $originalCommand = 'Import-Module -Name ' + (Quote-PowerShellLiteral $sourcePath) + ' -Force -ErrorAction Stop; ' + $entry.qualification.probeScript
-            $compiledCommand = 'Import-Module -Name ' + (Quote-PowerShellLiteral $compiledImportPath) + ' -Force -ErrorAction Stop; ' + $entry.qualification.probeScript
+            $originalCommand = New-QualificationInvocation -ImportPath $sourcePath -ImportSurface $originalImportSurface -ProbeScript $entry.qualification.probeScript -SetupScript $setupScript
+            $compiledCommand = New-QualificationInvocation -ImportPath $compiledImportPath -ImportSurface $compiledImportSurface -ProbeScript $entry.qualification.probeScript -SetupScript $setupScript
             $original = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoProfile', '-NonInteractive', '-Command', $originalCommand) -WorkingDirectory $runRoot -TimeoutSeconds 120
             $compiled = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoProfile', '-NonInteractive', '-Command', $compiledCommand) -WorkingDirectory $runRoot -TimeoutSeconds 120
             if ($original.ExitCode -ne 0 -or $compiled.ExitCode -ne 0 -or
@@ -124,7 +166,8 @@ try {
             $results.Add([ordered]@{
                 id = $entry.id
                 unitName = $entry.qualification.unitName
-                importSurface = $importSurface
+                originalImportSurface = $originalImportSurface
+                compiledImportSurface = $compiledImportSurface
                 emittedClrMethod = $true
                 runtimeRouted = [int] $ledgerEntry[0].runtimeCommandRegions -gt 0 -or [bool] $ledgerEntry[0].retainedHostedSource
                 compiledMethods = [int] $build.manifest.compiledMethods

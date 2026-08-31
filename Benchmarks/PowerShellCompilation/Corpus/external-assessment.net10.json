@@ -113,7 +113,38 @@
         "url": "https://raw.githubusercontent.com/ScoopInstaller/Install/1e2f334083d609986d8c8bc9e31ae8e87c39fab4/install.ps1",
         "sha256": "94f983b190438311e006b957db7c8422709e0ba62a6c2ac04e278164108f2512"
       },
-      "entryPoint": "install.ps1"
+      "entryPoint": "install.ps1",
+      "qualification": {
+        "kind": "HybridModuleCommand",
+        "originalImportSurface": "DotSource",
+        "compiledImportSurface": "TypedAssembly",
+        "unitName": "Test-IsAdministrator",
+        "setupScript": "$env:CI = 'true'; $env:SCOOP_NOINSTALL = 'true'",
+        "probeScript": "(Test-IsAdministrator).ToString()"
+      }
+    },
+    {
+      "id": "github-api-client-helpers",
+      "workloadKind": "Script",
+      "scenarioFamily": "github-api-client-utilities",
+      "repositoryUrl": "https://github.com/microsoft/PowerShellForGitHub",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/PowerShellForGitHub/blob/fd4fa65f23ca30f18f85312a85348e660c287a9c/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "fd4fa65f23ca30f18f85312a85348e660c287a9c",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/microsoft/PowerShellForGitHub/zip/fd4fa65f23ca30f18f85312a85348e660c287a9c",
+        "sha256": "f5b7dae55fdd932f4460762e794849fe1f1e6c6083e36509dfbcba676ce7fb15"
+      },
+      "entryPoint": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/Helpers.ps1",
+      "qualification": {
+        "kind": "HybridModuleCommand",
+        "originalImportSurface": "DotSource",
+        "compiledImportSurface": "TypedAssembly",
+        "unitName": "Get-SHA512Hash",
+        "probeScript": "Get-SHA512Hash -PlainText 'PowerForge'"
+      }
     }
   ]
 }

@@ -151,6 +151,27 @@ function Get-Sum {
     return [int] (($Values | Measure-Object -Sum).Sum)
 }
 
+function Get-PercentileMilliseconds {
+    param([double[]] $Values, [double] $Percentile)
+
+    if ($Values.Count -eq 0) { throw 'A percentile requires at least one duration sample.' }
+    $ordered = @($Values | Sort-Object)
+    $index = [Math]::Max(0, [Math]::Min($ordered.Count - 1, [Math]::Ceiling($Percentile * $ordered.Count) - 1))
+    return [Math]::Round([double] $ordered[$index], 3)
+}
+
+function Get-TextSha256 {
+    param([string] $Value)
+
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Value))).ToLowerInvariant()
+}
+
+function Get-NormalizedTextSha256 {
+    param([string] $Value)
+
+    return Get-TextSha256 ($Value.Replace("`r`n", "`n").Replace("`r", "`n"))
+}
+
 function Compare-PublicBaseline {
     param(
         [object] $Baseline,
@@ -221,9 +242,11 @@ function Compare-PublicBaseline {
             $regressions.Add([ordered]@{ scope = 'strict'; metric = 'targetHost'; expected = $Rid; actual = @($Baseline.strict.targetHosts.runtimeIdentifier) -join ',' })
         } else {
             $successful = @($StrictPrograms | Where-Object succeeded)
+            $qualifiedApplications = @($successful | Where-Object { $null -ne $_.qualification -and $_.qualification.succeeded })
             $metrics = [ordered]@{
                 programs = $StrictPrograms.Count
                 programsPassed = $successful.Count
+                qualifiedApplications = $qualifiedApplications.Count
                 analyzedUnits = Get-Sum @($successful.counts.analyzedUnits)
                 boundUnits = Get-Sum @($successful.counts.boundUnits)
                 emittedClrUnits = Get-Sum @($successful.counts.emittedClrUnits)
@@ -240,6 +263,49 @@ function Compare-PublicBaseline {
             }
             if ($metrics.programsPassed -ne $targetHost[0].programsPassed -or $metrics.programs -ne $targetHost[0].programsTotal) {
                 $regressions.Add([ordered]@{ scope = 'strict'; metric = 'targetHostPrograms'; expected = "$($targetHost[0].programsPassed)/$($targetHost[0].programsTotal)"; actual = "$($metrics.programsPassed)/$($metrics.programs)" })
+            }
+            $expectedQualifications = @($targetHost[0].qualifiedApplications)
+            if ($metrics.qualifiedApplications -ne $expectedQualifications.Count) {
+                $regressions.Add([ordered]@{ scope = 'strict'; metric = 'qualifiedApplications'; expected = $expectedQualifications.Count; actual = $metrics.qualifiedApplications })
+            }
+            foreach ($expected in $expectedQualifications) {
+                $actual = @($qualifiedApplications | Where-Object id -eq $expected.id)
+                if ($actual.Count -ne 1) {
+                    $regressions.Add([ordered]@{ scope = 'strictQualification'; metric = 'applicationIdentity'; expected = $expected.id; actual = @($qualifiedApplications.id) -join ',' })
+                    continue
+                }
+                $qualification = $actual[0].qualification
+                foreach ($check in @(
+                    @{ Metric = 'dependencyLockSha256'; Expected = $expected.dependency.lockSha256; Actual = $qualification.dependency.lockSha256 },
+                    @{ Metric = 'dependencySourceFiles'; Expected = $expected.dependency.sourceFiles; Actual = $qualification.dependency.sourceFiles },
+                    @{ Metric = 'dependencyGraphNodes'; Expected = $expected.dependency.graphNodes; Actual = $qualification.dependency.graphNodes },
+                    @{ Metric = 'resourceSha256'; Expected = $expected.resource.sha256; Actual = $qualification.resource.sha256 },
+                    @{ Metric = 'resourceIncludedFiles'; Expected = $expected.resource.includedFiles; Actual = $qualification.resource.includedFiles },
+                    @{ Metric = 'resourceConsumed'; Expected = $true; Actual = $qualification.resource.consumed },
+                    @{ Metric = 'successExitCode'; Expected = $expected.streams.successExitCode; Actual = $qualification.streams.successExitCode },
+                    @{ Metric = 'successOutputSha256'; Expected = $expected.streams.successOutputSha256; Actual = $qualification.streams.successOutputSha256 },
+                    @{ Metric = 'successErrorSha256'; Expected = $expected.streams.emptyStreamSha256; Actual = $qualification.streams.successErrorSha256 },
+                    @{ Metric = 'failureExitCode'; Expected = $expected.streams.failureExitCode; Actual = $qualification.streams.failureExitCode },
+                    @{ Metric = 'failureOutputSha256'; Expected = $expected.streams.emptyStreamSha256; Actual = $qualification.streams.failureOutputSha256 },
+                    @{ Metric = 'failureContractSha256'; Expected = $expected.streams.failureContractSha256; Actual = $qualification.streams.failureContractSha256 },
+                    @{ Metric = 'failureMarkerObservedOnBoth'; Expected = $expected.streams.failureMarkerObservedOnBoth; Actual = $qualification.streams.failureMarkerObservedOnBoth },
+                    @{ Metric = 'warmupsPerSurface'; Expected = $expected.startup.warmupsPerSurface; Actual = $qualification.startup.warmupsPerSurface },
+                    @{ Metric = 'startupSamples'; Expected = $expected.startup.samples; Actual = $qualification.startup.samples },
+                    @{ Metric = 'startupOrderPolicy'; Expected = $expected.startup.orderPolicy; Actual = $qualification.startup.orderPolicy }
+                )) {
+                    if ([string] $check.Actual -cne [string] $check.Expected) {
+                        $regressions.Add([ordered]@{ scope = 'strictQualification'; id = $expected.id; metric = $check.Metric; expected = $check.Expected; actual = $check.Actual })
+                    }
+                }
+                foreach ($budget in @(
+                    @{ Metric = 'artifactP50Milliseconds'; Maximum = $expected.startup.maximumArtifactP50Milliseconds; Actual = $qualification.startup.artifactP50Milliseconds },
+                    @{ Metric = 'artifactP95Milliseconds'; Maximum = $expected.startup.maximumArtifactP95Milliseconds; Actual = $qualification.startup.artifactP95Milliseconds },
+                    @{ Metric = 'artifactToSourceP50Ratio'; Maximum = $expected.startup.maximumArtifactToSourceP50Ratio; Actual = $qualification.startup.artifactToSourceP50Ratio }
+                )) {
+                    if ([double] $budget.Actual -gt [double] $budget.Maximum) {
+                        $regressions.Add([ordered]@{ scope = 'strictQualification'; id = $expected.id; metric = $budget.Metric; expectedMaximum = $budget.Maximum; actual = $budget.Actual })
+                    }
+                }
             }
         }
     }
@@ -336,17 +402,125 @@ try {
             Write-Host "[$($program.id)] analyze, lock, build, execute on $RuntimeIdentifier"
             try {
                 $entryPoint = Assert-ContainedPath -Root $PSScriptRoot -Path (Join-Path $PSScriptRoot $program.entryPoint) -Label 'Strict program entry point'
-                $analysis = Invoke-PowerForgeJson -Arguments @('powershell', 'analyze', $entryPoint, '--target-contract', $targetContractPath, '--resource-mode', 'Declared') -WorkingDirectory $runRoot
+                $qualification = if ($null -ne $program.PSObject.Properties['qualification']) { $program.qualification } else { $null }
+                $analysisArguments = @('powershell', 'analyze', $entryPoint, '--target-contract', $targetContractPath, '--resource-mode', 'Declared')
+                if ($qualification) { $analysisArguments += @('--include-resource', [string] $qualification.resourceInclude) }
+                $analysis = Invoke-PowerForgeJson -Arguments $analysisArguments -WorkingDirectory $runRoot
                 $lockPath = Join-Path $runRoot ('locks/' + $program.id + '-' + $RuntimeIdentifier + '.lock.json')
                 Write-Utf8Json -Path $lockPath -Value $analysis.Json.result.dependencyGraph
                 $output = Join-Path $runRoot ('strict/' + $RuntimeIdentifier + '/' + $program.id)
-                $build = Invoke-PowerForgeJson -Arguments @('powershell', 'build', $entryPoint, '--out', $output, '--name', $program.id, '--target-contract', $targetContractPath, '--dependency-lock', $lockPath, '--cache-directory', $buildCache, '--no-build-cache') -WorkingDirectory $runRoot
+                $buildArguments = @('powershell', 'build', $entryPoint, '--out', $output, '--name', $program.id, '--target-contract', $targetContractPath, '--dependency-lock', $lockPath, '--cache-directory', $buildCache, '--no-build-cache')
+                if ($qualification) { $buildArguments += @('--include-resource', [string] $qualification.resourceInclude) }
+                $build = Invoke-PowerForgeJson -Arguments $buildArguments -WorkingDirectory $runRoot
                 $manifest = $build.Json.result.manifest
                 if ($manifest.requiresPowerShellRuntime -or $manifest.usesPowerShellRuntimeFallback) { throw 'Strict artifact retained a PowerShell runtime requirement.' }
                 if ($manifest.dependencyGraph.lockSha256 -ne $analysis.Json.result.dependencyGraph.lockSha256) { throw 'Strict build did not consume the analyzed dependency lock.' }
                 $execution = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                 if ($execution.ExitCode -ne 0 -or $execution.StandardOutput.Trim() -ne $program.expectedOutput -or $execution.StandardError.Trim()) {
                     throw "Strict execution mismatch. Exit=$($execution.ExitCode); stdout=$($execution.StandardOutput); stderr=$($execution.StandardError)"
+                }
+                $qualificationEvidence = $null
+                if ($qualification) {
+                    $sourceRoot = Split-Path -Parent $entryPoint
+                    $sourceResource = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot ([string] $qualification.resourceInclude)) -Label 'Strict application source resource'
+                    $artifactRoot = Split-Path -Parent ([string] $build.Json.result.artifactPath)
+                    $artifactResource = Assert-ContainedPath -Root $artifactRoot -Path (Join-Path $artifactRoot ([string] $qualification.resourceInclude)) -Label 'Strict application delivered resource'
+                    if (-not (Test-Path -LiteralPath $sourceResource -PathType Leaf) -or -not (Test-Path -LiteralPath $artifactResource -PathType Leaf)) {
+                        throw 'Strict application resource was not present in both source and delivered artifact roots.'
+                    }
+                    $sourceResourceSha256 = (Get-FileHash -LiteralPath $sourceResource -Algorithm SHA256).Hash.ToLowerInvariant()
+                    $artifactResourceSha256 = (Get-FileHash -LiteralPath $artifactResource -Algorithm SHA256).Hash.ToLowerInvariant()
+                    if ($sourceResourceSha256 -ne $artifactResourceSha256 -or [int] $manifest.resourceSummary.includedFiles -lt 1) {
+                        throw 'Strict application resource identity or included-resource evidence did not survive publication.'
+                    }
+
+                    $sourceResourceRun = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint, '-ResourcePath', $sourceResource) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    $artifactResourceRun = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @('-ResourcePath', $artifactResource) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    if ($sourceResourceRun.ExitCode -ne 0 -or $sourceResourceRun.ExitCode -ne $artifactResourceRun.ExitCode -or
+                        $sourceResourceRun.StandardOutput -cne $artifactResourceRun.StandardOutput -or
+                        $sourceResourceRun.StandardOutput.TrimEnd("`r", "`n") -cne $qualification.resourceOutput -or
+                        $sourceResourceRun.StandardError -cne $artifactResourceRun.StandardError -or
+                        $sourceResourceRun.StandardError.Length -ne 0) {
+                        throw 'Strict application resource execution did not preserve source/generated success-stream behavior.'
+                    }
+
+                    $sourceFailure = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint, [string] $qualification.failureArgument) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    $artifactFailure = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @([string] $qualification.failureArgument) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    if ($sourceFailure.ExitCode -eq 0 -or $sourceFailure.ExitCode -ne $artifactFailure.ExitCode -or
+                        $sourceFailure.StandardOutput -cne $artifactFailure.StandardOutput -or
+                        $sourceFailure.StandardOutput.Length -ne 0 -or
+                        -not $sourceFailure.StandardError.Contains([string] $qualification.failureMarker, [StringComparison]::Ordinal) -or
+                        -not $artifactFailure.StandardError.Contains([string] $qualification.failureMarker, [StringComparison]::Ordinal)) {
+                        throw 'Strict application controlled failure did not preserve the bounded source/generated exit, output, and error-marker contract.'
+                    }
+
+                    $sampleCount = [int] $qualification.startupSamples
+                    if ($sampleCount -lt 4 -or $sampleCount -gt 20 -or $sampleCount % 2 -ne 0) { throw 'Strict application startupSamples must be an even number between 4 and 20.' }
+                    $sourceSamples = [Collections.Generic.List[double]]::new()
+                    $artifactSamples = [Collections.Generic.List[double]]::new()
+                    $sampleOrder = [Collections.Generic.List[string]]::new()
+                    $sourceWarmup = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    $artifactWarmup = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    if ($sourceWarmup.ExitCode -ne 0 -or $artifactWarmup.ExitCode -ne 0 -or
+                        $sourceWarmup.StandardOutput -cne $artifactWarmup.StandardOutput -or
+                        $sourceWarmup.StandardOutput.TrimEnd("`r", "`n") -cne $program.expectedOutput -or
+                        $sourceWarmup.StandardError -cne $artifactWarmup.StandardError -or $sourceWarmup.StandardError.Length -ne 0) {
+                        throw 'Strict application unmeasured startup warmup failed its exact source/generated contract.'
+                    }
+                    for ($sample = 0; $sample -lt $sampleCount; $sample++) {
+                        if ($sample % 2 -eq 0) {
+                            $sampleOrder.Add('source-first')
+                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                        } else {
+                            $sampleOrder.Add('artifact-first')
+                            $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                        }
+                        if ($sourceSample.ExitCode -ne 0 -or $sourceSample.ExitCode -ne $artifactSample.ExitCode -or
+                            $sourceSample.StandardOutput -cne $artifactSample.StandardOutput -or
+                            $sourceSample.StandardOutput.TrimEnd("`r", "`n") -cne $program.expectedOutput -or
+                            $sourceSample.StandardError -cne $artifactSample.StandardError -or $sourceSample.StandardError.Length -ne 0) {
+                            throw 'Strict application startup sample failed its exact source/generated output and stream contract.'
+                        }
+                        $sourceSamples.Add([double] $sourceSample.DurationMilliseconds)
+                        $artifactSamples.Add([double] $artifactSample.DurationMilliseconds)
+                    }
+                    $sourceP50 = Get-PercentileMilliseconds -Values $sourceSamples.ToArray() -Percentile 0.50
+                    $artifactP50 = Get-PercentileMilliseconds -Values $artifactSamples.ToArray() -Percentile 0.50
+                    $qualificationEvidence = [ordered]@{
+                        succeeded = $true
+                        dependency = [ordered]@{
+                            lockSha256 = $manifest.dependencyGraph.lockSha256
+                            sourceFiles = @($manifest.sourceFiles).Count
+                            graphNodes = @($manifest.dependencyGraph.nodes).Count
+                        }
+                        resource = [ordered]@{ sha256 = $artifactResourceSha256; includedFiles = [int] $manifest.resourceSummary.includedFiles; consumed = $true }
+                        streams = [ordered]@{
+                            successExitCode = $artifactResourceRun.ExitCode
+                            successOutputSha256 = Get-NormalizedTextSha256 $artifactResourceRun.StandardOutput
+                            successErrorSha256 = Get-TextSha256 $artifactResourceRun.StandardError
+                            failureExitCode = $artifactFailure.ExitCode
+                            failureOutputSha256 = Get-TextSha256 $artifactFailure.StandardOutput
+                            failureSourceErrorSha256 = Get-NormalizedTextSha256 $sourceFailure.StandardError
+                            failureArtifactErrorSha256 = Get-NormalizedTextSha256 $artifactFailure.StandardError
+                            failureContractSha256 = Get-TextSha256 ([string] $qualification.failureMarker)
+                            failureMarkerObservedOnBoth = $true
+                        }
+                        startup = [ordered]@{
+                            warmupsPerSurface = 1
+                            samples = $sampleCount
+                            orderPolicy = 'AlternatingPairs'
+                            order = @($sampleOrder)
+                            sourceMilliseconds = @($sourceSamples)
+                            artifactMilliseconds = @($artifactSamples)
+                            sourceP50Milliseconds = $sourceP50
+                            sourceP95Milliseconds = Get-PercentileMilliseconds -Values $sourceSamples.ToArray() -Percentile 0.95
+                            artifactP50Milliseconds = $artifactP50
+                            artifactP95Milliseconds = Get-PercentileMilliseconds -Values $artifactSamples.ToArray() -Percentile 0.95
+                            artifactToSourceP50Ratio = if ($sourceP50 -gt 0) { [Math]::Round($artifactP50 / $sourceP50, 3) } else { $null }
+                        }
+                    }
                 }
                 $strictResults.Add([ordered]@{
                     id = $program.id
@@ -358,6 +532,7 @@ try {
                     counts = Get-LedgerSummary -Ledger $manifest.unitDispositionLedger
                     expectedOutput = $program.expectedOutput
                     completeStrictProgram = $true
+                    qualification = $qualificationEvidence
                     durationMilliseconds = [ordered]@{ analyze = $analysis.DurationMilliseconds; build = $build.DurationMilliseconds; execute = $execution.DurationMilliseconds }
                     succeeded = $true
                 })
