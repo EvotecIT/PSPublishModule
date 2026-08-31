@@ -176,6 +176,50 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
+    public async Task BuildAsync_rejects_a_mirror_replacement_after_the_rsync_completion_boundary()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var mirrorRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Mirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var mirror = Path.Combine(mirrorRoot.FullName, "mirror");
+            var runner = new MirrorPostCompletionMutationRunner();
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                    UseBuildMirror = true,
+                    BuildMirrorPath = mirror,
+                    RsyncExecutable = "/usr/bin/rsync",
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                }));
+
+            Assert.Contains("local Apple build mirror changed", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, runner.Requests.Count);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_selected_scheme_execution_actions()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -307,6 +351,35 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         {
             DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private sealed class MirrorPostCompletionMutationRunner : IProcessRunner
+    {
+        public List<ProcessRunRequest> Requests { get; } = new();
+
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            request.InvokeStartBoundary();
+            var result = Success("ok");
+            if (request.FileName.Equals("/usr/bin/rsync", StringComparison.Ordinal))
+            {
+                var mirrorPath = request.Arguments[^1]
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                Directory.CreateDirectory(mirrorPath);
+                var payload = Path.Combine(mirrorPath, "payload");
+                File.WriteAllText(payload, "approved");
+                request.InvokeCompletionBoundary(result);
+                File.WriteAllText(payload, "replacement");
+            }
+            else
+            {
+                request.InvokeCompletionBoundary(result);
+            }
+            return Task.FromResult(result);
         }
     }
 }

@@ -62,27 +62,35 @@ public sealed partial class AppleDeviceDeploymentService
                 normalizedMirrorPath
             };
 
+            var processRequest = AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                rsyncExecutable,
+                "rsync",
+                "/usr/bin/rsync",
+                "Exact-source local Apple build mirroring",
+                sourceRoot,
+                args,
+                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout);
+            processRequest.SetCompletionBoundary(completionResult =>
+            {
+                if (completionResult.Succeeded && Directory.Exists(mirrorPath))
+                {
+                    _ = mutationMonitor.CaptureExpectedProducerOutput(
+                        () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                            mirrorPath,
+                            "local Apple build mirror"),
+                        "rsync");
+                }
+            });
+
             var result = await _processRunner.RunAsync(
-                AppleTrustedExecutionEnvironment.CreateProcessRequest(
-                    rsyncExecutable,
-                    "rsync",
-                    "/usr/bin/rsync",
-                    "Exact-source local Apple build mirroring",
-                    sourceRoot,
-                    args,
-                    request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
+                processRequest,
                 cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
             if (!result.Succeeded)
             {
                 mutationMonitor.Dispose();
                 return new MirrorResult(sourceRoot, mirrorPath, result, null);
             }
-
-            _ = mutationMonitor.CaptureExpectedProducerOutput(
-                () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
-                    mirrorPath,
-                    "local Apple build mirror"),
-                "rsync");
             return new MirrorResult(sourceRoot, mirrorPath, result, mutationMonitor);
         }
         catch

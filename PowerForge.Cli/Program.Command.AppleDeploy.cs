@@ -85,6 +85,17 @@ internal static partial class Program
             var planOnly = argv.Any(static value => value.Equals("--plan", StringComparison.OrdinalIgnoreCase));
             var provenanceRoot = AppleBuildProvenance.ResolveRepositoryRoot(
                 projectRoot) ?? projectRoot;
+            var resolvedInstallRoot = requestedPlatform == ApplePlatform.macOS
+                ? Path.GetFullPath(installRoot)
+                : null;
+            if (resolvedInstallRoot is not null)
+            {
+                AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+                    resolvedInstallRoot,
+                    projectRoot,
+                    nameof(AppleMacAppDeploymentRequest.InstallRoot),
+                    FrameworkCompatibility.GetPathStringComparisonForPath(projectRoot));
+            }
             AppleBuildProvenance.Snapshot? planSnapshot = null;
             if (planOnly)
             {
@@ -110,7 +121,7 @@ internal static partial class Program
                 DerivedDataPath = derivedDataPath,
                 SourceRevision = planSnapshot?.Revision,
                 Device = deviceIdentifier ?? device,
-                InstallRoot = requestedPlatform == ApplePlatform.macOS ? Path.GetFullPath(installRoot) : null,
+                InstallRoot = resolvedInstallRoot,
                 Launch = launch,
                 UseBuildMirror = useBuildMirror,
                 BuildMirrorPath = buildMirrorPath
