@@ -55,12 +55,24 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("requires-directive", PowerShellCompilationFeatureIds.RequiresDirective);
         yield return Case("dictionary-flow", PowerShellCompilationFeatureIds.DictionaryFlow);
         yield return Case("operator-arithmetic", "operator.arithmetic");
-        yield return Case("operator-comparison", "operator.comparison");
-        yield return Case("operator-logical", "operator.logical");
+        yield return Case("operator-comparison", "operator.comparison", expectedValue: "True", expectedTypeName: "System.Boolean");
+        yield return Case("operator-logical", "operator.logical", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("pipeline-enumeration", "pipeline.enumeration");
         yield return Case("runtime-read-only-state", "runtime.read-only-state");
     }
 
-    private static PowerShellCompilationSemanticOracleCase Case(string caseId, string featureId, IEnumerable<string>? arguments = null)
-        => new("PowerForge.Semantic/" + caseId, featureId, ResourcePrefix + caseId + ".ps1", AllProfiles, arguments);
+    private static PowerShellCompilationSemanticOracleCase Case(
+        string caseId,
+        string featureId,
+        IEnumerable<string>? arguments = null,
+        string expectedValue = "42",
+        string expectedTypeName = "System.Int32")
+        => new(
+            "PowerForge.Semantic/" + caseId,
+            featureId,
+            ResourcePrefix + caseId + ".ps1",
+            AllProfiles,
+            arguments,
+            expectedValue: expectedValue,
+            expectedTypeName: expectedTypeName);
 }

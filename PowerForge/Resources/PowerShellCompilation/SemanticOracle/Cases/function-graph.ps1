@@ -1,3 +1,3 @@
-function Get-BaseValue { 40 }
-function Get-Result { (Get-BaseValue) + 2 }
+function Get-BaseValue { 42 }
+function Get-Result { Get-BaseValue }
 Get-Result

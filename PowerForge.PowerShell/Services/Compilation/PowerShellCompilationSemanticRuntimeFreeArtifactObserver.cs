@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 
 namespace PowerForge;
@@ -29,9 +31,8 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
     {
         if (build is null) throw new ArgumentNullException(nameof(build));
         if (timeoutSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
-        var artifactPath = RequireCertifiedExecutable(profileId, build);
+        var artifactPath = RequireCertifiedExecutable(profileId, build, out var method);
         var manifest = build.Manifest!;
-        var method = manifest.PublicAbi!.Methods[0];
         culture ??= CultureInfo.GetCultureInfo("en-US");
         RequireObservableOutputContract(method, culture);
         var workingDirectory = Path.GetDirectoryName(artifactPath)
@@ -91,7 +92,10 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         return envelope;
     }
 
-    private static string RequireCertifiedExecutable(string profileId, PowerShellCompilationBuildResult build)
+    private static string RequireCertifiedExecutable(
+        string profileId,
+        PowerShellCompilationBuildResult build,
+        out PowerShellCompilationAbiMethod entryPoint)
     {
         if (!build.Succeeded || string.IsNullOrWhiteSpace(build.ArtifactPath) || build.Manifest is null)
             throw new InvalidOperationException("A successful Strict build result is required for runtime-free observation.");
@@ -107,16 +111,105 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         if (!target.SemanticProfileId.Equals(profileId, StringComparison.Ordinal) ||
             target.ArtifactKind != manifest.Kind || target.Mode != manifest.Mode || target.AllowsPowerShellRuntimeEvaluation)
             throw new InvalidOperationException("The Strict executable target contract does not match the selected semantic profile or manifest.");
-        if (manifest.PublicAbi?.Methods.Length != 1)
-            throw new InvalidOperationException("A Strict executable observation requires exactly one typed entry-point ABI method.");
         var path = Path.GetFullPath(build.ArtifactPath!);
         if (!File.Exists(path))
             throw new FileNotFoundException("The Strict executable artifact was not found.", path);
         if (!PowerShellCompilationPathSafety.PathEquals(path, manifest.ArtifactPath))
             throw new InvalidOperationException("The Strict executable path differs from its compiler manifest.");
         ValidateArtifactInventory(path, manifest);
+        entryPoint = SelectEntryPoint(manifest.PublicAbi);
+        ValidateEmbeddedPublicAbi(manifest, manifest.PublicAbi!.Sha256);
         return path;
     }
+
+    internal static PowerShellCompilationAbiMethod SelectEntryPoint(PowerShellCompilationAbiManifest? publicAbi)
+    {
+        ValidateCanonicalPublicAbi(publicAbi);
+        var entries = publicAbi?.Methods
+            .Where(static method =>
+                method.ClrName.Equals("Invoke", StringComparison.Ordinal) &&
+                method.PowerShellName.Equals("<script>", StringComparison.Ordinal))
+            .ToArray() ?? Array.Empty<PowerShellCompilationAbiMethod>();
+        return entries.Length == 1
+            ? entries[0]
+            : throw new InvalidOperationException(
+                "A Strict executable observation requires exactly one compiler-generated '<script>' ABI method named 'Invoke'.");
+    }
+
+    private static void ValidateCanonicalPublicAbi(PowerShellCompilationAbiManifest? publicAbi)
+    {
+        if (publicAbi is null || publicAbi.Methods is null || publicAbi.Methods.Any(static method => method is null))
+            throw new InvalidOperationException("A Strict executable observation requires a complete public ABI manifest.");
+        string computed;
+        try
+        {
+            computed = PowerShellCompilationAbiBuilder.ComputeSha256(
+                PowerShellCompilationAbiBuilder.GetNormalizedText(publicAbi));
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or NullReferenceException)
+        {
+            throw new InvalidOperationException("The Strict executable public ABI manifest is malformed.", exception);
+        }
+        if (!computed.Equals(publicAbi.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Strict executable public ABI manifest failed its canonical hash check.");
+    }
+
+    internal static void ValidateEmbeddedPublicAbi(PowerShellCompilationArtifactManifest manifest, string expectedSha256)
+    {
+        var values = (manifest.Files ?? Array.Empty<PowerShellCompilationArtifactFile>())
+            .Where(static file => file is not null &&
+                                  (Path.GetExtension(file.Path).Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+                                   Path.GetExtension(file.Path).Equals(".exe", StringComparison.OrdinalIgnoreCase)))
+            .SelectMany(static file => ReadAssemblyMetadataValues(file.Path, "PowerForge.PublicAbiSha256"))
+            .ToArray();
+        if (values.Length != 1 || !values[0].Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The Strict executable public ABI hash is missing, ambiguous, or differs from its embedded assembly metadata.");
+    }
+
+    private static IEnumerable<string> ReadAssemblyMetadataValues(string path, string key)
+    {
+        using var stream = File.OpenRead(path);
+        using var pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
+        if (!pe.HasMetadata) yield break;
+        var reader = pe.GetMetadataReader();
+        if (!reader.IsAssembly) yield break;
+        foreach (var handle in reader.GetAssemblyDefinition().GetCustomAttributes())
+        {
+            var attribute = reader.GetCustomAttribute(handle);
+            if (!GetAttributeTypeName(reader, attribute.Constructor)
+                    .Equals("System.Reflection.AssemblyMetadataAttribute", StringComparison.Ordinal))
+                continue;
+            var blob = reader.GetBlobReader(attribute.Value);
+            if (blob.ReadUInt16() != 1) continue;
+            var attributeKey = blob.ReadSerializedString();
+            var attributeValue = blob.ReadSerializedString();
+            if (key.Equals(attributeKey, StringComparison.Ordinal) && attributeValue is not null)
+                yield return attributeValue;
+        }
+    }
+
+    private static string GetAttributeTypeName(MetadataReader reader, EntityHandle constructor)
+    {
+        var type = constructor.Kind switch
+        {
+            HandleKind.MemberReference => reader.GetMemberReference((MemberReferenceHandle)constructor).Parent,
+            HandleKind.MethodDefinition => reader.GetMethodDefinition((MethodDefinitionHandle)constructor).GetDeclaringType(),
+            _ => default
+        };
+        return type.Kind switch
+        {
+            HandleKind.TypeReference => GetTypeName(reader, reader.GetTypeReference((TypeReferenceHandle)type)),
+            HandleKind.TypeDefinition => GetTypeName(reader, reader.GetTypeDefinition((TypeDefinitionHandle)type)),
+            _ => string.Empty
+        };
+    }
+
+    private static string GetTypeName(MetadataReader reader, TypeReference type)
+        => reader.GetString(type.Namespace) + "." + reader.GetString(type.Name);
+
+    private static string GetTypeName(MetadataReader reader, TypeDefinition type)
+        => reader.GetString(type.Namespace) + "." + reader.GetString(type.Name);
 
     private static void ValidateArtifactInventory(string artifactPath, PowerShellCompilationArtifactManifest manifest)
     {
