@@ -394,6 +394,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             var result = _execute(request);
             if (result.Succeeded)

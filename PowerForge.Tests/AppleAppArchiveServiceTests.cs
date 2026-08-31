@@ -580,6 +580,7 @@ public sealed partial class AppleAppArchiveServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             _beforeResult?.Invoke(request);
             if (_result.Succeeded)

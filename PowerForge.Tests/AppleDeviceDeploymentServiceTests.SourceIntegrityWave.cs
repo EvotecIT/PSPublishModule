@@ -390,6 +390,98 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         }
     }
 
+    [Fact]
+    public async Task BuildAsync_revalidates_a_mirror_replaced_before_rsync_start()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var mirrorRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Mirror",
+            Guid.NewGuid().ToString("N")));
+        var mirrorPath = Path.Combine(mirrorRoot.FullName, "mirror");
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                "clean");
+            InitializeGitRepository(root.FullName);
+            var runner = new MirrorPreStartSwapRunner(root.FullName);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        UseBuildMirror = true,
+                        BuildRoot = root.FullName,
+                        BuildMirrorPath = mirrorPath,
+                        RsyncExecutable = "/usr/bin/rsync",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                    }));
+
+            Assert.Contains("physically overlap", error.Message, StringComparison.Ordinal);
+            Assert.True(Directory.Exists(Path.Combine(root.FullName, ".git")));
+            Assert.False(runner.ProcessStarted);
+            Assert.Single(runner.Requests);
+        }
+        finally
+        {
+            try
+            {
+                if ((File.GetAttributes(mirrorPath) & FileAttributes.ReparsePoint) != 0)
+                    Directory.Delete(mirrorPath);
+            }
+            catch { /* best effort */ }
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { mirrorRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private sealed class MirrorPreStartSwapRunner : IProcessRunner
+    {
+        private readonly string _sourceRoot;
+
+        internal MirrorPreStartSwapRunner(string sourceRoot)
+        {
+            _sourceRoot = sourceRoot;
+        }
+
+        internal List<ProcessRunRequest> Requests { get; } = new();
+
+        internal bool ProcessStarted { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var mirrorPath = request.Arguments[^1]
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            Directory.Delete(mirrorPath, recursive: true);
+            Directory.CreateSymbolicLink(mirrorPath, _sourceRoot);
+
+            request.InvokePreStartBoundary();
+            ProcessStarted = true;
+            request.InvokeStartBoundary();
+            var result = Success("unexpected");
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
+        }
+    }
+
     private sealed class MirrorPostCompletionMutationRunner : IProcessRunner
     {
         public List<ProcessRunRequest> Requests { get; } = new();
@@ -399,6 +491,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             var result = Success("ok");
             if (request.FileName.Equals("/usr/bin/rsync", StringComparison.Ordinal))

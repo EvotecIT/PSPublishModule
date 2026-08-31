@@ -10,30 +10,32 @@ public sealed partial class AppleDeviceDeploymentService
         CancellationToken cancellationToken)
     {
         var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
-        var mirrorPath = ResolveBuildMirrorPath(request);
+        var requestedMirrorPath = ResolveBuildMirrorPath(request);
         var normalizedSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        var normalizedMirrorPath = EnsureTrailingDirectorySeparator(Path.GetFullPath(mirrorPath));
+        var normalizedMirrorPath = EnsureTrailingDirectorySeparator(Path.GetFullPath(requestedMirrorPath));
         if (normalizedMirrorPath.StartsWith(
                 normalizedSourceRoot,
                 sourcePathComparison))
             throw new InvalidOperationException("BuildMirrorPath must not be inside the mirrored build root.");
 
         var physicalSourceRoot = AppleReleaseArtifactService.ResolvePhysicalPath(sourceRoot);
-        var physicalMirrorPath = AppleReleaseArtifactService.ResolvePhysicalPath(mirrorPath);
-        if (IsSameOrDescendant(
-                physicalMirrorPath,
-                physicalSourceRoot,
-                sourcePathComparison) ||
-            IsSameOrDescendant(
-                physicalSourceRoot,
-                physicalMirrorPath,
-                sourcePathComparison))
-        {
-            throw new InvalidOperationException(
-                "BuildMirrorPath must not physically overlap the mirrored build root through a symbolic-link or path alias.");
-        }
+        var physicalMirrorPath = AppleReleaseArtifactService.ResolvePhysicalPath(requestedMirrorPath);
+        ValidatePhysicalMirrorBoundary(
+            physicalMirrorPath,
+            physicalSourceRoot,
+            sourcePathComparison);
 
-        Directory.CreateDirectory(mirrorPath);
+        Directory.CreateDirectory(requestedMirrorPath);
+        physicalMirrorPath = AppleReleaseArtifactService.ResolvePhysicalPath(requestedMirrorPath);
+        ValidatePhysicalMirrorBoundary(
+            physicalMirrorPath,
+            physicalSourceRoot,
+            sourcePathComparison);
+        var mirrorDirectoryIdentity = ExistingFilePathIdentityResolver
+            .ResolveDirectoryStatus(physicalMirrorPath)
+            .Identity;
+        var mirrorPath = physicalMirrorPath;
+        normalizedMirrorPath = EnsureTrailingDirectorySeparator(mirrorPath);
         var mutationMonitor = new AppleReleaseSourceMutationMonitor(
             mirrorPath,
             "local Apple build mirror",
@@ -70,6 +72,26 @@ public sealed partial class AppleDeviceDeploymentService
                 sourceRoot,
                 args,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout);
+            processRequest.SetPreStartBoundary(() =>
+            {
+                var currentPhysicalMirrorPath =
+                    AppleReleaseArtifactService.ResolvePhysicalPath(mirrorPath);
+                ValidatePhysicalMirrorBoundary(
+                    currentPhysicalMirrorPath,
+                    physicalSourceRoot,
+                    sourcePathComparison);
+                var currentIdentity = ExistingFilePathIdentityResolver
+                    .ResolveDirectoryStatus(currentPhysicalMirrorPath)
+                    .Identity;
+                if (!currentIdentity.Equals(
+                        mirrorDirectoryIdentity,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "BuildMirrorPath changed before rsync started. " +
+                        "The source repository was preserved; choose a stable mirror path and retry.");
+                }
+            });
             processRequest.SetCompletionBoundary(completionResult =>
             {
                 if (completionResult.Succeeded && Directory.Exists(mirrorPath))
@@ -123,6 +145,25 @@ public sealed partial class AppleDeviceDeploymentService
             fullCandidate.StartsWith(
                 EnsureTrailingDirectorySeparator(fullRoot),
                 comparison);
+    }
+
+    private static void ValidatePhysicalMirrorBoundary(
+        string physicalMirrorPath,
+        string physicalSourceRoot,
+        StringComparison comparison)
+    {
+        if (IsSameOrDescendant(
+                physicalMirrorPath,
+                physicalSourceRoot,
+                comparison) ||
+            IsSameOrDescendant(
+                physicalSourceRoot,
+                physicalMirrorPath,
+                comparison))
+        {
+            throw new InvalidOperationException(
+                "BuildMirrorPath must not physically overlap the mirrored build root through a symbolic-link or path alias.");
+        }
     }
 
     private static string RewritePath(

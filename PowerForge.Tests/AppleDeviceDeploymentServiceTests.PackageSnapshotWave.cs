@@ -303,6 +303,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             if (request.Arguments.Contains("-resolvePackageDependencies"))
             {

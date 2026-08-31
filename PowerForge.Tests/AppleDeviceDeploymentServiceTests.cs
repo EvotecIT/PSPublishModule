@@ -1043,7 +1043,9 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             });
 
             Assert.True(result.Succeeded);
-            Assert.Equal(mirror, result.BuildMirrorPath);
+            var physicalMirror = AppleReleaseArtifactService.ResolvePhysicalPath(
+                mirror);
+            Assert.Equal(physicalMirror, result.BuildMirrorPath);
             Assert.Equal(2, runner.Requests.Count);
             Assert.Equal("/usr/bin/rsync", runner.Requests[0].FileName);
             Assert.False(runner.Requests[0].InheritEnvironment);
@@ -1058,13 +1060,13 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             Assert.DoesNotContain(".git", runner.Requests[0].Arguments);
             Assert.DoesNotContain("build", runner.Requests[0].Arguments);
             Assert.Contains(root.FullName + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
-            Assert.Contains(mirror + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
+            Assert.Contains(physicalMirror + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
 
             var buildRequest = runner.Requests[1];
             Assert.Equal("/usr/bin/xcodebuild", buildRequest.FileName);
             Assert.False(buildRequest.InheritEnvironment);
-            Assert.Equal(mirror, buildRequest.WorkingDirectory);
-            Assert.Contains(Path.Combine(mirror, "Tactra.xcodeproj"), buildRequest.Arguments);
+            Assert.Equal(physicalMirror, buildRequest.WorkingDirectory);
+            Assert.Contains(Path.Combine(physicalMirror, "Tactra.xcodeproj"), buildRequest.Arguments);
         }
         finally
         {
@@ -1433,6 +1435,7 @@ App installed:
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             var result = _execute(request);
             if (result.Succeeded)

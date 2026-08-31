@@ -310,6 +310,28 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
 public sealed class ProcessRunnerStreamingTests
 {
     [Fact]
+    public async Task RunAsync_propagates_pre_start_boundary_failure_before_process_creation()
+    {
+        var validations = 0;
+        var request = new ProcessRunRequest(
+            "powerforge-test-process-must-not-start",
+            Directory.GetCurrentDirectory(),
+            Array.Empty<string>(),
+            TimeSpan.FromSeconds(30));
+        request.SetPreStartBoundary(() =>
+        {
+            validations++;
+            throw new InvalidOperationException("blocked before start");
+        });
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ProcessRunner().RunAsync(request));
+
+        Assert.Equal("blocked before start", error.Message);
+        Assert.Equal(1, validations);
+    }
+
+    [Fact]
     public async Task RunAsync_InvokesStartBoundaryAfterSuccessfulProcessStart()
     {
         var starts = 0;
