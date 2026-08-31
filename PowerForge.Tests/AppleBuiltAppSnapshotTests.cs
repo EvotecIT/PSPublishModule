@@ -5,6 +5,42 @@ namespace PowerForge.Tests;
 public sealed class AppleBuiltAppSnapshotTests
 {
     [Fact]
+    public void CaptureCompleteIdentity_rejects_a_linked_artifact_root()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var redirected = CreateAppFixture(out _);
+        var linkedRoot = Path.Combine(
+            redirected.Parent!.FullName,
+            "Linked.app");
+        try
+        {
+            Directory.CreateSymbolicLink(linkedRoot, redirected.FullName);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                    linkedRoot,
+                    "Apple artifact root"));
+
+            Assert.Contains(
+                "must not be a symbolic link or reparse point",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(linkedRoot) || File.Exists(linkedRoot))
+                    Directory.Delete(linkedRoot);
+            }
+            catch { /* best effort */ }
+            try { redirected.Parent!.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateUnchanged_rejects_a_transient_file_write_restored_before_validation()
     {
         var root = CreateAppFixture(out var payload);

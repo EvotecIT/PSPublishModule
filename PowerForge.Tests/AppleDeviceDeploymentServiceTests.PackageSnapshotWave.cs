@@ -1,7 +1,57 @@
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed partial class AppleDeviceDeploymentServiceTests
 {
+    [Fact]
+    public async Task BuildAsync_rejects_a_package_snapshot_root_inside_source_before_writing()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var previousTemporaryDirectory = Environment.GetEnvironmentVariable("TMPDIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("TMPDIR", fixture.RootPath);
+            var runner = new LocalPackageBuildRunner(
+                fixture.RemoteRoot,
+                fixture.RemoteUrl,
+                mutateDuringBuild: false);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = fixture.ProjectPath,
+                        Scheme = "CasaRay",
+                        DerivedDataPath = fixture.DerivedDataPath,
+                        Destination = "id=device-1",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                    }));
+
+            Assert.Contains(
+                "Swift package snapshot root",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "outside BuildRoot",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+            Assert.False(Directory.Exists(Path.Combine(
+                fixture.RootPath,
+                "PowerForge")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "TMPDIR",
+                previousTemporaryDirectory);
+            fixture.Dispose();
+        }
+    }
+
     [Fact]
     public async Task DeployAsync_builds_from_a_private_materialized_package_checkout()
     {
@@ -352,6 +402,8 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         }
 
         internal string ProjectPath { get; }
+
+        internal string RootPath => _root.FullName;
 
         internal string DerivedDataPath { get; }
 

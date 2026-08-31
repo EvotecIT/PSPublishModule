@@ -95,6 +95,11 @@ public sealed partial class AppleAppArchiveService
                 var approvedPackageRevisions =
                     AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
                         projectPath);
+                var packageSourceRoot =
+                    AppleSwiftPackageBuildSnapshot.ResolveRepositoryRoot(
+                        projectPath);
+                var packageSourceComparison = FrameworkCompatibility.GetPathStringComparison(
+                    Path.GetPathRoot(packageSourceRoot) ?? packageSourceRoot);
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
                         _processRunner,
                         xcodeBuildExecutable,
@@ -102,6 +107,8 @@ public sealed partial class AppleAppArchiveService
                         request.IsWorkspace,
                         request.Scheme.Trim(),
                         approvedPackageRevisions,
+                        packageSourceRoot,
+                        packageSourceComparison,
                         timeout,
                         cancellationToken,
                         request.Progress)

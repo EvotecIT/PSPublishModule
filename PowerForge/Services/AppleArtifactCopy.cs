@@ -18,6 +18,18 @@ internal static class AppleArtifactCopy
 
     internal static void CopyDirectory(string sourceRoot, string destinationRoot)
     {
+        var sourceAttributes = File.GetAttributes(sourceRoot);
+        if ((sourceAttributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"Apple artifact roots must not be symbolic links or reparse points: {sourceRoot}");
+        }
+        if ((sourceAttributes & FileAttributes.Directory) == 0)
+        {
+            throw new InvalidOperationException(
+                $"Apple artifact copy source must be a regular directory: {sourceRoot}");
+        }
+
         Directory.CreateDirectory(destinationRoot);
         var directoryMetadata = new List<(string Source, string Destination)>
         {

@@ -116,6 +116,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string archivePath,
         string description = "private Apple upload archive snapshot")
     {
+        var rootAttributes = File.GetAttributes(archivePath);
+        if ((rootAttributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"The {description} must not be a symbolic link or reparse point: {archivePath}");
+        }
         var sha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
         if (File.Exists(archivePath))
         {

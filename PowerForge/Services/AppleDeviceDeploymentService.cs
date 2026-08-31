@@ -370,6 +370,8 @@ public sealed partial class AppleDeviceDeploymentService
                         request.IsWorkspace,
                         request.Scheme.Trim(),
                         approvedPackageRevisions,
+                        sourceRoot,
+                        sourcePathComparison,
                         request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
                         cancellationToken)
                     .ConfigureAwait(false);
@@ -410,7 +412,9 @@ public sealed partial class AppleDeviceDeploymentService
                         request,
                         productDirectory,
                         appPath);
-                    productSnapshot = AppleBuiltAppSnapshot.Create(producedAppPath);
+                    productSnapshot = AppleBuiltAppSnapshot.Create(
+                        producedAppPath,
+                        boundProductDirectory.Path);
                     boundProductDirectory.ValidateUnchanged();
                 });
             }

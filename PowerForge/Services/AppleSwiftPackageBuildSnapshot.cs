@@ -8,16 +8,19 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor _monitor;
     private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _materializedPackagesIdentity;
+    private readonly AppleStableDirectoryIdentity _rootDirectory;
     private bool _disposed;
 
     private AppleSwiftPackageBuildSnapshot(
         string rootPath,
+        AppleStableDirectoryIdentity rootDirectory,
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
         IReadOnlyDictionary<string, string?> environmentVariables,
         AppleReleaseSourceMutationMonitor monitor,
         AppleArchiveUploadSnapshot.SnapshotIdentity materializedPackagesIdentity)
     {
         RootPath = rootPath;
+        _rootDirectory = rootDirectory;
         _environmentVariables = environmentVariables;
         _monitor = monitor;
         _materializedPackagesIdentity = materializedPackagesIdentity;
@@ -36,7 +39,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     internal static IReadOnlyDictionary<string, string> ReadApprovedRemotePackages(
         string projectPath)
     {
-        var repositoryRoot = FindRepositoryRoot(projectPath);
+        var repositoryRoot = ResolveRepositoryRoot(projectPath);
         return new AppleReleaseSourceTrustService()
             .ReadApprovedLocalBuildPackageRevisions(
                 repositoryRoot,
@@ -50,14 +53,39 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         bool isWorkspace,
         string scheme,
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
+        string sourceRoot,
+        StringComparison sourcePathComparison,
         TimeSpan timeout,
         CancellationToken cancellationToken,
         Action<string>? progress = null)
     {
-        var parent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-swiftpm-build-snapshots");
+        var parent = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "apple-swiftpm-build-snapshots");
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            parent,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
         Directory.CreateDirectory(parent);
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            parent,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
+        parent = AppleReleaseArtifactService.ResolvePhysicalPath(parent);
         var root = Path.Combine(parent, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        var rootDirectory = AppleStableDirectoryIdentity.Capture(
+            root,
+            "private Swift package snapshot directory");
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            rootDirectory.Path,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
+        root = rootDirectory.Path;
         AppleReleaseSourceMutationMonitor? monitor = null;
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
@@ -140,6 +168,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
             var snapshot = new AppleSwiftPackageBuildSnapshot(
                 root,
+                rootDirectory,
                 approvedPackageRevisions,
                 environmentVariables,
                 monitor,
@@ -150,7 +179,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         catch
         {
             monitor?.Dispose();
-            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
+            try { rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
             throw;
         }
     }
@@ -263,10 +292,10 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             return;
         _disposed = true;
         _monitor.Dispose();
-        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after archive */ }
+        try { _rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort after archive */ }
     }
 
-    private static string FindRepositoryRoot(string startPath)
+    internal static string ResolveRepositoryRoot(string startPath)
     {
         var fullStartPath = Path.GetFullPath(startPath);
         var current = new DirectoryInfo(Directory.Exists(fullStartPath) ? fullStartPath : Path.GetDirectoryName(fullStartPath)!);

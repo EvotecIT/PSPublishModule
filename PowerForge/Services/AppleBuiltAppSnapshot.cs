@@ -20,7 +20,9 @@ internal sealed class AppleBuiltAppSnapshot : IDisposable
 
     internal string AppPath => _snapshot.ArchivePath;
 
-    internal static AppleBuiltAppSnapshot Create(string appPath)
+    internal static AppleBuiltAppSnapshot Create(
+        string appPath,
+        string? expectedProductDirectory = null)
     {
         var productPath = Path.GetFullPath(appPath);
         if (!Directory.Exists(productPath))
@@ -29,9 +31,11 @@ internal sealed class AppleBuiltAppSnapshot : IDisposable
                 $"xcodebuild completed but the built app product was not found: {productPath}");
         }
 
+        ValidateProductRoot(productPath, expectedProductDirectory);
         var sourceIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
             productPath,
             "xcodebuild app product");
+        ValidateProductRoot(productPath, expectedProductDirectory);
         var expectedSha256 = sourceIdentity.Sha256;
         AppleArchiveUploadSnapshot? snapshot = null;
         try
@@ -41,10 +45,13 @@ internal sealed class AppleBuiltAppSnapshot : IDisposable
             // concurrent source mutation either changes the copied bytes and
             // fails the expected hash or is irrelevant because installation
             // consumes only this private copy.
+            ValidateProductRoot(productPath, expectedProductDirectory);
             snapshot = AppleArchiveUploadSnapshot.Create(productPath, expectedSha256);
+            ValidateProductRoot(productPath, expectedProductDirectory);
             var sourceAfterCopy = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
                 productPath,
                 "xcodebuild app product");
+            ValidateProductRoot(productPath, expectedProductDirectory);
             if (!sourceIdentity.Equals(sourceAfterCopy))
             {
                 throw new InvalidOperationException(
@@ -57,6 +64,34 @@ internal sealed class AppleBuiltAppSnapshot : IDisposable
         {
             snapshot?.Dispose();
             throw;
+        }
+    }
+
+    private static void ValidateProductRoot(
+        string productPath,
+        string? expectedProductDirectory)
+    {
+        var attributes = File.GetAttributes(productPath);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"The xcodebuild app product must not be a symbolic link or reparse point: {productPath}");
+        }
+        if (string.IsNullOrWhiteSpace(expectedProductDirectory))
+            return;
+
+        var physicalProductPath = AppleReleaseArtifactService.ResolvePhysicalPath(productPath);
+        var physicalProductDirectory = AppleReleaseArtifactService.ResolvePhysicalPath(
+                expectedProductDirectory!)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(
+            physicalProductDirectory);
+        if (!physicalProductPath.StartsWith(
+                physicalProductDirectory + Path.DirectorySeparatorChar,
+                comparison))
+        {
+            throw new InvalidOperationException(
+                $"The xcodebuild app product must remain physically inside the private product directory '{physicalProductDirectory}': {physicalProductPath}");
         }
     }
 
