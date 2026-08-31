@@ -204,6 +204,7 @@ public static class PowerShellCompilationSemanticOracleComparer
         var allowed = new HashSet<string>(allowedDifferencePaths ?? Array.Empty<string>(), StringComparer.Ordinal);
         var differences = new List<PowerShellCompilationSemanticOracleDifference>();
         Add(differences, allowed, "Success", expected.Success, actual.Success);
+        Add(differences, allowed, "SuccessState", expected.SuccessState, actual.SuccessState);
         Add(differences, allowed, "Information", expected.Information, actual.Information);
         Add(differences, allowed, "Warnings", expected.Warnings, actual.Warnings);
         Add(differences, allowed, "Verbose", expected.Verbose, actual.Verbose);
@@ -213,6 +214,8 @@ public static class PowerShellCompilationSemanticOracleComparer
         Add(differences, allowed, "ErrorRecords", expected.ErrorRecords, actual.ErrorRecords);
         Add(differences, allowed, "ExitCode", expected.ExitCode, actual.ExitCode);
         Add(differences, allowed, "FileSystemEffects", expected.FileSystemEffects, actual.FileSystemEffects);
+        Add(differences, allowed, "Encoding", expected.Encoding, actual.Encoding);
+        Add(differences, allowed, "ProcessState", expected.ProcessState, actual.ProcessState);
         Add(differences, allowed, "ProcessEffects", expected.ProcessEffects, actual.ProcessEffects);
         return new ReadOnlyCollection<PowerShellCompilationSemanticOracleDifference>(differences);
     }

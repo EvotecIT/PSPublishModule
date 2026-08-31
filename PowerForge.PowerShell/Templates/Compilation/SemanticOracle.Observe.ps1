@@ -4,7 +4,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+trap {
+    [Console]::Error.WriteLine("Semantic oracle wrapper failure: $($_.Exception.Message)")
+    [Console]::Error.WriteLine([string] $_.InvocationInfo.PositionMessage)
+    [Console]::Error.WriteLine([string] $_.ScriptStackTrace)
+    exit 99
+}
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+$maximumObservationItems = 1024
 $culture = [System.Globalization.CultureInfo]::GetCultureInfo([string] $config.Culture)
 [System.Globalization.CultureInfo]::CurrentCulture = $culture
 [System.Globalization.CultureInfo]::CurrentUICulture = $culture
@@ -76,14 +83,103 @@ function Get-PropertyObservation {
     $properties = foreach ($property in $Value.PSObject.Properties) {
         if ($ObservedPropertyNames -notcontains $property.Name) { continue }
         $propertyValue = $property.Value
+        $shape = Get-ValueShape -Value $propertyValue
         [ordered] @{
             Name = [string] $property.Name
-            Value = if ($null -eq $propertyValue) { '' } else { [string] $propertyValue }
-            TypeName = if ($null -eq $propertyValue) { '' } else { $propertyValue.GetType().FullName }
-            IsNull = $null -eq $propertyValue
+            Value = if ($shape.ValueState -eq 'Value') { [string] $propertyValue } else { '' }
+            TypeName = if ($shape.ValueState -eq 'Null') { '' } else { $propertyValue.GetType().FullName }
+            IsNull = $shape.ValueState -eq 'Null'
+            IsAutomationNull = $shape.ValueState -eq 'AutomationNull'
+            ValueState = $shape.ValueState
+            EnumerationState = $shape.EnumerationState
+            CollectionCardinality = $shape.CollectionCardinality
+            ElementTypeNames = @($shape.ElementTypeNames)
         }
     }
     return @($properties)
+}
+
+function Get-ValueShape {
+    param([object] $Value)
+
+    if ($null -eq $Value) {
+        return [ordered] @{
+            ValueState = 'Null'
+            EnumerationState = 'Scalar'
+            CollectionCardinality = $null
+            ElementTypeNames = @()
+        }
+    }
+    $isAutomationNull = $false
+    try {
+        $isAutomationNull = [object]::ReferenceEquals($Value, [System.Management.Automation.Internal.AutomationNull]::Value)
+    } catch {
+        $isAutomationNull = $false
+    }
+    if ($isAutomationNull) {
+        return [ordered] @{
+            ValueState = 'AutomationNull'
+            EnumerationState = 'Scalar'
+            CollectionCardinality = $null
+            ElementTypeNames = @()
+        }
+    }
+    $enumerationState = 'Scalar'
+    $cardinality = $null
+    $elementTypes = @()
+    if ($Value -is [System.Collections.IDictionary]) {
+        $enumerationState = 'Dictionary'
+        $cardinality = [int] $Value.Count
+        $elementTypes = @(Get-ElementTypeNames -Values $Value.Values)
+    } elseif ($Value -is [System.Collections.ICollection] -and -not ($Value -is [string])) {
+        $enumerationState = 'Collection'
+        $cardinality = [int] $Value.Count
+        $elementTypes = @(Get-ElementTypeNames -Values $Value)
+    } elseif ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        $enumerationState = 'Collection'
+    }
+    return [ordered] @{
+        ValueState = 'Value'
+        EnumerationState = $enumerationState
+        CollectionCardinality = $cardinality
+        ElementTypeNames = @($elementTypes)
+    }
+}
+
+function Get-ElementTypeNames {
+    param([System.Collections.IEnumerable] $Values)
+
+    $types = [System.Collections.Generic.List[string]]::new()
+    $count = 0
+    foreach ($item in $Values) {
+        $count++
+        if ($count -gt $maximumObservationItems) {
+            throw "Semantic observation exceeds the $maximumObservationItems-item collection limit."
+        }
+        $typeName = if ($null -eq $item) { 'Null' } else { $item.GetType().FullName }
+        if (-not $types.Contains($typeName)) { $types.Add($typeName) }
+    }
+    return @($types)
+}
+
+function Get-EncodingWebName {
+    param([scriptblock] $Factory)
+
+    try {
+        $encoding = & $Factory
+        if ($null -eq $encoding) { return '' }
+        $webName = [string] $encoding.WebName
+        if ([string]::IsNullOrEmpty($webName)) { return '' }
+        return $webName.ToLowerInvariant()
+    } catch {
+        return ''
+    }
+}
+
+function Get-NativeArgumentPassing {
+    $variable = Get-Variable -Name PSNativeCommandArgumentPassing -ErrorAction SilentlyContinue
+    if ($null -eq $variable) { return '' }
+    return [string] $variable.Value
 }
 
 $before = Get-FileSnapshot ([string] $config.FileSystemRoot)
@@ -96,7 +192,7 @@ $errors = [System.Collections.Generic.List[string]]::new()
 $streamRecords = [System.Collections.Generic.List[object]]::new()
 $errorRecords = [System.Collections.Generic.List[object]]::new()
 $sequence = 0
-$scriptExitCode = $null
+$lastExitCode = $null
 $pipelineState = $null
 $pipelineReason = $null
 $powerShell = $null
@@ -121,6 +217,9 @@ $global:LASTEXITCODE = $null
     $output = @()
     try {
         $output = @($powerShell.Invoke())
+        if ($output.Count -gt $maximumObservationItems) {
+            throw "Semantic observation exceeds the $maximumObservationItems-item success/stream limit."
+        }
     } catch {
         $pipelineState = 'Failed'
         $pipelineReason = if ($null -ne $_.Exception.InnerException) { $_.Exception.InnerException } else { $_.Exception }
@@ -130,7 +229,6 @@ $global:LASTEXITCODE = $null
         $pipelineReason = $powerShell.InvocationStateInfo.Reason
     }
     $lastExitCode = $runspace.SessionStateProxy.GetVariable('LASTEXITCODE')
-    if ($lastExitCode -is [int]) { $scriptExitCode = [int] $lastExitCode }
 
     foreach ($item in $output) {
         $sequence++
@@ -182,23 +280,19 @@ $global:LASTEXITCODE = $null
             continue
         }
 
-        $isNull = $null -eq $item
-        $isAutomationNull = $false
-        if (-not $isNull) {
-            try {
-                $isAutomationNull = [object]::ReferenceEquals($item, [System.Management.Automation.Internal.AutomationNull]::Value)
-            } catch {
-                $isAutomationNull = $false
-            }
-        }
-        $baseValue = if ($isNull) { $null } else { $item.PSObject.BaseObject }
+        $itemShape = Get-ValueShape -Value $item
+        $baseValue = if ($itemShape.ValueState -eq 'Value') { $item.PSObject.BaseObject } else { $null }
+        $shape = if ($itemShape.ValueState -eq 'Value') { Get-ValueShape -Value $baseValue } else { $itemShape }
         $success.Add([ordered] @{
             Sequence = $sequence
-            Value = if ($isNull) { '' } else { [string] $baseValue }
-            TypeName = if ($isNull) { '' } else { $baseValue.GetType().FullName }
-            IsNull = $isNull
-            IsAutomationNull = $isAutomationNull
-            EnumerationState = 'PipelineItem'
+            Value = if ($shape.ValueState -eq 'Value') { [string] $baseValue } else { '' }
+            TypeName = if ($shape.ValueState -eq 'Value') { $baseValue.GetType().FullName } elseif ($shape.ValueState -eq 'AutomationNull') { $item.GetType().FullName } else { '' }
+            IsNull = $shape.ValueState -eq 'Null'
+            IsAutomationNull = $shape.ValueState -eq 'AutomationNull'
+            ValueState = $shape.ValueState
+            EnumerationState = $shape.EnumerationState
+            CollectionCardinality = $shape.CollectionCardinality
+            ElementTypeNames = @($shape.ElementTypeNames)
             Properties = @(Get-PropertyObservation -Value $item -ObservedPropertyNames @($config.ObservedPropertyNames))
         })
     }
@@ -230,6 +324,13 @@ foreach ($path in @($before.Keys + $after.Keys | Sort-Object -Unique)) {
     if (-not $after.ContainsKey($path)) { $effects.Add("Removed:${path}:$($before[$path])"); continue }
     if ($before[$path] -ne $after[$path]) { $effects.Add("Modified:${path}:$($after[$path])") }
 }
+$encoding = [ordered] @{
+    ConsoleInput = Get-EncodingWebName { [Console]::InputEncoding }
+    ConsoleOutput = Get-EncodingWebName { [Console]::OutputEncoding }
+    PowerShellOutput = Get-EncodingWebName { $OutputEncoding }
+    ObservationFile = if ($PSVersionTable.PSVersion.Major -le 5) { 'utf-8-bom' } else { 'utf-8' }
+    NativeArgumentPassing = Get-NativeArgumentPassing
+}
 
 $executablePath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 $executable = Get-Item -LiteralPath $executablePath
@@ -257,7 +358,7 @@ $hostArtifact = [ordered] @{
 }
 
 $envelope = [ordered] @{
-    SchemaVersion = 2
+    SchemaVersion = 3
     ProfileId = [string] $config.ProfileId
     ExecutionSurface = [string] $config.ExecutionSurface
     HostVersion = $hostArtifact.HostVersion
@@ -267,6 +368,7 @@ $envelope = [ordered] @{
     Culture = $hostArtifact.Culture
     HostArtifact = $hostArtifact
     Success = @($success)
+    SuccessState = if ($success.Count -eq 0) { 'NoOutput' } else { 'Output' }
     Information = @($information)
     Warnings = @($warnings)
     Verbose = @($verbose)
@@ -274,8 +376,12 @@ $envelope = [ordered] @{
     StreamRecords = @($streamRecords)
     Errors = @($errors)
     ErrorRecords = @($errorRecords)
-    ExitCode = $scriptExitCode
+    ExitCode = $null
     FileSystemEffects = @($effects)
+    Encoding = $encoding
+    ProcessState = [ordered] @{
+        LastExitCode = if ($lastExitCode -is [int]) { [int] $lastExitCode } else { $null }
+    }
     ProcessEffects = @()
 }
 $envelope | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath ([string] $config.OutputPath) -Encoding utf8

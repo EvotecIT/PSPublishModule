@@ -49,8 +49,7 @@ public static class PowerShellCompilationSemanticOraclePromotionGate
         foreach (var observation in observations)
         {
             if (observation is null) throw new ArgumentException("Semantic observations cannot contain null entries.", nameof(observations));
-            if (observation.SchemaVersion != 2)
-                throw new InvalidOperationException($"Semantic promotion requires envelope schema 2, not {observation.SchemaVersion}.");
+            PowerShellCompilationSemanticOracleEnvelopeValidator.Validate(observation);
             var profile = PowerShellCompilationSemanticOracleCatalog.Get(observation.ProfileId);
             if (!PowerShellCompilationSemanticOracleCatalog.FeatureProvenance.Any(evidence =>
                     evidence.FeatureId.Equals(feature, StringComparison.Ordinal) &&
@@ -86,6 +85,19 @@ public static class PowerShellCompilationSemanticOraclePromotionGate
             throw new InvalidOperationException("Semantic promotion requires at least two distinct profile/execution-surface observations.");
         if (!hostBackedProfiles.Overlaps(runtimeFreeProfiles))
             throw new InvalidOperationException("Semantic promotion requires a pinned host-backed observation and a runtime-free CLR observation for the same semantic profile.");
+        foreach (var runtimeFree in observations.Where(static observation =>
+                     Enum.TryParse<PowerShellCompilationSemanticExecutionSurface>(observation.ExecutionSurface, true, out var surface) &&
+                     surface is PowerShellCompilationSemanticExecutionSurface.Strict or PowerShellCompilationSemanticExecutionSurface.HandWrittenClr))
+        {
+            var matchingHost = observations.Any(observation =>
+                observation.ProfileId.Equals(runtimeFree.ProfileId, StringComparison.Ordinal) &&
+                observation.HostArtifact is not null &&
+                observation.OperatingSystem.Equals(runtimeFree.OperatingSystem, StringComparison.OrdinalIgnoreCase) &&
+                observation.Architecture.Equals(runtimeFree.Architecture, StringComparison.OrdinalIgnoreCase) &&
+                observation.Culture.Equals(runtimeFree.Culture, StringComparison.OrdinalIgnoreCase));
+            if (!matchingHost)
+                throw new InvalidOperationException($"Runtime-free observation for '{runtimeFree.ProfileId}' has no host-backed observation with matching OS, architecture, and culture.");
+        }
 
         var allowed = (allowedDifferencePaths ?? Array.Empty<string>())
             .Select(static path => path?.Trim() ?? string.Empty)

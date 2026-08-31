@@ -132,7 +132,7 @@ public sealed class PowerShellCompilationSemanticOracleRunner
         string expectedExecutionSurface,
         string expectedHostArtifact)
     {
-        if (envelope.SchemaVersion != 2)
+        if (envelope.SchemaVersion != 3)
             throw new InvalidOperationException($"Unsupported semantic-oracle envelope schema {envelope.SchemaVersion}.");
         if (!string.Equals(profile.ProfileId, envelope.ProfileId, StringComparison.Ordinal))
             throw new InvalidOperationException("Semantic oracle returned the wrong profile identity.");
@@ -144,6 +144,7 @@ public sealed class PowerShellCompilationSemanticOracleRunner
         if (expectedHostArtifact.Length > 0 && !string.Equals(expectedHostArtifact, artifact.IdentitySha256, StringComparison.Ordinal))
             throw new InvalidOperationException($"Semantic oracle host artifact '{artifact.IdentitySha256}' does not match the required identity '{expectedHostArtifact}'.");
         ValidateEnvelopeMirror(envelope, artifact);
+        PowerShellCompilationSemanticOracleEnvelopeValidator.Validate(envelope, profile.ProfileId);
     }
 
     private static void ValidateEnvelopeMirror(

@@ -247,6 +247,21 @@ public sealed class PowerShellCompilationSemanticPropertyObservation
 
     /// <summary>Whether the property value is null.</summary>
     public bool IsNull { get; set; }
+
+    /// <summary>Whether the property value is PowerShell's no-value sentinel.</summary>
+    public bool IsAutomationNull { get; set; }
+
+    /// <summary>Semantic value state: Value, Null, or AutomationNull.</summary>
+    public string ValueState { get; set; } = "Value";
+
+    /// <summary>Whether the value is scalar, a dictionary, or a collection retained as one value.</summary>
+    public string EnumerationState { get; set; } = "Scalar";
+
+    /// <summary>Known retained collection cardinality, or null when the value is not a countable collection.</summary>
+    public int? CollectionCardinality { get; set; }
+
+    /// <summary>Ordered distinct element runtime types for a safely inspectable retained collection.</summary>
+    public string[] ElementTypeNames { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>One normalized value written to a PowerShell stream.</summary>
@@ -267,8 +282,17 @@ public sealed class PowerShellCompilationSemanticValueObservation
     /// <summary>Whether the observed value is PowerShell's internal no-value sentinel.</summary>
     public bool IsAutomationNull { get; set; }
 
-    /// <summary>Observable pipeline enumeration state.</summary>
-    public string EnumerationState { get; set; } = "PipelineItem";
+    /// <summary>Semantic value state: Value, Null, or AutomationNull.</summary>
+    public string ValueState { get; set; } = "Value";
+
+    /// <summary>Whether the pipeline item is scalar, a dictionary, or a collection retained as one value.</summary>
+    public string EnumerationState { get; set; } = "Scalar";
+
+    /// <summary>Known retained collection cardinality, or null when the value is not a countable collection.</summary>
+    public int? CollectionCardinality { get; set; }
+
+    /// <summary>Ordered distinct element runtime types for a safely inspectable retained collection.</summary>
+    public string[] ElementTypeNames { get; set; } = Array.Empty<string>();
 
     /// <summary>Stable selected-property snapshot in the source object's original property order.</summary>
     public PowerShellCompilationSemanticPropertyObservation[] Properties { get; set; } = Array.Empty<PowerShellCompilationSemanticPropertyObservation>();
@@ -281,7 +305,7 @@ public sealed class PowerShellCompilationSemanticValueObservation
 public sealed class PowerShellCompilationSemanticOracleEnvelope
 {
     /// <summary>Envelope schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>Semantic profile identity.</summary>
     public string ProfileId { get; set; } = string.Empty;
@@ -309,6 +333,9 @@ public sealed class PowerShellCompilationSemanticOracleEnvelope
 
     /// <summary>Ordered success-stream observations.</summary>
     public PowerShellCompilationSemanticValueObservation[] Success { get; set; } = Array.Empty<PowerShellCompilationSemanticValueObservation>();
+
+    /// <summary>Observable success result state: Output or NoOutput.</summary>
+    public string SuccessState { get; set; } = "NoOutput";
 
     /// <summary>Ordered information-stream observations.</summary>
     public string[] Information { get; set; } = Array.Empty<string>();
@@ -343,8 +370,50 @@ public sealed class PowerShellCompilationSemanticOracleEnvelope
     /// <summary>Normalized file-system effects relative to the isolated oracle root.</summary>
     public string[] FileSystemEffects { get; set; } = Array.Empty<string>();
 
-    /// <summary>Normalized child-process effects.</summary>
-    public string[] ProcessEffects { get; set; } = Array.Empty<string>();
+    /// <summary>Encoding facts that can affect text and native-command behavior.</summary>
+    public PowerShellCompilationSemanticEncodingObservation Encoding { get; set; } = new();
+
+    /// <summary>Final process-related state exposed by the execution surface.</summary>
+    public PowerShellCompilationSemanticProcessStateObservation ProcessState { get; set; } = new();
+
+    /// <summary>Reserved sequenced child-process effects. Schema 3 accepts no entries until launches can be observed directly.</summary>
+    public PowerShellCompilationSemanticProcessEffectObservation[] ProcessEffects { get; set; } = Array.Empty<PowerShellCompilationSemanticProcessEffectObservation>();
+}
+
+/// <summary>Portable encoding facts recorded at an oracle execution boundary.</summary>
+public sealed class PowerShellCompilationSemanticEncodingObservation
+{
+    /// <summary>Console input encoding web name.</summary>
+    public string ConsoleInput { get; set; } = string.Empty;
+
+    /// <summary>Console output encoding web name.</summary>
+    public string ConsoleOutput { get; set; } = string.Empty;
+
+    /// <summary>PowerShell native-pipeline output encoding web name when applicable.</summary>
+    public string PowerShellOutput { get; set; } = string.Empty;
+
+    /// <summary>Encoding used for the observation artifact itself.</summary>
+    public string ObservationFile { get; set; } = "utf-8";
+
+    /// <summary>Selected native-command argument-passing mode when exposed by the host.</summary>
+    public string NativeArgumentPassing { get; set; } = string.Empty;
+}
+
+/// <summary>Final process-related state without claiming that a child-process launch was observed.</summary>
+public sealed class PowerShellCompilationSemanticProcessStateObservation
+{
+    /// <summary>Final value of PowerShell's LASTEXITCODE variable, when it was set.</summary>
+    public int? LastExitCode { get; set; }
+}
+
+/// <summary>One future sequenced process effect observed directly by the semantic boundary.</summary>
+public sealed class PowerShellCompilationSemanticProcessEffectObservation
+{
+    /// <summary>Effect kind, currently NativeCommandExit.</summary>
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>Observed native-process exit code.</summary>
+    public int ExitCode { get; set; }
 }
 
 /// <summary>Black-box interpreted-host execution request used by the semantic oracle runner.</summary>
