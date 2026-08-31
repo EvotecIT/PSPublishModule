@@ -120,13 +120,14 @@ internal static partial class Program
                     "xcodebuild",
                     "/usr/bin/xcodebuild",
                     "Exact-source local Apple builds");
-                planSnapshot = AppleBuildProvenance.CaptureBuildInputs(
+                planSnapshot = AppleBuildProvenance.CaptureStableBuildInputs(
                     provenanceRoot,
-                    excludesGeneratedDirectories: useBuildMirror);
-                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
-                    provenanceRoot,
-                    projectPath,
-                    scheme);
+                    excludesGeneratedDirectories: useBuildMirror,
+                    inspectBuildGraph: () =>
+                        AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                            provenanceRoot,
+                            projectPath,
+                            scheme));
             }
 
             var cliResult = new AppleLocalDeploymentCliResult

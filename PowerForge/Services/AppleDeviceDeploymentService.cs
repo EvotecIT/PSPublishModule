@@ -166,6 +166,14 @@ public sealed partial class AppleDeviceDeploymentService
             sourceRoot,
             nameof(request.DerivedDataPath),
             sourcePathComparison);
+        if (deploymentProductRoot is not null)
+        {
+            EnsureOutputPathOutsideBuildRoot(
+                deploymentProductRoot,
+                sourceRoot,
+                "private Apple product directory",
+                sourcePathComparison);
+        }
         EnsureOutputPathOutsideBuildRoot(
             appPath,
             sourceRoot,

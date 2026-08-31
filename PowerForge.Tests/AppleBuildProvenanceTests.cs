@@ -6,6 +6,36 @@ namespace PowerForge.Tests;
 public sealed class AppleBuildProvenanceTests
 {
     [Fact]
+    public void CaptureStableBuildInputs_rejects_a_transient_mutation_during_graph_inspection()
+    {
+        var root = CreateRepository();
+        try
+        {
+            var transientPath = Path.Combine(root.FullName, "transient.txt");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                AppleBuildProvenance.CaptureStableBuildInputs(
+                    root.FullName,
+                    excludesGeneratedDirectories: false,
+                    inspectBuildGraph: () =>
+                    {
+                        File.WriteAllText(transientPath, "temporary");
+                        File.Delete(transientPath);
+                    }));
+
+            Assert.Contains(
+                "changed while PowerForge Apple plan validation",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(transientPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ResolveLocalSourceRevision_requires_a_clean_working_tree()
     {
         var root = Directory.CreateDirectory(Path.Combine(

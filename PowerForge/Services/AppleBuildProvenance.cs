@@ -98,6 +98,33 @@ internal static class AppleBuildProvenance
         return snapshot;
     }
 
+    internal static Snapshot CaptureStableBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories,
+        Action inspectBuildGraph)
+    {
+        if (inspectBuildGraph is null)
+            throw new ArgumentNullException(nameof(inspectBuildGraph));
+
+        var root = Path.GetFullPath(sourceRoot);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(
+            root);
+        using var mutationMonitor = new AppleReleaseSourceMutationMonitor(
+            root,
+            "local Apple source",
+            "PowerForge Apple plan validation",
+            "Retry the plan from a stable working tree.",
+            ignoredMutation: args =>
+                IsGitMetadataMutation(args, root, comparison));
+        var snapshot = CaptureBuildInputs(
+            root,
+            excludesGeneratedDirectories);
+        inspectBuildGraph();
+        mutationMonitor.ValidateNoChanges(
+            () => ValidateUnchanged(snapshot));
+        return snapshot;
+    }
+
     internal static void ValidateXcodeBuildInputsWithinSource(
         string sourceRoot,
         string projectPath,

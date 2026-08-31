@@ -5,6 +5,63 @@ namespace PowerForge.Tests;
 public sealed partial class AppleDeviceDeploymentServiceTests
 {
     [Fact]
+    public async Task BuildForDeploymentAsync_rejects_a_private_product_root_inside_source_before_writing()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var previousTemporaryDirectory = Environment.GetEnvironmentVariable("TMPDIR");
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            InitializeGitRepository(root.FullName);
+            Environment.SetEnvironmentVariable("TMPDIR", root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildForDeploymentAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                    }));
+
+            Assert.Contains(
+                "private Apple product directory",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "outside BuildRoot",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(runner.Requests);
+            Assert.False(Directory.Exists(Path.Combine(
+                root.FullName,
+                "PowerForge")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "TMPDIR",
+                previousTemporaryDirectory);
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildForDeploymentAsync_rejects_a_linked_product_root_before_snapshotting()
     {
         if (Path.DirectorySeparatorChar == '\\')
