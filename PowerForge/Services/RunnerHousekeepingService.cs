@@ -470,6 +470,11 @@ public sealed partial class RunnerHousekeepingService
             if (File.Exists(target))
                 File.Delete(target);
         }
+        catch (UnauthorizedAccessException) when (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Directory.Exists(target))
+        {
+            ClearReadOnlyAttributesRecursively(target, allowedRootPath);
+            Directory.Delete(target, recursive: true);
+        }
         catch when (allowSudo && CanUseSudo() && (isDirectory == true || Directory.Exists(target)))
         {
             RunSudoDelete(target, allowedRootPath);

@@ -211,6 +211,57 @@ public sealed class RunnerHousekeepingServiceTests
     }
 
     [Fact]
+    public void Clean_Apply_DeletesWorkspaceContainingReadOnlyGitFiles()
+    {
+        var root = CreateSandbox();
+        var previousWorkspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+        try
+        {
+            var runnerRoot = Path.Combine(root, "runner");
+            var workRoot = Path.Combine(runnerRoot, "_work");
+            var runnerTemp = Path.Combine(workRoot, "_temp");
+            var oldWorkspace = Path.Combine(workRoot, "OldRepo");
+            var packRoot = Path.Combine(oldWorkspace, "OldRepo", ".git", "objects", "pack");
+            var readOnlyIndex = Path.Combine(packRoot, "pack-test.idx");
+
+            Directory.CreateDirectory(runnerTemp);
+            Directory.CreateDirectory(packRoot);
+            File.WriteAllText(readOnlyIndex, "x");
+            File.SetAttributes(readOnlyIndex, File.GetAttributes(readOnlyIndex) | FileAttributes.ReadOnly);
+            var staleTime = DateTime.UtcNow.AddDays(-10);
+            File.SetLastWriteTimeUtc(readOnlyIndex, staleTime);
+            foreach (var directory in Directory.EnumerateDirectories(oldWorkspace, "*", SearchOption.AllDirectories).OrderByDescending(static path => path.Length))
+                Directory.SetLastWriteTimeUtc(directory, staleTime);
+            Directory.SetLastWriteTimeUtc(oldWorkspace, staleTime);
+            Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", null);
+
+            var service = new RunnerHousekeepingService(new NullLogger());
+            var result = service.Clean(new RunnerHousekeepingSpec
+            {
+                RunnerTempPath = runnerTemp,
+                RunnerRootPath = runnerRoot,
+                WorkRootPath = workRoot,
+                MinFreeGb = null,
+                DryRun = false,
+                Aggressive = false,
+                ClearDotNetCaches = false,
+                PruneDocker = false,
+                CleanRunnerTemp = false,
+                CleanWorkspaces = true
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Steps, step => step.Id == "workspaces" && step.EntriesAffected == 1);
+            Assert.False(Directory.Exists(oldWorkspace));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GITHUB_WORKSPACE", previousWorkspace);
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Clean_Apply_UsesDescendantActivityForWorkspaceAge()
     {
         var root = CreateSandbox();
@@ -297,6 +348,19 @@ public sealed class RunnerHousekeepingServiceTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void DeleteSafety_RejectsReparsePointAttributes()
+    {
+        var method = typeof(RunnerHousekeepingService).GetMethod("EnsureNotReparsePoint", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() =>
+            method!.Invoke(null, new object?[] { "linked-workspace", FileAttributes.Directory | FileAttributes.ReparsePoint }));
+
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
     }
 
     [Fact]
