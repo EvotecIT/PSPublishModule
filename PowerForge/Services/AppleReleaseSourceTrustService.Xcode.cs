@@ -39,16 +39,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SWIFT_SYSTEM_INCLUDE_PATHS"
     };
 
-    private static readonly HashSet<string> FlagBuildSettings = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "OTHER_CFLAGS",
-        "OTHER_CPLUSPLUSFLAGS",
-        "OTHER_LDFLAGS",
-        "OTHER_LIBTOOLFLAGS",
-        "MTL_COMPILER_FLAGS",
-        "OTHER_SWIFT_FLAGS",
-        "INFOPLIST_OTHER_PREPROCESSOR_FLAGS"
-    };
+    private static bool IsFlagBuildSetting(string key)
+        => key.EndsWith("FLAGS", StringComparison.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> DefinitionBuildSettings = new(StringComparer.OrdinalIgnoreCase)
     {

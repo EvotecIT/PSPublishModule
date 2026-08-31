@@ -14,14 +14,14 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
             var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
-            var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
             var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var existing = Directory.CreateDirectory(Path.Combine(installRoot.FullName, "CasaRay.app"));
             File.WriteAllText(Path.Combine(existing.FullName, "version.txt"), "old");
 
             var runner = new CapturingProcessRunner(request =>
             {
+                if (request.FileName == "/usr/bin/xcodebuild")
+                    MaterializeBuildVersion(request, "new");
                 if (request.FileName == "/usr/bin/ditto")
                 {
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
@@ -168,14 +168,14 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
             var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
-            var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
             var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var orphanedBackup = Directory.CreateDirectory(Path.Combine(installRoot.FullName, ".CasaRay.app.powerforge-backup-interrupted"));
             File.WriteAllText(Path.Combine(orphanedBackup.FullName, "version.txt"), "old");
 
             var runner = new CapturingProcessRunner(request =>
             {
+                if (request.FileName == "/usr/bin/xcodebuild")
+                    MaterializeBuildVersion(request, "new");
                 if (request.FileName == "/usr/bin/ditto")
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                 return Success("ok");
@@ -333,6 +333,21 @@ public sealed partial class AppleMacAppDeploymentServiceTests
 
     private static void CopyDirectory(string source, string destination)
         => AppleArtifactCopy.CopyDirectory(source, destination);
+
+    private static void MaterializeBuildVersion(
+        ProcessRunRequest request,
+        string version)
+    {
+        AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
+        var productRoot = request.Arguments.Single(argument =>
+                argument.StartsWith(
+                    "CONFIGURATION_BUILD_DIR=",
+                    StringComparison.Ordinal))
+            .Substring("CONFIGURATION_BUILD_DIR=".Length);
+        File.WriteAllText(
+            Path.Combine(productRoot, "CasaRay.app", "version.txt"),
+            version);
+    }
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);

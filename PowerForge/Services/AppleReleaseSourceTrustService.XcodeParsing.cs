@@ -51,7 +51,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             {
                 values = SplitBuildSettingPaths(assignment.Value);
             }
-            else if (FlagBuildSettings.Contains(baseKey))
+            else if (IsFlagBuildSetting(baseKey))
             {
                 if (baseKey.Equals("INFOPLIST_OTHER_PREPROCESSOR_FLAGS", StringComparison.OrdinalIgnoreCase) &&
                     !preprocessInfoPlist)

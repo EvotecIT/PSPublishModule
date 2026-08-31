@@ -529,7 +529,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                     }));
 
             Assert.Contains(
-                "DerivedDataPath changed",
+                "fresh DerivedData build root changed",
                 error.Message,
                 StringComparison.OrdinalIgnoreCase);
             Assert.True(Directory.Exists(Path.Combine(root.FullName, ".git")));

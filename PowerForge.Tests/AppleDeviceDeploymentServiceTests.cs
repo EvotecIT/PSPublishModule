@@ -86,7 +86,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
 
             Assert.True(result.Succeeded);
             Assert.Equal($"id=3DA86114-A96C-5109-970A-B52EA186B0E9", result.Destination);
-            Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug-iphoneos", "Tactra.app"), result.AppPath);
+            Assert.Equal(Path.Combine(result.DerivedDataPath, "Build", "Products", "Debug-iphoneos", "Tactra.app"), result.AppPath);
             Assert.Single(runner.Requests);
             var request = runner.Requests[0];
             Assert.Equal("/usr/bin/xcodebuild", request.FileName);
@@ -104,7 +104,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 "-destination",
                 "id=3DA86114-A96C-5109-970A-B52EA186B0E9",
                 "-derivedDataPath",
-                derived,
+                result.DerivedDataPath,
                 "-allowProvisioningUpdates",
                 "build",
                 $"POWERFORGE_SOURCE_REVISION={revision}"
@@ -923,8 +923,8 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "Tactra.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
             var derived = ExternalOutputPath(root, "DerivedData");
-            var actualApp = Directory.CreateDirectory(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "Tactra.app"));
-            var service = new AppleDeviceDeploymentService(new CapturingProcessRunner(_ => Success("ok")));
+            var service = new AppleDeviceDeploymentService(
+                new AlternativeProductRunner("Debug-maccatalyst", "Tactra.app"));
             InitializeGitRepository(root.FullName);
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
@@ -938,7 +938,14 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             });
 
             Assert.True(result.Succeeded);
-            Assert.Equal(actualApp.FullName, result.AppPath);
+            Assert.Equal(
+                Path.Combine(
+                    result.DerivedDataPath,
+                    "Build",
+                    "Products",
+                    "Debug-maccatalyst",
+                    "Tactra.app"),
+                result.AppPath);
         }
         finally
         {
@@ -971,7 +978,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             });
 
             Assert.True(result.Succeeded);
-            Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug", "Tactra.app"), result.AppPath);
+            Assert.Equal(Path.Combine(result.DerivedDataPath, "Build", "Products", "Debug", "Tactra.app"), result.AppPath);
         }
         finally
         {
@@ -1005,7 +1012,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
 
             Assert.True(result.Succeeded);
             Assert.Equal("generic/platform=macOS,variant=Mac Catalyst", result.Destination);
-            Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"), result.AppPath);
+            Assert.Equal(Path.Combine(result.DerivedDataPath, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"), result.AppPath);
         }
         finally
         {
@@ -1167,6 +1174,10 @@ App installed:
                 result.Build.AppPath,
                 StringComparison.Ordinal);
             Assert.Equal(result.Build.AppPath, result.Install!.AppPath);
+            var privateDerivedDataRoot = ReadArgumentValue(
+                runner.Requests[0],
+                "-derivedDataPath");
+            Assert.False(Directory.Exists(privateDerivedDataRoot));
             var privateProductRoot = runner.Requests[0].Arguments.Single(argument =>
                     argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
                 .Substring("CONFIGURATION_BUILD_DIR=".Length);

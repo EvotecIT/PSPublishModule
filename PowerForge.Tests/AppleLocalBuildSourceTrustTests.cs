@@ -7,6 +7,67 @@ namespace PowerForge.Tests;
 public sealed class AppleLocalBuildSourceTrustTests
 {
     [Fact]
+    public void ValidateLocalBuildInputContainment_rejects_external_assembler_include_flags()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LocalAppleTrust",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            var externalRoot = Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge.Tests.ExternalAssemblerInput",
+                Guid.NewGuid().ToString("N"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                $$"""
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = XCBuildConfiguration;
+                            buildSettings = {
+                                OTHER_ASFLAGS = "-I {{externalRoot}}";
+                            };
+                        };
+                    };
+                }
+                """);
+            var schemeRoot = Directory.CreateDirectory(Path.Combine(
+                project.FullName,
+                "xcshareddata",
+                "xcschemes"));
+            File.WriteAllText(
+                Path.Combine(schemeRoot.FullName, "CasaRay.xcscheme"),
+                "<Scheme />");
+            InitializeGitRepository(root.FullName, writeInputs: null);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService()
+                    .ValidateLocalBuildInputContainment(
+                        root.FullName,
+                        project.FullName,
+                        "CasaRay"));
+
+            Assert.Contains(
+                "OTHER_ASFLAGS",
+                error.Message,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "inside the repository",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateLocalBuildInputContainment_rejects_an_unrelated_target_script_phase_fail_closed()
     {
         var root = Directory.CreateDirectory(Path.Combine(

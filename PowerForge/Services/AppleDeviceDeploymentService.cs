@@ -224,7 +224,8 @@ public sealed partial class AppleDeviceDeploymentService
                             ProcessResult = mirror.ProcessResult
                         },
                         productSnapshot: null,
-                        derivedDataDirectory: null);
+                        derivedDataDirectory: null,
+                        ownedDerivedDataDirectory: null);
                 }
 
                 var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
@@ -301,15 +302,30 @@ public sealed partial class AppleDeviceDeploymentService
         using var buildInputMonitorLease = buildInputMonitor;
         using var liveSourceMonitorLease = liveSourceMonitor;
 
-        Directory.CreateDirectory(derivedDataPath);
-        var derivedDataDirectory = AppleStableDirectoryIdentity.Capture(
+        using var derivedDataRoot = AppleDerivedDataBuildRoot.Create(
             derivedDataPath,
-            nameof(request.DerivedDataPath));
-        EnsureOutputPathOutsideBuildRoot(
-            derivedDataDirectory.Path,
             sourceRoot,
-            nameof(request.DerivedDataPath),
             sourcePathComparison);
+        derivedDataPath = derivedDataRoot.BuildPath;
+        resultDerivedDataPath = bindProductForDeployment
+            ? derivedDataRoot.ResultPath
+            : derivedDataRoot.BuildPath;
+        var derivedDataDirectory = derivedDataRoot.BuildDirectory;
+        var resultDerivedDataDirectory = derivedDataRoot.ResultDirectory;
+        if (deploymentProductRoot is null)
+        {
+            productDirectory = Path.Combine(
+                derivedDataPath,
+                "Build",
+                "Products",
+                GetProductDirectory(request));
+            appPath = ResolveAppPath(request, derivedDataPath);
+            EnsureOutputPathOutsideBuildRoot(
+                appPath,
+                sourceRoot,
+                nameof(request.AppPath),
+                sourcePathComparison);
+        }
         AppleStableDirectoryIdentity? deploymentProductDirectory = null;
         if (deploymentProductRoot is not null)
         {
@@ -397,7 +413,7 @@ public sealed partial class AppleDeviceDeploymentService
                 isolateGitConfiguration: packageSnapshot is not null);
             processRequest.SetPreStartBoundary(() =>
             {
-                derivedDataDirectory.ValidateUnchanged();
+                derivedDataRoot.ValidateFreshBeforeBuild();
                 deploymentProductDirectory?.ValidateUnchanged();
                 EnsureOutputPathOutsideBuildRoot(
                     derivedDataDirectory.Path,
@@ -460,6 +476,11 @@ public sealed partial class AppleDeviceDeploymentService
                 productSnapshot = null;
             }
 
+            var ownedDerivedDataDirectory = bindProductForDeployment
+                ? derivedDataRoot.ReleaseBuildDirectory()
+                : null;
+            if (!bindProductForDeployment && result.Succeeded)
+                derivedDataRoot.RetainBuildDirectory();
             return new AppleAppBuildOperation(
                 new AppleAppBuildResult
                 {
@@ -471,7 +492,8 @@ public sealed partial class AppleDeviceDeploymentService
                     ProcessResult = result
                 },
                 productSnapshot,
-                derivedDataDirectory,
+                resultDerivedDataDirectory,
+                ownedDerivedDataDirectory,
                 deploymentProductDirectory);
         }
         catch
