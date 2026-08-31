@@ -289,6 +289,88 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectDocsSync_OnlyLocalLinksIncludesRepositoryLocalDotNetApiArtifact()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-local-dotnet-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "dotnetonly",
+                      "surfaces": { "apiDotNet": true, "apiPowerShell": false },
+                      "links": { "apiDotNet": "https://example.invalid/dotnetonly/api/" },
+                      "artifacts": { "api": "WebsiteArtifacts/apidocs" }
+                    },
+                    {
+                      "slug": "traversal",
+                      "surfaces": { "apiDotNet": true },
+                      "links": { "apiDotNet": "https://example.invalid/traversal/api/" },
+                      "artifacts": { "api": "../outside-api" }
+                    },
+                    {
+                      "slug": "backslash-rooted",
+                      "surfaces": { "apiDotNet": true },
+                      "links": { "apiDotNet": "https://example.invalid/backslash-rooted/api/" },
+                      "artifacts": { "api": "\\\\outside-api" }
+                    }
+                  ]
+                }
+                """);
+
+            var sourceApi = Path.Combine(root, "projects-sources", "dotnetonly", "WebsiteArtifacts", "apidocs");
+            Directory.CreateDirectory(sourceApi);
+            File.WriteAllText(Path.Combine(sourceApi, "Library.xml"), "<doc />");
+
+            var outsideApi = Path.Combine(root, "projects-sources", "outside-api");
+            Directory.CreateDirectory(outsideApi);
+            File.WriteAllText(Path.Combine(outsideApi, "Secret.xml"), "<doc />");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-docs-sync",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/docs",
+                      "syncDocs": false,
+                      "syncApi": true,
+                      "apiRoot": "./data/apidocs",
+                      "sourceApiPaths": ["websiteartifacts/apidocs"],
+                      "syncExamples": false,
+                      "onlyLocalLinks": true,
+                      "failOnMissingApiSource": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("api=1/1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "dotnetonly", "Library.xml")));
+            Assert.False(File.Exists(Path.Combine(root, "data", "apidocs", "traversal", "Secret.xml")));
+            Assert.False(Directory.Exists(Path.Combine(root, "data", "apidocs", "backslash-rooted")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectDocsSync_FailsWhenMissingApiSourceAndFailOnMissingApiSourceEnabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-fail-missing-api-" + Guid.NewGuid().ToString("N"));
@@ -489,7 +571,7 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
     }
 
     [Fact]
-    public void RunPipeline_ProjectDocsSync_UsesRawExamplesFolderWhenExplicitlyConfigured()
+    public void RunPipeline_ProjectDocsSync_UsesDeclaredExamplesArtifactPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-examples-explicit-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -502,12 +584,16 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
                 """
                 {
                   "projects": [
-                    { "slug": "alpha", "surfaces": { "docs": false, "examples": true } }
+                    {
+                      "slug": "alpha",
+                      "surfaces": { "docs": false, "examples": true },
+                      "artifacts": { "examples": "WebsiteArtifacts/examples" }
+                    }
                   ]
                 }
                 """);
 
-            var rawExamples = Path.Combine(root, "projects-sources", "alpha", "Examples");
+            var rawExamples = Path.Combine(root, "projects-sources", "alpha", "WebsiteArtifacts", "examples");
             Directory.CreateDirectory(rawExamples);
             File.WriteAllText(Path.Combine(rawExamples, "Invoke-Alpha.ps1"), "Invoke-Alpha -Name Demo");
 
@@ -537,7 +623,6 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
                       "syncDocs": false,
                       "syncExamples": true,
                       "examplesRoot": "./content/project-examples",
-                      "sourceExamplesPaths": ["Examples"],
                       "summaryPath": "./Build/sync-project-docs-summary.json"
                     }
                   ]
@@ -559,7 +644,7 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             var markdown = File.ReadAllText(generatedMarkdown);
             Assert.Contains("meta.generated_by: \"powerforge.project-docs-sync\"", markdown, StringComparison.Ordinal);
             Assert.Contains("meta.project_base_slug: \"alpha\"", markdown, StringComparison.Ordinal);
-            Assert.Contains("meta.project_artifact_examples: \"Examples\"", File.ReadAllText(Path.Combine(root, "content", "projects", "alpha.md")), StringComparison.Ordinal);
+            Assert.Contains("meta.project_artifact_examples: \"WebsiteArtifacts/examples\"", File.ReadAllText(Path.Combine(root, "content", "projects", "alpha.md")), StringComparison.Ordinal);
             Assert.Contains("```powershell", markdown, StringComparison.Ordinal);
             Assert.Contains("Invoke-Alpha -Name Demo", markdown, StringComparison.Ordinal);
         }
@@ -633,6 +718,80 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             Assert.Contains("examples=1/1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(staleTarget));
             Assert.True(File.Exists(Path.Combine(root, "content", "project-examples", "alpha", "examples", "current-example.md")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectDocsSync_HydratesDeclaredApiPathFromLinkedZipArtifact()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-declared-api-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var artifactZip = Path.Combine(root, "api-artifact.zip");
+            using (var archive = ZipFile.Open(artifactZip, ZipArchiveMode.Create))
+            {
+                var apiEntry = archive.CreateEntry("bundle/WebsiteArtifacts/apidocs/Library.xml");
+                using var writer = new StreamWriter(apiEntry.Open());
+                writer.Write("<doc />");
+            }
+
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                $$"""
+                {
+                  "projects": [
+                    {
+                      "slug": "dotnetonly",
+                      "surfaces": { "apiDotNet": true },
+                      "links": {
+                        "apiDotNet": "{{artifactZip.Replace("\\", "\\\\", StringComparison.Ordinal)}}"
+                      },
+                      "artifacts": { "api": "WebsiteArtifacts/apidocs" }
+                    }
+                  ]
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-docs-sync",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/docs",
+                      "syncDocs": false,
+                      "syncApi": true,
+                      "apiRoot": "./data/apidocs",
+                      "syncExamples": false,
+                      "hydrateFromArtifacts": true,
+                      "failOnMissingApiSource": true,
+                      "summaryPath": "./Build/sync-project-docs-summary.json",
+                      "strict": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("api=1/1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "dotnetonly", "Library.xml")));
+
+            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "sync-project-docs-summary.json")));
+            Assert.Equal(1, summary.RootElement.GetProperty("apiHydrated").GetInt32());
         }
         finally
         {
