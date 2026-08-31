@@ -83,6 +83,66 @@ public class WebPipelineRunnerBuildStepTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_VerifyUsesArtifactsAddedAfterBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-verify-artifacts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        Directory.CreateDirectory(Path.Combine(root, "downstream"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome.");
+            File.WriteAllText(Path.Combine(root, "downstream", "index.html"), "<h1>Generated API</h1>");
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Pipeline artifact verification",
+                  "baseUrl": "https://example.test",
+                  "collections": [
+                    { "name": "pages", "input": "content", "output": "/" }
+                  ],
+                  "navigation": {
+                    "autoDefaults": false,
+                    "menus": [
+                      {
+                        "name": "main",
+                        "items": [
+                          { "title": "Home", "url": "/" },
+                          { "title": "Generated API", "url": "/projects/foo/api/" }
+                        ]
+                      }
+                    ],
+                    "surfaces": [
+                      { "name": "main", "path": "/", "primaryMenu": "main" }
+                    ]
+                  }
+                }
+                """);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    { "task": "build", "id": "build", "config": "./site.json", "out": "./site", "clean": true },
+                    { "task": "overlay", "id": "downstream", "dependsOn": "build", "source": "./downstream", "destination": "./site/projects/foo/api" },
+                    { "task": "verify", "id": "verify", "dependsOn": "downstream", "config": "./site.json", "failOnNavLint": true }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, string.Join(Environment.NewLine, result.Steps.Select(step => step.Message)));
+            Assert.Equal(3, result.Steps.Count);
+            Assert.All(result.Steps, step => Assert.True(step.Success, step.Message));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

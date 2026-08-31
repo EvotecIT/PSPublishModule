@@ -1,0 +1,1150 @@
+using PowerForge.Web;
+
+public partial class WebSiteVerifierTests
+{
+    [Fact]
+    public void Verify_MatchesCustomHtmlSocialCardEmissionAndRendererAvailability()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-social-custom-format-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "index.md"),
+                "---\ntitle: Home\nslug: index\n---\nCustom HTML renderer.");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Custom HTML social route",
+                BaseUrl = "https://example.test",
+                Outputs = new OutputsSpec
+                {
+                    Formats = [new OutputFormatSpec { Name = "legacy", MediaType = "text/html", Suffix = "htm" }]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/", Outputs = ["legacy"] }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var item = Assert.Single(WebSiteBuilder.BuildContentItemsForVerification(spec, plan));
+            var cardRoute = WebSiteBuilder.ResolveGeneratedSocialCardRoute(spec, item, root);
+            Assert.StartsWith("/assets/social/generated/", cardRoute, StringComparison.Ordinal);
+            spec.Navigation.Menus =
+            [
+                new MenuSpec
+                {
+                    Name = "main",
+                    Items = [new MenuItemSpec { Title = "Generated card", Url = cardRoute }]
+                }
+            ];
+
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var cardPath = Path.Combine(outputRoot, cardRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            var missingRouteWarning = HasMissingRouteWarning(result, cardRoute);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "index.htm")));
+            using (var sitemap = System.Text.Json.JsonDocument.Parse(
+                       File.ReadAllText(Path.Combine(outputRoot, "_powerforge", "sitemap-entries.json"))))
+            {
+                Assert.Contains(
+                    sitemap.RootElement.GetProperty("entries").EnumerateArray(),
+                    entry => entry.GetProperty("path").GetString() == "/index.htm");
+                Assert.DoesNotContain(
+                    sitemap.RootElement.GetProperty("entries").EnumerateArray(),
+                    entry => entry.GetProperty("path").GetString() == "/");
+            }
+            var generatedSitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot,
+                BaseUrl = spec.BaseUrl,
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false
+            });
+            var sitemapXml = File.ReadAllText(generatedSitemap.OutputPath);
+            Assert.Contains("<loc>https://example.test/index.htm</loc>", sitemapXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("<loc>https://example.test/</loc>", sitemapXml, StringComparison.Ordinal);
+            Assert.Equal(File.Exists(cardPath), !missingRouteWarning);
+            Assert.Equal(WebSocialCardGenerator.IsPngRenderingAvailable(), File.Exists(cardPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_TrustsRenderedNoIndexForArbitraryHtmlFormatSuffix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-custom-html-noindex-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "guide.md"),
+                "---\ntitle: Guide\n---\n<meta name=\"robots\" content=\"noindex\">\nGuide");
+            var spec = new SiteSpec
+            {
+                Name = "Custom HTML noindex",
+                BaseUrl = "https://example.test",
+                Outputs = new OutputsSpec
+                {
+                    Formats = [new OutputFormatSpec { Name = "legacy", MediaType = "text/html", Suffix = "xhtml" }]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/", Outputs = ["legacy"] }]
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            var renderedPath = Path.Combine(outputRoot, "guide", "index.xhtml");
+            Assert.True(File.Exists(renderedPath));
+            using var metadata = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(outputRoot, "_powerforge", "sitemap-entries.json")));
+            var entry = Assert.Single(metadata.RootElement.GetProperty("entries").EnumerateArray());
+            Assert.Equal("/guide/index.xhtml", entry.GetProperty("path").GetString());
+            Assert.True(entry.GetProperty("noIndex").GetBoolean());
+
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot,
+                BaseUrl = spec.BaseUrl,
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false
+            });
+            Assert.DoesNotContain("guide/index.xhtml", File.ReadAllText(sitemap.OutputPath), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersEveryExactGeneratedRedirectSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome");
+            File.WriteAllText(
+                Path.Combine(root, "content", "guide.md"),
+                "---\ntitle: Guide\naliases: [\"/legacy-guide/\"]\n---\nGuide");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var redirectRoutes = new[]
+            {
+                "/configured-old/",
+                "/legacy-file.html",
+                "/legacy-guide/",
+                "/docs/latest/",
+                "/docs/stable/",
+                "/guide/amp/"
+            };
+            const string invalidFileRedirectDirectory = "/legacy-file.html/";
+            const string invalidSlashlessRedirect = "/configured-old";
+            var spec = new SiteSpec
+            {
+                Name = "Generated redirect navigation routes",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                EnableLegacyAmpRedirects = true,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Redirects =
+                [
+                    new RedirectSpec { From = "/configured-old/", To = "/guide/" },
+                    new RedirectSpec { From = "/legacy-file.html", To = "/guide/" }
+                ],
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    GenerateAliasRedirects = true,
+                    Versions =
+                    [
+                        new VersionSpec
+                        {
+                            Name = "v2",
+                            Url = "/docs/v2/",
+                            Latest = true,
+                            Aliases = ["stable"]
+                        }
+                    ]
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = redirectRoutes
+                                .Prepend("/")
+                                .Append(invalidFileRedirectDirectory)
+                                .Append(invalidSlashlessRedirect)
+                                .Select((route, index) => new MenuItemSpec { Title = $"Redirect {index}", Url = route })
+                                .ToArray()
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var netlifyRedirects = File.ReadAllText(Path.Combine(outputRoot, "_redirects"));
+
+            Assert.All(redirectRoutes, route =>
+            {
+                Assert.Contains(route.TrimEnd('/'), netlifyRedirects, StringComparison.OrdinalIgnoreCase);
+                Assert.False(HasMissingRouteWarning(result, route), string.Join(Environment.NewLine, result.Warnings));
+            });
+            Assert.True(
+                HasMissingRouteWarning(result, invalidFileRedirectDirectory),
+                string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(
+                HasMissingRouteWarning(result, invalidSlashlessRedirect),
+                string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersExactGeneratedRedirectSourcesWithoutCollections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-static-only-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var spec = new SiteSpec
+            {
+                Name = "Static-only redirect navigation routes",
+                BaseUrl = "https://example.test",
+                Redirects = [new RedirectSpec { From = "/legacy-file.html", To = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Legacy", Url = "/legacy-file.html" },
+                                new MenuItemSpec { Title = "Invalid directory", Url = "/legacy-file.html/" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, "/legacy-file.html"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/legacy-file.html/"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsNonRegexRedirectMatchersAcrossNavigationPatterns()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-redirect-matchers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var spec = new SiteSpec
+            {
+                Name = "Generated redirect matcher routes",
+                BaseUrl = "https://example.test",
+                Redirects =
+                [
+                    new RedirectSpec { From = "/old/", To = "/", MatchType = RedirectMatchType.Exact },
+                    new RedirectSpec { From = "/query?id=1", To = "/", MatchType = RedirectMatchType.Exact },
+                    new RedirectSpec { From = "/legacy", To = "/archive/{path}", MatchType = RedirectMatchType.Prefix },
+                    new RedirectSpec { From = "/downloads/*", To = "/files/{path}", MatchType = RedirectMatchType.Wildcard },
+                    new RedirectSpec { From = "/campaign/*?source=old", To = "/archive/{path}", MatchType = RedirectMatchType.Prefix },
+                    new RedirectSpec { From = "^/regex/(.*)$", To = "/archive/{path}", MatchType = RedirectMatchType.Regex }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec
+                                {
+                                    Title = "Exact pattern",
+                                    Url = "/old/",
+                                    Match = "/old/",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/old/"] }
+                                },
+                                new MenuItemSpec { Title = "Exact path with arbitrary query", Url = "/old/?id=anything" },
+                                new MenuItemSpec { Title = "Exact query", Url = "/query?id=1" },
+                                new MenuItemSpec { Title = "Exact query with optional slash", Url = "/query/?id=1" },
+                                new MenuItemSpec { Title = "Exact query with repeated slash", Url = "/query//?id=1" },
+                                new MenuItemSpec { Title = "Wrong exact query", Url = "/query?id=2" },
+                                new MenuItemSpec { Title = "Missing exact query", Url = "/query" },
+                                new MenuItemSpec { Title = "Prefix base", Url = "/legacy" },
+                                new MenuItemSpec
+                                {
+                                    Title = "Prefix descendant pattern",
+                                    Url = "/legacy/guide",
+                                    Match = "/legacy/guide/**",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/legacy/guide/**"] }
+                                },
+                                new MenuItemSpec { Title = "Wildcard descendant", Url = "/downloads/tool" },
+                                new MenuItemSpec
+                                {
+                                    Title = "Wildcard narrow pattern",
+                                    Url = "/downloads/tools/latest",
+                                    Match = "/downloads/tools/**",
+                                    Visibility = new NavigationVisibilitySpec { Paths = ["/downloads/tools/**"] }
+                                },
+                                new MenuItemSpec { Title = "Prefix query", Url = "/campaign/guide?source=old" },
+                                new MenuItemSpec { Title = "Wrong prefix query", Url = "/campaign/guide?source=new" },
+                                new MenuItemSpec { Title = "Invalid prefix neighbor", Url = "/legacyish/guide" },
+                                new MenuItemSpec { Title = "Invalid wildcard neighbor", Url = "/download/tool" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+
+            var result = WebSiteVerifier.Verify(spec, WebSitePlanner.Plan(spec, configPath));
+
+            Assert.False(HasMissingRouteWarning(result, "/legacy"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/downloads/tool"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/old/?id=anything"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/query?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/query/?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/query//?id=1"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, "/campaign/guide?source=old"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Exact pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Prefix descendant pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Wildcard narrow pattern", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("match any generated route", StringComparison.OrdinalIgnoreCase));
+            Assert.True(HasMissingRouteWarning(result, "/query?id=2"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/query"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/campaign/guide?source=new"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/legacyish/guide"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/download/tool"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ValidatesGeneratedRootDataWithoutStaticMappings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-generated-root-data-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "guide.md"), "---\ntitle: Guide\n---\nGuide");
+            var spec = new SiteSpec
+            {
+                Name = "Generated root data coverage",
+                BaseUrl = "https://example.test",
+                DataRoot = "./payload",
+                Collections = [new CollectionSpec { Name = "docs", Input = "content", Output = "/docs" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Guide", Url = "/docs/guide/" },
+                                new MenuItemSpec { Title = "Navigation data", Url = "/payload/site-nav.json" },
+                                new MenuItemSpec { Title = "Missing root data", Url = "/payload/missing.json" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "payload", "site-nav.json")));
+            Assert.False(HasMissingRouteWarning(result, "/payload/site-nav.json"), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, "/payload/missing.json"), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsPaginationForDistinctTaxonomyTermsWithCollidingSlugs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-slug-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "one.md"), "---\ntitle: One\ntags: [\"C#\"]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "two.md"), "---\ntitle: Two\ntags: [\"C++\"]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string pageTwoRoute = "/tags/page/2/";
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy slug collision pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Tag page 2", Url = pageTwoRoute }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "page", "2", "index.html")));
+            Assert.False(HasMissingRouteWarning(result, pageTwoRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsTermPaginationForLaterTaxonomyTermWithCollidingSlug()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-term-slug-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "csharp.md"), "---\ntitle: C sharp\ntags: [\"C#\"]\n---\nC sharp");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-one.md"), "---\ntitle: C plus plus one\ntags: [\"C++\"]\n---\nOne");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-two.md"), "---\ntitle: C plus plus two\ntags: [\"C++\"]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "content", "cplusplus-three.md"), "---\ntitle: C plus plus three\ntags: [\"C++\"]\n---\nThree");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string pageTwoRoute = "/tags/c/page/2/";
+            const string pageThreeRoute = "/tags/c/page/3/";
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy term slug collision pagination",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Tag page 2", Url = pageTwoRoute },
+                                new MenuItemSpec { Title = "Tag page 3", Url = pageThreeRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "c", "page", "2", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "c", "page", "3", "index.html")));
+            Assert.False(HasMissingRouteWarning(result, pageTwoRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, pageThreeRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsEmittedTaxonomySocialCardsIncludingPagination()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-social-cards-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "one.md"),
+                "---\ntitle: One\nblog: [alpha, shared]\n---\nOne");
+            File.WriteAllText(
+                Path.Combine(root, "content", "two.md"),
+                "---\ntitle: Two\nblog: [shared]\n---\nTwo");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy social card projection",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Taxonomies = [new TaxonomySpec { Name = "blog", BasePath = "/topics", PageSize = 1 }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Social = new SocialSpec { Enabled = true, AutoGenerateCards = true },
+                Navigation = new NavigationSpec { AutoDefaults = false }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var generatedCardsRoot = Path.Combine(outputRoot, "assets", "social", "generated");
+            var taxonomyCards = Directory.Exists(generatedCardsRoot)
+                ? Directory.GetFiles(generatedCardsRoot, "topics-*.png", SearchOption.TopDirectoryOnly)
+                : Array.Empty<string>();
+            Assert.Equal(WebSocialCardGenerator.IsPngRenderingAvailable() ? 5 : 0, taxonomyCards.Length);
+            if (taxonomyCards.Length == 0)
+                return;
+
+            var cardRoutes = taxonomyCards
+                .Select(path => "/assets/social/generated/" + Path.GetFileName(path))
+                .OrderBy(static route => route, StringComparer.Ordinal)
+                .ToArray();
+            spec.Navigation.Menus =
+            [
+                new MenuSpec
+                {
+                    Name = "main",
+                    Items = cardRoutes
+                        .Select((route, index) => new MenuItemSpec { Title = $"Taxonomy card {index + 1}", Url = route })
+                        .ToArray()
+                }
+            ];
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "page", "2", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "topics", "shared", "page", "2", "index.html")));
+            Assert.All(cardRoutes, route =>
+                Assert.False(HasMissingRouteWarning(result, route), string.Join(Environment.NewLine, result.Warnings)));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_KeepsNotFoundFileOutOfDirectoryRouteMatching()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-not-found-file-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "404.md"), "---\ntitle: Not found\n---\nMissing");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string fileRoute = "/404.html";
+            const string extensionlessRoute = "/404";
+            const string invalidDirectoryRoute = "/404.html/";
+            var spec = new SiteSpec
+            {
+                Name = "Not found route parity",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Not found file", Url = fileRoute },
+                                new MenuItemSpec { Title = "Not found extensionless alias", Url = extensionlessRoute },
+                                new MenuItemSpec { Title = "Invalid not found directory", Url = invalidDirectoryRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
+            Assert.False(HasMissingRouteWarning(result, fileRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, extensionlessRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, invalidDirectoryRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_PreservesLiteralPercentEscapesForGeneratedFilesAndResources()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-literal-percent-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "encoded"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "encoded", "index.md"),
+                "---\ntitle: Encoded\nslug: About%20Us\n---\nLiteral escape.");
+            File.WriteAllText(Path.Combine(root, "content", "encoded", "manual.pdf"), "manual");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string pageRoute = "/About%2520Us/";
+            const string resourceRoute = "/About%2520Us/manual.pdf";
+            var spec = new SiteSpec
+            {
+                Name = "Literal percent route",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Literal escape page", Url = pageRoute },
+                                new MenuItemSpec { Title = "Literal escape resource", Url = resourceRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "About%20Us", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "About%20Us", "manual.pdf")));
+            Assert.False(HasMissingRouteWarning(result, pageRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, resourceRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RegistersGeneratedTaxonomyTermWhenDraftContentOccupiesItsRoute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-draft-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "blog"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pages", "tags", "foo"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "blog", "post.md"), "---\ntitle: Post\ndate: 2026-08-30\ntags: [foo]\n---\nPost");
+            File.WriteAllText(Path.Combine(root, "content", "pages", "tags", "foo", "index.md"), "---\ntitle: Reserved\ndraft: true\n---\nReserved");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string termRoute = "/tags/foo/";
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy collision",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections =
+                [
+                    new CollectionSpec { Name = "blog", Preset = "blog", Input = "content/blog", Output = "/blog" },
+                    new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" }
+                ],
+                Taxonomies = [new TaxonomySpec { Name = "tags", BasePath = "/tags" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = [new MenuSpec { Name = "main", Items = [new MenuItemSpec { Title = "Foo", Url = termRoute }] }]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "tags", "foo", "index.html")));
+            Assert.Contains(result.Warnings, warning => warning.Contains("overlaps content route", StringComparison.OrdinalIgnoreCase));
+            Assert.False(HasMissingRouteWarning(result, termRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ReservesMaterializedFallbackTranslationKeysBetweenItems()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-fallback-reservation-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "first.md"), "---\ntitle: First\ntranslation_key: shared\n---\nFirst");
+            File.WriteAllText(Path.Combine(root, "content", "second.md"), "---\ntitle: Second\ntranslation_key: shared\n---\nSecond");
+            File.WriteAllText(Path.Combine(root, "static-marker.txt"), "marker");
+            const string firstRoute = "/pl/first/";
+            const string secondRoute = "/pl/second/";
+            var spec = new SiteSpec
+            {
+                Name = "Fallback reservation",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    DetectFromPath = true,
+                    FallbackToDefaultLanguage = true,
+                    MaterializeFallbackPages = true,
+                    Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                StaticAssets = [new StaticAssetSpec { Source = "static-marker.txt", Destination = "./" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "First fallback", Url = firstRoute },
+                                new MenuItemSpec { Title = "Second fallback", Url = secondRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+            var firstExists = File.Exists(Path.Combine(outputRoot, "pl", "first", "index.html"));
+            var secondExists = File.Exists(Path.Combine(outputRoot, "pl", "second", "index.html"));
+
+            Assert.NotEqual(firstExists, secondExists);
+            Assert.Equal(firstExists, !HasMissingRouteWarning(result, firstRoute));
+            Assert.Equal(secondExists, !HasMissingRouteWarning(result, secondRoute));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ProjectsReservedRouteCharactersFromPhysicalOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-reserved-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "about"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "about", "index.md"),
+                "---\ntitle: About\nslug: about#us\n---\nAbout us.");
+            File.WriteAllText(Path.Combine(root, "content", "about", "manual#one.pdf"), "manual");
+            var pageRoute = "/about%23us/";
+            var jsonRoute = "/about%23us/index.json";
+            var resourceRoute = "/about%23us/manual%23one.pdf";
+            var spec = new SiteSpec
+            {
+                Name = "Reserved route characters",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections =
+                [
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content",
+                        Output = "/",
+                        Outputs = ["html", "json"]
+                    }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Page", Url = pageRoute },
+                                new MenuItemSpec { Title = "JSON", Url = jsonRoute },
+                                new MenuItemSpec { Title = "Resource", Url = resourceRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "manual#one.pdf")));
+            Assert.False(HasMissingRouteWarning(result, pageRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, jsonRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, resourceRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RequiresHostAccurateRouteCasing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-route-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Guide\nslug: index\n---\nGuide.");
+            const string exactRoute = "/Guide/";
+            const string wrongCaseRoute = "/guide/";
+            var spec = new SiteSpec
+            {
+                Name = "Route case",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/Guide" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Exact", Url = exactRoute },
+                                new MenuItemSpec { Title = "Wrong case", Url = wrongCaseRoute },
+                                new MenuItemSpec { Title = "Exact match", Kind = "button", Match = "/Guide/**" },
+                                new MenuItemSpec { Title = "Wrong-case match", Kind = "button", Match = "/guide/**" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            Assert.Equal(exactRoute, Assert.Single(WebSiteBuilder.BuildContentItemsForVerification(spec, plan)).OutputPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, exactRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, wrongCaseRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Match '/Guide/**'", StringComparison.Ordinal));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Match '/guide/**'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_UsesObservedPipelineArtifactsAsAuthoritativeRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-pipeline-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome.");
+            const string downstreamRoute = "/projects/foo/api/";
+            var spec = new SiteSpec
+            {
+                Name = "Pipeline artifacts",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "API", Url = downstreamRoute }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var downstreamDirectory = Path.Combine(outputRoot, "projects", "foo", "api");
+            Directory.CreateDirectory(downstreamDirectory);
+            File.WriteAllText(Path.Combine(downstreamDirectory, "index.html"), "<h1>API</h1>");
+
+            var plannedOnly = WebSiteVerifier.Verify(spec, plan);
+            var observed = WebSiteVerifier.Verify(
+                spec,
+                plan,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web),
+                outputRoot);
+
+            Assert.True(HasMissingRouteWarning(plannedOnly, downstreamRoute), string.Join(Environment.NewLine, plannedOnly.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, downstreamRoute), string.Join(Environment.NewLine, observed.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ObservedArtifactsExcludeLanguagesOmittedFromBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-filtered-language-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "en"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pl"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "en", "guide.md"), "---\ntitle: Guide\n---\nEnglish guide.");
+            File.WriteAllText(Path.Combine(root, "content", "pl", "guide.md"), "---\ntitle: Poradnik\n---\nPolish guide.");
+            const string excludedPage = "/en/guide/";
+            const string renderedPage = "/pl/guide/";
+            const string excludedSearchShard = "/search/en/index.json";
+            const string renderedSearchShard = "/search/pl/index.json";
+            var spec = new SiteSpec
+            {
+                Name = "Filtered language artifact",
+                BaseUrl = "https://example.test",
+                Features = ["search"],
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Prefix = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl" }
+                    ]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "English", Url = excludedPage },
+                                new MenuItemSpec { Title = "Polish", Url = renderedPage },
+                                new MenuItemSpec { Title = "English search", Url = excludedSearchShard },
+                                new MenuItemSpec { Title = "Polish search", Url = renderedSearchShard }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot, language: "pl");
+            var planned = WebSiteVerifier.Verify(spec, plan);
+            var observed = WebSiteVerifier.Verify(
+                spec,
+                plan,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web),
+                outputRoot);
+
+            Assert.False(File.Exists(Path.Combine(outputRoot, "en", "guide", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "pl", "guide", "index.html")));
+            Assert.False(File.Exists(Path.Combine(outputRoot, "search", "en", "index.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "search", "pl", "index.json")));
+            Assert.False(HasMissingRouteWarning(planned, excludedPage), string.Join(Environment.NewLine, planned.Warnings));
+            Assert.False(HasMissingRouteWarning(planned, excludedSearchShard), string.Join(Environment.NewLine, planned.Warnings));
+            Assert.True(HasMissingRouteWarning(observed, excludedPage), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.True(HasMissingRouteWarning(observed, excludedSearchShard), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, renderedPage), string.Join(Environment.NewLine, observed.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, renderedSearchShard), string.Join(Environment.NewLine, observed.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_LocalizedPublicRouteContinuesPastStaticShapeNearMiss()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-localized-static-near-miss-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "pl"));
+        Directory.CreateDirectory(Path.Combine(root, "static"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "pl", "contact.md"), "---\ntitle: Kontakt\n---\nKontakt.");
+            File.WriteAllText(Path.Combine(root, "static", "contact.html"), "<h1>Static contact</h1>");
+            const string publicRoute = "/contact/";
+            var spec = new SiteSpec
+            {
+                Name = "Localized static near miss",
+                BaseUrl = "https://example.test",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = true,
+                    DetectFromPath = true,
+                    Languages =
+                    [
+                        new LanguageSpec { Code = "en", Prefix = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Prefix = "pl", RenderAtRoot = true }
+                    ]
+                },
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main-pl",
+                            Items = [new MenuItemSpec { Title = "Kontakt", Url = publicRoute }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, publicRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    private static bool HasMissingRouteWarning(WebVerifyResult result, string route)
+        => result.Warnings.Any(warning =>
+            warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&
+            warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+}

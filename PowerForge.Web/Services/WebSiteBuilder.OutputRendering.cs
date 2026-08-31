@@ -324,7 +324,7 @@ public static partial class WebSiteBuilder
         public ConcurrentDictionary<string, string> CriticalCssCache { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
+    internal static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
     {
         var formatNames = item.Outputs.Length > 0 ? item.Outputs : ResolveOutputRule(spec, item);
         if (formatNames.Length == 0)
@@ -504,7 +504,7 @@ public static partial class WebSiteBuilder
             : string.Join(Environment.NewLine, lines);
     }
 
-    private static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
+    internal static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
     {
         var baseRoute = NormalizeRouteForMatch(outputPath);
         if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
@@ -554,6 +554,14 @@ public static partial class WebSiteBuilder
             "jsonfeed" => RenderJsonFeedOutput(spec, item, allItems),
             _ => OptimizeNetworkHints(RenderHtmlPage(outputRoot, spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml))
         };
+    }
+
+    internal static bool RendersHtmlPage(OutputFormatSpec format)
+    {
+        if (format is null || string.IsNullOrWhiteSpace(format.Name))
+            return false;
+
+        return format.Name.ToLowerInvariant() is not ("json" or "rss" or "atom" or "jsonfeed");
     }
 
     private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -7,6 +8,8 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private static readonly ConcurrentDictionary<string, GeneratedSocialCardRenderObservation> GeneratedSocialCardRenderObservations =
+        new(StringComparer.Ordinal);
     private static readonly TimeSpan SocialRegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex MarkdownFenceRegex = new(
         "```[\\s\\S]*?```",
@@ -80,7 +83,94 @@ public static partial class WebSiteBuilder
         if (spec.Social is null || string.IsNullOrWhiteSpace(outputRoot))
             return string.Empty;
 
+        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName);
+        if (plan is null)
+            return string.Empty;
+
         var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
+        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, plan.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
+            return string.Empty;
+        var route = "/" + plan.RelativePath.Replace('\\', '/');
+        var bytes = WebSocialCardGenerator.RenderPng(plan.RenderOptions);
+        if (bytes is null || bytes.Length == 0)
+        {
+            RecordGeneratedSocialCardRenderObservation(route, fullPath, rendered: false);
+            return string.Empty;
+        }
+
+        WriteAllBytesIfChanged(fullPath, bytes);
+        RecordGeneratedSocialCardRenderObservation(route, fullPath, rendered: true);
+        return route;
+    }
+
+    internal static bool TryGetGeneratedSocialCardRenderOutcome(string route, string rootPath, out bool rendered)
+    {
+        rendered = false;
+        if (string.IsNullOrWhiteSpace(route) ||
+            !GeneratedSocialCardRenderObservations.TryGetValue(BuildGeneratedSocialCardRenderObservationKey(route, rootPath), out var observation))
+        {
+            return false;
+        }
+
+        rendered = observation.Rendered &&
+                   !string.IsNullOrWhiteSpace(observation.FullPath) &&
+                   File.Exists(observation.FullPath);
+        return true;
+    }
+
+    internal static void RecordFailedGeneratedSocialCardRenderForTesting(string route, string rootPath)
+        => GeneratedSocialCardRenderObservations[BuildGeneratedSocialCardRenderObservationKey(route, rootPath)] =
+            new GeneratedSocialCardRenderObservation(false, null);
+
+    internal static void ClearGeneratedSocialCardRenderOutcomeForTesting(string route, string rootPath)
+        => GeneratedSocialCardRenderObservations.TryRemove(BuildGeneratedSocialCardRenderObservationKey(route, rootPath), out _);
+
+    private static void RecordGeneratedSocialCardRenderObservation(string route, string fullPath, bool rendered)
+        => GeneratedSocialCardRenderObservations[BuildGeneratedSocialCardRenderObservationKey(route, BuildRootPathScope.Value)] =
+            new GeneratedSocialCardRenderObservation(rendered, fullPath);
+
+    private static string BuildGeneratedSocialCardRenderObservationKey(string route, string? rootPath)
+    {
+        var normalizedRoot = string.IsNullOrWhiteSpace(rootPath)
+            ? string.Empty
+            : Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return WebSocialCardGenerator.GetPngRendererIdentity() + "|" + normalizedRoot + "|" + route;
+    }
+
+    internal static string ResolveGeneratedSocialCardRoute(SiteSpec spec, ContentItem item, string? rootPath = null)
+    {
+        if (spec?.Social is null || item is null || !spec.Social.Enabled || !spec.Social.AutoGenerateCards)
+            return string.Empty;
+        if (TryGetMetaBool(item.Meta, "social", out var socialEnabled) && !socialEnabled)
+            return string.Empty;
+        if (!string.IsNullOrWhiteSpace(ResolveSocialImageOverride(item)) || !ShouldAutoGenerateSocialCardForPage(item))
+            return string.Empty;
+
+        var title = GetMetaString(item.Meta, "social_title");
+        if (string.IsNullOrWhiteSpace(title))
+            title = ResolveSeoTitle(spec, item);
+        if (string.IsNullOrWhiteSpace(title))
+            title = spec.Name;
+        var description = GetMetaString(item.Meta, "social_description");
+        if (string.IsNullOrWhiteSpace(description))
+            description = ResolveMetaDescription(spec, item);
+        var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
+        var plan = CreateSocialCardGenerationPlan(spec, item, title, description, siteName, rootPath);
+        return plan is null ? string.Empty : "/" + plan.RelativePath.Replace('\\', '/');
+    }
+
+    private static SocialCardGenerationPlan? CreateSocialCardGenerationPlan(
+        SiteSpec spec,
+        ContentItem item,
+        string title,
+        string description,
+        string siteName,
+        string? rootPath = null)
+    {
+        if (spec.Social is null)
+            return null;
+
         var generatedPath = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath);
         var routeForSlug = BuildSocialRouteLabel(item);
         var routeLabel = ResolveSocialRouteLabel(item, routeForSlug);
@@ -97,12 +187,12 @@ public static partial class WebSiteBuilder
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
         var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
         var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
-        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme));
+        var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme), rootPath);
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
-            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate)
+            ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate, rootPath)
             : string.Empty;
         var metrics = ResolveSocialCardMetrics(spec, item, cardTheme);
-        var themeTokens = MergeSocialCardThemeTokens(BuildRenderCacheScope.Value?.Manifest?.Tokens, cardTheme?.Tokens);
+        var themeTokens = MergeSocialCardThemeTokens(ResolveSocialCardSiteThemeTokens(spec, rootPath), cardTheme?.Tokens);
         var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var metricsFingerprint = ComputeSocialCardMetricsFingerprint(metrics);
         var hashInput = string.Join("|", new[]
@@ -126,10 +216,7 @@ public static partial class WebSiteBuilder
         var hash = ComputeSocialHash(hashInput);
         var fileName = $"{routeSlug}-{hash}.png";
         var relativePath = $"{generatedPath.TrimStart('/')}/{fileName}".TrimStart('/');
-        var fullPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
-            return string.Empty;
-        var bytes = WebSocialCardGenerator.RenderPng(new WebSocialCardGenerator.SocialCardRenderOptions
+        var renderOptions = new WebSocialCardGenerator.SocialCardRenderOptions
         {
             Title = title,
             Description = description,
@@ -146,14 +233,29 @@ public static partial class WebSiteBuilder
             LogoDataUri = logoSource,
             InlineImageDataUri = inlineImageSource,
             Metrics = metrics
-        });
-        if (bytes is null || bytes.Length == 0)
-            return string.Empty;
-
-        if (!WriteAllBytesIfChanged(fullPath, bytes))
-            return "/" + relativePath.Replace('\\', '/');
-        return "/" + relativePath.Replace('\\', '/');
+        };
+        return new SocialCardGenerationPlan(relativePath, renderOptions);
     }
+
+    private static Dictionary<string, object?>? ResolveSocialCardSiteThemeTokens(SiteSpec spec, string? rootPath)
+    {
+        var scopedTokens = BuildRenderCacheScope.Value?.Manifest?.Tokens;
+        if (scopedTokens is not null || string.IsNullOrWhiteSpace(rootPath))
+            return scopedTokens;
+
+        var themeRoot = ResolveThemeRoot(spec, rootPath);
+        if (string.IsNullOrWhiteSpace(themeRoot) || !Directory.Exists(themeRoot))
+            return null;
+
+        var manifest = new ThemeLoader().Load(themeRoot, ResolveThemesRoot(spec, rootPath));
+        return manifest?.Tokens;
+    }
+
+    private sealed record SocialCardGenerationPlan(
+        string RelativePath,
+        WebSocialCardGenerator.SocialCardRenderOptions RenderOptions);
+
+    private sealed record GeneratedSocialCardRenderObservation(bool Rendered, string? FullPath);
 
     private static string NormalizeGeneratedCardsPath(string? value)
     {
@@ -856,7 +958,7 @@ public static partial class WebSiteBuilder
         return string.Equals(styleKey, "blog", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate)
+    internal static string ResolveSocialCardAssetDataUri(SiteSpec spec, ContentItem item, string? candidate, string? rootPath = null)
     {
         if (string.IsNullOrWhiteSpace(candidate))
             return string.Empty;
@@ -868,7 +970,7 @@ public static partial class WebSiteBuilder
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return trimmed;
 
-        var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed);
+        var sourcePath = TryResolveSocialCardAssetPath(spec, item, trimmed, rootPath);
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
             return string.Empty;
 
@@ -889,10 +991,10 @@ public static partial class WebSiteBuilder
         return $"data:{mimeType};base64,{Convert.ToBase64String(File.ReadAllBytes(sourcePath))}";
     }
 
-    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate)
+    internal static string TryResolveSocialCardAssetPath(SiteSpec spec, ContentItem item, string candidate, string? rootPath = null)
     {
         var sourceDir = Path.GetDirectoryName(item.SourcePath);
-        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir);
+        var allowedRoots = BuildAllowedSocialCardAssetRoots(spec, sourceDir, rootPath);
 
         if (Path.IsPathRooted(candidate) && File.Exists(candidate))
         {
@@ -935,10 +1037,10 @@ public static partial class WebSiteBuilder
         return string.Empty;
     }
 
-    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir)
+    private static List<string> BuildAllowedSocialCardAssetRoots(SiteSpec spec, string? sourceDir, string? explicitRootPath = null)
     {
         var roots = new List<string>();
-        var rootPath = BuildRootPathScope.Value;
+        var rootPath = string.IsNullOrWhiteSpace(explicitRootPath) ? BuildRootPathScope.Value : explicitRootPath;
         if (!string.IsNullOrWhiteSpace(rootPath))
         {
             roots.Add(Path.GetFullPath(rootPath));

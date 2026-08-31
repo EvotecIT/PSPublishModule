@@ -504,7 +504,7 @@ public static partial class WebSiteBuilder
         return false;
     }
 
-    private static string NormalizeLanguageToken(string? value)
+    internal static string NormalizeLanguageToken(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;

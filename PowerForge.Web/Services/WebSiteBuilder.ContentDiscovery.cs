@@ -258,6 +258,69 @@ public static partial class WebSiteBuilder
         return items;
     }
 
+    /// <summary>Builds the same complete render queue used by a site build for artifact verification.</summary>
+    internal static IReadOnlyList<ContentItem> BuildContentItemsForVerification(SiteSpec spec, WebSitePlan plan) =>
+        BuildVerificationState(spec, plan).Items;
+
+    /// <summary>Builds the complete render and redirect state used by a site build for artifact verification.</summary>
+    internal static (IReadOnlyList<ContentItem> Items, IReadOnlyList<RedirectSpec> Redirects) BuildVerificationState(
+        SiteSpec spec,
+        WebSitePlan plan,
+        JsonSerializerOptions? options = null)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var previousRenderCache = BuildRenderCacheScope.Value;
+        var previousRootPath = BuildRootPathScope.Value;
+        var previousProjectDataCache = BuildProjectDataCacheScope.Value;
+        BuildRenderCacheScope.Value = CreateBuildRenderCache(spec, plan.RootPath);
+        BuildRootPathScope.Value = plan.RootPath;
+        BuildProjectDataCacheScope.Value = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var redirects = new List<RedirectSpec>();
+            if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
+            if (spec.Redirects is { Length: > 0 }) redirects.AddRange(spec.Redirects);
+
+            var projectSpecs = LoadProjectSpecs(plan.ProjectsRoot, options ?? WebJson.Options).ToList();
+            foreach (var project in projectSpecs)
+            {
+                if (project.Redirects is { Length: > 0 })
+                    redirects.AddRange(project.Redirects);
+            }
+            AddVersioningAliasRedirects(spec, redirects);
+
+            var data = LoadData(spec, plan, projectSpecs);
+            var projectMap = projectSpecs
+                .Where(static project => !string.IsNullOrWhiteSpace(project.Slug))
+                .ToDictionary(static project => project.Slug, StringComparer.OrdinalIgnoreCase);
+            var projectContentMap = projectSpecs
+                .Where(static project => project.Content is not null && !string.IsNullOrWhiteSpace(project.Slug))
+                .ToDictionary(static project => project.Slug, static project => project.Content!, StringComparer.OrdinalIgnoreCase);
+
+            var items = BuildContentItems(
+                spec,
+                plan,
+                redirects,
+                data,
+                projectMap,
+                projectContentMap,
+                ResolveCacheRoot(spec, plan.RootPath));
+            items = MaterializeLocalizedFallbackPages(spec, items);
+            items.AddRange(BuildTaxonomyItems(spec, items));
+            items = BuildPaginatedItems(spec, items);
+            AddLegacyAmpRedirects(spec, redirects, items);
+            return (items, redirects.ToArray());
+        }
+        finally
+        {
+            BuildRenderCacheScope.Value = previousRenderCache;
+            BuildRootPathScope.Value = previousRootPath;
+            BuildProjectDataCacheScope.Value = previousProjectDataCache;
+        }
+    }
+
     private static List<ContentItem> MaterializeLocalizedFallbackPages(SiteSpec spec, IReadOnlyList<ContentItem> items)
     {
         if (spec is null || items is null || items.Count == 0)
@@ -401,6 +464,23 @@ public static partial class WebSiteBuilder
         };
     }
 
+    internal static ContentItem CloneFallbackItem(
+        SiteSpec spec,
+        ContentItem source,
+        string outputPath,
+        string targetLanguage)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentNullException.ThrowIfNull(source);
+        var localization = ResolveLocalizationConfig(spec);
+        return CloneFallbackItem(
+            source,
+            outputPath,
+            targetLanguage,
+            localization.DefaultLanguage,
+            ResolveLanguageBaseUrl(spec, localization, localization.DefaultLanguage));
+    }
+
     private static string RebaseFallbackPageResourceUrls(
         string html,
         string sourceRoute,
@@ -473,39 +553,54 @@ public static partial class WebSiteBuilder
                 if (hasLanding)
                     continue;
 
-                var generatedTitle = string.IsNullOrWhiteSpace(collection.AutoSectionTitle)
-                    ? HumanizeSegment(collection.Name)
-                    : collection.AutoSectionTitle!.Trim();
-                var generatedDescription = string.IsNullOrWhiteSpace(collection.AutoSectionDescription)
-                    ? string.Empty
-                    : collection.AutoSectionDescription!.Trim();
-
-                allItems.Add(new ContentItem
-                {
-                    SourcePath = $"[generated:{collection.Name}]",
-                    Collection = collection.Name,
-                    OutputPath = expectedRoute,
-                    Language = language,
-                    TranslationKey = string.IsNullOrWhiteSpace(projectSlug)
-                        ? $"{collection.Name}:_index"
-                        : $"{collection.Name}:{projectSlug}/_index",
-                    Title = generatedTitle,
-                    Description = generatedDescription,
-                    LastModifiedUtc = MaxLastModifiedUtc(projectGroup
+                allItems.Add(CreateAutoGeneratedSectionIndexItem(
+                    collection,
+                    expectedRoute,
+                    language,
+                    projectSlug,
+                    MaxLastModifiedUtc(projectGroup
                         .Where(item => ResolveEffectiveLanguageCode(localization, item.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
-                        .Select(static item => item.LastModifiedUtc)),
-                    Slug = "index",
-                    Kind = PageKind.Section,
-                    Layout = string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout,
-                    ProjectSlug = projectSlug,
-                    Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        ["auto_generated_section_index"] = true
-                    },
-                    Outputs = collection.Outputs
-                });
+                        .Select(static item => item.LastModifiedUtc))));
             }
         }
+    }
+
+    internal static ContentItem CreateAutoGeneratedSectionIndexItem(
+        CollectionSpec collection,
+        string outputPath,
+        string language,
+        string? projectSlug,
+        DateTimeOffset? lastModifiedUtc = null)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        var generatedTitle = string.IsNullOrWhiteSpace(collection.AutoSectionTitle)
+            ? HumanizeSegment(collection.Name)
+            : collection.AutoSectionTitle!.Trim();
+        var generatedDescription = string.IsNullOrWhiteSpace(collection.AutoSectionDescription)
+            ? string.Empty
+            : collection.AutoSectionDescription!.Trim();
+        return new ContentItem
+        {
+            SourcePath = $"[generated:{collection.Name}]",
+            Collection = collection.Name,
+            OutputPath = outputPath,
+            Language = language,
+            TranslationKey = string.IsNullOrWhiteSpace(projectSlug)
+                ? $"{collection.Name}:_index"
+                : $"{collection.Name}:{projectSlug}/_index",
+            Title = generatedTitle,
+            Description = generatedDescription,
+            LastModifiedUtc = lastModifiedUtc,
+            Slug = "index",
+            Kind = PageKind.Section,
+            Layout = string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout,
+            ProjectSlug = projectSlug,
+            Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["auto_generated_section_index"] = true
+            },
+            Outputs = collection.Outputs
+        };
     }
 
     private static List<ContentItem> BuildTaxonomyItems(SiteSpec spec, IReadOnlyList<ContentItem> items)
@@ -623,7 +718,7 @@ public static partial class WebSiteBuilder
         return results;
     }
 
-    private static IEnumerable<string> GetTaxonomyValues(ContentItem item, TaxonomySpec taxonomy)
+    internal static IEnumerable<string> GetTaxonomyValues(ContentItem item, TaxonomySpec taxonomy)
     {
         if (taxonomy.Name.Equals("tags", StringComparison.OrdinalIgnoreCase))
             return item.Tags ?? Array.Empty<string>();
@@ -868,7 +963,7 @@ public static partial class WebSiteBuilder
         return PageKind.Page;
     }
 
-    private static PageResource[] BuildBundleResources(string bundleRoot)
+    internal static PageResource[] BuildBundleResources(string bundleRoot)
     {
         if (string.IsNullOrWhiteSpace(bundleRoot) || !Directory.Exists(bundleRoot))
             return Array.Empty<PageResource>();
@@ -1007,7 +1102,7 @@ public static partial class WebSiteBuilder
         return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
     }
 
-    private static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)
+    internal static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)
     {
         var outputs = TryGetMetaStringList(meta, "outputs");
         if (outputs.Length > 0)

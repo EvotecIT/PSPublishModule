@@ -46,7 +46,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web fleet report --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--output json]");
         Console.WriteLine("  powerforge-web fleet prune --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
-        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
+        Console.WriteLine("  powerforge-web verify --config <site.json> [--site-root <_site>] [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--forbidden-route <path[,path]>] [--nav-required-link <path[,path]>]");

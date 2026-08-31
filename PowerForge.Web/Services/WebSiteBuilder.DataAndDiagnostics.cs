@@ -636,6 +636,18 @@ public static partial class WebSiteBuilder
         return StripTagsRegex.Replace(input, string.Empty);
     }
 
+    internal static bool IsSearchableContent(bool draft, string? outputPath)
+    {
+        if (draft || string.IsNullOrWhiteSpace(outputPath))
+            return false;
+
+        var suffixIndex = outputPath.IndexOfAny(['?', '#']);
+        var path = suffixIndex < 0 ? outputPath : outputPath[..suffixIndex];
+        var normalized = path.Replace('\\', '/').Trim('/');
+        return !normalized.Equals("404", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Equals("404.html", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void WriteSearchIndex(SiteSpec spec, string outputRoot, IReadOnlyList<ContentItem> items)
     {
         if (items.Count == 0) return;
@@ -643,10 +655,7 @@ public static partial class WebSiteBuilder
         var entries = new List<SearchIndexEntry>();
         foreach (var item in items)
         {
-            if (item.Draft) continue;
-            if (string.IsNullOrWhiteSpace(item.OutputPath))
-                continue;
-            if (item.OutputPath.Equals("/404.html", StringComparison.OrdinalIgnoreCase))
+            if (!IsSearchableContent(item.Draft, item.OutputPath))
                 continue;
 
             var snippet = BuildSnippet(item.HtmlContent, 240);

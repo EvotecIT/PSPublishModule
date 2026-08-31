@@ -202,7 +202,8 @@ internal static partial class WebCliCommandHandlers
         var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
         var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-        var verify = WebSiteVerifier.Verify(spec, plan);
+        var generatedSiteRoot = TryGetOptionValue(subArgs, "--site-root") ?? TryGetOptionValue(subArgs, "--out");
+        var verify = WebSiteVerifier.Verify(spec, plan, WebCliJson.Options, generatedSiteRoot);
         var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
         var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
             verify,
