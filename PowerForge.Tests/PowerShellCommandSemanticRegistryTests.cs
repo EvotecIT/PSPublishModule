@@ -178,6 +178,38 @@ public sealed class PowerShellCommandSemanticRegistryTests
             Assert.Contains(sink, source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RuntimeFreeStreamProviderAcceptsProvablyNonEmptyExpandedMessage()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Write-Proof { param([int] $Value) Write-Verbose \"Current value: $Value\" }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "expanded-stream.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.IsType<PowerShellBoundStreamWriteStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
+        Assert.Contains("Current value:", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeStreamProviderRejectsExpandedMessageWithoutLiteralContent()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Write-Proof { param([string] $Value) Write-Verbose \"$Value\" }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "empty-expanded-stream.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Contains(result.Emitted.Diagnostics, static diagnostic => diagnostic.Code == "command.write-verbose");
+    }
+
     [Theory]
     [InlineData("Write-Output -InputObject 42", "InputObject")]
     [InlineData("Write-Verbose -Message 'verbose'", "Message")]

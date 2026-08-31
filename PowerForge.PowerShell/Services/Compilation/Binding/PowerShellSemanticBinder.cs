@@ -447,7 +447,7 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2309", "Typed finally blocks cannot alter enclosing return, break, or continue control flow.", PowerShellSourceParser.GetSpan(document, tryStatement.Finally.Extent)));
                 return null;
             }
-            var body = BindBlock(document, tryStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
+            var body = BindBlock(document, tryStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
             if (body is null) return null;
             var catches = new List<PowerShellBoundCatchClause>();
             foreach (var clause in tryStatement.CatchClauses)
@@ -466,7 +466,7 @@ internal sealed partial class PowerShellSemanticBinder
                     }
                     types.Add(type);
                 }
-                var catchBody = BindBlock(document, clause.Body, symbols, functions, diagnostics, targetFramework, capabilities);
+                var catchBody = BindBlock(document, clause.Body, symbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
                 if (catchBody is null) return null;
                 catches.Add(new PowerShellBoundCatchClause(types.ToArray(), catchBody));
             }
@@ -602,13 +602,23 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        bool terminalOutputReturns = false)
     {
         var statements = new List<PowerShellBoundStatement>();
-        foreach (var statement in syntax.Statements)
+        for (var index = 0; index < syntax.Statements.Count; index++)
         {
+            var statement = syntax.Statements[index];
             var diagnosticCount = diagnostics.Count;
-            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal: false, targetFramework, capabilities);
+            var bound = BindStatement(
+                document,
+                statement,
+                symbols,
+                functions,
+                diagnostics,
+                isTerminal: terminalOutputReturns && index == syntax.Statements.Count - 1,
+                targetFramework,
+                capabilities);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)

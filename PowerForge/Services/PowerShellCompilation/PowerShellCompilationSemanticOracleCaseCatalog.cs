@@ -46,11 +46,13 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("parameter-binding", PowerShellCompilationFeatureIds.ParameterBinding);
         yield return Case("conversion", PowerShellCompilationFeatureIds.Conversion);
         yield return Case("expandable-string", PowerShellCompilationFeatureIds.ExpandableString, expectedValue: "0");
+        yield return Case("expandable-scalar", PowerShellCompilationFeatureIds.ExpandableString, expectedValue: "value=42; flag=True", expectedTypeName: "System.String");
         yield return Case("assignment-target", PowerShellCompilationFeatureIds.AssignmentTarget, expectedValue: "0");
         yield return Case("switch-flags", PowerShellCompilationFeatureIds.SwitchFlags);
         yield return Case("catch-filter", PowerShellCompilationFeatureIds.CatchFilter);
         yield return Case("pipeline-lifecycle", PowerShellCompilationFeatureIds.PipelineLifecycle);
         yield return Case("function-graph", PowerShellCompilationFeatureIds.FunctionGraph);
+        yield return Case("member-null-propagation", PowerShellCompilationFeatureIds.ForSyntax("MemberExpressionAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("comment-based-help", PowerShellCompilationFeatureIds.CommentBasedHelp);
         yield return Case("requires-directive", PowerShellCompilationFeatureIds.RequiresDirective);
         yield return Case("dictionary-flow", PowerShellCompilationFeatureIds.DictionaryFlow);
@@ -60,6 +62,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("pipeline-enumeration", "pipeline.enumeration");
         yield return Case("runtime-process-user-culture-state", "runtime.read-only-state", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("runtime-read-only-state", "runtime.read-only-state");
+        yield return Case("try-terminal-output", PowerShellCompilationFeatureIds.ForSyntax("PipelineAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
     }
 
     private static PowerShellCompilationSemanticOracleCase Case(

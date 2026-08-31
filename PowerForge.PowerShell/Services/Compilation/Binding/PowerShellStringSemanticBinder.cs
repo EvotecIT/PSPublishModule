@@ -26,10 +26,10 @@ internal static class PowerShellStringSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2101", "Expandable-string subexpressions are not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
                 return null;
             }
-            var expression = bindExpression(nested, typeof(string));
-            if (expression is null || expression.Type.ClrType != typeof(string))
+            var expression = bindExpression(nested, null);
+            if (expression is null || !PowerShellStableScalarTypePolicy.IsSupported(expression.Type.ClrType))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Typed expandable-string variables must have a stable String representation.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2803", "Typed expandable-string variables must have a stable scalar representation.", PowerShellSourceParser.GetSpan(document, nested.Extent)));
                 return null;
             }
             var token = nested.Extent.Text;

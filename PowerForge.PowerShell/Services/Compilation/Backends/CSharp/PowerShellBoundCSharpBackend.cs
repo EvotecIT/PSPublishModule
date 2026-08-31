@@ -448,7 +448,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var parts = interpolated.Parts.Select(part => part.Expression is null
             ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
-            : $"({EmitExpression(part.Expression)} ?? string.Empty)").ToArray();
+            : part.Expression.ClrType == typeof(string)
+                ? $"({EmitExpression(part.Expression)} ?? string.Empty)"
+                : $"(global::System.Convert.ToString((object?)({EmitExpression(part.Expression)}), global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty)").ToArray();
         return parts.Length switch
         {
             0 => "string.Empty",

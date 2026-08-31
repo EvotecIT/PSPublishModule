@@ -125,7 +125,9 @@ internal static class PowerShellStreamCommandSemanticBinder
            contract.Aliases.Any(alias => parameterName.Equals(alias, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsProvablyNonEmptyMessage(ExpressionAst message)
-        => message is StringConstantExpressionAst { Value.Length: > 0 };
+        => message is StringConstantExpressionAst { Value.Length: > 0 } ||
+           message is ExpandableStringExpressionAst expandable &&
+           expandable.Value.Length > expandable.NestedExpressions.Sum(static expression => expression.Extent.Text.Length);
 
     private static bool IsRuntimeFreeSuccessValue(ExpressionAst value)
         => value is StringConstantExpressionAst or ConstantExpressionAst;

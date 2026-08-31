@@ -193,8 +193,11 @@ internal static class PowerShellClrMemberSemanticBinder
         var resultType = member is PropertyInfo property ? property.PropertyType : ((FieldInfo)member).FieldType;
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2604", $"CLR member '{target.Type.FullName}.{member.Name}' returns target-incompatible type '{resultType.FullName}'.", span);
-        if (!TrySelectReadBehavior(target, resultType, out var receiverBehavior))
-            return Reject(diagnostics, "PSB2605", $"CLR member '{target.Type.FullName}.{member.Name}' on a potentially null receiver returns non-nullable value '{resultType.FullName}'.", span);
+        var receiverBehavior = SelectReadBehavior(target);
+        var boundResultType = receiverBehavior == PowerShellClrReceiverBehavior.PropagateNull &&
+                              resultType.IsValueType && Nullable.GetUnderlyingType(resultType) is null
+            ? typeof(Nullable<>).MakeGenericType(resultType)
+            : resultType;
 
         return new PowerShellBoundClrMemberExpression(
             span,
@@ -203,7 +206,7 @@ internal static class PowerShellClrMemberSemanticBinder
             target.IsStatic,
             target.Receiver,
             receiverBehavior,
-            new PowerShellTypeFact(resultType, PowerShellTypeFactProvenance.Inferred, "The semantic binder resolved one target-compatible CLR field or property."));
+            new PowerShellTypeFact(boundResultType, PowerShellTypeFactProvenance.Inferred, "The semantic binder resolved one target-compatible CLR field or property, including PowerShell null propagation."));
     }
 
     internal static PowerShellBoundExpression? BindInvocation(
@@ -387,18 +390,12 @@ internal static class PowerShellClrMemberSemanticBinder
         return true;
     }
 
-    private static bool TrySelectReadBehavior(Target target, Type resultType, out PowerShellClrReceiverBehavior behavior)
+    private static PowerShellClrReceiverBehavior SelectReadBehavior(Target target)
     {
-        behavior = PowerShellClrReceiverBehavior.None;
-        if (target.IsStatic || target.Type.IsValueType || target.IsKnownNonNull) return true;
-        if (target.Type.IsArray) { behavior = PowerShellClrReceiverBehavior.NormalizeNullArrayLength; return true; }
-        if (target.Type == typeof(string)) { behavior = PowerShellClrReceiverBehavior.NormalizeNullString; return true; }
-        if (!resultType.IsValueType || Nullable.GetUnderlyingType(resultType) is not null)
-        {
-            behavior = PowerShellClrReceiverBehavior.PropagateNull;
-            return true;
-        }
-        return false;
+        if (target.IsStatic || target.Type.IsValueType || target.IsKnownNonNull) return PowerShellClrReceiverBehavior.None;
+        if (target.Type.IsArray) return PowerShellClrReceiverBehavior.NormalizeNullArrayLength;
+        if (target.Type == typeof(string)) return PowerShellClrReceiverBehavior.NormalizeNullString;
+        return PowerShellClrReceiverBehavior.PropagateNull;
     }
 
     private static bool TrySelectInvocationBehavior(Target target, bool allowPowerShellRuntimeErrors, out PowerShellClrReceiverBehavior behavior)

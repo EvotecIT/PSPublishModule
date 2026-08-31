@@ -117,10 +117,11 @@ internal static class PowerShellOperatorSemanticBinder
             if ((left.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
                 (right.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
                 return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
-            if (leftType != rightType && left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null)
+            var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
+            var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
+            if (leftType != rightType && !liftedEquality && left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null)
                 return Reject(diagnostics, span, "PSB2210", "Comparison operands must have the same static CLR type on the conservative compilation path.");
             var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
-            var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
             if (equality && leftType == rightType && leftType != typeof(string) &&
                 left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null &&
                 !PowerShellCSharpOperatorPolicy.SupportsEquality(leftType))
@@ -154,6 +155,9 @@ internal static class PowerShellOperatorSemanticBinder
             span));
         return null;
     }
+
+    private static bool IsNullableUnderlyingPair(Type left, Type right)
+        => Nullable.GetUnderlyingType(left) == right || Nullable.GetUnderlyingType(right) == left;
 
     private static PowerShellBoundExpression? BindTypeTest(
         BinaryExpressionAst syntax,

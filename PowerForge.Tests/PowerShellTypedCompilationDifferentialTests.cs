@@ -171,12 +171,36 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             loadContext.Unload();
         }
 
-        using var valueFixture = DifferentialFixture.Create(
-            "function Get-ResolvedTypeToken { param([string] $Name); return [Type]::GetType($Name).MetadataToken }");
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(valueFixture.ScriptPath));
-        var unit = Assert.Single(Assert.Single(plan.Files).Units);
-        Assert.False(unit.IsCompilable);
-        Assert.Contains(unit.Diagnostics, diagnostic => diagnostic.FeatureId == "syntax.memberexpression");
+        const string valueSource =
+            "function Get-ResolvedTypeToken { param([string] $Name); return [Type]::GetType($Name).MetadataToken }";
+        using var valueFixture = DifferentialFixture.Create(valueSource);
+        var valueBuild = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            valueFixture.ScriptPath,
+            valueFixture.OutputPath,
+            "PowerForge.NullableValuePropertyDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+        Assert.True(valueBuild.Succeeded, valueBuild.Error + Environment.NewLine + valueBuild.BuildOutput);
+
+        using var valueAssemblyStream = File.OpenRead(valueBuild.ArtifactPath!);
+        var valueLoadContext = new AssemblyLoadContext("PowerForgeNullableValuePropertyDifferential", isCollectible: true);
+        using var valueRunspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        valueRunspace.Open();
+        InitializePowerShellSource(valueRunspace, valueSource);
+        try
+        {
+            var generatedType = valueLoadContext.LoadFromStream(valueAssemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_NullableValuePropertyDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(generatedType, valueRunspace, "Get-ResolvedTypeToken", "Get_ResolvedTypeToken", new[]
+            {
+                new object[] { "System.String" },
+                new object[] { "PowerForge.Missing." + Guid.NewGuid().ToString("N") }
+            });
+        }
+        finally
+        {
+            valueLoadContext.Unload();
+        }
     }
 
     [Fact]
@@ -192,6 +216,41 @@ public sealed class PowerShellTypedCompilationDifferentialTests
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+    }
+
+    [Fact]
+    public void TypedTerminalTryExpressionOutputMatchesPowerShell()
+    {
+        const string source =
+            "function Test-TerminalTryOutput { param([int] $Value) try { $result = $Value -gt 0; $result } catch { return $false } }";
+        using var fixture = DifferentialFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TerminalTryOutputDifferential",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+
+        using var assemblyStream = File.OpenRead(build.ArtifactPath!);
+        var loadContext = new AssemblyLoadContext("PowerForgeTerminalTryOutputDifferential", isCollectible: true);
+        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        runspace.Open();
+        InitializePowerShellSource(runspace, source);
+        try
+        {
+            var generatedType = loadContext.LoadFromStream(assemblyStream)
+                .GetType("PowerForge.Compiled.PowerForge_TerminalTryOutputDifferentialMethods", throwOnError: true)!;
+            AssertDifferential(generatedType, runspace, "Test-TerminalTryOutput", "Test_TerminalTryOutput", new[]
+            {
+                new object[] { -1 },
+                new object[] { 1 }
+            });
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
     }
 
     [Fact]
