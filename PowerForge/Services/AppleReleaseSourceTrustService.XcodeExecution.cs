@@ -26,16 +26,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         string? executable,
         string defaultName,
         string trustedPath)
-    {
-        var value = executable?.Trim();
-        if (string.IsNullOrWhiteSpace(value) ||
-            string.Equals(value, defaultName, StringComparison.Ordinal) ||
-            string.Equals(value, trustedPath, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"Exact-source Apple checkpoints require the trusted system tool '{trustedPath}'; configured executable '{value}' is not trusted.");
-    }
+        => _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            executable,
+            defaultName,
+            trustedPath,
+            "Exact-source Apple checkpoints");
 }

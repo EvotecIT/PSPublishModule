@@ -34,6 +34,25 @@ public sealed class AppleMacAppDeploymentService
             throw new ArgumentException("Local macOS deployment requires Platform macOS.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.ProjectPath))
             throw new ArgumentException("ProjectPath is required.", nameof(request));
+        var dittoExecutable = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            request.DittoExecutable,
+            "ditto",
+            "/usr/bin/ditto",
+            "Exact-source macOS app installation");
+        var openExecutable = request.Launch
+            ? AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                request.OpenExecutable,
+                "open",
+                "/usr/bin/open",
+                "Exact-source macOS app launch")
+            : null;
+        var pkillExecutable = request.Launch && request.TerminateExisting
+            ? AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                request.PkillExecutable,
+                "pkill",
+                "/usr/bin/pkill",
+                "Exact-source macOS app launch")
+            : null;
 
         var sourceRoot = AppleDeviceDeploymentService.ResolveBuildRoot(
             Path.GetFullPath(request.ProjectPath),
@@ -60,13 +79,19 @@ public sealed class AppleMacAppDeploymentService
             request,
             productSnapshot.AppPath,
             productSnapshot,
+            dittoExecutable,
             cancellationToken).ConfigureAwait(false);
         install.SourceAppPath = build.AppPath;
         deployment.Install = install;
         if (!install.Succeeded || !request.Launch)
             return deployment;
 
-        deployment.Launch = await LaunchAsync(request, install.InstalledAppPath, cancellationToken).ConfigureAwait(false);
+        deployment.Launch = await LaunchAsync(
+            request,
+            install.InstalledAppPath,
+            openExecutable!,
+            pkillExecutable,
+            cancellationToken).ConfigureAwait(false);
         return deployment;
     }
 
@@ -74,6 +99,7 @@ public sealed class AppleMacAppDeploymentService
         AppleMacAppDeploymentRequest request,
         string sourceAppPath,
         AppleBuiltAppSnapshot productSnapshot,
+        string dittoExecutable,
         CancellationToken cancellationToken)
     {
         var source = Path.GetFullPath(sourceAppPath);
@@ -95,8 +121,11 @@ public sealed class AppleMacAppDeploymentService
 #endif
 
         var copy = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.DittoExecutable, "/usr/bin/ditto"),
+            AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                dittoExecutable,
+                "ditto",
+                "/usr/bin/ditto",
+                "Exact-source macOS app installation",
                 installRoot,
                 new[] { source, stage },
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : request.Timeout),
@@ -143,10 +172,17 @@ public sealed class AppleMacAppDeploymentService
     private async Task<AppleMacAppLaunchResult> LaunchAsync(
         AppleMacAppDeploymentRequest request,
         string appPath,
+        string openExecutable,
+        string? pkillExecutable,
         CancellationToken cancellationToken)
     {
         if (request.TerminateExisting)
-            await TerminateExistingAsync(request, appPath, cancellationToken).ConfigureAwait(false);
+            await TerminateExistingAsync(
+                request,
+                appPath,
+                pkillExecutable ?? throw new InvalidOperationException(
+                    "Exact-source macOS termination requires a trusted pkill executable."),
+                cancellationToken).ConfigureAwait(false);
 
         var arguments = new List<string> { "--new", "--fresh" };
         foreach (var pair in request.LaunchEnvironment.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
@@ -162,8 +198,11 @@ public sealed class AppleMacAppDeploymentService
         }
 
         var process = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.OpenExecutable, "/usr/bin/open"),
+            AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                openExecutable,
+                "open",
+                "/usr/bin/open",
+                "Exact-source macOS app launch",
                 request.InstallRoot,
                 arguments,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
@@ -179,13 +218,17 @@ public sealed class AppleMacAppDeploymentService
     private async Task TerminateExistingAsync(
         AppleMacAppDeploymentRequest request,
         string appPath,
+        string pkillExecutable,
         CancellationToken cancellationToken)
     {
         var executableRoot = Path.Combine(Path.GetFullPath(appPath), "Contents", "MacOS") + Path.DirectorySeparatorChar;
         var pattern = $"^{System.Text.RegularExpressions.Regex.Escape(executableRoot)}";
         var process = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.PkillExecutable, "/usr/bin/pkill"),
+            AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                pkillExecutable,
+                "pkill",
+                "/usr/bin/pkill",
+                "Exact-source macOS app launch",
                 request.InstallRoot,
                 new[] { "-f", pattern },
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
@@ -194,8 +237,5 @@ public sealed class AppleMacAppDeploymentService
         if (process.ExitCode is not 0 and not 1)
             throw new InvalidOperationException($"Could not terminate the existing installed app: {process.StdErr.Trim()}");
     }
-
-    private static string NormalizeExecutable(string? executable, string fallback)
-        => string.IsNullOrWhiteSpace(executable) ? fallback : executable!.Trim();
 
 }

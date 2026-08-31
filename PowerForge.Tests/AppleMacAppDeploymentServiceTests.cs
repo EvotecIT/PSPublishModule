@@ -22,12 +22,12 @@ public sealed partial class AppleMacAppDeploymentServiceTests
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                     return Success("copied");
                 }
-                if (request.FileName == "open-test")
+                if (request.FileName == "/usr/bin/open")
                 {
                     var destination = Path.Combine(installRoot.FullName, "CasaRay.app");
                     Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
@@ -50,14 +50,18 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 {
                     ["CASARAY_ENABLE_SANDBOX_PURCHASES"] = "1"
                 },
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test",
-                OpenExecutable = "open-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto",
+                OpenExecutable = "/usr/bin/open"
             });
 
             Assert.True(result.Succeeded);
             Assert.Equal("new", File.ReadAllText(Path.Combine(installRoot.FullName, "CasaRay.app", "version.txt")));
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-backup", StringComparison.Ordinal));
+            Assert.All(runner.Requests, request => Assert.False(request.InheritEnvironment));
+            Assert.All(
+                runner.Requests,
+                request => Assert.DoesNotContain("DEVELOPER_DIR", request.EnvironmentVariables!.Keys));
             var terminate = Assert.Single(runner.Requests, request => request.FileName == "/usr/bin/pkill");
             Assert.Equal("-f", terminate.Arguments[0]);
             Assert.StartsWith("^", terminate.Arguments[1], StringComparison.Ordinal);
@@ -65,7 +69,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 System.Text.RegularExpressions.Regex.Escape(Path.Combine(installRoot.FullName, "CasaRay.app", "Contents", "MacOS")),
                 terminate.Arguments[1],
                 StringComparison.Ordinal);
-            var launch = Assert.Single(runner.Requests, request => request.FileName == "open-test");
+            var launch = Assert.Single(runner.Requests, request => request.FileName == "/usr/bin/open");
             Assert.Equal(new[]
             {
                 "--new", "--fresh", "--env", "CASARAY_ENABLE_SANDBOX_PURCHASES=1",
@@ -93,7 +97,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     Directory.CreateDirectory(request.Arguments[1]);
                     File.WriteAllText(Path.Combine(request.Arguments[1], "partial"), string.Empty);
@@ -112,8 +116,8 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 DerivedDataPath = derived.FullName,
                 InstallRoot = installRoot.FullName,
                 Launch = false,
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto"
             });
 
             Assert.False(result.Succeeded);
@@ -144,7 +148,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                 return Success("ok");
             });
@@ -159,8 +163,8 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 DerivedDataPath = derived.FullName,
                 InstallRoot = installRoot.FullName,
                 Launch = false,
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto"
             });
 
             Assert.True(result.Succeeded);
@@ -224,6 +228,55 @@ public sealed partial class AppleMacAppDeploymentServiceTests
         using var first = AppleMacAppBundleReplacement.AcquireInstallLock(destination);
 
         Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
+    }
+
+    [Theory]
+    [InlineData("ditto")]
+    [InlineData("open")]
+    [InlineData("pkill")]
+    public async Task DeployAsync_rejects_non_system_mac_deployment_tools_before_building(string tool)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var request = new AppleMacAppDeploymentRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                Platform = ApplePlatform.macOS,
+                Launch = true
+            };
+            switch (tool)
+            {
+                case "ditto":
+                    request.DittoExecutable = "/tmp/ditto-wrapper";
+                    break;
+                case "open":
+                    request.OpenExecutable = "/tmp/open-wrapper";
+                    break;
+                case "pkill":
+                    request.PkillExecutable = "/tmp/pkill-wrapper";
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown test tool: {tool}");
+            }
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleMacAppDeploymentService(runner).DeployAsync(request));
+
+            Assert.Contains("trusted system tool", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     private static string ExternalOutputPath(

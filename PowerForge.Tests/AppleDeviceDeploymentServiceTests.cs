@@ -81,7 +81,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Scheme = "Tactra",
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
                 DerivedDataPath = derived,
-                XcodeBuildExecutable = "xcodebuild-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild"
             });
 
             Assert.True(result.Succeeded);
@@ -89,7 +89,10 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             Assert.Equal(Path.Combine(derived, "Build", "Products", "Debug-iphoneos", "Tactra.app"), result.AppPath);
             Assert.Single(runner.Requests);
             var request = runner.Requests[0];
-            Assert.Equal("xcodebuild-test", request.FileName);
+            Assert.Equal("/usr/bin/xcodebuild", request.FileName);
+            Assert.False(request.InheritEnvironment);
+            Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
+            Assert.DoesNotContain("DEVELOPER_DIR", request.EnvironmentVariables!.Keys);
             Assert.Equal(new[]
             {
                 "-project",
@@ -142,7 +145,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                             Path.GetTempPath(),
                             "PowerForge.Tests.DerivedData",
                             Guid.NewGuid().ToString("N")),
-                        XcodeBuildExecutable = "xcodebuild-test",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
                         BuildRoot = root.FullName
                     }));
 
@@ -624,7 +627,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Scheme = "CasaRay",
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
                 DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
-                XcodeBuildExecutable = "xcodebuild-test",
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
                 BuildRoot = root.FullName
             });
 
@@ -638,7 +641,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Scheme = "CasaRay",
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
                 DerivedDataPath = ExternalOutputPath(root, "OtherDerivedData"),
-                XcodeBuildExecutable = "xcodebuild-test",
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
                 BuildRoot = root.FullName,
                 AdditionalArguments = [$"POWERFORGE_SOURCE_REVISION={new string('b', 40)}"]
             }));
@@ -682,7 +685,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                         Scheme = "CasaRay",
                         DeviceIdentifier = "device-1",
                         DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
-                        XcodeBuildExecutable = "xcodebuild-test",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
                         BuildRoot = root.FullName
                     }));
 
@@ -728,7 +731,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                             Path.GetTempPath(),
                             "PowerForge.Tests.DerivedData",
                             Guid.NewGuid().ToString("N")),
-                        XcodeBuildExecutable = "xcodebuild-test",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
                         BuildRoot = root.FullName
                     }));
 
@@ -788,8 +791,8 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                         UseBuildMirror = true,
                         BuildRoot = root.FullName,
                         BuildMirrorPath = mirror,
-                        RsyncExecutable = "rsync-test",
-                        XcodeBuildExecutable = "xcodebuild-test"
+                        RsyncExecutable = "/usr/bin/rsync",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
                     }));
 
             Assert.Contains("changed", exception.Message);
@@ -843,8 +846,8 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                         UseBuildMirror = true,
                         BuildRoot = root.FullName,
                         BuildMirrorPath = Path.Combine(mirrorRoot.FullName, "mirror"),
-                        RsyncExecutable = "rsync-test",
-                        XcodeBuildExecutable = "xcodebuild-test"
+                        RsyncExecutable = "/usr/bin/rsync",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
                     }));
 
             Assert.Contains("source changed", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -895,8 +898,8 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                         UseBuildMirror = true,
                         BuildRoot = root.FullName,
                         BuildMirrorPath = mirror,
-                        RsyncExecutable = "rsync-test",
-                        XcodeBuildExecutable = "xcodebuild-test"
+                        RsyncExecutable = "/usr/bin/rsync",
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
                     }));
 
             Assert.Contains("physically overlap", exception.Message, StringComparison.Ordinal);
@@ -931,7 +934,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Platform = ApplePlatform.macOS,
                 ArchiveVariant = AppleArchiveVariant.MacCatalyst,
                 DerivedDataPath = derived,
-                XcodeBuildExecutable = "xcodebuild-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild"
             });
 
             Assert.True(result.Succeeded);
@@ -964,7 +967,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Platform = ApplePlatform.macOS,
                 Destination = "platform=macOS",
                 DerivedDataPath = derived,
-                XcodeBuildExecutable = "xcodebuild-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild"
             });
 
             Assert.True(result.Succeeded);
@@ -997,7 +1000,7 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 Platform = ApplePlatform.macOS,
                 ArchiveVariant = AppleArchiveVariant.MacCatalyst,
                 DerivedDataPath = derived,
-                XcodeBuildExecutable = "xcodebuild-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild"
             });
 
             Assert.True(result.Succeeded);
@@ -1035,14 +1038,15 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 UseBuildMirror = true,
                 BuildRoot = root.FullName,
                 BuildMirrorPath = mirror,
-                RsyncExecutable = "rsync-test",
-                XcodeBuildExecutable = "xcodebuild-test"
+                RsyncExecutable = "/usr/bin/rsync",
+                XcodeBuildExecutable = "/usr/bin/xcodebuild"
             });
 
             Assert.True(result.Succeeded);
             Assert.Equal(mirror, result.BuildMirrorPath);
             Assert.Equal(2, runner.Requests.Count);
-            Assert.Equal("rsync-test", runner.Requests[0].FileName);
+            Assert.Equal("/usr/bin/rsync", runner.Requests[0].FileName);
+            Assert.False(runner.Requests[0].InheritEnvironment);
             Assert.Contains("--delete", runner.Requests[0].Arguments);
             Assert.Contains("--delete-excluded", runner.Requests[0].Arguments);
             Assert.Contains("/.git", runner.Requests[0].Arguments);
@@ -1057,7 +1061,8 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             Assert.Contains(mirror + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
 
             var buildRequest = runner.Requests[1];
-            Assert.Equal("xcodebuild-test", buildRequest.FileName);
+            Assert.Equal("/usr/bin/xcodebuild", buildRequest.FileName);
+            Assert.False(buildRequest.InheritEnvironment);
             Assert.Equal(mirror, buildRequest.WorkingDirectory);
             Assert.Contains(Path.Combine(mirror, "Tactra.xcodeproj"), buildRequest.Arguments);
         }
@@ -1131,15 +1136,19 @@ App installed:
                 DeviceIdentifier = "device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
-                XcodeBuildExecutable = "xcodebuild-test",
-                XcrunExecutable = "xcrun-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                XcrunExecutable = "/usr/bin/xcrun"
             });
 
             Assert.True(result.Succeeded);
             Assert.NotNull(result.Install);
             Assert.NotNull(result.Launch);
             Assert.Equal(3, runner.Requests.Count);
-            Assert.Equal("xcodebuild-test", runner.Requests[0].FileName);
+            Assert.Equal("/usr/bin/xcodebuild", runner.Requests[0].FileName);
+            Assert.All(runner.Requests, request => Assert.False(request.InheritEnvironment));
+            Assert.All(
+                runner.Requests,
+                request => Assert.DoesNotContain("DEVELOPER_DIR", request.EnvironmentVariables!.Keys));
             Assert.Equal(
                 new[] { "devicectl", "device", "install", "app", "--device", "device-1" },
                 runner.Requests[1].Arguments.Take(6));
@@ -1181,8 +1190,8 @@ App installed:
                 Destination = "id=device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
-                XcodeBuildExecutable = "xcodebuild-test",
-                XcrunExecutable = "xcrun-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                XcrunExecutable = "/usr/bin/xcrun"
             });
 
             Assert.True(result.Succeeded);
@@ -1229,8 +1238,8 @@ App installed:
                 },
                 LaunchArguments = new[] { "--sample" },
                 TerminateExisting = true,
-                XcodeBuildExecutable = "xcodebuild-test",
-                XcrunExecutable = "xcrun-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                XcrunExecutable = "/usr/bin/xcrun"
             });
 
             Assert.True(result.Succeeded);
@@ -1272,7 +1281,7 @@ App installed:
                                    The request was denied by service delegate (SBMainWorkspace) for reason: Locked ("Unable to launch com.evotecit.tactra because the device was not, or could not be, unlocked").
                                    BSErrorCodeDescription = Locked
                         """,
-                        "xcrun-test",
+                        "/usr/bin/xcrun",
                         TimeSpan.FromMilliseconds(1),
                         timedOut: false);
 
@@ -1289,8 +1298,8 @@ App installed:
                 DeviceIdentifier = "device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
-                XcodeBuildExecutable = "xcodebuild-test",
-                XcrunExecutable = "xcrun-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                XcrunExecutable = "/usr/bin/xcrun"
             });
 
             Assert.True(result.Succeeded);

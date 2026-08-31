@@ -29,4 +29,48 @@ internal static class AppleTrustedExecutionEnvironment
         }
         return environment;
     }
+
+    /// <summary>
+    /// Resolves a configurable Apple tool to its fixed system path and rejects
+    /// wrappers or alternate executables for provenance-bound operations.
+    /// </summary>
+    internal static string ResolveSystemTool(
+        string? executable,
+        string defaultName,
+        string trustedPath,
+        string operation)
+    {
+        var value = executable?.Trim();
+        if (string.IsNullOrWhiteSpace(value) ||
+            string.Equals(value, defaultName, StringComparison.Ordinal) ||
+            string.Equals(value, trustedPath, StringComparison.Ordinal))
+        {
+            return trustedPath;
+        }
+
+        throw new InvalidOperationException(
+            $"{operation} requires the trusted system tool '{trustedPath}'; received '{value}'.");
+    }
+
+    /// <summary>
+    /// Creates a process request for a fixed Apple system tool with an explicit
+    /// allowlisted environment instead of inheriting operator build variables.
+    /// </summary>
+    internal static ProcessRunRequest CreateProcessRequest(
+        string? executable,
+        string defaultName,
+        string trustedPath,
+        string operation,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout)
+        => new(
+            ResolveSystemTool(executable, defaultName, trustedPath, operation),
+            workingDirectory,
+            arguments,
+            timeout,
+            Create(),
+            captureOutput: true,
+            captureError: true,
+            inheritEnvironment: false);
 }

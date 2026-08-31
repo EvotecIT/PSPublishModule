@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using System.Text.Json;
 
 namespace PowerForge;
 
@@ -40,32 +39,10 @@ public sealed partial class AppleDeviceDeploymentService
     public async Task<IReadOnlyList<AppleDeviceInfo>> GetDevicesAsync(
         AppleDeviceListRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                new[] { "devicectl", "list", "devices" },
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(1) : request.Timeout),
+        => await GetDevicesCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (!result.Succeeded)
-            throw CreateProcessException(result, "devicectl list devices failed.");
-
-        var devices = ParseDevices(result.StdOut)
-            .Where(device => request.IncludeUnavailable || device.IsAvailable);
-
-        if (!string.IsNullOrWhiteSpace(request.Device))
-        {
-            var filter = request.Device!.Trim();
-            devices = devices.Where(device => MatchesDevice(device, filter));
-        }
-
-        return devices.ToArray();
-    }
 
     /// <summary>
     /// Builds an Apple app for local device installation.
@@ -114,12 +91,25 @@ public sealed partial class AppleDeviceDeploymentService
         // source-trust validator can inspect.
         AppleBuildProvenance.RejectLocalBuildAdditionalArguments(
             request.AdditionalArguments);
+        var xcodeBuildExecutable = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            request.XcodeBuildExecutable,
+            "xcodebuild",
+            "/usr/bin/xcodebuild",
+            "Exact-source local Apple builds");
+        var rsyncExecutable = request.UseBuildMirror
+            ? AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                request.RsyncExecutable,
+                "rsync",
+                "/usr/bin/rsync",
+                "Exact-source local Apple build mirroring")
+            : null;
 
         var deviceIdentifier = await ResolveDeviceIdentifierAsync(
             request.DeviceIdentifier,
             request.Device,
             request.XcrunExecutable,
             request.Timeout,
+            requireTrustedSystemTool: true,
             cancellationToken).ConfigureAwait(false);
 
         var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform, request.ArchiveVariant);
@@ -182,6 +172,7 @@ public sealed partial class AppleDeviceDeploymentService
                 var mirror = await MirrorBuildRootAsync(
                     projectPath,
                     request,
+                    rsyncExecutable!,
                     sourcePathComparison,
                     cancellationToken).ConfigureAwait(false);
                 if (!mirror.ProcessResult.Succeeded)
@@ -302,8 +293,11 @@ public sealed partial class AppleDeviceDeploymentService
 
         try
         {
-            var processRequest = new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable, "xcodebuild"),
+            var processRequest = AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                xcodeBuildExecutable,
+                "xcodebuild",
+                "/usr/bin/xcodebuild",
+                "Exact-source local Apple builds",
                 workingDirectory,
                 args,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout);
@@ -378,43 +372,10 @@ public sealed partial class AppleDeviceDeploymentService
     public async Task<AppleAppInstallResult> InstallAsync(
         AppleAppInstallRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-        if (string.IsNullOrWhiteSpace(request.AppPath))
-            throw new ArgumentException("AppPath is required.", nameof(request));
-
-        var appPath = Path.GetFullPath(request.AppPath);
-        if (!Directory.Exists(appPath))
-            throw new DirectoryNotFoundException($"App path was not found: {appPath}");
-
-        var deviceIdentifier = await ResolveDeviceIdentifierAsync(
-            request.DeviceIdentifier,
-            request.Device,
-            request.XcrunExecutable,
-            request.Timeout,
+        => await InstallCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(deviceIdentifier))
-            throw new ArgumentException("DeviceIdentifier or Device is required.", nameof(request));
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                new[] { "devicectl", "device", "install", "app", "--device", deviceIdentifier!, appPath },
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        return new AppleAppInstallResult
-        {
-            DeviceIdentifier = deviceIdentifier!,
-            AppPath = appPath,
-            BundleIdentifier = MatchValue(BundleIdRegex, result.StdOut),
-            InstallationUrl = MatchValue(InstallationUrlRegex, result.StdOut),
-            ProcessResult = result
-        };
-    }
 
     /// <summary>
     /// Launches an installed app on a physical device.
@@ -425,51 +386,10 @@ public sealed partial class AppleDeviceDeploymentService
     public async Task<AppleAppLaunchResult> LaunchAsync(
         AppleAppLaunchRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-        if (string.IsNullOrWhiteSpace(request.BundleIdentifier))
-            throw new ArgumentException("BundleIdentifier is required.", nameof(request));
-
-        var deviceIdentifier = await ResolveDeviceIdentifierAsync(
-            request.DeviceIdentifier,
-            request.Device,
-            request.XcrunExecutable,
-            request.Timeout,
+        => await LaunchCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(deviceIdentifier))
-            throw new ArgumentException("DeviceIdentifier or Device is required.", nameof(request));
-
-        var arguments = new List<string>
-        {
-            "devicectl", "device", "process", "launch", "--device", deviceIdentifier!
-        };
-        if (request.EnvironmentVariables.Count > 0)
-        {
-            arguments.Add("--environment-variables");
-            arguments.Add(JsonSerializer.Serialize(request.EnvironmentVariables));
-        }
-        if (request.TerminateExisting)
-            arguments.Add("--terminate-existing");
-        arguments.Add(request.BundleIdentifier.Trim());
-        arguments.AddRange(request.Arguments);
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                arguments,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        return new AppleAppLaunchResult
-        {
-            DeviceIdentifier = deviceIdentifier!,
-            BundleIdentifier = request.BundleIdentifier.Trim(),
-            ProcessResult = result
-        };
-    }
 
     /// <summary>
     /// Builds, installs, and optionally launches an Apple app on a physical device.
@@ -483,6 +403,11 @@ public sealed partial class AppleDeviceDeploymentService
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            request.XcrunExecutable,
+            "xcrun",
+            "/usr/bin/xcrun",
+            "Exact-source Apple device deployment");
 
         using var buildOperation = await BuildForDeploymentAsync(
             request,
@@ -498,14 +423,14 @@ public sealed partial class AppleDeviceDeploymentService
             return deployment;
 
         var deployDeviceIdentifier = request.DeviceIdentifier ?? TryParseDestinationDeviceIdentifier(request.Destination);
-        var install = await InstallAsync(new AppleAppInstallRequest
+        var install = await InstallCoreAsync(new AppleAppInstallRequest
         {
             DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
             AppPath = buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
             XcrunExecutable = request.XcrunExecutable,
             Timeout = request.Timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
         buildOperation.ProductSnapshot?.ValidateUnchanged();
         install.AppPath = build.AppPath;
         deployment.Install = install;
@@ -519,7 +444,7 @@ public sealed partial class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(bundleIdentifier))
             throw new InvalidOperationException("BundleIdentifier is required to launch and could not be parsed from the install output.");
 
-        deployment.Launch = await LaunchAsync(new AppleAppLaunchRequest
+        deployment.Launch = await LaunchCoreAsync(new AppleAppLaunchRequest
         {
             DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
@@ -529,7 +454,7 @@ public sealed partial class AppleDeviceDeploymentService
             Arguments = request.LaunchArguments,
             TerminateExisting = request.TerminateExisting,
             Timeout = request.Timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
 
         return deployment;
     }
@@ -572,6 +497,7 @@ public sealed partial class AppleDeviceDeploymentService
         string? device,
         string xcrunExecutable,
         TimeSpan timeout,
+        bool requireTrustedSystemTool,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(deviceIdentifier))
@@ -580,12 +506,12 @@ public sealed partial class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(device))
             return null;
 
-        var matches = await GetDevicesAsync(new AppleDeviceListRequest
+        var matches = await GetDevicesCoreAsync(new AppleDeviceListRequest
         {
             XcrunExecutable = xcrunExecutable,
             Device = device,
             Timeout = timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(1) : timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool, cancellationToken).ConfigureAwait(false);
 
         if (matches.Count == 0)
             throw new InvalidOperationException($"No available Apple device matched '{device}'.");

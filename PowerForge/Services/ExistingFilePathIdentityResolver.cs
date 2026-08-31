@@ -46,7 +46,6 @@ internal static class ExistingFilePathIdentityResolver
     /// </summary>
     internal static ExistingFilePhysicalStatus ResolveDirectoryStatus(string path)
     {
-#if NET8_0_OR_GREATER
         var fullPath = System.IO.Path.GetFullPath(path);
         SafeFileHandle handle;
         if (System.IO.Path.DirectorySeparatorChar == '\\')
@@ -63,8 +62,13 @@ internal static class ExistingFilePathIdentityResolver
         }
         else
         {
+#if NET8_0_OR_GREATER
             var descriptor = OpenUnixDirectory(fullPath, 0);
             handle = new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+#else
+            throw new PlatformNotSupportedException(
+                "Physical directory identity is not available for this runtime and operating system.");
+#endif
         }
 
         using (handle)
@@ -73,11 +77,13 @@ internal static class ExistingFilePathIdentityResolver
                 throw new Win32Exception(Marshal.GetLastWin32Error());
             return System.IO.Path.DirectorySeparatorChar == '\\'
                 ? ReadWindowsFileStatus(handle)
+#if NET8_0_OR_GREATER
                 : ReadUnixFileStatus(handle);
-        }
 #else
-        throw new PlatformNotSupportedException("Physical directory identity requires .NET 8 or newer.");
+                : throw new PlatformNotSupportedException(
+                    "Physical directory identity is not available for this runtime and operating system.");
 #endif
+        }
     }
 
     /// <summary>Returns physical status for an already-open file without resolving its pathname again.</summary>
@@ -391,7 +397,6 @@ internal static class ExistingFilePathIdentityResolver
         SafeFileHandle file,
         out WindowsFileInformation information);
 
-#if NET8_0_OR_GREATER
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFileForDirectory(
         string fileName,
@@ -402,6 +407,7 @@ internal static class ExistingFilePathIdentityResolver
         uint flagsAndAttributes,
         IntPtr templateFile);
 
+#if NET8_0_OR_GREATER
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int OpenUnixDirectory(string path, int flags);
 #endif

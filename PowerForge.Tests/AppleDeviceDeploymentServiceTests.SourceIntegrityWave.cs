@@ -5,6 +5,101 @@ namespace PowerForge.Tests;
 public sealed partial class AppleDeviceDeploymentServiceTests
 {
     [Fact]
+    public async Task BuildAsync_rejects_a_non_system_xcodebuild_before_tools_run()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    XcodeBuildExecutable = "/tmp/xcodebuild-wrapper"
+                }));
+
+            Assert.Contains("trusted system tool '/usr/bin/xcodebuild'", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_non_system_rsync_before_tools_run()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    UseBuildMirror = true,
+                    RsyncExecutable = "/tmp/rsync-wrapper"
+                }));
+
+            Assert.Contains("trusted system tool '/usr/bin/rsync'", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_rejects_a_non_system_xcrun_before_building()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).DeployAsync(
+                    new AppleAppDeviceDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        XcrunExecutable = "/tmp/xcrun-wrapper"
+                    }));
+
+            Assert.Contains("trusted system tool '/usr/bin/xcrun'", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_additional_xcodebuild_arguments_before_tools_run()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -202,8 +297,8 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                         DeviceIdentifier = "device-1",
                         BundleIdentifier = "com.evotecit.casaray",
                         Launch = false,
-                        XcodeBuildExecutable = "xcodebuild-test",
-                        XcrunExecutable = "xcrun-test"
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        XcrunExecutable = "/usr/bin/xcrun"
                     }));
 
             Assert.Contains("private built Apple app snapshot changed", error.Message, StringComparison.OrdinalIgnoreCase);

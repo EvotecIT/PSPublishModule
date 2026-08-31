@@ -5,6 +5,7 @@ public sealed partial class AppleDeviceDeploymentService
     private async Task<MirrorResult> MirrorBuildRootAsync(
         string projectPath,
         AppleAppBuildRequest request,
+        string rsyncExecutable,
         StringComparison sourcePathComparison,
         CancellationToken cancellationToken)
     {
@@ -62,8 +63,11 @@ public sealed partial class AppleDeviceDeploymentService
             };
 
             var result = await _processRunner.RunAsync(
-                new ProcessRunRequest(
-                    NormalizeExecutable(request.RsyncExecutable, "rsync"),
+                AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                    rsyncExecutable,
+                    "rsync",
+                    "/usr/bin/rsync",
+                    "Exact-source local Apple build mirroring",
                     sourceRoot,
                     args,
                     request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),

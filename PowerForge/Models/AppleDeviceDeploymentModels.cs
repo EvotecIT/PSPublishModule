@@ -85,10 +85,16 @@ public class AppleAppBuildRequest
     /// <summary>Expected app path. When omitted, DerivedData, Configuration, Platform, and ProductName are used.</summary>
     public string? AppPath { get; set; }
 
-    /// <summary>xcodebuild executable name or path.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Exact-source local builds accept
+    /// only xcodebuild or /usr/bin/xcodebuild and execute /usr/bin/xcodebuild.
+    /// </summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
-    /// <summary>xcrun executable name or path, used only when resolving a device by name.</summary>
+    /// <summary>
+    /// xcrun executable name or path. Exact-source deployment accepts only
+    /// xcrun or /usr/bin/xcrun; standalone device operations remain configurable.
+    /// </summary>
     public string XcrunExecutable { get; set; } = "xcrun";
 
     /// <summary>Allows Xcode to create or update signing assets during build.</summary>
@@ -103,7 +109,10 @@ public class AppleAppBuildRequest
     /// <summary>Mirror directory used when UseBuildMirror is enabled.</summary>
     public string? BuildMirrorPath { get; set; }
 
-    /// <summary>rsync executable name or path used for build mirroring.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Exact-source mirroring accepts
+    /// only rsync or /usr/bin/rsync and executes /usr/bin/rsync.
+    /// </summary>
     public string RsyncExecutable { get; set; } = "rsync";
 
     /// <summary>

@@ -76,7 +76,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             InitializeGitRepository(root.FullName);
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                     File.WriteAllText(
@@ -97,8 +97,8 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                         DerivedDataPath = derived.FullName,
                         InstallRoot = installRoot.FullName,
                         Launch = false,
-                        XcodeBuildExecutable = "xcodebuild-test",
-                        DittoExecutable = "ditto-test"
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        DittoExecutable = "/usr/bin/ditto"
                     }));
 
             Assert.Contains("private built Apple app snapshot changed", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -138,7 +138,7 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             InitializeGitRepository(root.FullName);
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                     File.WriteAllText(
@@ -159,8 +159,8 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                         DerivedDataPath = derived.FullName,
                         InstallRoot = installRoot.FullName,
                         Launch = false,
-                        XcodeBuildExecutable = "xcodebuild-test",
-                        DittoExecutable = "ditto-test"
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        DittoExecutable = "/usr/bin/ditto"
                     }));
 
             Assert.Contains("staged macOS app does not match", error.Message, StringComparison.OrdinalIgnoreCase);
