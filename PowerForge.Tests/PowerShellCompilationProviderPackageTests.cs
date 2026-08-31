@@ -53,6 +53,41 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void SdkConformanceRejectsHostedExternalOperation()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Family = PowerShellCompilationCommandFamily.ExternalOperation;
+        provider.Adapter.RuntimeFree = false;
+        provider.Adapter.AotCompatible = false;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderConformanceKit().Validate(fixture.Manifest));
+
+        Assert.Contains("runtime-free executable adapter", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsRuntimeFreeProviderWithoutSingleValueParameter()
+    {
+        using var fixture = ProviderFixture.Create();
+        var packagePath = fixture.PackagePath("missing-value-parameter.nupkg");
+        fixture.BuildPackage("missing-value-parameter.nupkg");
+        RewriteJsonEntry<PowerShellCompilationProviderPackageManifest>(
+            packagePath,
+            PowerShellCompilationProviderPackageReader.ManifestPath,
+            manifest => Assert.Single(manifest.Providers).Parameters = Array.Empty<PowerShellCompilationCommandParameterContract>());
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderPackageReader().Resolve(new[]
+            {
+                new PowerShellCompilationProviderPackageReference(packagePath)
+            }));
+
+        Assert.Contains("exactly one value parameter", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SdkBuildsDeterministicPackageAndReaderLocksTrustClosureWithoutAssemblyLoad()
     {
         using var fixture = ProviderFixture.Create();
@@ -127,6 +162,27 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         Assert.Equal(first.Lock.LockSha256, second.Lock.LockSha256);
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.notice");
         Assert.Single(first.Providers, static provider => provider.ProviderId == "generic.command.stream.warning");
+    }
+
+    [Fact]
+    public void ReaderRejectsPreviousProviderAbiInsteadOfInferringExternalOperationSemantics()
+    {
+        using var fixture = ProviderFixture.Create();
+        var packagePath = fixture.PackagePath("previous-abi.nupkg");
+        fixture.BuildPackage("previous-abi.nupkg");
+        RewriteJsonEntry<PowerShellCompilationProviderPackageManifest>(
+            packagePath,
+            PowerShellCompilationProviderPackageReader.ManifestPath,
+            manifest => manifest.ProviderAbiVersion = "3");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderPackageReader().Resolve(new[]
+            {
+                new PowerShellCompilationProviderPackageReference(packagePath)
+            }));
+
+        Assert.Contains("targets ABI '3'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("expected '4'", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -347,6 +403,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             {
                 var provider = Assert.Single(manifest.Providers);
                 provider.Stream = "Success";
+                provider.Adapter.Operation = "WriteOutput";
                 provider.Output = PowerShellCompilationCommandOutput.None;
                 provider.Cardinality = PowerShellCompilationCommandCardinality.None;
             });

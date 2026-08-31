@@ -270,21 +270,17 @@ internal sealed class PowerShellCommandSemanticRegistry
                 throw new InvalidOperationException($"Command semantic provider '{contract.ProviderId}' declares an invalid or duplicate parameter shape.");
             if (contract.Adapter.RuntimeFree)
             {
-                if (contract.Family != PowerShellCompilationCommandFamily.Stream ||
-                    contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Host" or "Error"))
-                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must use one supported stream adapter contract.");
-                var expectedProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion;
-                if (!contract.Adapter.SemanticProfile.Equals(expectedProfile, StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' targets semantic profile '{contract.Adapter.SemanticProfile}' instead of '{expectedProfile}'.");
-                var expectedOperation = contract.Stream.Equals("Success", StringComparison.Ordinal)
-                    ? "WriteOutput"
-                    : "Write" + contract.Stream;
-                if (!contract.Adapter.Operation.Equals(expectedOperation, StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' operation '{contract.Adapter.Operation}' does not match stream '{contract.Stream}' operation '{expectedOperation}'.");
+                PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(
+                    contract,
+                    requireExecutableEntryPoint: false);
                 if (contract.Adapter.Dependencies.Length > 0 && contract.Adapter.EntryPoint is null)
                     throw new InvalidOperationException($"Runtime-free built-in provider '{contract.ProviderId}' cannot declare external adapter dependencies.");
-                if (contract.Parameters.Length != 1)
-                    throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must declare exactly one value parameter shape.");
+            }
+            else if (contract.Family == PowerShellCompilationCommandFamily.ExternalOperation)
+            {
+                PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(
+                    contract,
+                    requireExecutableEntryPoint: false);
             }
             else if (contract.Adapter.Dependencies.Any(static dependency =>
                          !dependency.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase)))

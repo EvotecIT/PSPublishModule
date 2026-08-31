@@ -88,6 +88,15 @@ internal sealed partial class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeProviderOperations) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeProviderOperations))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1010",
+                    "External provider operations require the runtime-free provider-operation target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
             if (function.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) &&
                 !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
             {
@@ -160,6 +169,8 @@ internal sealed partial class PowerShellTypedLowerer
                 function.DeclaredOutputType,
                 boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
+                function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeProviderOperations),
+                function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams),
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),

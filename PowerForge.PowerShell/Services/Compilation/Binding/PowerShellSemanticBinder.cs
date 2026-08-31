@@ -530,8 +530,13 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
             streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
-            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-            PowerShellCommandIslandPolicy.TryGetStreamCommand(streamCommand, out var streamKind, out var messageSyntax, out var streamProvider, _commandRegistry))
+            PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(
+                streamCommand,
+                capabilities,
+                out var streamKind,
+                out var messageSyntax,
+                out var streamProvider,
+                _commandRegistry))
         {
             var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);

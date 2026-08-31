@@ -404,12 +404,29 @@ internal static class PowerShellCommandIslandPolicy
         return true;
     }
 
+    internal static bool TryGetTargetStreamCommand(
+        CommandAst command,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellStreamCommandKind kind,
+        out ExpressionAst message,
+        out PowerShellCompilationCommandProviderContract? provider,
+        PowerShellCommandSemanticRegistry? registry = null)
+    {
+        if (!TryGetStreamCommand(command, out kind, out message, out provider, registry))
+            return false;
+
+        return capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+               capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeProviderOperations) &&
+               provider!.Adapter.RuntimeFree &&
+               provider.Adapter.EntryPoint is not null;
+    }
+
     private static bool IsStreamCommand(CommandAst command, PowerShellCommandSemanticRegistry? registry = null)
     {
         if (TryGetStreamCommand(command, out _, out _, registry))
             return true;
         var contract = (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName()).Contract;
-        return contract?.Family == PowerShellCompilationCommandFamily.Stream &&
+        return (contract?.Family is PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) &&
                !contract.Stream.Equals("Success", StringComparison.Ordinal);
     }
 

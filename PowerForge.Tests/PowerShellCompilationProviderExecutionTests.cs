@@ -620,4 +620,137 @@ function Invoke-ProviderCleanupFailure {
             loadContext.Unload();
         }
     }
+
+    [Fact]
+    public void StrictExecutableExecutesLockedExternalFileOperationWithoutPowerShell()
+    {
+        using var providerFixture = ProviderFixture.Create();
+        var provider = CreateExternalFileReadProvider();
+        providerFixture.Manifest.Providers = new[] { provider };
+        var packagePath = providerFixture.PackagePath("filesystem.nupkg");
+        var resolution = providerFixture.BuildPackage("filesystem.nupkg");
+        var inputPath = Path.Combine(providerFixture.RootPath, "input.txt");
+        File.WriteAllText(inputPath, "runtime-free-file-value");
+        using var artifactFixture = ScriptFixture.Create(
+            "Read-PackageTextCore '" + inputPath.Replace("'", "''", StringComparison.Ordinal) + "'");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            artifactFixture.ScriptPath,
+            artifactFixture.OutputPath,
+            "ExternalFileProviderExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            ProviderPackages = new[] { new PowerShellCompilationProviderPackageReference(packagePath) },
+            ExpectedProviderLock = resolution.Lock,
+            ProviderTrustPolicy = CreateProviderTrust(provider.ProviderId),
+            EmitIrSnapshots = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+        Assert.Equal(PowerShellCompilationCommandFamily.ExternalOperation,
+            Assert.Single(result.Manifest.CommandProviders).Family);
+        Assert.DoesNotContain(result.Manifest.Files, static file =>
+            Path.GetFileName(file.Path).Contains("System.Management.Automation", StringComparison.OrdinalIgnoreCase));
+        var snapshotPath = Assert.Single(result.Manifest.Files, static file => file.Role == "CompilerIrSnapshot").Path;
+        var snapshots = System.Text.Json.JsonSerializer.Deserialize<PowerShellCompilationIrSnapshotBundle>(
+            File.ReadAllText(snapshotPath),
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var boundCapabilities = Assert.Single(snapshots.Bound).Capabilities;
+        var loweredCapabilities = Assert.Single(snapshots.Lowered).Capabilities;
+        Assert.Contains(nameof(PowerShellRequiredCapability.RuntimeFreeProviderOperations), boundCapabilities);
+        Assert.Contains(nameof(PowerShellRequiredCapability.RuntimeFreeProviderOperations), loweredCapabilities);
+        Assert.DoesNotContain(nameof(PowerShellRequiredCapability.PowerShellStreams), loweredCapabilities);
+        var run = RunProviderProcess(result.ArtifactPath!);
+        Assert.Equal((0, "runtime-free-file-value", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void StrictExecutableRejectsUnlockedDirectExternalEntryPoint()
+    {
+        var provider = CreateExternalFileReadProvider();
+        using var artifactFixture = ScriptFixture.Create("Read-PackageTextCore 'input.txt'");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            artifactFixture.ScriptPath,
+            artifactFixture.OutputPath,
+            "UnlockedExternalProvider",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            CommandProviders = new[] { provider }
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(provider.ProviderId, result.Error, StringComparison.Ordinal);
+        Assert.Contains("reviewed provider package lock", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(artifactFixture.OutputPath));
+    }
+
+    [Fact]
+    public void StrictExecutableObserverPreservesProviderStreamsAndNonterminatingError()
+    {
+        using var providerFixture = ProviderFixture.Create();
+        var providers = new[]
+        {
+            Provider("generic.observer.warning", "Write-ObserverWarning", "Warning", "Transform"),
+            Provider("generic.observer.information", "Write-ObserverInformation", "Information", "Transform"),
+            Provider("generic.observer.host", "Write-ObserverHost", "Host", "Transform"),
+            Provider("generic.observer.error", "Write-ObserverError", "Error", "Transform")
+        };
+        providerFixture.Manifest.Providers = providers;
+        var packagePath = providerFixture.PackagePath("observer-streams.nupkg");
+        var resolution = providerFixture.BuildPackage("observer-streams.nupkg");
+        using var artifactFixture = ScriptFixture.Create("""
+            Write-ObserverWarning 'warning'
+            Write-ObserverInformation 'information'
+            Write-ObserverHost 'host'
+            Write-ObserverError 'error'
+            42
+            """);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            artifactFixture.ScriptPath,
+            artifactFixture.OutputPath,
+            "ObservedProviderStreams",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            SingleFile = false,
+            ProviderPackages = new[] { new PowerShellCompilationProviderPackageReference(packagePath) },
+            ExpectedProviderLock = resolution.Lock,
+            ProviderTrustPolicy = new PowerShellCompilationProviderTrustPolicy
+            {
+                AllowedPackageIds = new[] { "Generic.Semantic.Provider" },
+                AllowedProviderIds = providers.Select(static provider => provider.ProviderId).ToArray(),
+                AllowedPublishers = new[] { "Generic Publisher" },
+                AllowedLicenseExpressions = new[] { "MIT" }
+            }
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var observation = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            result);
+        Assert.Equal("42", Assert.Single(observation.Success).Value);
+        Assert.Equal(new[] { "provider:warning" }, observation.Warnings);
+        Assert.Equal(new[] { "provider:information", "provider:host" }, observation.Information);
+        Assert.Equal(new[] { "provider:error" }, observation.Errors);
+        Assert.Collection(
+            observation.StreamRecords,
+            record => Assert.Equal((1, "Warning", "provider:warning"), (record.Sequence, record.Stream, record.Message)),
+            record => Assert.Equal((2, "Information", "provider:information"), (record.Sequence, record.Stream, record.Message)),
+            record =>
+            {
+                Assert.Equal((3, "Information", "provider:host"), (record.Sequence, record.Stream, record.Message));
+                Assert.Equal(new[] { "PSHOST" }, record.Tags);
+            });
+        var error = Assert.Single(observation.ErrorRecords);
+        Assert.Equal(4, error.Sequence);
+        Assert.Equal("provider:error", error.Message);
+        Assert.False(error.IsTerminating);
+    }
+
 }

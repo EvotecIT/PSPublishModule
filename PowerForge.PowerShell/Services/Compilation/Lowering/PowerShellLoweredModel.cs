@@ -181,6 +181,8 @@ internal sealed class PowerShellLoweredFunction
         Type? declaredOutputType,
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
+        bool requiresRuntimeFreeProviderOperations,
+        bool requiresPowerShellHostStreams,
         bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
@@ -201,6 +203,8 @@ internal sealed class PowerShellLoweredFunction
         DeclaredOutputType = declaredOutputType;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresRuntimeFreeProviderOperations = requiresRuntimeFreeProviderOperations;
+        RequiresPowerShellHostStreams = requiresPowerShellHostStreams;
         RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
@@ -222,6 +226,8 @@ internal sealed class PowerShellLoweredFunction
     internal Type? DeclaredOutputType { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresRuntimeFreeProviderOperations { get; }
+    internal bool RequiresPowerShellHostStreams { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

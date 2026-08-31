@@ -14,9 +14,16 @@ internal static class PowerShellTypedExecutableEmitter
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
         string targetFramework,
-        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
-        var compilation = PowerShellTypedExecutableCompiler.Compile(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId);
+        var compilation = PowerShellTypedExecutableCompiler.Compile(
+            sourcePath,
+            sourcePaths,
+            plan,
+            targetFramework,
+            semanticProfileId,
+            commandProviders);
         var contract = compilation.EntryPoint;
         var method = compilation.EntryPointMethod;
         PowerShellTypedExecutableOutputPolicy.EnsureSupported(method.ReturnType);
@@ -72,13 +79,30 @@ internal static class PowerShellTypedExecutableEmitter
         var arguments = parameters.Select(parameter =>
             "(" + PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType) + ")values[" +
             PowerShellCSharpLiteral.QuoteString(parameter.Contract.Name) + "]").ToList();
+        if (method.RequiresPowerShellStreams)
+        {
+            arguments.AddRange(new[]
+            {
+                "WritePowerShellOutput",
+                "WritePowerShellVerbose",
+                "WritePowerShellDebug",
+                "WritePowerShellWarning",
+                "WritePowerShellInformation",
+                "WritePowerShellHost",
+                "WritePowerShellError"
+            });
+        }
+        if (method.RequiresProviderCancellation)
+            arguments.Add("providerCancellation.Token");
         if (method.RequiresPowerShellBoundParameters)
             arguments.Add("boundParameters");
         var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + string.Join(", ", arguments) + ")";
         var resultCardinality = method.OutputCardinality.Equals("Collection", StringComparison.Ordinal)
             ? "ResultCardinality.Collection"
             : "ResultCardinality.Scalar";
-        var invocationSource = method.ReturnType == typeof(void)
+        var invocationSource = method.RequiresPowerShellStreams
+            ? GenerateStreamInvocation(method, invocation, resultCardinality)
+            : method.ReturnType == typeof(void)
             ? "            " + invocation + ";" + Environment.NewLine +
               "            WriteNoResult();" + Environment.NewLine + "            return 0;"
             : "            var result = " + invocation + ";" + Environment.NewLine +
@@ -93,6 +117,41 @@ internal static class PowerShellTypedExecutableEmitter
             .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", commandBinding.IsAdvancedFunction ? "false" : "true")
             .Replace("{{INVOCATION}}", invocationSource);
         return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods, compilation.Optimization, compilation.IrSnapshots);
+    }
+
+    private static string GenerateStreamInvocation(
+        PowerShellCSharpMethodEmission method,
+        string invocation,
+        string resultCardinality)
+    {
+        var builder = new StringBuilder();
+        if (method.RequiresProviderCancellation)
+        {
+            builder.AppendLine("            using var providerCancellation = new global::System.Threading.CancellationTokenSource();")
+                .AppendLine("            global::System.ConsoleCancelEventHandler cancellationHandler = (_, eventArgs) =>")
+                .AppendLine("            {")
+                .AppendLine("                eventArgs.Cancel = true;")
+                .AppendLine("                providerCancellation.Cancel();")
+                .AppendLine("            };")
+                .AppendLine("            global::System.Console.CancelKeyPress += cancellationHandler;");
+        }
+        builder.AppendLine("            BeginPowerShellStreams();")
+            .AppendLine("            try")
+            .AppendLine("            {");
+        if (method.ReturnType == typeof(void))
+            builder.Append("                ").Append(invocation).AppendLine(";");
+        else
+            builder.Append("                var result = ").Append(invocation).AppendLine(";")
+                .Append("                WritePowerShellResult(result, ").Append(resultCardinality).AppendLine(");");
+        builder.AppendLine("                EndPowerShellStreams();")
+            .AppendLine("                return 0;")
+            .AppendLine("            }")
+            .AppendLine("            finally")
+            .AppendLine("            {");
+        if (method.RequiresProviderCancellation)
+            builder.AppendLine("                global::System.Console.CancelKeyPress -= cancellationHandler;");
+        builder.Append("            }");
+        return builder.ToString();
     }
 
     private static string GenerateStringArray(IEnumerable<string> values)

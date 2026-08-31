@@ -50,7 +50,10 @@ public enum PowerShellCompilationCapability
     PowerShellLanguageOperators = 256,
 
     /// <summary>Generated methods may lower a bounded set of read-only automatic state and host interactions.</summary>
-    RuntimeStateIntrinsics = 512
+    RuntimeStateIntrinsics = 512,
+
+    /// <summary>Runtime-free targets may invoke separately packaged executable provider operations through generated stream delegates.</summary>
+    RuntimeFreeProviderOperations = 1024
 }
 
 /// <summary>
@@ -404,7 +407,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellHostTypes |
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
-                              PowerShellCompilationCapability.RuntimeStateIntrinsics)) != 0)
+                              PowerShellCompilationCapability.RuntimeStateIntrinsics |
+                              PowerShellCompilationCapability.RuntimeFreeProviderOperations)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

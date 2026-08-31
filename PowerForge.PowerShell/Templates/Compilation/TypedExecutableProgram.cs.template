@@ -13,6 +13,8 @@ internal static class Program
     private const string SemanticObservationProtocolVariable = "POWERFORGE_SEMANTIC_OBSERVATION_PROTOCOL";
     private const string SemanticObservationCultureVariable = "POWERFORGE_SEMANTIC_OBSERVATION_CULTURE";
     private static readonly bool AcceptsSurplusPositionalArguments = {{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}};
+    private static int PowerShellObservationFrameCount;
+    private static bool PowerShellStreamsUseObservationProtocol;
 
     private static readonly ParameterSpec[] Parameters =
     {
@@ -297,6 +299,91 @@ internal static class Program
             return;
         WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
         WriteSemanticFrame("END", string.Empty, "0");
+    }
+
+    private static void BeginPowerShellStreams()
+    {
+        PowerShellObservationFrameCount = 0;
+        PowerShellStreamsUseObservationProtocol = UsesSemanticObservationProtocol();
+        if (PowerShellStreamsUseObservationProtocol)
+            WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
+    }
+
+    private static void EndPowerShellStreams()
+    {
+        if (PowerShellStreamsUseObservationProtocol)
+            WriteSemanticFrame("END", string.Empty, PowerShellObservationFrameCount.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static void WritePowerShellOutput(object? value)
+    {
+        if (PowerShellStreamsUseObservationProtocol)
+        {
+            WriteSemanticValue(value);
+            PowerShellObservationFrameCount++;
+            return;
+        }
+        WriteResult(value, ResultCardinality.Scalar);
+    }
+
+    private static void WritePowerShellResult(object? value, ResultCardinality cardinality)
+    {
+        if (cardinality == ResultCardinality.Collection && value is IEnumerable values && value is not string)
+        {
+            foreach (var item in values)
+                WritePowerShellOutput(item);
+            return;
+        }
+        WritePowerShellOutput(value);
+    }
+
+    private static void WritePowerShellVerbose(string value)
+        => WritePowerShellStream("Verbose", value);
+
+    private static void WritePowerShellDebug(string value)
+        => WritePowerShellStream("Debug", value);
+
+    private static void WritePowerShellInformation(string value)
+        => WritePowerShellStream("Information", value);
+
+    private static void WritePowerShellWarning(string value)
+    {
+        if (PowerShellStreamsUseObservationProtocol)
+            WritePowerShellStream("Warning", value);
+        else
+            WritePowerShellDiagnostic("WARNING: " + value, standardError: false);
+    }
+
+    private static void WritePowerShellHost(string value)
+    {
+        if (PowerShellStreamsUseObservationProtocol)
+            WritePowerShellStream("Host", value);
+        else
+            WritePowerShellDiagnostic(value, standardError: false);
+    }
+
+    private static void WritePowerShellError(string value)
+    {
+        if (PowerShellStreamsUseObservationProtocol)
+            WritePowerShellStream("Error", value);
+        else
+            WritePowerShellDiagnostic("Write-Error: " + value, standardError: true);
+    }
+
+    private static void WritePowerShellStream(string stream, string value)
+    {
+        if (!PowerShellStreamsUseObservationProtocol)
+            return;
+        WriteSemanticFrame(stream == "Error" ? "ERROR" : "STREAM", stream, value);
+        PowerShellObservationFrameCount++;
+    }
+
+    private static void WritePowerShellDiagnostic(string value, bool standardError)
+    {
+        if (standardError)
+            Console.Error.WriteLine(value);
+        else
+            Console.Out.WriteLine(value);
     }
 
     private static void WriteResult(object? value, ResultCardinality cardinality)

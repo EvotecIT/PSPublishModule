@@ -6,7 +6,7 @@ namespace PowerForge;
 public static class PowerShellCompilationProviderAbi
 {
     /// <summary>Current provider package ABI version.</summary>
-    public const string CurrentVersion = "3";
+    public const string CurrentVersion = "4";
 }
 
 /// <summary>One validated provider assembly available to generated projects but never loaded by the compiler.</summary>

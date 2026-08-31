@@ -31,6 +31,8 @@ public static class NoticeAdapter
         System.Globalization.NumberStyles.Float,
         System.Globalization.CultureInfo.InvariantCulture);
 
+    public static string ReadText(string path) => System.IO.File.ReadAllText(path);
+
     public static string WaitForCancellation(string value, System.Threading.CancellationToken cancellationToken)
     {
         using (var stream = new System.IO.FileStream(

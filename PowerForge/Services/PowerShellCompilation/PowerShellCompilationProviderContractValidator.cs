@@ -28,6 +28,52 @@ public static class PowerShellCompilationProviderContractValidator
             ValidateContract(contract, manifest);
     }
 
+    /// <summary>Validates the executable command shape shared by package conformance and compiler registration.</summary>
+    public static void ValidateExecutableContractShape(
+        PowerShellCompilationCommandProviderContract contract,
+        bool requireExecutableEntryPoint)
+    {
+        if (contract is null) throw new ArgumentNullException(nameof(contract));
+        if (contract.Adapter is null)
+            throw new InvalidOperationException($"Provider '{contract.ProviderId}' requires an adapter contract.");
+
+        if (contract.Adapter.RuntimeFree)
+        {
+            if (contract.Family is not (PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) ||
+                contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Host" or "Error"))
+                throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must use one supported stream adapter contract.");
+            var expectedProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" +
+                                  PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion;
+            if (!contract.Adapter.SemanticProfile.Equals(expectedProfile, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Runtime-free provider '{contract.ProviderId}' targets semantic profile '{contract.Adapter.SemanticProfile}' instead of '{expectedProfile}'.");
+            if (contract.Family == PowerShellCompilationCommandFamily.Stream)
+            {
+                var expectedOperation = contract.Stream.Equals("Success", StringComparison.Ordinal)
+                    ? "WriteOutput"
+                    : "Write" + contract.Stream;
+                if (!contract.Adapter.Operation.Equals(expectedOperation, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"Runtime-free provider '{contract.ProviderId}' operation '{contract.Adapter.Operation}' does not match stream '{contract.Stream}' operation '{expectedOperation}'.");
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(contract.Adapter.Operation))
+                    throw new InvalidOperationException($"Runtime-free external provider '{contract.ProviderId}' requires a named adapter operation.");
+                if (contract.Adapter.EntryPoint is null)
+                    throw new InvalidOperationException($"Runtime-free external provider '{contract.ProviderId}' requires an executable adapter entry point.");
+            }
+            if (requireExecutableEntryPoint && contract.Adapter.EntryPoint is null)
+                throw new InvalidOperationException($"Runtime-free package provider '{contract.ProviderId}' requires an executable adapter entry point.");
+            if ((contract.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>()).Length != 1)
+                throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must declare exactly one value parameter shape.");
+        }
+        else if (contract.Family == PowerShellCompilationCommandFamily.ExternalOperation)
+        {
+            throw new InvalidOperationException($"External provider '{contract.ProviderId}' must declare a runtime-free executable adapter.");
+        }
+    }
+
     private static void ValidateContract(
         PowerShellCompilationCommandProviderContract contract,
         PowerShellCompilationProviderPackageManifest manifest)
@@ -42,8 +88,7 @@ public static class PowerShellCompilationProviderContractValidator
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' violates the no-execution analysis boundary.");
         if (contract.Adapter is null || string.IsNullOrWhiteSpace(contract.Adapter.Operation))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' requires an adapter operation.");
-        if (contract.Adapter.RuntimeFree && contract.Adapter.EntryPoint is null)
-            throw new InvalidOperationException($"Runtime-free package provider '{contract.ProviderId}' requires an executable adapter entry point.");
+        ValidateExecutableContractShape(contract, requireExecutableEntryPoint: true);
         if (contract.Adapter.EntryPoint is { } entryPoint &&
             !Enum.IsDefined(typeof(PowerShellCompilationProviderValueType), entryPoint.ResultType))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' declares an unknown executable result type.");
@@ -51,7 +96,8 @@ public static class PowerShellCompilationProviderContractValidator
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' targets an undeclared semantic profile.");
         if (!KnownStreams.Contains(contract.Stream, StringComparer.Ordinal))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' declares unsupported stream '{contract.Stream}'.");
-        if (!Enum.IsDefined(typeof(PowerShellCompilationCommandOutput), contract.Output) ||
+        if (!Enum.IsDefined(typeof(PowerShellCompilationCommandFamily), contract.Family) ||
+            !Enum.IsDefined(typeof(PowerShellCompilationCommandOutput), contract.Output) ||
             !Enum.IsDefined(typeof(PowerShellCompilationCommandCardinality), contract.Cardinality) ||
             !Enum.IsDefined(typeof(PowerShellCompilationCommandErrors), contract.Errors) ||
             !Enum.IsDefined(typeof(PowerShellCompilationProviderCancellation), contract.Adapter.Cancellation) ||
@@ -96,7 +142,8 @@ public static class PowerShellCompilationProviderContractValidator
         var parameters = contract.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>();
         var names = parameters.SelectMany(static parameter =>
             new[] { parameter.Name }.Concat(parameter.Aliases ?? Array.Empty<string>()));
-        if (names.Any(string.IsNullOrWhiteSpace) ||
+        if (parameters.Any(static parameter => parameter.Position < -1) ||
+            names.Any(string.IsNullOrWhiteSpace) ||
             names.GroupBy(static name => name, StringComparer.OrdinalIgnoreCase).Any(static group => group.Count() > 1))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' declares ambiguous parameter names or aliases.");
     }

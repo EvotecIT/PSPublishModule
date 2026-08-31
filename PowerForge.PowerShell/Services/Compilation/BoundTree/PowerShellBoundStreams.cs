@@ -12,7 +12,9 @@ internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundState
             (kind == PowerShellStreamCommandKind.Success
                 ? PowerShellSemanticEffect.SuccessOutput
                 : PowerShellSemanticEffect.NonSuccessStream) | message.Effects,
-            PowerShellRequiredCapability.PowerShellStreams | message.Capabilities)
+            (provider.Adapter.RuntimeFree && provider.Adapter.EntryPoint is not null
+                ? PowerShellRequiredCapability.RuntimeFreeProviderOperations
+                : PowerShellRequiredCapability.PowerShellStreams) | message.Capabilities)
     {
         Kind = kind;
         Provider = provider;

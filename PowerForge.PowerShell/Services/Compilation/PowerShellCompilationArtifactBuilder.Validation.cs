@@ -178,4 +178,29 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, runtimeSource, $"Runtime source '{runtimeSource}' traverses a symbolic link or junction.");
         }
     }
+
+    private static void ValidateProviderTargetCompatibility(
+        PowerShellCompilationBuildSpec spec,
+        IEnumerable<PowerShellCompilationCommandProviderContract> providers)
+    {
+        if (spec.Optimization != PowerShellCompilationExecutableOptimization.NativeAot)
+            return;
+        var incompatible = providers.FirstOrDefault(static provider =>
+            provider.Adapter.RuntimeFree && !provider.Adapter.AotCompatible);
+        if (incompatible is not null)
+            throw new InvalidOperationException(
+                $"NativeAOT compilation rejected command provider '{incompatible.ProviderId}' because its runtime-free adapter does not declare AotCompatible.");
+    }
+
+    private static void ValidateDirectProviderInputs(
+        IEnumerable<PowerShellCompilationCommandProviderContract> providers)
+    {
+        var unlocked = (providers ?? Array.Empty<PowerShellCompilationCommandProviderContract>())
+            .FirstOrDefault(static provider =>
+                provider.Family == PowerShellCompilationCommandFamily.ExternalOperation ||
+                provider.Adapter?.EntryPoint is not null);
+        if (unlocked is not null)
+            throw new InvalidOperationException(
+                $"Executable command provider '{unlocked.ProviderId}' must come from an exact reviewed provider package lock; direct command-provider inputs may not declare external adapter entry points.");
+    }
 }

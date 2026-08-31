@@ -66,6 +66,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
+            ValidateDirectProviderInputs(spec.CommandProviders);
             failureStage = PowerShellCompilationFailureStage.Dependency;
             var providerResolution = ResolveProviderPackages(spec);
             var providerRuntimeAssemblies = PrepareProviderRuntimeAssemblies(workspace, providerResolution);
@@ -76,6 +77,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .ThenBy(static provider => provider.ProviderVersion, StringComparer.Ordinal)
                 .ThenBy(static provider => provider.CommandName, StringComparer.Ordinal)
                 .ToArray();
+            ValidateProviderTargetCompatibility(spec, commandProviderInputs);
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
             var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
@@ -131,7 +133,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
-                var executable = PowerShellTypedExecutableEmitter.Emit(spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework, spec.SemanticProfileId);
+                var executable = PowerShellTypedExecutableEmitter.Emit(
+                    spec.SourcePath,
+                    compilationSourcePaths,
+                    plan,
+                    spec.TargetFramework,
+                    spec.SemanticProfileId,
+                    commandProviderInputs);
                 File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");

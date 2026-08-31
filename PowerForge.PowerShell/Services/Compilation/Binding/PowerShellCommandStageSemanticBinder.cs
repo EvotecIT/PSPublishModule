@@ -31,6 +31,7 @@ internal static class PowerShellCommandStageSemanticBinder
         => provider.Family switch
         {
             PowerShellCompilationCommandFamily.Stream => PowerShellStreamCommandSemanticBinder.IsSupported(command, provider),
+            PowerShellCompilationCommandFamily.ExternalOperation => PowerShellStreamCommandSemanticBinder.IsSupported(command, provider),
             PowerShellCompilationCommandFamily.Projection => PowerShellProjectionCommandSemanticBinder.IsSupported(command),
             PowerShellCompilationCommandFamily.Filtering => PowerShellFilteringCommandSemanticBinder.IsSupported(command),
             PowerShellCompilationCommandFamily.Mapping => PowerShellMappingCommandSemanticBinder.IsSupported(command),
@@ -82,7 +83,8 @@ internal static class PowerShellStreamCommandSemanticBinder
             pipeline.PipelineElements.Count != 1 ||
             command.Redirections.Count != 0)
             return false;
-        if (provider.Family != PowerShellCompilationCommandFamily.Stream || !provider.Adapter.RuntimeFree)
+        if (provider.Family is not (PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) ||
+            !provider.Adapter.RuntimeFree)
             return false;
         switch (provider.Stream)
         {

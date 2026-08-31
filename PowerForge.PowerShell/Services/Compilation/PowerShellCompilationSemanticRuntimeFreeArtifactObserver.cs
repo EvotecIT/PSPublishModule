@@ -70,15 +70,26 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             ConsoleOutput = "utf-8",
             ObservationFile = "utf-8"
         };
-        var envelope = run.ExitCode == 0
-            ? CreateFramedEnvelope(profileId, ParseSuccessOutput(run.StdOut, method), culture, run.ExitCode, encoding)
-            : PowerShellCompilationSemanticRuntimeFreeObserver.Observe(
+        PowerShellCompilationSemanticOracleEnvelope envelope;
+        if (run.ExitCode == 0)
+        {
+            envelope = CreateFramedEnvelope(
+                profileId,
+                ParseFramedOutput(run.StdOut, method),
+                culture,
+                run.ExitCode,
+                encoding);
+        }
+        else
+        {
+            envelope = PowerShellCompilationSemanticRuntimeFreeObserver.Observe(
                 profileId,
                 PowerShellCompilationSemanticExecutionSurface.Strict,
                 value: null,
                 culture: culture,
                 exitCode: run.ExitCode,
                 encoding: encoding);
+        }
         if (run.ExitCode != 0)
         {
             var message = string.IsNullOrWhiteSpace(run.StdErr) ? $"Strict executable exited with code {run.ExitCode}." : run.StdErr.Trim();
@@ -289,7 +300,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             .Select(static value => value.ToString("x2", CultureInfo.InvariantCulture)));
     }
 
-    private static PowerShellCompilationSemanticValueObservation[] ParseSuccessOutput(
+    private static ParsedFramedObservation ParseFramedOutput(
         string output,
         PowerShellCompilationAbiMethod method)
     {
@@ -303,40 +314,91 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         if (end.State != "END" || end.TypeName.Length != 0 ||
             !int.TryParse(end.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var declaredCount) || declaredCount < 0)
             throw new InvalidDataException("The Strict semantic observation has an invalid end frame.");
-        var valueLines = lines.Skip(1).Take(lines.Length - 2).ToArray();
-        if (declaredCount != valueLines.Length)
+        var frames = lines.Skip(1).Take(lines.Length - 2).Select(ParseFrame).ToArray();
+        if (declaredCount != frames.Length)
             throw new InvalidDataException("The Strict semantic observation frame count is inconsistent.");
         if (declaredCount > PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationItems)
-            throw new InvalidDataException("The Strict executable exceeded the bounded success-output cardinality.");
+            throw new InvalidDataException("The Strict executable exceeded the bounded observation cardinality.");
+
+        var indexedFrames = frames.Select(static (frame, index) => (Frame: frame, Sequence: index + 1)).ToArray();
+        var successFrames = indexedFrames.Where(static item => item.Frame.State is "VALUE" or "NULL").ToArray();
+        var streamRecords = new List<PowerShellCompilationSemanticStreamObservation>();
+        var errors = new List<string>();
+        var errorRecords = new List<PowerShellCompilationSemanticErrorObservation>();
+        var information = new List<string>();
+        var warnings = new List<string>();
+        var verbose = new List<string>();
+        var debug = new List<string>();
+        foreach (var item in indexedFrames.Where(static item => item.Frame.State is not ("VALUE" or "NULL")))
+        {
+            var frame = item.Frame;
+            var nonSuccessSequence = item.Sequence;
+            if (frame.State == "ERROR" && frame.TypeName == "Error")
+            {
+                errors.Add(frame.Value);
+                errorRecords.Add(new PowerShellCompilationSemanticErrorObservation
+                {
+                    Sequence = nonSuccessSequence,
+                    Message = frame.Value,
+                    FullyQualifiedErrorId = "PowerForge.CompiledCommandError",
+                    Category = "NotSpecified",
+                    ExceptionTypeName = typeof(InvalidOperationException).FullName!,
+                    IsTerminating = false
+                });
+                continue;
+            }
+            if (frame.State != "STREAM" || frame.TypeName is not ("Verbose" or "Debug" or "Warning" or "Information" or "Host"))
+                throw new InvalidDataException("The Strict executable emitted an unknown semantic stream frame.");
+
+            var streamName = frame.TypeName == "Host" ? "Information" : frame.TypeName;
+            var tags = frame.TypeName == "Host" ? new[] { "PSHOST" } : Array.Empty<string>();
+            streamRecords.Add(new PowerShellCompilationSemanticStreamObservation
+            {
+                Sequence = nonSuccessSequence,
+                Stream = streamName,
+                Message = frame.Value,
+                TypeName = "System.Management.Automation." + streamName + "Record",
+                Tags = tags
+            });
+            switch (frame.TypeName)
+            {
+                case "Verbose": verbose.Add(frame.Value); break;
+                case "Debug": debug.Add(frame.Value); break;
+                case "Warning": warnings.Add(frame.Value); break;
+                case "Information":
+                case "Host": information.Add(frame.Value); break;
+            }
+        }
 
         var cardinality = method.OutputCardinality;
         if (cardinality.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
-            if (valueLines.Length != 0)
+            if (successFrames.Length != 0)
                 throw new InvalidDataException("The Strict executable emitted success output contrary to its ABI cardinality.");
-            return Array.Empty<PowerShellCompilationSemanticValueObservation>();
         }
-        if (cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) && valueLines.Length != 1)
-            throw new InvalidDataException($"The Strict executable emitted {valueLines.Length} framed values for a scalar ABI result.");
-        if (!cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) &&
+        else if (cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) && successFrames.Length != 1)
+            throw new InvalidDataException($"The Strict executable emitted {successFrames.Length} framed values for a scalar ABI result.");
+        else if (!cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) &&
             !cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Unsupported Strict executable ABI cardinality '{cardinality}'.");
 
         var expectedType = cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase)
             ? method.CollectionElementType
             : method.ReturnType;
-        expectedType = GetFramedScalarTypeName(expectedType);
-        var result = new PowerShellCompilationSemanticValueObservation[valueLines.Length];
-        for (var index = 0; index < valueLines.Length; index++)
+        if (successFrames.Length > 0)
+            expectedType = GetFramedScalarTypeName(expectedType);
+        var result = new PowerShellCompilationSemanticValueObservation[successFrames.Length];
+        for (var index = 0; index < successFrames.Length; index++)
         {
-            var frame = ParseFrame(valueLines[index]);
+            var item = successFrames[index];
+            var frame = item.Frame;
             if (frame.State == "NULL")
             {
                 if (frame.TypeName.Length != 0 || frame.Value.Length != 0 || !method.CanProduceNull && !method.Nullable)
                     throw new InvalidDataException("The Strict executable emitted a null frame contrary to its ABI contract.");
                 result[index] = new PowerShellCompilationSemanticValueObservation
                 {
-                    Sequence = index + 1,
+                    Sequence = item.Sequence,
                     IsNull = true,
                     ValueState = "Null",
                     EnumerationState = "Scalar"
@@ -348,14 +410,22 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
                     $"The Strict executable emitted framed type '{frame.TypeName}' for ABI type '{expectedType}'.");
             result[index] = new PowerShellCompilationSemanticValueObservation
             {
-                Sequence = index + 1,
+                Sequence = item.Sequence,
                 Value = frame.Value,
                 TypeName = frame.TypeName,
                 ValueState = "Value",
                 EnumerationState = "Scalar"
             };
         }
-        return result;
+        return new ParsedFramedObservation(
+            result,
+            information.ToArray(),
+            warnings.ToArray(),
+            verbose.ToArray(),
+            debug.ToArray(),
+            streamRecords.ToArray(),
+            errors.ToArray(),
+            errorRecords.ToArray());
     }
 
     private static string GetFramedScalarTypeName(string typeName)
@@ -404,7 +474,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
 
     private static PowerShellCompilationSemanticOracleEnvelope CreateFramedEnvelope(
         string profileId,
-        PowerShellCompilationSemanticValueObservation[] success,
+        ParsedFramedObservation observation,
         CultureInfo culture,
         int exitCode,
         PowerShellCompilationSemanticEncodingObservation encoding)
@@ -416,8 +486,15 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             OperatingSystem = GetOperatingSystem(),
             Architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
             Culture = culture.Name,
-            Success = success,
-            SuccessState = success.Length == 0 ? "NoOutput" : "Output",
+            Success = observation.Success,
+            SuccessState = observation.Success.Length == 0 ? "NoOutput" : "Output",
+            Information = observation.Information,
+            Warnings = observation.Warnings,
+            Verbose = observation.Verbose,
+            Debug = observation.Debug,
+            StreamRecords = observation.StreamRecords,
+            Errors = observation.Errors,
+            ErrorRecords = observation.ErrorRecords,
             ExitCode = exitCode,
             Encoding = encoding,
             ProcessState = new PowerShellCompilationSemanticProcessStateObservation(),
@@ -445,4 +522,14 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
     }
 
     private sealed record SemanticFrame(string State, string TypeName, string Value);
+
+    private sealed record ParsedFramedObservation(
+        PowerShellCompilationSemanticValueObservation[] Success,
+        string[] Information,
+        string[] Warnings,
+        string[] Verbose,
+        string[] Debug,
+        PowerShellCompilationSemanticStreamObservation[] StreamRecords,
+        string[] Errors,
+        PowerShellCompilationSemanticErrorObservation[] ErrorRecords);
 }

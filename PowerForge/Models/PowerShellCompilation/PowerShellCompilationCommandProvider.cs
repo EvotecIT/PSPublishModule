@@ -18,7 +18,9 @@ public enum PowerShellCompilationCommandFamily
     /// <summary>Bounded mutation of a statically known PowerShell object shape.</summary>
     ObjectMutation,
     /// <summary>A bounded command region executed by the PowerShell host.</summary>
-    HostedRegion
+    HostedRegion,
+    /// <summary>A separately packaged runtime-free operation whose result is routed to a declared stream.</summary>
+    ExternalOperation
 }
 
 /// <summary>Success-output shape produced by a command provider.</summary>

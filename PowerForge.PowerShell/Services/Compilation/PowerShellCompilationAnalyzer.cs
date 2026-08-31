@@ -315,12 +315,12 @@ public sealed partial class PowerShellCompilationAnalyzer
                         (command.InvocationOperator == TokenKind.Dot ||
                          commandName is not null && localFunctionNames?.Contains(commandName) == true))
                         break;
-                    if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
-                        (PowerShellCommandIslandPolicy.TryGetStreamCommand(command, out _, out _, _commandRegistry) ||
-                         (unitRoot is ScriptBlockAst commandBody &&
+                    if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(command, capabilities, out _, out _, out _, _commandRegistry) ||
+                        capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                        (unitRoot is ScriptBlockAst commandBody &&
                           (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
                            PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
-                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _)))))
+                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _))))
                         break;
                     diagnostics.Add(CreateDiagnostic(
                         commandName is null ? PowerShellCompilationDiagnosticCode.DynamicCommandInvocation : PowerShellCompilationDiagnosticCode.CommandInvocation,

@@ -12,7 +12,8 @@ internal static class PowerShellTypedExecutableCompiler
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
         string targetFramework,
-        string semanticProfileId)
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
         if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
@@ -40,7 +41,8 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray() ?? Array.Empty<StatementAst>();
 
         var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
-        var semantic = new PowerShellSemanticCompilationPipeline(semanticProfileId).Compile(
+        var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
+        var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
             parsed.Values.Select(static source => source.Document).Append(entryDocument),
             targetFramework,
             Capabilities);
@@ -154,7 +156,7 @@ internal static class PowerShellTypedExecutableCompiler
             unit.Parameters,
             method.SourceSpan.StartLine,
             sourcePath,
-            requiresPowerShellStreams: false,
+            requiresPowerShellStreams: method.RequiresPowerShellStreams,
             requiresPowerShellCommandRegions: false,
             aliases: function.Aliases.ToArray(),
             requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
@@ -166,7 +168,13 @@ internal static class PowerShellTypedExecutableCompiler
             sourceEndLine: method.SourceSpan.EndLine,
             sourceEndColumn: method.SourceSpan.EndColumn,
             sourceMap: method.SourceMap,
-            commandProviders: method.CommandProviders);
+            commandProviders: method.CommandProviders,
+            outputCardinality: method.OutputCardinality,
+            outputValueStates: method.OutputValueStates,
+            collectionElementType: method.CollectionElementType,
+            outputScalarization: method.OutputScalarization,
+            hostedRegionSiteCount: method.HostedRegionSiteCount,
+            requiresProviderCancellation: method.RequiresProviderCancellation);
         description.DocumentId = function.Symbol.DocumentId;
         return description;
     }
