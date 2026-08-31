@@ -411,6 +411,23 @@ public sealed partial class DotNetPublishPipelineRunner
             IEnumerable<string> packageRoots,
             VerifiedPackageArchiveCache archives,
             out VerifiedPackageInputCatalog? catalog)
+            => TryCreateForEvaluation(
+                projectPath,
+                properties,
+                packageRoots,
+                archives,
+                effectiveGlobalProperties: null,
+                environmentVariables: null,
+                out catalog);
+
+        internal static bool TryCreateForEvaluation(
+            string projectPath,
+            JsonElement properties,
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables,
+            out VerifiedPackageInputCatalog? catalog)
         {
             catalog = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
@@ -458,16 +475,9 @@ public sealed partial class DotNetPublishPipelineRunner
             var committedPackageHashes = new Dictionary<string, string>(
                 hashes,
                 StringComparer.OrdinalIgnoreCase);
+            var sdkDownloadPackageHashes = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
             var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            AddSdkManagedPackageHashes(
-                properties,
-                projectDirectory,
-                allRoots,
-                committedPackageHashes,
-                hashes,
-                sdkManagedPackageKeys);
-            if (allRoots.Count == 0)
-                return !hasCommittedLock && hashes.Count == 0;
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
                     committedPackageHashes,
@@ -476,13 +486,53 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
-            catalog = new VerifiedPackageInputCatalog(
+            string? sdkEvidenceRoot = AddSdkManagedPackageHashes(
+                projectPath,
+                properties,
                 allRoots,
-                hashes,
-                archives,
+                sdkDownloadPackageHashes,
+                sdkManagedPackageKeys,
+                effectiveGlobalProperties,
+                environmentVariables,
                 archivePathsByPackageKey,
-                sdkManagedPackageKeys);
-            return true;
+                archives);
+            try
+            {
+                if (allRoots.Count == 0)
+                    return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
+                if (!TryPrimeLockedPackageArchives(
+                        allRoots,
+                        sdkDownloadPackageHashes,
+                        archives,
+                        out Dictionary<string, string> sdkDownloadArchivePaths))
+                {
+                    return false;
+                }
+                foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
+                {
+                    if (archivePathsByPackageKey.TryGetValue(entry.Key, out string? existingPath) &&
+                        !Path.GetFullPath(existingPath).Equals(
+                            Path.GetFullPath(entry.Value),
+                            IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                    archivePathsByPackageKey[entry.Key] = entry.Value;
+                }
+                foreach (KeyValuePair<string, string> entry in sdkDownloadPackageHashes)
+                    AddPackageHash(entry.Key, entry.Value, hashes);
+                catalog = new VerifiedPackageInputCatalog(
+                    allRoots,
+                    hashes,
+                    archives,
+                    archivePathsByPackageKey,
+                    sdkManagedPackageKeys);
+                return true;
+            }
+            finally
+            {
+                TryDeleteSdkEvidenceRoot(sdkEvidenceRoot);
+            }
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)
@@ -702,6 +752,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         private readonly Dictionary<string, CacheEntry> _archives = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        private readonly Dictionary<string, CacheEntry> _archivesByContentHash = new(StringComparer.Ordinal);
 
         internal VerifiedPackageArchive? TryGetOrOpen(string path, string expectedContentHash)
         {
@@ -713,17 +764,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     : null;
             }
 
+            if (_archivesByContentHash.TryGetValue(expectedContentHash, out CacheEntry? cachedByHash))
+            {
+                _archives.Add(fullPath, cachedByHash);
+                return cachedByHash.Archive;
+            }
+
             VerifiedPackageArchive? archive = VerifiedPackageArchive.TryOpen(fullPath, expectedContentHash);
             if (archive is not null)
-                _archives.Add(fullPath, new CacheEntry(fullPath, expectedContentHash, archive));
+            {
+                var entry = new CacheEntry(fullPath, expectedContentHash, archive);
+                _archives.Add(fullPath, entry);
+                _archivesByContentHash.Add(expectedContentHash, entry);
+            }
             return archive;
         }
 
         public void Dispose()
         {
-            foreach (CacheEntry cached in _archives.Values)
+            foreach (CacheEntry cached in _archivesByContentHash.Values)
                 cached.Archive.Dispose();
             _archives.Clear();
+            _archivesByContentHash.Clear();
         }
 
         private sealed class CacheEntry
