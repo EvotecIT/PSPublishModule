@@ -7,6 +7,80 @@ namespace PowerForge.Tests;
 public sealed class AppleLocalBuildSourceTrustTests
 {
     [Fact]
+    public void ValidateLocalBuildInputContainment_rejects_untracked_empty_built_directories()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LocalAppleTrust",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                """
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = PBXBuildFile;
+                            fileRef = AA0000000000000000000002;
+                        };
+                        AA0000000000000000000002 = {
+                            isa = PBXFileReference;
+                            lastKnownFileType = folder;
+                            path = Assets;
+                            sourceTree = "<group>";
+                        };
+                    };
+                }
+                """);
+            var schemeRoot = Directory.CreateDirectory(Path.Combine(
+                project.FullName,
+                "xcshareddata",
+                "xcschemes"));
+            File.WriteAllText(
+                Path.Combine(schemeRoot.FullName, "CasaRay.xcscheme"),
+                "<Scheme />");
+            var assets = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "Assets"));
+            File.WriteAllText(
+                Path.Combine(assets.FullName, "tracked.txt"),
+                "tracked");
+            InitializeGitRepository(root.FullName, writeInputs: null);
+            var injected = Directory.CreateDirectory(Path.Combine(
+                assets.FullName,
+                "Injected"));
+            Assert.True(string.IsNullOrWhiteSpace(
+                ReadGit(root.FullName, "status", "--porcelain")));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService()
+                    .ValidateLocalBuildInputContainment(
+                        root.FullName,
+                        project.FullName,
+                        "CasaRay"));
+
+            Assert.Contains(
+                FrameworkCompatibility.GetRelativePath(
+                    root.FullName,
+                    injected.FullName).Replace('\\', '/'),
+                error.Message,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "not represented by tracked source",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateLocalBuildInputContainment_inspects_locked_remote_package_execution_features()
     {
         var root = Directory.CreateDirectory(Path.Combine(

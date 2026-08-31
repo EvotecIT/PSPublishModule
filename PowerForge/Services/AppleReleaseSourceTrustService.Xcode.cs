@@ -598,6 +598,32 @@ internal sealed partial class AppleReleaseSourceTrustService
             .ToHashSet(GetPathComparer());
         var headBlobs = ReadHeadTreeBlobIds(repositoryRoot, relativeRoot);
         var entries = EnumerateTreeWithoutLinks(path, name);
+        var impliedDirectories = new HashSet<string>(GetPathComparer());
+        foreach (var trackedPath in tracked.Where(File.Exists))
+        {
+            var directory = Path.GetDirectoryName(trackedPath);
+            while (!string.IsNullOrWhiteSpace(directory) &&
+                   IsPathAtOrWithin(directory!, path))
+            {
+                if (!impliedDirectories.Add(Path.GetFullPath(directory!)) ||
+                    GetPathComparer().Equals(
+                        Path.GetFullPath(directory!),
+                        Path.GetFullPath(path)))
+                {
+                    break;
+                }
+                directory = Path.GetDirectoryName(directory);
+            }
+        }
+        var untrackedDirectory = new[] { Path.GetFullPath(path) }
+            .Concat(entries.Where(Directory.Exists).Select(Path.GetFullPath))
+            .FirstOrDefault(directory => !impliedDirectories.Contains(directory));
+        if (untrackedDirectory is not null)
+        {
+            throw new InvalidOperationException(
+                $"{name} contains a directory that is not represented by tracked source at the exact commit: " +
+                FrameworkCompatibility.GetRelativePath(repositoryRoot, untrackedDirectory).Replace('\\', '/'));
+        }
         var trackedFiles = entries
             .Where(File.Exists)
             .Select(Path.GetFullPath)

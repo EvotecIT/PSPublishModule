@@ -6,6 +6,67 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliAppleDeployTests
 {
     [Fact]
+    public async Task AppleDeploy_plan_rejects_a_configured_xcode_wrapper()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var configPath = Path.Combine(
+                tempRoot,
+                "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "XcodeBuildExecutable": "/tmp/custom-xcodebuild",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.Contains(
+                "requires the trusted system tool '/usr/bin/xcodebuild'",
+                document.RootElement.GetProperty("error").GetString(),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AppleDeploy_plan_uses_configured_target_profile_and_platform_defaults()
     {
         var repoRoot = FindRepositoryRoot();

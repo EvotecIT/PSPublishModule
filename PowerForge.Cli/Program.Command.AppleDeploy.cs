@@ -99,6 +99,11 @@ internal static partial class Program
             AppleBuildProvenance.Snapshot? planSnapshot = null;
             if (planOnly)
             {
+                _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                    apple.XcodeBuildExecutable,
+                    "xcodebuild",
+                    "/usr/bin/xcodebuild",
+                    "Exact-source local Apple builds");
                 planSnapshot = AppleBuildProvenance.CaptureBuildInputs(
                     provenanceRoot,
                     excludesGeneratedDirectories: useBuildMirror);
