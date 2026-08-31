@@ -1,2 +1,2 @@
-$Values = [ordered] @{ First = 40; Second = 2 }
-$Values.First + $Values.Second
+$Values = [ordered] @{ First = 42; Second = 'ready' }
+if ($Values.First -is [int]) { return 42 } else { return 0 }

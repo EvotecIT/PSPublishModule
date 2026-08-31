@@ -26,7 +26,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
-    public void RuntimeFreeDictionariesStillRejectHeterogeneousValues()
+    public void RuntimeFreeDictionariesUseBclObjectRepresentationForHeterogeneousValues()
     {
         var document = PowerShellSourceParser.Parse(
             "function Get-MapValue { $map = @{ Text = 'ready'; Count = 2 }; return $map['Count'] }",
@@ -34,12 +34,102 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
-        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2702");
-        Assert.Empty(result.Emitted.Methods);
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var dictionary = Assert.IsType<PowerShellBoundDictionaryExpression>(
+            Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[0]).Value);
+        Assert.Equal(PowerShellBoundDictionaryKind.ObjectDictionary, dictionary.Kind);
+        Assert.False(dictionary.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes));
+        Assert.Contains("System.Collections.Hashtable", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void HostedDictionaryMemberAccessUsesThePowerShellAdapterContract()
+    public void RuntimeFreeKnownDictionaryMemberUsesKeyLookupBeforeClrMembers()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapMember { $map = [ordered] @{ Count = 42; Text = 'ready' }; return $map.Count }",
+            TestPath("runtime-free-dictionary-member.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[1]).Expression);
+        Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
+        Assert.Equal(typeof(object), member.Type.ClrType);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("Contains(\"Count\")", source, StringComparison.Ordinal);
+        Assert.Contains("__pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("(Map).Count", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeCompilerOwnedDictionaryReturnsNullForMissingMemberWithoutClrFallback()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapMember { $map = [ordered] @{ Name = 'ready' }; return $map.Missing }",
+            TestPath("runtime-free-unknown-dictionary-member.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[1]).Expression);
+        Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
+        Assert.Contains("__pf_dictionary.Contains(\"Missing\") ?", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeOrderedObjectDictionaryIndexRemainsObjectValued()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapValue { $map = [ordered] @{ Count = 2; Text = 'ready' }; return $map['Count'] }",
+            TestPath("runtime-free-ordered-object-dictionary-index.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var index = Assert.IsType<PowerShellBoundIndexExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[1]).Expression);
+        Assert.Equal(PowerShellBoundIndexKind.ObjectDictionary, index.Kind);
+        Assert.Equal(typeof(object), index.Type.ClrType);
+        Assert.DoesNotContain("(string?)", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeDictionaryMemberLookupPrefersAddedKeyBeforeClrFallback()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapMember { $map = [ordered] @{ Name = 1 }; $map['Count'] = 42; return $map.Count }",
+            TestPath("runtime-free-mutated-dictionary-member.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[2]).Expression);
+        Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("((global::System.Collections.Specialized.OrderedDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeDictionaryMemberLookupFallsBackAfterSameTypeReassignment()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapMember { $map = [ordered] @{ Count = 42 }; $map = [ordered] @{ Name = 1 }; return $map.Count }",
+            TestPath("runtime-free-reassigned-dictionary-member.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("((global::System.Collections.Specialized.OrderedDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TypedDictionaryMemberAccessUsesTheKeyFirstContractInHostedBuilds()
     {
         var document = PowerShellSourceParser.Parse(
             "function Get-MapMember { param([System.Collections.IDictionary] $Map) return $Map.AjaxSessionKey }",
@@ -53,8 +143,33 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
             Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
-        Assert.Equal(PowerShellClrReceiverBehavior.PowerShellAdapter, member.ReceiverBehavior);
-        Assert.Contains("Contains(\"AjaxSessionKey\")", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
+        Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("__pf_dictionary.Contains(\"AjaxSessionKey\")", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("PSObject.AsPSObject", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostedDictionaryCountMemberUsesKeyFirstClrFallbackContract()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-MapCount { param([System.Collections.IDictionary] $Map) return $Map.Count }",
+            TestPath("hosted-dictionary-count-member.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.BinaryModule);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
+        Assert.False(member.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes));
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("__pf_dictionary.Contains(\"Count\") ? __pf_dictionary[\"Count\"]", source, StringComparison.Ordinal);
+        Assert.Contains("((global::System.Collections.IDictionary)__pf_dictionary).Count", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("(Map).Count", source, StringComparison.Ordinal);
     }
 
     [Fact]

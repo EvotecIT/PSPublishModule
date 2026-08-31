@@ -18,6 +18,13 @@ internal sealed class PowerShellSemanticSymbolBinding
     internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState)
     {
         if (Type.Provenance == PowerShellTypeFactProvenance.Unknown) Type = type;
+        else if (Type.ClrType == type.ClrType && type.DictionaryValueKind != PowerShellDictionaryValueKind.None)
+            Type = new PowerShellTypeFact(
+                Type.ClrType,
+                Type.Provenance,
+                Type.Explanation,
+                type.KnownProperties,
+                type.DictionaryValueKind);
         ValueState = valueState;
     }
 
@@ -63,7 +70,8 @@ internal static class PowerShellMutationSemanticBinder
                     value.Type.ClrType,
                     PowerShellTypeFactProvenance.Inferred,
                     $"The first bound assignment to '${target.Symbol.Name}' provides a stable CLR representation.",
-                    value.Type.KnownProperties),
+                    value.Type.KnownProperties,
+                    value.Type.DictionaryValueKind),
                 value.ValueState);
             targetType = target.Type.ClrType;
         }

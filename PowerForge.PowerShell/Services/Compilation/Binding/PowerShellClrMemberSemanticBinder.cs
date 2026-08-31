@@ -113,6 +113,25 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
+                    (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
+        var members = GetReadableMembers(target.Type, name, flags, targetFramework);
+        if (!target.IsStatic && typeof(System.Collections.IDictionary).IsAssignableFrom(target.Type))
+        {
+            if (members.Length > 1)
+                return Reject(diagnostics, "PSB2602", $"CLR dictionary fallback member '{target.Type.FullName}.{name}' is ambiguous on the conservative typed path.", span);
+            var resolvedName = members.Length == 1 ? members[0].Name : name;
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                resolvedName,
+                false,
+                target.Receiver,
+                members.Length == 1
+                    ? PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback
+                    : PowerShellClrReceiverBehavior.DictionaryKeyLookup,
+                new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred, "A statically typed IDictionary member is resolved dynamically as key-first with an optional CLR-member fallback."));
+        }
         if (!target.IsStatic && target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
         {
             return new PowerShellBoundClrMemberExpression(
@@ -129,31 +148,6 @@ internal static class PowerShellClrMemberSemanticBinder
         if (!target.IsStatic && target.Type.IsArray && !name.Equals("Length", StringComparison.OrdinalIgnoreCase))
             return Reject(diagnostics, "PSB2601", $"CLR array member '{name}' does not preserve PowerShell null-member semantics; only Length is eligible.", span);
 
-        var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
-                    (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
-        var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags)
-            .Where(member => IsSupportedMember(member, targetFramework))
-            .Where(static member => member switch
-            {
-                PropertyInfo property => property.GetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0,
-                FieldInfo => true,
-                _ => false
-            })
-            .ToArray();
-        if (members.Length == 0 &&
-            !target.IsStatic &&
-            typeof(System.Collections.IDictionary).IsAssignableFrom(target.Type) &&
-            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
-        {
-            return new PowerShellBoundClrMemberExpression(
-                span,
-                target.Type,
-                name,
-                false,
-                target.Receiver,
-                PowerShellClrReceiverBehavior.PowerShellAdapter,
-                new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred, "PowerShell's adapted dictionary member is evaluated by the hosted runtime."));
-        }
         if (members.Length == 0 &&
             !target.IsStatic &&
             name.Equals("Count", StringComparison.OrdinalIgnoreCase) &&
@@ -411,6 +405,22 @@ internal static class PowerShellClrMemberSemanticBinder
 
     private static bool IsSupportedMember(MemberInfo member, string? targetFramework)
         => string.IsNullOrWhiteSpace(targetFramework) || PowerShellGeneratedMemberPolicy.IsSupported(member, targetFramework!);
+
+    private static MemberInfo[] GetReadableMembers(Type type, string name, BindingFlags flags, string? targetFramework)
+    {
+        var declaringTypes = type.IsInterface ? new[] { type }.Concat(type.GetInterfaces()) : new[] { type };
+        return declaringTypes
+            .SelectMany(candidate => candidate.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags))
+            .Distinct()
+            .Where(member => IsSupportedMember(member, targetFramework))
+            .Where(static member => member switch
+            {
+                PropertyInfo property => property.GetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0,
+                FieldInfo => true,
+                _ => false
+            })
+            .ToArray();
+    }
 
     private static bool TryGetMemberName(
         ParsedSourceDocument document,

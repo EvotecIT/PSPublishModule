@@ -6,6 +6,8 @@ internal enum PowerShellClrReceiverBehavior
     NormalizeNullString,
     NormalizeNullArrayLength,
     PropagateNull,
+    DictionaryKeyLookup,
+    DictionaryKeyLookupWithClrFallback,
     PowerShellAdapter,
     PowerShellAdapterAddNoteProperty,
     PowerShellRuntimeException
@@ -34,7 +36,10 @@ internal sealed class PowerShellBoundClrMemberExpression : PowerShellBoundExpres
             type,
             PowerShellValueState.Unknown,
             receiver?.Effects ?? PowerShellSemanticEffect.None,
-            receiver?.Capabilities ?? PowerShellRequiredCapability.None)
+            (receiver?.Capabilities ?? PowerShellRequiredCapability.None) |
+            (receiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapter
+                ? PowerShellRequiredCapability.PowerShellHostTypes
+                : PowerShellRequiredCapability.None))
     {
         DeclaringType = declaringType;
         MemberName = memberName;

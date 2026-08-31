@@ -47,24 +47,34 @@ internal enum PowerShellTypeFactProvenance
     Unknown
 }
 
+internal enum PowerShellDictionaryValueKind
+{
+    None,
+    String,
+    Object
+}
+
 internal sealed class PowerShellTypeFact
 {
     internal PowerShellTypeFact(
         Type clrType,
         PowerShellTypeFactProvenance provenance,
         string explanation,
-        IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null)
+        IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null,
+        PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
         Explanation = explanation ?? string.Empty;
         KnownProperties = CopyKnownProperties(knownProperties);
+        DictionaryValueKind = dictionaryValueKind;
     }
 
     internal Type ClrType { get; }
     internal PowerShellTypeFactProvenance Provenance { get; }
     internal string Explanation { get; }
     internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
+    internal PowerShellDictionaryValueKind DictionaryValueKind { get; }
 
     internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
         => KnownProperties.TryGetValue(name, out property!);
@@ -73,7 +83,7 @@ internal sealed class PowerShellTypeFact
     {
         var properties = CopyKnownProperties(KnownProperties);
         properties[name] = property;
-        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties);
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind);
     }
 
     private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(

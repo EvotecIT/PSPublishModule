@@ -298,32 +298,32 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities)
     {
         var expression = UnwrapExpression(assignment.Right);
-        var hostedObjects = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
         if (assignment.Left is ConvertExpressionAst typedDictionary &&
-            expression is HashtableAst &&
+            expression is HashtableAst typedHashtable &&
             (typedDictionary.StaticType == typeof(System.Collections.Hashtable) ||
              typedDictionary.StaticType == typeof(System.Collections.IDictionary)))
-            return new PowerShellTypeFact(
-                hostedObjects ? typeof(System.Collections.Hashtable) : typeof(Dictionary<string, string>),
-                PowerShellTypeFactProvenance.Explicit,
-                hostedObjects
-                    ? "A hosted typed hashtable literal preserves heterogeneous object values."
-                    : "A typed hashtable literal selects the compiler's homogeneous String dictionary representation.");
+            return PowerShellDictionarySemanticBinder.InferLiteralType(
+                typedHashtable,
+                ordered: false,
+                typedDictionary.StaticType,
+                PowerShellTypeFactProvenance.Explicit);
         if (assignment.Left is ConvertExpressionAst typedLeft)
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
         if (expression is HashtableAst)
         {
             var hashtable = (HashtableAst)expression;
-            var objectValues = PowerShellDictionarySemanticBinder.UsesHostedObjectRepresentation(hashtable, contextualType: null, capabilities);
-            return new PowerShellTypeFact(
-                objectValues ? typeof(System.Collections.Hashtable) : typeof(Dictionary<string, string>),
-                PowerShellTypeFactProvenance.Inferred,
-                objectValues
-                    ? "A hosted hashtable literal preserves heterogeneous object values."
-                    : "A homogeneous hashtable literal selects the compiler's string dictionary representation.");
+            return PowerShellDictionarySemanticBinder.InferLiteralType(
+                hashtable,
+                ordered: false,
+                contextualType: null,
+                PowerShellTypeFactProvenance.Inferred);
         }
         if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
-            return new PowerShellTypeFact(typeof(System.Collections.Specialized.OrderedDictionary), PowerShellTypeFactProvenance.Explicit, "An [ordered] literal selects OrderedDictionary representation.");
+            return PowerShellDictionarySemanticBinder.InferLiteralType(
+                (HashtableAst)ordered.Child,
+                ordered: true,
+                typeof(System.Collections.Specialized.OrderedDictionary),
+                PowerShellTypeFactProvenance.Explicit);
         if (expression is ConvertExpressionAst powerShellObject && PowerShellObjectConstructionPolicy.IsLiteral(powerShellObject))
             return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))

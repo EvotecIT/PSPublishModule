@@ -570,8 +570,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
                 $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
             PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
-            PowerShellClrReceiverBehavior.PowerShellAdapter when typeof(global::System.Collections.IDictionary).IsAssignableFrom(member.DeclaringType) =>
-                $"new global::System.Func<object?>(() => {{ var __pf_dictionary = (global::System.Collections.IDictionary?)({receiver}); return __pf_dictionary is null || !__pf_dictionary.Contains({PowerShellCSharpLiteral.QuoteString(member.MemberName)}) ? null : __pf_dictionary[{PowerShellCSharpLiteral.QuoteString(member.MemberName)}]; }})()",
+            PowerShellClrReceiverBehavior.DictionaryKeyLookup => EmitDictionaryKeyLookup(member, receiver, hasClrFallback: false),
+            PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback => EmitDictionaryKeyLookup(member, receiver, hasClrFallback: true),
             PowerShellClrReceiverBehavior.PowerShellAdapter when member.MemberName.Equals("Count", StringComparison.OrdinalIgnoreCase) && member.ClrType == typeof(int) =>
                 $"new global::System.Func<int>(() => {{ var __pf_adapted_value = (object?)({receiver}); if (__pf_adapted_value is null) return 0; var __pf_count = global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[\"Count\"]?.Value; return __pf_count is null ? 1 : (int)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__pf_count, typeof(int), global::System.Globalization.CultureInfo.InvariantCulture)!; }})()",
             PowerShellClrReceiverBehavior.PowerShellAdapter when member.ClrType != typeof(object) =>
@@ -580,6 +580,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 $"new global::System.Func<object?>(() => {{ var __pf_adapted_value = (object?)({receiver}); return __pf_adapted_value is null ? null : global::System.Management.Automation.PSObject.AsPSObject(__pf_adapted_value).Properties[{PowerShellCSharpLiteral.QuoteString(member.MemberName)}]?.Value; }})()",
             _ => $"({receiver}).{member.MemberName}"
         };
+    }
+
+    private static string EmitDictionaryKeyLookup(PowerShellLoweredClrMemberExpression member, string receiver, bool hasClrFallback)
+    {
+        var name = PowerShellCSharpLiteral.QuoteString(member.MemberName);
+        var fallback = hasClrFallback
+            ? $"(object?)(({PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType)})__pf_dictionary).{member.MemberName}"
+            : "null";
+        return $"new global::System.Func<object?>(() => {{ var __pf_dictionary = (global::System.Collections.IDictionary?)({receiver}); return __pf_dictionary is null ? null : __pf_dictionary.Contains({name}) ? __pf_dictionary[{name}] : {fallback}; }})()";
     }
 
     private static string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)

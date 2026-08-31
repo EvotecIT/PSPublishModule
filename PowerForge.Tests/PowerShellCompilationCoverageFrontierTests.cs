@@ -180,7 +180,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Set-FrontierHeader { [CmdletBinding()] param([System.Collections.IDictionary] $Headers, [string] $Name, [string] $Value) " +
-            "$Headers[$Name] = $Value; return $Headers[$Name] }",
+            "$Headers[$Name] = $Value; return $Headers[$Name] }; " +
+            "function Get-FrontierHeaderCount { [CmdletBinding()] param([System.Collections.IDictionary] $Headers) return $Headers.Count }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -194,6 +195,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             result.ArtifactPath!,
             "$headers = @{}; Set-FrontierHeader -Headers $headers -Name X-Test -Value two; $headers['X-Test']");
         Assert.Equal(new[] { "two", "two" }, output.Split(Environment.NewLine));
+        Assert.Equal("99", RunModuleProof(result.ArtifactPath!, "$headers = @{ Count = 99 }; Get-FrontierHeaderCount -Headers $headers"));
+        Assert.Equal("1", RunModuleProof(result.ArtifactPath!, "$headers = @{ Name = 'ready' }; Get-FrontierHeaderCount -Headers $headers"));
     }
 
     [Fact]

@@ -74,16 +74,14 @@ internal sealed class PowerShellBoundDictionaryEntry
 
 internal sealed class PowerShellBoundDictionaryExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundDictionaryExpression(SourceSpan span, Type dictionaryType, PowerShellBoundDictionaryKind kind, PowerShellBoundDictionaryEntry[] entries)
+    internal PowerShellBoundDictionaryExpression(SourceSpan span, PowerShellTypeFact type, PowerShellBoundDictionaryKind kind, PowerShellBoundDictionaryEntry[] entries)
         : base(
             span,
-            new PowerShellTypeFact(dictionaryType, PowerShellTypeFactProvenance.Inferred, "A homogeneous literal selects one case-insensitive CLR dictionary representation."),
+            type,
             PowerShellValueState.Known,
             entries.Aggregate(PowerShellSemanticEffect.None, static (effects, entry) => effects | entry.Key.Effects | entry.Value.Effects),
             entries.Aggregate(
-                kind is PowerShellBoundDictionaryKind.ObjectDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary
-                    ? PowerShellRequiredCapability.PowerShellHostTypes
-                    : PowerShellRequiredCapability.None,
+                PowerShellRequiredCapability.None,
                 static (capabilities, entry) => capabilities | entry.Key.Capabilities | entry.Value.Capabilities))
     {
         Kind = kind;

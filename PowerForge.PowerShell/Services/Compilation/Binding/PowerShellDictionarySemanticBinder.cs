@@ -4,7 +4,7 @@ using System.Management.Automation.Language;
 
 namespace PowerForge;
 
-/// <summary>Owns homogeneous dictionary construction, lookup, and indexed mutation semantics.</summary>
+/// <summary>Owns bounded dictionary construction, lookup, and indexed mutation semantics.</summary>
 internal static class PowerShellDictionarySemanticBinder
 {
     internal static PowerShellBoundExpression? BindLiteral(
@@ -13,10 +13,9 @@ internal static class PowerShellDictionarySemanticBinder
         bool ordered,
         Type? contextualType,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
-        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        var hostedObjects = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
+        var objectValues = UsesObjectRepresentation(syntax, contextualType);
         var entries = new List<PowerShellBoundDictionaryEntry>();
         foreach (var pair in syntax.KeyValuePairs)
         {
@@ -27,21 +26,20 @@ internal static class PowerShellDictionarySemanticBinder
                 return null;
             }
             var key = bindExpression(pair.Item1, typeof(string));
-            var value = bindExpression(valueSyntax, hostedObjects ? null : typeof(string));
+            var value = bindExpression(valueSyntax, objectValues ? null : typeof(string));
             if (key is null || value is null) return null;
-            if (key.Type.ClrType != typeof(string) || !hostedObjects && value.Type.ClrType != typeof(string))
+            if (key.Type.ClrType != typeof(string) || !objectValues && value.Type.ClrType != typeof(string))
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2702", "Typed dictionary literals require homogeneous String keys and String values.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2702", "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
                 return null;
             }
             entries.Add(new PowerShellBoundDictionaryEntry(key, value));
         }
 
-        var hostedObjectValues = UsesHostedObjectRepresentation(syntax, contextualType, capabilities);
         var type = ordered
             ? typeof(OrderedDictionary)
-            : hostedObjectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
-        var kind = (ordered, hostedObjectValues) switch
+            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+        var kind = (ordered, objectValues) switch
         {
             (true, true) => PowerShellBoundDictionaryKind.OrderedObjectDictionary,
             (true, false) => PowerShellBoundDictionaryKind.OrderedStringDictionary,
@@ -50,7 +48,7 @@ internal static class PowerShellDictionarySemanticBinder
         };
         return new PowerShellBoundDictionaryExpression(
             PowerShellSourceParser.GetSpan(document, syntax.Extent),
-            type,
+            CreateLiteralTypeFact(type, objectValues, entries),
             kind,
             entries.ToArray());
     }
@@ -73,7 +71,7 @@ internal static class PowerShellDictionarySemanticBinder
             return null;
         }
         var target = bindExpression(syntax.Target, null);
-        if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out var resultType))
+        if (target is null || !TryClassify(target.Type, out var kind, out var indexType, out var resultType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2704", "Typed indexing supports strings, one-dimensional arrays, IList values, homogeneous string dictionaries, and IDictionary values.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
             return null;
@@ -130,7 +128,7 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2713", "The bounded $Error collection is a read-only invocation snapshot and cannot be mutated.", target.Span));
             return null;
         }
-        if (target is null || !TryClassify(target.Type.ClrType, capabilities, out var kind, out var indexType, out _) || kind == PowerShellBoundIndexKind.String)
+        if (target is null || !TryClassify(target.Type, out var kind, out var indexType, out _) || kind == PowerShellBoundIndexKind.String)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
             return null;
@@ -173,23 +171,47 @@ internal static class PowerShellDictionarySemanticBinder
     internal static bool IsOrderedHashtableConversion(ConvertExpressionAst syntax)
         => syntax.StaticType == typeof(OrderedDictionary) && syntax.Child is HashtableAst;
 
-    internal static bool UsesHostedObjectRepresentation(
+    internal static bool UsesObjectRepresentation(
         HashtableAst syntax,
-        Type? contextualType,
-        PowerShellCompilationCapability capabilities)
+        Type? contextualType)
     {
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects)) return false;
-        if (contextualType == typeof(Hashtable) || contextualType == typeof(IDictionary) || contextualType == typeof(OrderedDictionary)) return true;
+        if (contextualType == typeof(Hashtable) || contextualType == typeof(IDictionary)) return true;
         return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst);
     }
 
+    internal static PowerShellTypeFact InferLiteralType(
+        HashtableAst syntax,
+        bool ordered,
+        Type? contextualType,
+        PowerShellTypeFactProvenance provenance)
+    {
+        var objectValues = UsesObjectRepresentation(syntax, contextualType);
+        var dictionaryType = ordered
+            ? typeof(OrderedDictionary)
+            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+        var properties = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in syntax.KeyValuePairs)
+        {
+            if (pair.Item1 is not StringConstantExpressionAst key || GetValueExpression(pair.Item2) is not { } value) continue;
+            properties[key.Value] = InferValueType(value);
+        }
+        return new PowerShellTypeFact(
+            dictionaryType,
+            provenance,
+            objectValues
+                ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
+                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+            properties,
+            objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
+    }
+
     private static bool TryClassify(
-        Type type,
-        PowerShellCompilationCapability capabilities,
+        PowerShellTypeFact typeFact,
         out PowerShellBoundIndexKind kind,
         out Type indexType,
         out Type resultType)
     {
+        var type = typeFact.ClrType;
         if (type == typeof(string))
         {
             kind = PowerShellBoundIndexKind.String; indexType = typeof(int); resultType = typeof(object); return true;
@@ -208,7 +230,7 @@ internal static class PowerShellDictionarySemanticBinder
         }
         if (type == typeof(OrderedDictionary))
         {
-            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+            if (typeFact.DictionaryValueKind != PowerShellDictionaryValueKind.String)
             {
                 kind = PowerShellBoundIndexKind.ObjectDictionary; indexType = typeof(object); resultType = typeof(object); return true;
             }
@@ -225,6 +247,41 @@ internal static class PowerShellDictionarySemanticBinder
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline && pipeline.PipelineElements[0] is CommandExpressionAst expression
             ? expression.Expression
             : null;
+
+    private static PowerShellTypeFact CreateLiteralTypeFact(
+        Type dictionaryType,
+        bool objectValues,
+        IEnumerable<PowerShellBoundDictionaryEntry> entries)
+    {
+        var properties = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
+        {
+            if (entry.Key is PowerShellBoundLiteralExpression { Value: string key }) properties[key] = entry.Value.Type;
+        }
+        return new PowerShellTypeFact(
+            dictionaryType,
+            PowerShellTypeFactProvenance.Inferred,
+            objectValues
+                ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
+                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+            properties,
+            objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
+    }
+
+    private static PowerShellTypeFact InferValueType(ExpressionAst expression)
+    {
+        if (expression is StringConstantExpressionAst)
+            return new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "The dictionary value is a String literal.");
+        if (expression is ConstantExpressionAst constant)
+            return new PowerShellTypeFact(constant.Value?.GetType() ?? typeof(object), PowerShellTypeFactProvenance.Literal, "The dictionary value is a scalar literal.");
+        if (expression is VariableExpressionAst variable &&
+            (variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+             variable.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase)))
+            return new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Literal, "The dictionary value is a Boolean literal.");
+        if (expression.StaticType != typeof(object))
+            return new PowerShellTypeFact(expression.StaticType, PowerShellTypeFactProvenance.Inferred, "The dictionary value syntax provides one static CLR type.");
+        return PowerShellTypeFact.Unknown;
+    }
 
     private static bool IsSideEffectFreeIndex(ExpressionAst index)
         => index is VariableExpressionAst or ConstantExpressionAst or StringConstantExpressionAst ||
