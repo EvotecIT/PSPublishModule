@@ -7,6 +7,12 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private const string PayloadCachePromotionFailure =
+        "The exact signed coordinated release payload could not be committed to its durable cache before any remote publish attempt. Resolve the local filesystem lock and retry; the release checkpoint will resume without duplicating publication.";
+
+    private const string PayloadRestoreFailure =
+        "The exact signed coordinated release payload could not be restored from its durable cache. Resolve the local filesystem lock and retry the incomplete release.";
+
     private ModuleBuildResult BindSynchronizedReleasePayload(
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
@@ -247,6 +253,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state)
     {
         var temporaryPath = cachePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        Exception? operationFailure = null;
         try
         {
             CopySynchronizedReleaseDirectory(buildResult.StagingPath, Path.Combine(temporaryPath, "module"));
@@ -304,13 +311,37 @@ public sealed partial class ModulePipelineRunner
             }
 
             if (Directory.Exists(cachePath))
-                DeleteDirectoryWithRetries(cachePath);
-            Directory.Move(temporaryPath, cachePath);
+            {
+                try
+                {
+                    DeleteDirectoryWithRetries(cachePath);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new InvalidOperationException(
+                        $"{PayloadCachePromotionFailure} Failed while deleting the previous cache '{cachePath}'.",
+                        ex);
+                }
+            }
+            MoveDirectoryWithRetries(
+                temporaryPath,
+                cachePath,
+                PayloadCachePromotionFailure);
+        }
+        catch (Exception ex)
+        {
+            operationFailure = ex;
+            throw;
         }
         finally
         {
             if (Directory.Exists(temporaryPath))
-                DeleteDirectoryWithRetries(temporaryPath);
+            {
+                CleanupTemporaryPath(
+                    temporaryPath,
+                    operationFailure,
+                    () => DeleteDirectoryWithRetries(temporaryPath));
+            }
         }
     }
 
@@ -527,17 +558,42 @@ public sealed partial class ModulePipelineRunner
     {
         DeleteStaleSynchronizedReleaseRestorePaths(destinationPath);
         var temporaryPath = destinationPath + ".restore-" + Guid.NewGuid().ToString("N");
+        Exception? operationFailure = null;
         try
         {
             CopySynchronizedReleaseDirectory(sourcePath, temporaryPath);
             if (Directory.Exists(destinationPath))
-                DeleteDirectoryWithRetries(destinationPath);
-            Directory.Move(temporaryPath, destinationPath);
+            {
+                try
+                {
+                    DeleteDirectoryWithRetries(destinationPath);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    throw new InvalidOperationException(
+                        $"{PayloadRestoreFailure} Failed while deleting the previous destination '{destinationPath}'.",
+                        ex);
+                }
+            }
+            MoveDirectoryWithRetries(
+                temporaryPath,
+                destinationPath,
+                PayloadRestoreFailure);
+        }
+        catch (Exception ex)
+        {
+            operationFailure = ex;
+            throw;
         }
         finally
         {
             if (Directory.Exists(temporaryPath))
-                DeleteDirectoryWithRetries(temporaryPath);
+            {
+                CleanupTemporaryPath(
+                    temporaryPath,
+                    operationFailure,
+                    () => DeleteDirectoryWithRetries(temporaryPath));
+            }
         }
     }
 
@@ -553,17 +609,42 @@ public sealed partial class ModulePipelineRunner
         Directory.CreateDirectory(destinationDirectory);
         DeleteStaleSynchronizedReleaseRestorePaths(destinationPath);
         var temporaryPath = destinationPath + ".restore-" + Guid.NewGuid().ToString("N");
+        Exception? operationFailure = null;
         try
         {
-            File.Copy(sourcePath, temporaryPath, overwrite: true);
+            RunFileSystemOperationWithRetries(
+                () => File.Copy(sourcePath, temporaryPath, overwrite: true),
+                PayloadRestoreFailure,
+                $"copying cached file '{sourcePath}' to temporary path '{temporaryPath}'");
             if (File.Exists(destinationPath))
-                File.Delete(destinationPath);
-            File.Move(temporaryPath, destinationPath);
+            {
+                RunFileSystemOperationWithRetries(
+                    () => File.Delete(destinationPath),
+                    PayloadRestoreFailure,
+                    $"deleting previous destination file '{destinationPath}'");
+            }
+            RunFileSystemOperationWithRetries(
+                () => File.Move(temporaryPath, destinationPath),
+                PayloadRestoreFailure,
+                $"moving temporary file '{temporaryPath}' to '{destinationPath}'");
+        }
+        catch (Exception ex)
+        {
+            operationFailure = ex;
+            throw;
         }
         finally
         {
             if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
+            {
+                CleanupTemporaryPath(
+                    temporaryPath,
+                    operationFailure,
+                    () => RunFileSystemOperationWithRetries(
+                        () => File.Delete(temporaryPath),
+                        PayloadRestoreFailure,
+                        $"deleting temporary file '{temporaryPath}'"));
+            }
         }
     }
 
