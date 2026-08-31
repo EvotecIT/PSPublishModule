@@ -39,6 +39,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Providers", "Providers", "{
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.PowerShell.Provider.Management.Runtime", "PowerForge.PowerShell.Provider.Management.Runtime\PowerForge.PowerShell.Provider.Management.Runtime.csproj", "{5D5DAE4D-D6B9-489F-845D-209477D50462}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.PowerShell.Provider.Directory", "PowerForge.PowerShell.Provider.Directory\PowerForge.PowerShell.Provider.Directory.csproj", "{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerForge.PowerShell.Provider.Directory.Runtime", "PowerForge.PowerShell.Provider.Directory.Runtime\PowerForge.PowerShell.Provider.Directory.Runtime.csproj", "{F9CF283F-CDD7-4074-942A-154063872A7D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -253,6 +257,30 @@ Global
 		{5D5DAE4D-D6B9-489F-845D-209477D50462}.Release|x64.Build.0 = Release|Any CPU
 		{5D5DAE4D-D6B9-489F-845D-209477D50462}.Release|x86.ActiveCfg = Release|Any CPU
 		{5D5DAE4D-D6B9-489F-845D-209477D50462}.Release|x86.Build.0 = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|x64.Build.0 = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Debug|x86.Build.0 = Debug|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|x64.ActiveCfg = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|x64.Build.0 = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|x86.ActiveCfg = Release|Any CPU
+		{ECFDB094-25D1-4E9E-AD54-07881DB3DA52}.Release|x86.Build.0 = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|x64.Build.0 = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Debug|x86.Build.0 = Debug|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|x64.ActiveCfg = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|x64.Build.0 = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|x86.ActiveCfg = Release|Any CPU
+		{F9CF283F-CDD7-4074-942A-154063872A7D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

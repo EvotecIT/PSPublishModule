@@ -271,9 +271,13 @@ public sealed class PSPublishModuleManifestContractTests
             .Select(static project => project.GetString())
             .ToArray();
         Assert.Contains("PowerForge.PowerShell.ProviderSdk", powerForgeProjects);
+        Assert.Contains("PowerForge.PowerShell.Provider.Directory", powerForgeProjects);
+        Assert.Contains("PowerForge.PowerShell.Provider.Directory.Runtime", powerForgeProjects);
         Assert.Contains("PowerForge.PowerShell.Provider.Management", powerForgeProjects);
         Assert.Contains("PowerForge.PowerShell.Provider.Management.Runtime", powerForgeProjects);
         Assert.Contains("'PowerForge.PowerShell.ProviderSdk'", publicReleaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("'PowerForge.PowerShell.Provider.Directory'", publicReleaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("'PowerForge.PowerShell.Provider.Directory.Runtime'", publicReleaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("'PowerForge.PowerShell.Provider.Management'", publicReleaseWorkflow, StringComparison.Ordinal);
         Assert.Contains("'PowerForge.PowerShell.Provider.Management.Runtime'", publicReleaseWorkflow, StringComparison.Ordinal);
         Assert.False(releaseRoot.GetProperty("Tools").GetProperty("GitHub").GetProperty("Publish").GetBoolean());

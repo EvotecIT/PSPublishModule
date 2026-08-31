@@ -75,6 +75,8 @@ public enum PowerShellCompilationProviderCancellation
     NotApplicable,
     /// <summary>The runtime-free adapter accepts and observes cooperative cancellation.</summary>
     Cooperative,
+    /// <summary>The adapter observes cooperative cancellation after a non-cancellable initialization phase.</summary>
+    PostInitializationCooperative,
     /// <summary>The PowerShell host owns cancellation semantics for a hosted boundary.</summary>
     PowerShellHost
 }

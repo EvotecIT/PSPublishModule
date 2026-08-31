@@ -1154,6 +1154,19 @@
           "System.Security.Cryptography.Xml": "[10.0.11, )"
         }
       },
+      "powerforge.powershell.provider.directory": {
+        "type": "Project",
+        "dependencies": {
+          "System.DirectoryServices.Protocols": "[10.0.5, )"
+        }
+      },
+      "powerforge.powershell.provider.directory.runtime": {
+        "type": "Project",
+        "dependencies": {
+          "PowerForge.PowerShell.Provider.Directory": "[3.0.126, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.126, )"
+        }
+      },
       "powerforge.powershell.provider.management": {
         "type": "Project",
         "dependencies": {

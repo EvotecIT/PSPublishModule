@@ -24,7 +24,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var entryPoint = stream.Provider.Adapter.EntryPoint;
         var convertedMessage = "global::System.Convert.ToString(" + EmitExpression(stream.Message) +
             ", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty";
-        var cancellationArgument = stream.Provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.Cooperative
+        var cancellationArgument = stream.Provider.Adapter.Cancellation is
+            PowerShellCompilationProviderCancellation.Cooperative or
+            PowerShellCompilationProviderCancellation.PostInitializationCooperative
             ? ", __providerCancellationToken"
             : string.Empty;
         var nullFailure = "new global::System.InvalidOperationException(" +

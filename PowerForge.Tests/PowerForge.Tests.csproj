@@ -17,6 +17,8 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Directory\PowerForge.PowerShell.Provider.Directory.csproj" />
+    <ProjectReference Include="..\PowerForge.PowerShell.Provider.Directory.Runtime\PowerForge.PowerShell.Provider.Directory.Runtime.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management\PowerForge.PowerShell.Provider.Management.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell.Provider.Management.Runtime\PowerForge.PowerShell.Provider.Management.Runtime.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell.ProviderSdk\PowerForge.PowerShell.ProviderSdk.csproj" />

@@ -70,7 +70,9 @@ internal sealed partial class PowerShellTypedLowerer
         => statement switch
         {
             PowerShellBoundStreamWriteStatement stream =>
-                stream.Provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.Cooperative,
+                stream.Provider.Adapter.Cancellation is
+                    PowerShellCompilationProviderCancellation.Cooperative or
+                    PowerShellCompilationProviderCancellation.PostInitializationCooperative,
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsCooperativeProvider(clause.Body)) ||
                 conditional.ElseBlock is not null && ContainsCooperativeProvider(conditional.ElseBlock),
             PowerShellBoundWhileStatement loop => ContainsCooperativeProvider(loop.Body),

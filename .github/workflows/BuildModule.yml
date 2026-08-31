@@ -275,6 +275,8 @@ jobs:
         run: |
           dotnet build .\PowerForge\PowerForge.csproj -c Release -f net472 --nologo
           dotnet build .\PowerForge.PowerShell.ProviderSdk\PowerForge.PowerShell.ProviderSdk.csproj -c Release -f net472 --nologo
+          dotnet build .\PowerForge.PowerShell.Provider.Directory\PowerForge.PowerShell.Provider.Directory.csproj -c Release -f net472 --nologo
+          dotnet build .\PowerForge.PowerShell.Provider.Directory.Runtime\PowerForge.PowerShell.Provider.Directory.Runtime.csproj -c Release -f net10.0 --nologo
           dotnet build .\PowerForge.PowerShell.Provider.Management\PowerForge.PowerShell.Provider.Management.csproj -c Release -f net472 --nologo
           dotnet build .\PowerForge.PowerShell.Provider.Management.Runtime\PowerForge.PowerShell.Provider.Management.Runtime.csproj -c Release -f net10.0 --nologo
           dotnet build .\PowerForge.PowerShell\PowerForge.PowerShell.csproj -c Release -f net472 --nologo

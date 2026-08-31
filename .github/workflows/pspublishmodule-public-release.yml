@@ -121,6 +121,8 @@ jobs:
               'PowerForge.Cli/PowerForge.Cli.csproj'
               'PowerForge.PowerShell/PowerForge.PowerShell.csproj'
               'PowerForge.PowerShell.ProviderSdk/PowerForge.PowerShell.ProviderSdk.csproj'
+              'PowerForge.PowerShell.Provider.Directory/PowerForge.PowerShell.Provider.Directory.csproj'
+              'PowerForge.PowerShell.Provider.Directory.Runtime/PowerForge.PowerShell.Provider.Directory.Runtime.csproj'
               'PowerForge.PowerShell.Provider.Management/PowerForge.PowerShell.Provider.Management.csproj'
               'PowerForge.PowerShell.Provider.Management.Runtime/PowerForge.PowerShell.Provider.Management.Runtime.csproj'
               'PowerForge.Web/PowerForge.Web.csproj'
@@ -274,6 +276,8 @@ jobs:
               'PowerForge',
               'PowerForge.PowerShell',
               'PowerForge.PowerShell.ProviderSdk',
+              'PowerForge.PowerShell.Provider.Directory',
+              'PowerForge.PowerShell.Provider.Directory.Runtime',
               'PowerForge.PowerShell.Provider.Management',
               'PowerForge.PowerShell.Provider.Management.Runtime',
               'PowerForge.Build',

@@ -125,7 +125,8 @@ public static class PowerShellCompilationProviderContractValidator
         if (contract.Adapter.AotCompatible && !contract.Adapter.RuntimeFree)
             throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' cannot claim runtime-free AOT compatibility.");
         if (!contract.Adapter.RuntimeFree &&
-            (contract.Adapter.Cancellation == PowerShellCompilationProviderCancellation.Cooperative ||
+            (contract.Adapter.Cancellation is PowerShellCompilationProviderCancellation.Cooperative or
+                 PowerShellCompilationProviderCancellation.PostInitializationCooperative ||
              contract.Adapter.Cleanup == PowerShellCompilationProviderCleanup.Deterministic))
             throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' cannot claim runtime-free cancellation or cleanup ownership.");
         var declaredDependencies = (manifest.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())
