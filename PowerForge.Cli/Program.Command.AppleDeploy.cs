@@ -85,6 +85,16 @@ internal static partial class Program
             var planOnly = argv.Any(static value => value.Equals("--plan", StringComparison.OrdinalIgnoreCase));
             var provenanceRoot = AppleBuildProvenance.ResolveRepositoryRoot(
                 projectRoot) ?? projectRoot;
+            AppleBuildProvenance.Snapshot? planSnapshot = null;
+            if (planOnly)
+            {
+                planSnapshot = AppleBuildProvenance.CaptureBuildInputs(
+                    provenanceRoot,
+                    excludesGeneratedDirectories: useBuildMirror);
+                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                    provenanceRoot,
+                    projectPath);
+            }
 
             var cliResult = new AppleLocalDeploymentCliResult
             {
@@ -97,11 +107,7 @@ internal static partial class Program
                 ProjectPath = projectPath,
                 Scheme = scheme,
                 DerivedDataPath = derivedDataPath,
-                SourceRevision = planOnly
-                    ? AppleBuildProvenance.CaptureBuildInputs(
-                        provenanceRoot,
-                        excludesGeneratedDirectories: useBuildMirror).Revision
-                    : null,
+                SourceRevision = planSnapshot?.Revision,
                 Device = deviceIdentifier ?? device,
                 InstallRoot = requestedPlatform == ApplePlatform.macOS ? Path.GetFullPath(installRoot) : null,
                 Launch = launch,

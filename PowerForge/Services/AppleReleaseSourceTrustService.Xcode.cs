@@ -263,24 +263,21 @@ internal sealed partial class AppleReleaseSourceTrustService
         string repositoryRoot,
         string metadataPath,
         IReadOnlyCollection<string> metadataPaths,
-        IReadOnlyCollection<string> generatedOutputPaths)
+        IReadOnlyCollection<string> generatedOutputPaths,
+        bool inspectRemotePackageSource = true)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
         var packageLockPaths = ResolveEffectivePackageLockPaths(metadataPath, metadataPaths);
         var objects = ParsePbxObjects(File.ReadAllText(metadataPath));
         var parents = BuildPbxParentMap(objects);
-        var buildFileReferences = objects.Values
-            .Where(static value => value.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
-            .Select(value => ReadPbxScalar(value.Body, "fileRef"))
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var nativeTargetProductReferences = objects.Values
-            .Where(static value => value.Isa.Equals("PBXNativeTarget", StringComparison.OrdinalIgnoreCase))
-            .Select(value => ReadPbxScalar(value.Body, "productReference"))
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var buildFileReferences = ResolvePbxReferences(
+            objects,
+            "PBXBuildFile",
+            "fileRef");
+        var nativeTargetProductReferences = ResolvePbxReferences(
+            objects,
+            "PBXNativeTarget",
+            "productReference");
         var shippingSources = ResolveShippingSourceOwnership(
             repositoryRoot,
             projectDirectory,
@@ -343,7 +340,11 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (item.Isa.Equals("XCRemoteSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateRemotePackageReference(repositoryRoot, packageLockPaths, item);
+                ValidateRemotePackageReference(
+                    repositoryRoot,
+                    packageLockPaths,
+                    item,
+                    inspectRemotePackageSource);
                 continue;
             }
 
@@ -488,7 +489,8 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateRemotePackageReference(
         string repositoryRoot,
         IReadOnlyCollection<string> packageLockPaths,
-        PbxObject item)
+        PbxObject item,
+        bool inspectRemotePackageSource)
     {
         var repositoryUrl = ReadPbxScalar(item.Body, "repositoryURL")?.Trim();
         if (string.IsNullOrWhiteSpace(repositoryUrl))
@@ -503,7 +505,14 @@ internal sealed partial class AppleReleaseSourceTrustService
         foreach (var packageLock in locks)
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
         var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!);
-        ValidateRemotePackageSource(repositoryUrl!, resolvedRevision, packageLockPaths);
+        ValidateRemotePackageIdentity(repositoryUrl!, resolvedRevision);
+        if (inspectRemotePackageSource)
+        {
+            ValidateRemotePackageSource(
+                repositoryUrl!,
+                resolvedRevision,
+                packageLockPaths);
+        }
     }
 
     private void ValidateResolvedProjectInput(

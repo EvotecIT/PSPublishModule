@@ -13,7 +13,12 @@ public sealed class PowerForgeCliAppleDeployTests
         Directory.CreateDirectory(tempRoot);
         try
         {
-            Directory.CreateDirectory(Path.Combine(tempRoot, "Sample.xcodeproj"));
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
             var configPath = Path.Combine(tempRoot, "powerforge.release.json");
             File.WriteAllText(configPath, """
             {
@@ -131,7 +136,12 @@ public sealed class PowerForgeCliAppleDeployTests
         try
         {
             var appRoot = Directory.CreateDirectory(Path.Combine(tempRoot, "App"));
-            Directory.CreateDirectory(Path.Combine(appRoot.FullName, "Sample.xcodeproj"));
+            var project = Directory.CreateDirectory(Path.Combine(
+                appRoot.FullName,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
             var configPath = Path.Combine(appRoot.FullName, "powerforge.release.json");
             File.WriteAllText(configPath, """
             {
@@ -169,6 +179,75 @@ public sealed class PowerForgeCliAppleDeployTests
             Assert.Equal(1, result.ExitCode);
             Assert.Contains(
                 "RepositoryLocal.xcconfig",
+                result.StdErr + result.StdOut,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleDeploy_plan_rejects_absolute_xcode_inputs()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                """
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = PBXFileReference;
+                            path = /tmp/PowerForge-External.xcconfig;
+                            sourceTree = "<absolute>";
+                        };
+                    };
+                }
+                """);
+            var configPath = Path.Combine(
+                tempRoot,
+                "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains(
+                "Absolute Xcode project inputs",
                 result.StdErr + result.StdOut,
                 StringComparison.Ordinal);
         }

@@ -13,10 +13,10 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
             var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
             File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var existing = Directory.CreateDirectory(Path.Combine(installRoot.FullName, "CasaRay.app"));
             File.WriteAllText(Path.Combine(existing.FullName, "version.txt"), "old");
 
@@ -74,6 +74,7 @@ public sealed class AppleMacAppDeploymentServiceTests
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -86,9 +87,9 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
             Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
 
             var runner = new CapturingProcessRunner(request =>
             {
@@ -121,6 +122,7 @@ public sealed class AppleMacAppDeploymentServiceTests
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -133,10 +135,10 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
             var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
             File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var orphanedBackup = Directory.CreateDirectory(Path.Combine(installRoot.FullName, ".CasaRay.app.powerforge-backup-interrupted"));
             File.WriteAllText(Path.Combine(orphanedBackup.FullName, "version.txt"), "old");
 
@@ -167,6 +169,50 @@ public sealed class AppleMacAppDeploymentServiceTests
         }
         finally
         {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_rejects_an_install_root_inside_the_source()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleMacAppDeploymentService(runner).DeployAsync(
+                    new AppleMacAppDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Platform = ApplePlatform.macOS,
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        InstallRoot = Path.Combine(root.FullName, "Applications"),
+                        Launch = false
+                    }));
+
+            Assert.Contains(
+                nameof(AppleMacAppDeploymentRequest.InstallRoot),
+                exception.Message,
+                StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -178,6 +224,30 @@ public sealed class AppleMacAppDeploymentServiceTests
         using var first = AppleMacAppBundleReplacement.AcquireInstallLock(destination);
 
         Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
+    }
+
+    private static string ExternalOutputPath(
+        DirectoryInfo sourceRoot,
+        string leaf)
+        => Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs",
+            leaf);
+
+    private static void DeleteExternalOutputs(DirectoryInfo sourceRoot)
+    {
+        var outputRoot = Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs");
+        try
+        {
+            if (Directory.Exists(outputRoot))
+                Directory.Delete(outputRoot, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup for test outputs.
+        }
     }
 
     private static void CopyDirectory(string source, string destination)

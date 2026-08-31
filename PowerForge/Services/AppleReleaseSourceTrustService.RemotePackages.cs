@@ -14,16 +14,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         string revision,
         IReadOnlyCollection<string> packageLockPaths)
     {
-        if (!LooksLikeRepositoryLocation(repositoryUrl) ||
-            !(repositoryUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-              repositoryUrl.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase) ||
-              repositoryUrl.StartsWith("git@", StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException(
-                $"Remote Swift package '{repositoryUrl}' must use an inspectable HTTPS or SSH Git repository.");
-        }
-        if (!Regex.IsMatch(revision, "^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$", RegexOptions.CultureInvariant))
-            throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' is not bound to an exact Git revision.");
+        ValidateRemotePackageIdentity(repositoryUrl, revision);
+        if (!_inspectRemotePackageSource)
+            return;
 
         var identity = NormalizePackageLocation(repositoryUrl) + "@" + revision.ToLowerInvariant();
         if (_validatedRemotePackages.Contains(identity))
@@ -77,6 +70,22 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             _remotePackagesUnderValidation.Remove(identity);
         }
+    }
+
+    private static void ValidateRemotePackageIdentity(
+        string repositoryUrl,
+        string revision)
+    {
+        if (!LooksLikeRepositoryLocation(repositoryUrl) ||
+            !(repositoryUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+              repositoryUrl.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase) ||
+              repositoryUrl.StartsWith("git@", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Remote Swift package '{repositoryUrl}' must use an inspectable HTTPS or SSH Git repository.");
+        }
+        if (!Regex.IsMatch(revision, "^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException($"Remote Swift package '{repositoryUrl}' is not bound to an exact Git revision.");
     }
 
     private void ValidateRemotePackageCheckout(

@@ -96,6 +96,16 @@ internal static class AppleBuildProvenance
         return snapshot;
     }
 
+    internal static void ValidateXcodeBuildInputsWithinSource(
+        string sourceRoot,
+        string projectPath)
+    {
+        var canonicalRoot = ResolveRepositoryRoot(projectPath) ??
+                            Path.GetFullPath(sourceRoot);
+        new AppleReleaseSourceTrustService()
+            .ValidateLocalBuildInputContainment(canonicalRoot, projectPath);
+    }
+
     internal static void RejectIgnoredBuildInputs(
         string sourceRoot,
         bool excludesGeneratedDirectories)
@@ -516,11 +526,14 @@ internal static class AppleBuildProvenance
 
     private static bool IsExcludedGeneratedPath(string path)
     {
-        var segments = path.Replace('\\', '/').Split('/');
-        return segments.Any(segment =>
-            segment.Equals(".build", StringComparison.Ordinal) ||
-            segment.Equals(".swiftpm", StringComparison.Ordinal) ||
-            segment.Equals("build", StringComparison.Ordinal) ||
-            segment.Equals("DerivedData", StringComparison.Ordinal));
+        var normalized = path.Replace('\\', '/').TrimStart('/');
+        var separator = normalized.IndexOf('/');
+        var rootSegment = separator < 0
+            ? normalized
+            : normalized.Substring(0, separator);
+        return rootSegment.Equals(".build", StringComparison.Ordinal) ||
+               rootSegment.Equals(".swiftpm", StringComparison.Ordinal) ||
+               rootSegment.Equals("build", StringComparison.Ordinal) ||
+               rootSegment.Equals("DerivedData", StringComparison.Ordinal);
     }
 }

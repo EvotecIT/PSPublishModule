@@ -372,6 +372,41 @@ public sealed class AppleBuildProvenanceTests
         }
     }
 
+    [Fact]
+    public void RejectIgnoredBuildInputs_rejects_nested_generated_named_directories_for_mirrors()
+    {
+        var root = CreateRepository();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root.FullName, ".gitignore"),
+                "Sources/build/\n");
+            RunGit(root.FullName, "add", ".gitignore");
+            RunGit(root.FullName, "commit", "-m", "ignore nested input");
+            var nested = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "Sources",
+                "build"));
+            File.WriteAllText(
+                Path.Combine(nested.FullName, "schema.json"),
+                "{}");
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => AppleBuildProvenance.RejectIgnoredBuildInputs(
+                    root.FullName,
+                    excludesGeneratedDirectories: true));
+
+            Assert.Contains(
+                "Sources/build/schema.json",
+                exception.Message,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static DirectoryInfo CreateRepository()
     {
         var root = Directory.CreateDirectory(Path.Combine(

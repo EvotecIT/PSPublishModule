@@ -153,7 +153,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         {
             "inherited", "TARGET_NAME", "PRODUCT_NAME", "EXECUTABLE_NAME", "WRAPPER_NAME",
             "FULL_PRODUCT_NAME", "CONTENTS_FOLDER_PATH", "INFOPLIST_PATH", "TEST_HOST",
-            "BUILT_PRODUCTS_DIR"
+            "BUILT_PRODUCTS_DIR", AppleBuildProvenance.XcodeBuildSetting
         };
         foreach (var reference in ReadBuildSettingReferences(value, key, source))
         {

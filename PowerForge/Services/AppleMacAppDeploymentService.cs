@@ -32,6 +32,17 @@ public sealed class AppleMacAppDeploymentService
             throw new ArgumentNullException(nameof(request));
         if (request.Platform != ApplePlatform.macOS)
             throw new ArgumentException("Local macOS deployment requires Platform macOS.", nameof(request));
+        if (string.IsNullOrWhiteSpace(request.ProjectPath))
+            throw new ArgumentException("ProjectPath is required.", nameof(request));
+
+        var sourceRoot = AppleDeviceDeploymentService.ResolveBuildRoot(
+            Path.GetFullPath(request.ProjectPath),
+            request.BuildRoot);
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            request.InstallRoot,
+            sourceRoot,
+            nameof(request.InstallRoot),
+            FrameworkCompatibility.GetPathStringComparisonForPath(sourceRoot));
 
         var build = await _buildService.BuildAsync(request, cancellationToken).ConfigureAwait(false);
         var deployment = new AppleMacAppDeploymentResult { Build = build };

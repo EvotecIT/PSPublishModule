@@ -154,6 +154,9 @@ public sealed partial class AppleDeviceDeploymentService
                 sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
                     sourceRoot,
                     excludesGeneratedDirectories: true);
+                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                    sourceRoot,
+                    projectPath);
                 var mirror = await MirrorBuildRootAsync(
                     projectPath,
                     request,
@@ -232,6 +235,9 @@ public sealed partial class AppleDeviceDeploymentService
                 sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
                     sourceRoot,
                     excludesGeneratedDirectories: false);
+                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                    sourceRoot,
+                    projectPath);
                 buildInputMonitor = sourceMonitor;
             }
             catch
@@ -593,7 +599,7 @@ public sealed partial class AppleDeviceDeploymentService
             _ => "iphoneos"
         };
 
-    private static string ResolveBuildRoot(string projectPath, string? buildRoot)
+    internal static string ResolveBuildRoot(string projectPath, string? buildRoot)
     {
         var requestedRoot = !string.IsNullOrWhiteSpace(buildRoot)
             ? Path.GetFullPath(buildRoot!)
@@ -647,7 +653,7 @@ public sealed partial class AppleDeviceDeploymentService
         }
     }
 
-    private static void EnsureOutputPathOutsideBuildRoot(
+    internal static void EnsureOutputPathOutsideBuildRoot(
         string outputPath,
         string sourceRoot,
         string parameterName,

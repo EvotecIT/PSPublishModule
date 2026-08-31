@@ -391,6 +391,64 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task BuildAsync_rejects_absolute_xcode_inputs_outside_the_source()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var external = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.External",
+            Guid.NewGuid().ToString("N") + ".xcconfig");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(external)!);
+            File.WriteAllText(external, "SETTING = outside");
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                $$"""
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = PBXFileReference;
+                            path = "{{external}}";
+                            sourceTree = "<absolute>";
+                        };
+                    };
+                }
+                """);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleDeviceDeploymentService(runner).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData")
+                    }));
+
+            Assert.Contains(
+                "Absolute Xcode project inputs",
+                exception.Message,
+                StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { File.Delete(external); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_ignored_generated_inputs_without_a_build_mirror()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -987,6 +1045,14 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
             Assert.Equal("rsync-test", runner.Requests[0].FileName);
             Assert.Contains("--delete", runner.Requests[0].Arguments);
             Assert.Contains("--delete-excluded", runner.Requests[0].Arguments);
+            Assert.Contains("/.git", runner.Requests[0].Arguments);
+            Assert.Contains("/.build", runner.Requests[0].Arguments);
+            Assert.Contains("/.swiftpm", runner.Requests[0].Arguments);
+            Assert.Contains("/build", runner.Requests[0].Arguments);
+            Assert.Contains("/DerivedData", runner.Requests[0].Arguments);
+            Assert.DoesNotContain(".build", runner.Requests[0].Arguments);
+            Assert.DoesNotContain(".git", runner.Requests[0].Arguments);
+            Assert.DoesNotContain("build", runner.Requests[0].Arguments);
             Assert.Contains(root.FullName + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
             Assert.Contains(mirror + Path.DirectorySeparatorChar, runner.Requests[0].Arguments);
 
