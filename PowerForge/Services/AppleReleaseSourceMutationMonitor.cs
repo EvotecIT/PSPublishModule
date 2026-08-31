@@ -56,25 +56,43 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _watcher.EnableRaisingEvents = true;
     }
 
-    internal void ValidateNoChanges(Action? finalValidation = null) {
+    internal void ValidateNoChanges(Action? finalValidation = null)
+        => ValidateNoChangesTogether(new[] { this }, finalValidation);
+
+    /// <summary>
+    /// Closes several mutation observers around one final identity boundary so
+    /// no observer is disabled while another protected scope is still being read.
+    /// </summary>
+    internal static void ValidateNoChangesTogether(
+        IReadOnlyList<AppleReleaseSourceMutationMonitor> monitors,
+        Action? finalValidation = null)
+    {
+        if (monitors is null)
+            throw new ArgumentNullException(nameof(monitors));
+        if (monitors.Any(static monitor => monitor is null))
+            throw new ArgumentException("Mutation monitors must not contain null entries.", nameof(monitors));
+
         // Drain mutations from the completed reader first so established diagnostics retain the
         // observed event rather than being replaced by a later identity-comparison message.
         Thread.Sleep(250);
-        ThrowIfMutationObserved();
+        foreach (var monitor in monitors)
+            monitor.ThrowIfMutationObserved();
 
-        // Keep the watcher active while the caller captures its final content and physical
+        // Keep every watcher active while the caller captures its final content and physical
         // identities. A transient create/delete during that traversal may leave no final hash
-        // difference, so the watcher is the only evidence that the validation boundary changed.
+        // difference, so the watchers are the only evidence that a boundary changed.
         finalValidation?.Invoke();
         if (finalValidation is not null)
         {
-            // macOS FSEvents delivery is asynchronous. Drain any mutation that occurred during
-            // final identity capture before closing the observation boundary.
+            // macOS FSEvents delivery is asynchronous. Drain mutations that occurred during
+            // final identity capture before closing all observation boundaries together.
             Thread.Sleep(250);
         }
-        _watcher.EnableRaisingEvents = false;
+        foreach (var monitor in monitors)
+            monitor._watcher.EnableRaisingEvents = false;
 
-        ThrowIfMutationObserved();
+        foreach (var monitor in monitors)
+            monitor.ThrowIfMutationObserved();
     }
 
     private void ThrowIfMutationObserved() {

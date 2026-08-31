@@ -7,6 +7,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 {
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor _monitor;
+    private readonly AppleReleaseSourceMutationMonitor _rootMonitor;
     private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _materializedPackagesIdentity;
     private readonly AppleStableDirectoryIdentity _rootDirectory;
     private bool _disposed;
@@ -17,12 +18,14 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
         IReadOnlyDictionary<string, string?> environmentVariables,
         AppleReleaseSourceMutationMonitor monitor,
+        AppleReleaseSourceMutationMonitor rootMonitor,
         AppleArchiveUploadSnapshot.SnapshotIdentity materializedPackagesIdentity)
     {
         RootPath = rootPath;
         _rootDirectory = rootDirectory;
         _environmentVariables = environmentVariables;
         _monitor = monitor;
+        _rootMonitor = rootMonitor;
         _materializedPackagesIdentity = materializedPackagesIdentity;
     }
 
@@ -87,6 +90,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             sourcePathComparison);
         root = rootDirectory.Path;
         AppleReleaseSourceMutationMonitor? monitor = null;
+        AppleReleaseSourceMutationMonitor? rootMonitor = null;
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -97,6 +101,13 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
+            rootMonitor = new AppleReleaseSourceMutationMonitor(
+                parent,
+                "private Swift package snapshot directory",
+                "xcodebuild exact-source package resolution and build",
+                "Discard the Apple product and resolve the exact package graph again.",
+                exactPath: root,
+                includeExactPathDescendants: false);
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {
@@ -131,10 +142,12 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 captureOutput: true,
                 captureError: true,
                 inheritEnvironment: false);
+            processRequest.SetPreStartBoundary(rootDirectory.ValidateUnchanged);
             processRequest.SetCompletionBoundary(completionResult =>
             {
                 if (!completionResult.Succeeded)
                     return;
+                rootDirectory.ValidateUnchanged();
                 materializedPackagesIdentity = monitor.CaptureExpectedProducerOutput(
                     () => CaptureMaterializedPackageIdentity(sourcePackagesPath),
                     "xcodebuild -resolvePackageDependencies");
@@ -147,9 +160,10 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                         "The materialized Swift package root changed while its exact package graph was being validated. " +
                         "Discard the Apple product and resolve the exact package graph again.");
                 }
-                monitor.ValidateNoChanges();
+                rootDirectory.ValidateUnchanged();
                 progress?.Invoke("Pinned Swift package graph validated");
             });
+            processRequest.ValidatePreStartBoundaryForCompatibility();
             var result = await processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
             if (!result.Succeeded)
@@ -172,13 +186,16 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 approvedPackageRevisions,
                 environmentVariables,
                 monitor,
+                rootMonitor,
                 materializedPackagesIdentity);
             monitor = null;
+            rootMonitor = null;
             return snapshot;
         }
         catch
         {
             monitor?.Dispose();
+            rootMonitor?.Dispose();
             try { rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
             throw;
         }
@@ -186,6 +203,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void AppendArchiveArguments(ICollection<string> arguments)
     {
+        _rootDirectory.ValidateUnchanged();
         arguments.Add("-clonedSourcePackagesDirPath");
         arguments.Add(SourcePackagesPath);
         arguments.Add("-derivedDataPath");
@@ -197,6 +215,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void AppendLocalBuildArguments(ICollection<string> arguments)
     {
+        _rootDirectory.ValidateUnchanged();
         arguments.Add("-clonedSourcePackagesDirPath");
         arguments.Add(SourcePackagesPath);
         arguments.Add("-onlyUsePackageVersionsFromResolvedFile");
@@ -206,15 +225,29 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal void ValidateUnchanged()
     {
-        var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
-        if (!actual.Equals(_materializedPackagesIdentity))
+        void ValidateCurrentIdentity()
         {
-            throw new InvalidOperationException(
-                "The materialized Swift package root changed before the exact-source xcodebuild completed. " +
-                "A transient write or hard-link alias invalidates the exact package graph.");
+            _rootDirectory.ValidateUnchanged();
+            var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
+            if (!actual.Equals(_materializedPackagesIdentity))
+            {
+                throw new InvalidOperationException(
+                    "The materialized Swift package root changed before the exact-source xcodebuild completed. " +
+                    "A transient write or hard-link alias invalidates the exact package graph.");
+            }
+            _rootDirectory.ValidateUnchanged();
         }
-        _monitor.ValidateNoChanges();
+
+        // Preserve the most specific identity diagnostic while both observers
+        // are still active, then close them around a second identical boundary.
+        ValidateCurrentIdentity();
+        AppleReleaseSourceMutationMonitor.ValidateNoChangesTogether(
+            new[] { _monitor, _rootMonitor },
+            ValidateCurrentIdentity);
     }
+
+    internal void ValidateRootDirectoryUnchanged()
+        => _rootDirectory.ValidateUnchanged();
 
     private static AppleArchiveUploadSnapshot.SnapshotIdentity CaptureMaterializedPackageIdentity(
         string sourcePackagesPath)
@@ -292,6 +325,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             return;
         _disposed = true;
         _monitor.Dispose();
+        _rootMonitor.Dispose();
         try { _rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort after archive */ }
     }
 

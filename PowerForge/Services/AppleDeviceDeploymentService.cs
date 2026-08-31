@@ -415,6 +415,7 @@ public sealed partial class AppleDeviceDeploymentService
             {
                 derivedDataRoot.ValidateFreshBeforeBuild();
                 deploymentProductDirectory?.ValidateUnchanged();
+                packageSnapshot?.ValidateRootDirectoryUnchanged();
                 EnsureOutputPathOutsideBuildRoot(
                     derivedDataDirectory.Path,
                     sourceRoot,
@@ -432,6 +433,7 @@ public sealed partial class AppleDeviceDeploymentService
                         return;
                     derivedDataDirectory.ValidateUnchanged();
                     boundProductDirectory.ValidateUnchanged();
+                    packageSnapshot?.ValidateRootDirectoryUnchanged();
                     var producedAppPath = ResolveBuiltAppPath(
                         request,
                         productDirectory,

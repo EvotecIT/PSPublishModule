@@ -139,6 +139,49 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
+    public async Task DeployAsync_rejects_a_transient_package_snapshot_root_replacement_during_build()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        try
+        {
+            var runner = new LocalPackageBuildRunner(
+                fixture.RemoteRoot,
+                fixture.RemoteUrl,
+                mutateDuringBuild: false,
+                replaceSnapshotRootDuringBuild: true);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).DeployAsync(
+                    new AppleAppDeviceDeploymentRequest
+                    {
+                        ProjectPath = fixture.ProjectPath,
+                        Scheme = "CasaRay",
+                        ProductName = "CasaRay",
+                        DerivedDataPath = fixture.DerivedDataPath,
+                        DeviceIdentifier = "device-1",
+                        BundleIdentifier = "com.evotecit.casaray",
+                        Launch = false,
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        XcrunExecutable = "/usr/bin/xcrun"
+                    }));
+
+            Assert.Contains(
+                "private Swift package snapshot directory changed",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.False(Directory.Exists(runner.SourcePackagesRoot));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task DeployAsync_ignores_an_unrelated_repository_root_package_lock()
     {
         var fixture = CreateLocalPackageBuildFixture(
@@ -333,15 +376,18 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         private readonly string _remoteRoot;
         private readonly string _remoteUrl;
         private readonly bool _mutateDuringBuild;
+        private readonly bool _replaceSnapshotRootDuringBuild;
 
         internal LocalPackageBuildRunner(
             string remoteRoot,
             string remoteUrl,
-            bool mutateDuringBuild)
+            bool mutateDuringBuild,
+            bool replaceSnapshotRootDuringBuild = false)
         {
             _remoteRoot = remoteRoot;
             _remoteUrl = remoteUrl;
             _mutateDuringBuild = mutateDuringBuild;
+            _replaceSnapshotRootDuringBuild = replaceSnapshotRootDuringBuild;
         }
 
         internal List<ProcessRunRequest> Requests { get; } = new();
@@ -371,6 +417,8 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                         Path.Combine(SourcePackagesRoot, "checkouts", "Shared", "Package.swift"),
                         "// unapproved mutation\n");
                 }
+                if (_replaceSnapshotRootDuringBuild)
+                    ReplaceAndRestoreSnapshotRoot();
                 AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
             }
 
@@ -379,6 +427,35 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 : Success("ok");
             request.InvokeCompletionBoundary(result);
             return Task.FromResult(result);
+        }
+
+        private void ReplaceAndRestoreSnapshotRoot()
+        {
+            var snapshotRoot = Path.GetDirectoryName(SourcePackagesRoot)
+                ?? throw new InvalidOperationException("Swift package snapshot root was not captured.");
+            var parkedRoot = snapshotRoot + ".parked";
+            var redirectedRoot = Directory.CreateDirectory(Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge.Tests.PackageSnapshotRedirect",
+                Guid.NewGuid().ToString("N")));
+            try
+            {
+                Directory.Move(snapshotRoot, parkedRoot);
+                Directory.CreateSymbolicLink(snapshotRoot, redirectedRoot.FullName);
+                File.WriteAllText(
+                    Path.Combine(redirectedRoot.FullName, "unapproved-package-input"),
+                    "transient");
+                Directory.Delete(snapshotRoot);
+                Directory.Move(parkedRoot, snapshotRoot);
+            }
+            finally
+            {
+                if (Directory.Exists(snapshotRoot) && Directory.Exists(parkedRoot))
+                    Directory.Delete(snapshotRoot);
+                if (Directory.Exists(parkedRoot) && !Directory.Exists(snapshotRoot))
+                    Directory.Move(parkedRoot, snapshotRoot);
+                try { redirectedRoot.Delete(recursive: true); } catch { /* best effort */ }
+            }
         }
     }
 

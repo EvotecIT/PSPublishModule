@@ -119,39 +119,36 @@ public sealed class AppleMacAppDeploymentService
         var stage = Path.Combine(stageRoot, Path.GetFileName(source));
         var backup = Path.Combine(installRoot, $".{Path.GetFileName(source)}.powerforge-backup-{suffix}");
         var recoveryWarning = AppleMacAppBundleReplacement.RecoverInterruptedReplacement(destination);
-        Directory.CreateDirectory(stageRoot);
-#if NET8_0_OR_GREATER
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(stageRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-#endif
-
-        var copy = await _processRunner.RunAsync(
-            AppleTrustedExecutionEnvironment.CreateProcessRequest(
-                dittoExecutable,
-                "ditto",
-                "/usr/bin/ditto",
-                "Exact-source macOS app installation",
-                installRoot,
-                new[] { source, stage },
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        var result = new AppleMacAppInstallResult
-        {
-            SourceAppPath = source,
-            InstalledAppPath = destination,
-            ProcessResult = copy
-        };
-        if (!copy.Succeeded)
-        {
-            AppleMacAppBundleReplacement.TryDeleteDirectory(stageRoot, out _);
-            return result;
-        }
-        if (!Directory.Exists(stage))
-            throw new InvalidOperationException($"ditto completed but did not create the staged app: {stage}");
-
         try
         {
+            Directory.CreateDirectory(stageRoot);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(stageRoot, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+
+            var copy = await _processRunner.RunAsync(
+                AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                    dittoExecutable,
+                    "ditto",
+                    "/usr/bin/ditto",
+                    "Exact-source macOS app installation",
+                    installRoot,
+                    new[] { source, stage },
+                    request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : request.Timeout),
+                cancellationToken).ConfigureAwait(false);
+
+            var result = new AppleMacAppInstallResult
+            {
+                SourceAppPath = source,
+                InstalledAppPath = destination,
+                ProcessResult = copy
+            };
+            if (!copy.Succeeded)
+                return result;
+            if (!Directory.Exists(stage))
+                throw new InvalidOperationException($"ditto completed but did not create the staged app: {stage}");
+
             var stageSnapshot = productSnapshot.CaptureVerifiedCopy(
                 stage,
                 "staged macOS app");

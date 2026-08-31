@@ -115,6 +115,12 @@ internal static partial class Program
             AppleBuildProvenance.Snapshot? planSnapshot = null;
             if (planOnly)
             {
+                _ = AppleDeviceDeploymentService.ResolveProductName(
+                    new AppleAppBuildRequest
+                    {
+                        Scheme = scheme,
+                        ProductName = selectedTarget.ProductName
+                    });
                 _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
                     apple.XcodeBuildExecutable,
                     "xcodebuild",

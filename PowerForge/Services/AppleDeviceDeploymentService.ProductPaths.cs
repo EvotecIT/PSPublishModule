@@ -62,7 +62,7 @@ public sealed partial class AppleDeviceDeploymentService
             : expectedAppPath;
     }
 
-    private static string ResolveProductName(AppleAppBuildRequest request)
+    internal static string ResolveProductName(AppleAppBuildRequest request)
     {
         var productName = string.IsNullOrWhiteSpace(request.ProductName)
             ? request.Scheme.Trim()

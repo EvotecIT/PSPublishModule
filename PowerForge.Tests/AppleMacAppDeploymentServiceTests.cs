@@ -159,6 +159,68 @@ public sealed partial class AppleMacAppDeploymentServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeployAsync_removes_stage_when_copy_does_not_return_a_valid_app(
+        bool copyThrows)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
+
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName != "/usr/bin/ditto")
+                    return Success("ok");
+                if (!copyThrows)
+                    return Success("copy claimed success");
+
+                Directory.CreateDirectory(request.Arguments[1]);
+                File.WriteAllText(
+                    Path.Combine(request.Arguments[1], "partial"),
+                    string.Empty);
+                throw new IOException("copy interrupted");
+            });
+            InitializeGitRepository(root.FullName);
+
+            _ = await Assert.ThrowsAnyAsync<Exception>(() =>
+                new AppleMacAppDeploymentService(runner).DeployAsync(
+                    new AppleMacAppDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Platform = ApplePlatform.macOS,
+                        ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                        DerivedDataPath = derived.FullName,
+                        InstallRoot = installRoot.FullName,
+                        Launch = false,
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        DittoExecutable = "/usr/bin/ditto"
+                    }));
+
+            Assert.DoesNotContain(
+                Directory.EnumerateDirectories(installRoot.FullName),
+                path => path.Contains("powerforge-stage", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public async Task DeployAsync_recovers_interrupted_backup_before_replacement()
     {
