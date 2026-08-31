@@ -393,7 +393,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.OutputValueStates,
             emitted.CollectionElementType,
             emitted.OutputScalarization,
-            emitted.HostedRegionSiteCount);
+            emitted.HostedRegionSiteCount,
+            emitted.RequiresProviderCancellation);
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
@@ -534,6 +535,7 @@ internal sealed class PowerShellCSharpMethodEmission
         string source,
         SourceSpan sourceSpan,
         bool requiresPowerShellStreams = false,
+        bool requiresProviderCancellation = false,
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellRuntimeState = false,
@@ -554,6 +556,7 @@ internal sealed class PowerShellCSharpMethodEmission
         Source = source;
         SourceSpan = sourceSpan;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
@@ -575,6 +578,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string Source { get; }
     internal SourceSpan SourceSpan { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }

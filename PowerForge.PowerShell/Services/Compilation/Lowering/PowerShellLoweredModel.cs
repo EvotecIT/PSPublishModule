@@ -59,6 +59,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         string?[] evaluationTemporaryNames,
         bool requiresBoundParameters,
         bool requiresPowerShellStreams,
+        bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState)
         : base(span, clrType)
@@ -70,6 +71,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         EvaluationTemporaryNames = evaluationTemporaryNames;
         RequiresBoundParameters = requiresBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
     }
@@ -81,6 +83,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal PowerShellImmutableArray<string?> EvaluationTemporaryNames { get; }
     internal bool RequiresBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
 }
@@ -178,6 +181,7 @@ internal sealed class PowerShellLoweredFunction
         Type? declaredOutputType,
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
+        bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         PowerShellOutputCardinality outputCardinality,
@@ -197,6 +201,7 @@ internal sealed class PowerShellLoweredFunction
         DeclaredOutputType = declaredOutputType;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         OutputCardinality = outputCardinality;
@@ -217,6 +222,7 @@ internal sealed class PowerShellLoweredFunction
     internal Type? DeclaredOutputType { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
+    internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
     internal PowerShellOutputCardinality OutputCardinality { get; }

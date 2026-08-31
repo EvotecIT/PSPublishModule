@@ -24,6 +24,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var entryPoint = stream.Provider.Adapter.EntryPoint;
         var convertedMessage = "global::System.Convert.ToString(" + EmitExpression(stream.Message) +
             ", global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty";
+        var cancellationArgument = stream.Provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.Cooperative
+            ? ", __providerCancellationToken"
+            : string.Empty;
         var nullFailure = "new global::System.InvalidOperationException(" +
             PowerShellCSharpLiteral.QuoteString($"Provider '{stream.Provider.ProviderId}' returned a null value outside its contract.") + ")";
         if (entryPoint is not null && stream.Kind == PowerShellStreamCommandKind.Success &&
@@ -33,7 +36,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).Append("foreach (").Append(GetProviderResultTypeName(entryPoint.ResultType)).Append(' ')
                 .Append(item).Append(" in (global::")
                 .Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.').Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
-                .Append(convertedMessage).Append(") ?? throw ").Append(nullFailure).AppendLine("))")
+                .Append(convertedMessage).Append(cancellationArgument).Append(") ?? throw ").Append(nullFailure).AppendLine("))")
                 .Append(prefix).AppendLine("{");
             if (entryPoint.ResultType == PowerShellCompilationProviderValueType.String)
                 builder.Append(prefix).Append("    if (").Append(item).Append(" is null) throw ").Append(nullFailure).AppendLine(";");
@@ -51,7 +54,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append('(');
             builder.Append("global::").Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.')
                 .Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
-                .Append(convertedMessage).Append(')');
+                .Append(convertedMessage).Append(cancellationArgument).Append(')');
             if (nullableResult)
                 builder.Append(" ?? throw ").Append(nullFailure).Append(')');
         }

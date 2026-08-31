@@ -82,6 +82,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.ToString(),
             function.Span,
             requiresPowerShellStreams: function.RequiresPowerShellStreams,
+            requiresProviderCancellation: function.RequiresProviderCancellation,
             requiresPowerShellCommandRegions: function.RequiresPowerShellCommandRegions,
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
@@ -164,6 +165,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitClrMemberAssignment(assignment)).AppendLine(";");
                 return;
             case PowerShellLoweredReturnStatement { Expression: null }:
+                builder.Append(prefix).AppendLine("return;");
+                return;
+            case PowerShellLoweredReturnStatement { Expression.ClrType: var type } returned when type == typeof(void):
+                builder.Append(prefix).Append(EmitExpression(returned.Expression!)).AppendLine(";");
                 builder.Append(prefix).AppendLine("return;");
                 return;
             case PowerShellLoweredReturnStatement { EmitsValue: false } returned:

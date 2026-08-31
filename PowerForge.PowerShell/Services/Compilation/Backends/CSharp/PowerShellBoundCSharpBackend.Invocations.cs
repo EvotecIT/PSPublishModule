@@ -19,6 +19,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var callArguments = arguments.ToList();
         if (invocation.RequiresPowerShellStreams)
             callArguments.AddRange(new[] { "__writeOutput", "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
+        if (invocation.RequiresProviderCancellation)
+            callArguments.Add("__providerCancellationToken");
         if (invocation.RequiresPowerShellCommandRegions)
             callArguments.AddRange(new[] { "__invokePowerShellRegion", "__invokePowerShellCapture" });
         if (invocation.RequiresPowerShellRuntimeState)

@@ -30,4 +30,46 @@ public static class NoticeAdapter
         value,
         System.Globalization.NumberStyles.Float,
         System.Globalization.CultureInfo.InvariantCulture);
+
+    public static string WaitForCancellation(string value, System.Threading.CancellationToken cancellationToken)
+    {
+        using (var stream = new System.IO.FileStream(
+                   value,
+                   System.IO.FileMode.Create,
+                   System.IO.FileAccess.ReadWrite,
+                   System.IO.FileShare.None))
+        {
+            stream.WriteByte(1);
+            stream.Flush(flushToDisk: true);
+            cancellationToken.WaitHandle.WaitOne(System.TimeSpan.FromSeconds(10));
+            cancellationToken.ThrowIfCancellationRequested();
+            return "not-cancelled:" + value;
+        }
+    }
+
+    public static string UseFileAndRelease(string path)
+    {
+        using (var stream = new System.IO.FileStream(
+                   path,
+                   System.IO.FileMode.OpenOrCreate,
+                   System.IO.FileAccess.ReadWrite,
+                   System.IO.FileShare.None))
+        {
+            stream.WriteByte(1);
+        }
+        return "released:" + path;
+    }
+
+    public static string UseFileAndFail(string path)
+    {
+        using (var stream = new System.IO.FileStream(
+                   path,
+                   System.IO.FileMode.OpenOrCreate,
+                   System.IO.FileAccess.ReadWrite,
+                   System.IO.FileShare.None))
+        {
+            stream.WriteByte(1);
+            throw new InvalidOperationException("provider-cleanup-failure:" + path);
+        }
+    }
 }

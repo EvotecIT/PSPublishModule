@@ -17,6 +17,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("global::System.Action<string> __writeHost");
             parameters.Add("global::System.Action<string> __writeError");
         }
+        if (function.RequiresProviderCancellation)
+            parameters.Add("global::System.Threading.CancellationToken __providerCancellationToken");
         if (function.RequiresPowerShellCommandRegions)
         {
             parameters.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");

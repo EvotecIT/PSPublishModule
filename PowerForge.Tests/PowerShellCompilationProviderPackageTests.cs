@@ -187,6 +187,99 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void ReaderRejectsCooperativeCancellationWhenEntrypointOmitsCancellationToken()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.Manifest.Providers[0].Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("provider.nupkg"));
+
+        Assert.Contains("string Method(string, CancellationToken)", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsSameNamedLocalCancellationTokenType()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationProvider.dll";
+        provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationProvider.ForgedAdapter";
+        var forgedAssemblyPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..",
+            "Fixtures",
+            "PowerShellCompilationForgedCancellationProviderFixture",
+            "bin",
+            "Debug",
+            "net8.0",
+            "Generic.Semantic.ForgedCancellationProvider.dll"));
+        Assert.True(File.Exists(forgedAssemblyPath), forgedAssemblyPath);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderPackageBuilder().Build(
+                new PowerShellCompilationProviderPackageBuildRequest(
+                    fixture.PackagePath("forged-cancellation-token.nupkg"),
+                    fixture.Manifest)
+                {
+                    Assemblies = new[]
+                    {
+                        new PowerShellCompilationProviderAssemblyInput(
+                            forgedAssemblyPath,
+                            provider.Adapter.EntryPoint.AssemblyPath)
+                    }
+                }));
+
+        Assert.Contains("string Method(string, CancellationToken)", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsSameNamedCancellationTokenFromNonFrameworkAssemblyReference()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationReferenceProvider.dll";
+        provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationReferenceProvider.ForgedReferenceAdapter";
+        var fixturesRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures"));
+        var forgedProviderPath = Path.Combine(
+            fixturesRoot,
+            "PowerShellCompilationForgedCancellationReferenceProviderFixture",
+            "bin",
+            "Debug",
+            "net8.0",
+            "Generic.Semantic.ForgedCancellationReferenceProvider.dll");
+        var forgedContractPath = Path.Combine(
+            fixturesRoot,
+            "PowerShellCompilationForgedCancellationContractFixture",
+            "bin",
+            "Debug",
+            "net8.0",
+            "Generic.Semantic.ForgedCancellationContract.dll");
+        Assert.True(File.Exists(forgedProviderPath), forgedProviderPath);
+        Assert.True(File.Exists(forgedContractPath), forgedContractPath);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderPackageBuilder().Build(
+                new PowerShellCompilationProviderPackageBuildRequest(
+                    fixture.PackagePath("forged-cancellation-reference.nupkg"),
+                    fixture.Manifest)
+                {
+                    Assemblies = new[]
+                    {
+                        new PowerShellCompilationProviderAssemblyInput(
+                            forgedProviderPath,
+                            provider.Adapter.EntryPoint.AssemblyPath),
+                        new PowerShellCompilationProviderAssemblyInput(
+                            forgedContractPath,
+                            "lib/net8.0/Generic.Semantic.ForgedCancellationContract.dll")
+                    }
+                }));
+
+        Assert.Contains("string Method(string, CancellationToken)", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReaderRejectsExecutableResultTypeThatConflictsWithAssemblyMetadata()
     {
         using var fixture = ProviderFixture.Create();

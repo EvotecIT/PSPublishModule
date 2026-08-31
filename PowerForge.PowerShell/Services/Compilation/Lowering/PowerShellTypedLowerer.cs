@@ -21,6 +21,7 @@ internal sealed partial class PowerShellTypedLowerer
                 targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)));
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
+        var providerCancellationBindings = PropagateHostRequirement(program, static function => ContainsCooperativeProvider(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
         var bySymbol = program.Functions.ToDictionary(
             static function => function.Symbol.StableKey,
@@ -28,6 +29,7 @@ internal sealed partial class PowerShellTypedLowerer
                 function,
                 boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
+                providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey)),
             StringComparer.Ordinal);
@@ -104,6 +106,22 @@ internal sealed partial class PowerShellTypedLowerer
                 continue;
             }
 
+            var generatedHostParameterCollision = FindGeneratedHostParameterCollision(
+                function,
+                boundParameterBindings.Contains(function.Symbol.StableKey),
+                streamBindings.Contains(function.Symbol.StableKey),
+                providerCancellationBindings.Contains(function.Symbol.StableKey),
+                commandRegionBindings.Contains(function.Symbol.StableKey),
+                runtimeStateBindings.Contains(function.Symbol.StableKey));
+            if (generatedHostParameterCollision is not null)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1009",
+                    $"Parameter '${generatedHostParameterCollision}' collides with compiler-owned host parameter '{generatedHostParameterCollision}'.",
+                    function.Symbol.Declaration));
+                continue;
+            }
+
             var statements = new List<PowerShellLoweredStatement>();
             var declared = new HashSet<string>(StringComparer.Ordinal);
             var localTypes = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type.ClrType, StringComparer.Ordinal);
@@ -142,6 +160,7 @@ internal sealed partial class PowerShellTypedLowerer
                 function.DeclaredOutputType,
                 boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
+                providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
@@ -706,6 +725,7 @@ internal sealed partial class PowerShellTypedLowerer
                     CreateEvaluationTemporaryNames(invocation, names),
                     target.RequiresPowerShellBoundParameters,
                     target.RequiresPowerShellStreams,
+                    target.RequiresProviderCancellation,
                     target.RequiresPowerShellCommandRegions,
                     target.RequiresPowerShellRuntimeState),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")

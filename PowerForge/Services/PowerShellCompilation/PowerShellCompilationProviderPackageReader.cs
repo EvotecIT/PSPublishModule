@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -322,12 +323,13 @@ public sealed class PowerShellCompilationProviderPackageReader
             }
             var collection = provider.Stream.Equals("Success", StringComparison.Ordinal) &&
                              provider.Cardinality == PowerShellCompilationCommandCardinality.Collection;
-            if (matches.Count != 1 || !HasTransformSignature(reader, matches[0], collection, entryPoint.ResultType))
+            var cooperative = provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.Cooperative;
+            if (matches.Count != 1 || !HasTransformSignature(reader, matches[0], collection, entryPoint.ResultType, cooperative))
                 throw new InvalidOperationException(
                     $"Provider '{provider.ProviderId}' entry point must be one public static non-generic " +
                     (collection
-                        ? $"{GetValueTypeName(entryPoint.ResultType)}[] Method(string)."
-                        : $"{GetValueTypeName(entryPoint.ResultType)} Method(string)."));
+                        ? $"{GetValueTypeName(entryPoint.ResultType)}[] Method(string{(cooperative ? ", CancellationToken" : string.Empty)})."
+                        : $"{GetValueTypeName(entryPoint.ResultType)} Method(string{(cooperative ? ", CancellationToken" : string.Empty)})."));
         }
     }
 
@@ -335,12 +337,13 @@ public sealed class PowerShellCompilationProviderPackageReader
         MetadataReader reader,
         MethodDefinition method,
         bool collection,
-        PowerShellCompilationProviderValueType resultType)
+        PowerShellCompilationProviderValueType resultType,
+        bool cooperative)
     {
         var blob = reader.GetBlobReader(method.Signature);
         var header = blob.ReadSignatureHeader();
         if (header.IsGeneric) return false;
-        if (blob.ReadCompressedInteger() != 1) return false;
+        if (blob.ReadCompressedInteger() != (cooperative ? 2 : 1)) return false;
         if (collection)
         {
             if (blob.ReadSignatureTypeCode() != SignatureTypeCode.SZArray ||
@@ -351,7 +354,40 @@ public sealed class PowerShellCompilationProviderPackageReader
         {
             return false;
         }
-        return blob.ReadSignatureTypeCode() == SignatureTypeCode.String;
+        if (blob.ReadSignatureTypeCode() != SignatureTypeCode.String) return false;
+        if (!cooperative) return true;
+        if (blob.ReadSignatureTypeCode() != SignatureTypeCode.TypeHandle) return false;
+        var codedIndex = blob.ReadCompressedInteger();
+        if (codedIndex < 0) return false;
+        var row = codedIndex >> 2;
+        return (codedIndex & 3) switch
+        {
+            0 => false,
+            1 => IsFrameworkCancellationToken(reader, MetadataTokens.TypeReferenceHandle(row)),
+            _ => false
+        };
+    }
+
+    private static bool IsFrameworkCancellationToken(MetadataReader reader, TypeReferenceHandle handle)
+    {
+        var type = reader.GetTypeReference(handle);
+        if (!reader.GetString(type.Namespace).Equals("System.Threading", StringComparison.Ordinal) ||
+            !reader.GetString(type.Name).Equals("CancellationToken", StringComparison.Ordinal) ||
+            type.ResolutionScope.Kind != HandleKind.AssemblyReference)
+            return false;
+        var assembly = reader.GetAssemblyReference((AssemblyReferenceHandle)type.ResolutionScope);
+        var name = reader.GetString(assembly.Name);
+        var publicKeyToken = BitConverter.ToString(reader.GetBlobBytes(assembly.PublicKeyOrToken))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+        return (name, publicKeyToken) switch
+        {
+            ("System.Runtime", "b03f5f7f11d50a3a") => true,
+            ("mscorlib", "b77a5c561934e089") => true,
+            ("System.Private.CoreLib", "7cec85d7bea7798e") => true,
+            ("netstandard", "cc7b13ffcd2ddd51") => true,
+            _ => false
+        };
     }
 
     private static SignatureTypeCode GetSignatureTypeCode(PowerShellCompilationProviderValueType valueType)

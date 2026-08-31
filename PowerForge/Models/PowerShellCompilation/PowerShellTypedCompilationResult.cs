@@ -149,7 +149,8 @@ public sealed class PowerShellCompiledMethod
         string[]? outputValueStates,
         string? collectionElementType,
         string? outputScalarization,
-        int hostedRegionSiteCount)
+        int hostedRegionSiteCount,
+        bool requiresProviderCancellation = false)
     {
         SourceName = sourceName ?? string.Empty;
         GeneratedName = generatedName ?? string.Empty;
@@ -167,6 +168,7 @@ public sealed class PowerShellCompiledMethod
         OutputScalarization = outputScalarization ?? string.Empty;
         SourcePath = sourcePath ?? string.Empty;
         RequiresPowerShellStreams = requiresPowerShellStreams;
+        RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         HostedRegionSiteCount = hostedRegionSiteCount;
         Aliases = aliases ?? Array.Empty<string>();
@@ -236,6 +238,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether the generated method expects PSCmdlet stream delegates.</summary>
     public bool RequiresPowerShellStreams { get; }
+
+    /// <summary>Whether the generated method expects a cooperative provider cancellation token.</summary>
+    public bool RequiresProviderCancellation { get; }
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }

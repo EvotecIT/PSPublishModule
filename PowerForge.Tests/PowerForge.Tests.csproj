@@ -25,6 +25,8 @@
     <ProjectReference Include="..\PowerForge.Cli\PowerForge.Cli.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="Fixtures\PowerShellCompilationProviderRuntimeFixture\PowerShellCompilationProviderRuntimeFixture.csproj" />
     <ProjectReference Include="Fixtures\PowerShellCompilationProviderWithDependencyFixture\PowerShellCompilationProviderWithDependencyFixture.csproj" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationProviderFixture\PowerShellCompilationForgedCancellationProviderFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationReferenceProviderFixture\PowerShellCompilationForgedCancellationReferenceProviderFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

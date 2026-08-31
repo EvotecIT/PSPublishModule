@@ -5,7 +5,7 @@ using System.Text;
 
 namespace PowerForge;
 
-internal static class PowerShellBinaryCmdletSourceGenerator
+internal static partial class PowerShellBinaryCmdletSourceGenerator
 {
     private const string RemainingArgumentsMemberName = "__PowerForgeRemainingArguments";
     private const string InvariantParameterAttributeName = "__PowerForgeInvariantParameterAttribute";
@@ -208,6 +208,7 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             return ReservedMemberNames.Contains(memberName) ||
                    (!cmdlet.Method.IsAdvancedFunction && memberName.Equals(RemainingArgumentsMemberName, StringComparison.OrdinalIgnoreCase)) ||
                    memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresProviderCancellation && ProviderCancellationMemberNames.Contains(memberName) ||
                    cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName) ||
                    cmdlet.Method.RequiresPowerShellRuntimeState && RuntimeStateMemberNames.Contains(memberName) ||
                    cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && HostedLifecycleMemberNames.Contains(memberName);
@@ -304,8 +305,13 @@ internal static class PowerShellBinaryCmdletSourceGenerator
             : cmdlet.Method.DeclaredOutputType;
         if (outputType is not null)
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
-        builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet{(cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline ? ", global::System.IDisposable" : string.Empty)}");
+        var requiresProviderCancellation = cmdlet.Method.RequiresProviderCancellation;
+        var implementsDisposable = requiresProviderCancellation ||
+            cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline;
+        builder.AppendLine($"public sealed class {cmdlet.ClassName} : PSCmdlet{(implementsDisposable ? ", global::System.IDisposable" : string.Empty)}");
         builder.AppendLine("{");
+        if (requiresProviderCancellation)
+            AppendProviderCancellationMembers(builder);
         for (var index = 0; index < cmdlet.Method.Parameters.Length; index++)
         {
             var parameter = cmdlet.Method.Parameters[index];
@@ -435,6 +441,8 @@ internal static class PowerShellBinaryCmdletSourceGenerator
                 "message => { var hostMessage = new global::System.Management.Automation.HostInformationMessage { Message = message, NoNewLine = false }; var record = new global::System.Management.Automation.InformationRecord(hostMessage, \"Write-Host\"); record.Tags.Add(\"PSHOST\"); WriteInformation(record); }",
                 "message => WriteError(new global::System.Management.Automation.ErrorRecord(new global::System.InvalidOperationException(message), \"PowerForge.CompiledCommandError\", global::System.Management.Automation.ErrorCategory.NotSpecified, null))"
             });
+        if (requiresProviderCancellation)
+            arguments = arguments.Append("_providerCancellation.Token");
         if (cmdlet.Method.RequiresPowerShellCommandRegions)
             arguments = arguments.Concat(new[] { "InvokePowerShellRegion", "CapturePowerShellRegion" });
         if (cmdlet.Method.RequiresPowerShellRuntimeState)
@@ -451,7 +459,12 @@ internal static class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.RequiresPowerShellBoundParameters)
             arguments = arguments.Append("new global::System.Collections.Generic.HashSet<string>(MyInvocation.BoundParameters.Keys, global::System.StringComparer.OrdinalIgnoreCase)");
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({string.Join(", ", arguments)})";
-        if (cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
+        if (requiresProviderCancellation)
+            AppendProviderCancellationInvocation(
+                builder,
+                invocation,
+                cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal));
+        else if (cmdlet.Method.ReturnType.Equals(typeof(void).FullName, StringComparison.Ordinal))
             builder.AppendLine($"        {invocation};");
         else
             builder.AppendLine($"        WriteObject({invocation}, enumerateCollection: true);");

@@ -203,8 +203,11 @@ internal static class PowerShellCompilationAbiBuilder
             AddCompilerParameter(parameters, "__writeDebug", "System.Action<System.String>", "DebugStream");
             AddCompilerParameter(parameters, "__writeWarning", "System.Action<System.String>", "WarningStream");
             AddCompilerParameter(parameters, "__writeInformation", "System.Action<System.String>", "InformationStream");
+            AddCompilerParameter(parameters, "__writeHost", "System.Action<System.String>", "HostStream");
             AddCompilerParameter(parameters, "__writeError", "System.Action<System.String>", "ErrorStream");
         }
+        if (method.RequiresProviderCancellation)
+            AddCompilerParameter(parameters, "__providerCancellationToken", "System.Threading.CancellationToken", "ProviderCancellation");
         if (method.RequiresPowerShellCommandRegions)
         {
             AddCompilerParameter(parameters, "__invokePowerShellRegion", "System.Action<System.String,System.Object[]>", "HostedCommandRegion");

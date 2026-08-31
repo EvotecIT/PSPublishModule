@@ -26,12 +26,14 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundFunction function,
             bool requiresPowerShellBoundParameters,
             bool requiresPowerShellStreams,
+            bool requiresProviderCancellation,
             bool requiresPowerShellCommandRegions,
             bool requiresPowerShellRuntimeState)
         {
             Function = function;
             RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
             RequiresPowerShellStreams = requiresPowerShellStreams;
+            RequiresProviderCancellation = requiresProviderCancellation;
             RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
             RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         }
@@ -39,6 +41,7 @@ internal sealed partial class PowerShellTypedLowerer
         internal PowerShellBoundFunction Function { get; }
         internal bool RequiresPowerShellBoundParameters { get; }
         internal bool RequiresPowerShellStreams { get; }
+        internal bool RequiresProviderCancellation { get; }
         internal bool RequiresPowerShellCommandRegions { get; }
         internal bool RequiresPowerShellRuntimeState { get; }
     }
