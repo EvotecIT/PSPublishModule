@@ -134,7 +134,10 @@ public class AppleAppBuildRequest
 /// </summary>
 public sealed class AppleAppBuildResult
 {
-    /// <summary>Resolved app path.</summary>
+    /// <summary>
+    /// Resolved app path. Successful deployment results retain this product in
+    /// content-addressed DerivedData after their private install input is cleaned.
+    /// </summary>
     public string AppPath { get; set; } = string.Empty;
 
     /// <summary>Resolved xcodebuild destination.</summary>

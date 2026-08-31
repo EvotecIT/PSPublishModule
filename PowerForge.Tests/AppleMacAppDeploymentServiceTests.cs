@@ -56,6 +56,21 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             });
 
             Assert.True(result.Succeeded);
+            Assert.True(Directory.Exists(result.Build.AppPath));
+            Assert.StartsWith(
+                Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(derived.FullName),
+                    "PowerForge",
+                    "DeploymentProducts"),
+                result.Build.AppPath,
+                StringComparison.Ordinal);
+            Assert.Equal(result.Build.AppPath, result.Install!.SourceAppPath);
+            var privateProductRoot = runner.Requests.Single(request =>
+                    request.FileName == "/usr/bin/xcodebuild")
+                .Arguments.Single(argument =>
+                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
+                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            Assert.False(Directory.Exists(privateProductRoot));
             Assert.Equal("new", File.ReadAllText(Path.Combine(installRoot.FullName, "CasaRay.app", "version.txt")));
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-backup", StringComparison.Ordinal));
             Assert.All(runner.Requests, request => Assert.False(request.InheritEnvironment));
@@ -122,6 +137,8 @@ public sealed partial class AppleMacAppDeploymentServiceTests
 
             Assert.False(result.Succeeded);
             Assert.False(result.Install?.Succeeded);
+            Assert.True(Directory.Exists(result.Build.AppPath));
+            Assert.Equal(result.Build.AppPath, result.Install!.SourceAppPath);
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-stage", StringComparison.Ordinal));
         }
         finally

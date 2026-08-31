@@ -1156,6 +1156,19 @@ App installed:
                 runner.Requests[1].Arguments.Take(6));
             Assert.EndsWith("Tactra.app", runner.Requests[1].Arguments[6], StringComparison.Ordinal);
             Assert.NotEqual(app.FullName, runner.Requests[1].Arguments[6]);
+            Assert.True(Directory.Exists(result.Build.AppPath));
+            Assert.StartsWith(
+                Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(derived),
+                    "PowerForge",
+                    "DeploymentProducts"),
+                result.Build.AppPath,
+                StringComparison.Ordinal);
+            Assert.Equal(result.Build.AppPath, result.Install!.AppPath);
+            var privateProductRoot = runner.Requests[0].Arguments.Single(argument =>
+                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
+                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            Assert.False(Directory.Exists(privateProductRoot));
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }
         finally

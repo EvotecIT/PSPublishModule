@@ -158,6 +158,21 @@ internal sealed class AppleAppBuildOperation : IDisposable
 
     internal AppleBuiltAppSnapshot? ProductSnapshot { get; }
 
+    /// <summary>
+    /// Materializes the provenance-bound product into a durable DerivedData
+    /// location before the private deployment input is released.
+    /// </summary>
+    internal string PreserveResultProduct()
+    {
+        if (!Result.Succeeded || ProductSnapshot is null)
+            return Result.AppPath;
+
+        Result.AppPath = AppleBuiltAppResultStore.Preserve(
+            ProductSnapshot,
+            Result.DerivedDataPath);
+        return Result.AppPath;
+    }
+
     public void Dispose()
     {
         ProductSnapshot?.Dispose();

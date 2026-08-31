@@ -487,6 +487,8 @@ public sealed partial class AppleDeviceDeploymentService
         if (!build.Succeeded)
             return deployment;
 
+        var retainedAppPath = buildOperation.PreserveResultProduct();
+
         var deployDeviceIdentifier = request.DeviceIdentifier ?? TryParseDestinationDeviceIdentifier(request.Destination);
         var install = await InstallCoreAsync(new AppleAppInstallRequest
         {
@@ -497,7 +499,7 @@ public sealed partial class AppleDeviceDeploymentService
             Timeout = request.Timeout
         }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
         buildOperation.ProductSnapshot?.ValidateUnchanged();
-        install.AppPath = build.AppPath;
+        install.AppPath = retainedAppPath;
         deployment.Install = install;
 
         if (!install.Succeeded || !request.Launch)

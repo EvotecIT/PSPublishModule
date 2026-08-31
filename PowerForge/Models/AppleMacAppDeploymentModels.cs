@@ -44,7 +44,7 @@ public sealed class AppleMacAppDeploymentRequest : AppleAppBuildRequest
 /// </summary>
 public sealed class AppleMacAppInstallResult
 {
-    /// <summary>Source app bundle produced by xcodebuild.</summary>
+    /// <summary>Durable source app bundle retained from the exact xcodebuild product.</summary>
     public string SourceAppPath { get; set; } = string.Empty;
 
     /// <summary>Final installed app bundle path.</summary>

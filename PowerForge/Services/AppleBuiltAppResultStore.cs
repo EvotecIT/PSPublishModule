@@ -1,0 +1,129 @@
+namespace PowerForge;
+
+/// <summary>
+/// Retains a verified deployment product in content-addressed DerivedData so
+/// public deployment results never advertise a private path that cleanup removes.
+/// </summary>
+internal static class AppleBuiltAppResultStore
+{
+    internal static string Preserve(
+        AppleBuiltAppSnapshot snapshot,
+        string derivedDataPath)
+    {
+        snapshot.ValidateUnchanged();
+        var identity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            snapshot.AppPath,
+            "private built Apple app snapshot");
+        var outputRoot = Path.Combine(
+            AppleReleaseArtifactService.ResolvePhysicalPath(
+                Path.GetFullPath(derivedDataPath)),
+            "PowerForge",
+            "DeploymentProducts");
+        var retainedRoot = Path.Combine(outputRoot, identity.Sha256);
+        var retainedAppPath = Path.Combine(
+            retainedRoot,
+            Path.GetFileName(snapshot.AppPath));
+
+        Directory.CreateDirectory(outputRoot);
+        EnsurePathHasNoLinkedAncestor(
+            outputRoot,
+            "Apple deployment result store");
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                outputRoot,
+                File.GetUnixFileMode(outputRoot) |
+                UnixFileMode.UserRead |
+                UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
+        }
+#endif
+        if (Directory.Exists(retainedRoot) || File.Exists(retainedRoot))
+        {
+            ValidateRetainedProduct(retainedAppPath, identity.Sha256);
+            snapshot.ValidateUnchanged();
+            return retainedAppPath;
+        }
+
+        var stageRoot = Path.Combine(
+            outputRoot,
+            $".powerforge-stage-{Guid.NewGuid():N}");
+        var stagedAppPath = Path.Combine(
+            stageRoot,
+            Path.GetFileName(snapshot.AppPath));
+        Directory.CreateDirectory(stageRoot);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                stageRoot,
+                UnixFileMode.UserRead |
+                UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute);
+        }
+#endif
+        try
+        {
+            AppleArtifactCopy.CopyDirectory(snapshot.AppPath, stagedAppPath);
+            ValidateRetainedProduct(stagedAppPath, identity.Sha256);
+            snapshot.ValidateUnchanged();
+            try
+            {
+                Directory.Move(stageRoot, retainedRoot);
+            }
+            catch (IOException) when (Directory.Exists(retainedRoot))
+            {
+                ValidateRetainedProduct(retainedAppPath, identity.Sha256);
+                return retainedAppPath;
+            }
+
+            ValidateRetainedProduct(retainedAppPath, identity.Sha256);
+            return retainedAppPath;
+        }
+        finally
+        {
+            if (Directory.Exists(stageRoot))
+            {
+                try { AppleArtifactCopy.DeleteOwnedDirectory(stageRoot); } catch { /* best effort private cleanup */ }
+            }
+        }
+    }
+
+    private static void ValidateRetainedProduct(
+        string appPath,
+        string expectedSha256)
+    {
+        EnsurePathHasNoLinkedAncestor(
+            appPath,
+            "retained Apple deployment product");
+        var regularIdentity = AppleArtifactCopy.CaptureRegularPathIdentity(
+            appPath,
+            "retained Apple deployment product",
+            requireDirectory: true);
+        if (regularIdentity is null ||
+            !regularIdentity.Sha256.Equals(
+                expectedSha256,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The retained Apple deployment product does not match the provenance-bound build. " +
+                "Remove the affected DerivedData and rebuild the app.");
+        }
+    }
+
+    private static void EnsurePathHasNoLinkedAncestor(
+        string path,
+        string description)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var physicalPath = AppleReleaseArtifactService.ResolvePhysicalPath(fullPath);
+        if (!fullPath.Equals(
+                physicalPath,
+                FrameworkCompatibility.GetPathStringComparisonForPath(fullPath)))
+        {
+            throw new InvalidOperationException(
+                $"The {description} must not traverse a symbolic link or reparse point: {fullPath}");
+        }
+    }
+}

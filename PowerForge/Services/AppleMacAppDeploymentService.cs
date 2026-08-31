@@ -72,6 +72,7 @@ public sealed class AppleMacAppDeploymentService
             return deployment;
         var productSnapshot = buildOperation.ProductSnapshot ?? throw new InvalidOperationException(
             "The successful macOS build did not retain its provenance-bound app snapshot.");
+        var retainedAppPath = buildOperation.PreserveResultProduct();
 
         var installedAppPath = Path.Combine(Path.GetFullPath(request.InstallRoot), Path.GetFileName(build.AppPath));
         using var installLock = AppleMacAppBundleReplacement.AcquireInstallLock(installedAppPath);
@@ -81,7 +82,7 @@ public sealed class AppleMacAppDeploymentService
             productSnapshot,
             dittoExecutable,
             cancellationToken).ConfigureAwait(false);
-        install.SourceAppPath = build.AppPath;
+        install.SourceAppPath = retainedAppPath;
         deployment.Install = install;
         if (!install.Succeeded || !request.Launch)
             return deployment;
