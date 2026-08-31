@@ -30,6 +30,42 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.False(result.Manifest!.RequiresPowerShellRuntime);
     }
 
+    [Theory]
+    [InlineData(PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, "net472", 5)]
+    [InlineData(PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, "net8.0", 7)]
+    [InlineData(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, "net10.0", 7)]
+    public void Transpile_VersionMajorIsFixedBySemanticProfileWithoutHostState(
+        string profileId,
+        string targetFramework,
+        int expectedMajor)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-VersionMajor { return $PSVersionTable.PSVersion.Major }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler(
+            Array.Empty<PowerShellCompilationCommandProviderContract>(),
+            profileId).Transpile(
+                fixture.ScriptPath,
+                "PowerForge.VersionMajor",
+                "CompiledPowerShell",
+                targetFramework);
+
+        var method = Assert.Single(typed.Methods);
+        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        Assert.False(method.RequiresPowerShellRuntimeState);
+        Assert.Contains($"return {expectedMajor};", typed.SourceCode, StringComparison.Ordinal);
+
+        var binaryModule = new PowerShellTypedCompilationTranspiler(
+            Array.Empty<PowerShellCompilationCommandProviderContract>(),
+            profileId).TranspileForBinaryModule(
+                new[] { fixture.ScriptPath },
+                "PowerForge.VersionMajor",
+                "CompiledPowerShell",
+                targetFramework);
+        Assert.False(Assert.Single(binaryModule.Methods).RequiresPowerShellRuntimeState);
+    }
+
     [Fact]
     public void Build_StrictExecutableReadsOneBoundedEnvironmentValueWithoutPowerShellRuntime()
     {
@@ -243,6 +279,24 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         Assert.False(function.IsCompilable);
         Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
+    }
+
+    [Theory]
+    [InlineData("return $PSVersionTable.PSVersion::Major")]
+    [InlineData("return $PSVersionTable::PSVersion.Major")]
+    public void Analyze_StaticVersionMemberSyntaxDoesNotBecomeRuntimeFreeProfileState(string body)
+    {
+        using var fixture = ArtifactFixture.Create($"function Get-RuntimeState {{ {body} }}", ".psm1");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var function = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+
+        Assert.False(function.IsCompilable);
+        Assert.NotEmpty(function.Diagnostics);
     }
 
     [Fact]

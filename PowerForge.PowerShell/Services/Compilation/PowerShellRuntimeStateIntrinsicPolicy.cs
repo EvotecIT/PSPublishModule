@@ -11,6 +11,7 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     IsLinux,
     IsMacOS,
     PSVersion,
+    PSVersionMajor,
     WhatIfPreference,
     ActionPreference,
     ConfirmPreference,
@@ -76,11 +77,19 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
         }
 
+        if (TryGetVersionTableVersionMember(ast, out var versionMember))
+        {
+            if (versionMember.Equals("Major", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
+                kind = PowerShellRuntimeStateIntrinsicKind.PSVersionMajor;
+            return kind != PowerShellRuntimeStateIntrinsicKind.None;
+        }
+
         if (TryGetVersionTableMember(ast, out var member))
         {
             if (member.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) && IsKnownTarget(targetFramework))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSEdition;
             else if (member.Equals("PSVersion", StringComparison.OrdinalIgnoreCase) &&
+                     !IsConsumedByStaticVersionMember(ast, targetFramework) &&
                      capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
                 kind = PowerShellRuntimeStateIntrinsicKind.PSVersion;
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
@@ -110,8 +119,11 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         PowerShellCompilationCapability capabilities)
     {
         if (TryClassify(variable, body, targetFramework, capabilities, out _)) return true;
-        return (variable.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst) &&
-               TryClassify(variable.Parent, body, targetFramework, capabilities, out _);
+        if (variable.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst &&
+            TryClassify(variable.Parent, body, targetFramework, capabilities, out _))
+            return true;
+        return variable.Parent?.Parent is MemberExpressionAst or IndexExpressionAst or InvokeMemberExpressionAst &&
+               TryClassify(variable.Parent.Parent, body, targetFramework, capabilities, out _);
     }
 
     internal static bool RequiresHostBinding(
@@ -147,6 +159,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         {
             PowerShellRuntimeStateIntrinsicKind.PSEdition => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.PSVersion => typeof(object),
+            PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.ActionPreference => typeof(System.Management.Automation.ActionPreference),
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
@@ -173,6 +186,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.IsLinux => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.Linux)",
             PowerShellRuntimeStateIntrinsicKind.IsMacOS => "global::System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(global::System.Runtime.InteropServices.OSPlatform.OSX)",
             PowerShellRuntimeStateIntrinsicKind.PSVersion => "__psVersion",
+            PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => EmitPowerShellMajorVersion(semanticProfileId),
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => "__whatIfPreference",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };
@@ -184,6 +198,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return false;
         if (ast is MemberExpressionAst
             {
+                Static: false,
                 Expression: VariableExpressionAst variable,
                 Member: StringConstantExpressionAst { Value: var property }
             } && variable.VariablePath.UserPath.Equals("PSVersionTable", StringComparison.OrdinalIgnoreCase))
@@ -201,6 +216,36 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return true;
         }
         return false;
+    }
+
+    private static string EmitPowerShellMajorVersion(string semanticProfileId)
+    {
+        var major = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).PowerShellMajorVersion;
+        if (major <= 0)
+            throw new InvalidOperationException($"Semantic profile '{semanticProfileId}' does not fix one PowerShell major version.");
+        return major.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsConsumedByStaticVersionMember(Ast ast, string? targetFramework)
+        => ast.Parent is { } parent &&
+           TryGetVersionTableVersionMember(parent, out var member) &&
+           member.Equals("Major", StringComparison.OrdinalIgnoreCase) &&
+           IsKnownTarget(targetFramework);
+
+    private static bool TryGetVersionTableVersionMember(Ast ast, out string member)
+    {
+        member = string.Empty;
+        if (IsAssignmentTarget(ast) || ast is not MemberExpressionAst
+            {
+                Static: false,
+                Expression: var versionExpression,
+                Member: StringConstantExpressionAst { Value: var property }
+            } ||
+            !TryGetVersionTableMember(versionExpression, out var versionTableMember) ||
+            !versionTableMember.Equals("PSVersion", StringComparison.OrdinalIgnoreCase))
+            return false;
+        member = property;
+        return true;
     }
 
     private static bool HasLocalDefinition(ScriptBlockAst body, string name)

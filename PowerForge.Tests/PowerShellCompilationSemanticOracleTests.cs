@@ -18,7 +18,7 @@ public sealed class PinnedSemanticHostFactAttribute : FactAttribute
 }
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerShellCompilationSemanticOracleTests
+public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [Fact]
     public void CatalogPinsSupportedHostFamiliesAndUpstreamSourceEvidence()
@@ -29,9 +29,11 @@ public sealed class PowerShellCompilationSemanticOracleTests
             PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
 
         Assert.Equal("Desktop", windows.PowerShellEdition);
+        Assert.Equal(5, windows.PowerShellMajorVersion);
         Assert.Equal("Windows", windows.OperatingSystem);
         Assert.Empty(windows.UpstreamCommit);
         Assert.Equal("Core", current.PowerShellEdition);
+        Assert.Equal(7, current.PowerShellMajorVersion);
         Assert.Equal("7acb29279dd64e646d821f75d1cc8ad59455a9a6", current.UpstreamCommit);
         Assert.All(PowerShellCompilationSemanticOracleCatalog.Profiles, profile =>
         {

@@ -57,6 +57,7 @@ public sealed class PowerShellCompilationSemanticOracleProfile
         HostExecutable = Require(hostExecutable, nameof(hostExecutable));
         PowerShellEdition = Require(powerShellEdition, nameof(powerShellEdition));
         VersionRange = Require(versionRange, nameof(versionRange));
+        PowerShellMajorVersion = ParseMajorVersion(VersionRange);
         OperatingSystem = Require(operatingSystem, nameof(operatingSystem));
         Architecture = Require(architecture, nameof(architecture));
         Culture = Require(culture, nameof(culture));
@@ -86,6 +87,9 @@ public sealed class PowerShellCompilationSemanticOracleProfile
     /// <summary>Supported host-version range.</summary>
     public string VersionRange { get; }
 
+    /// <summary>PowerShell major version fixed by this semantic profile, or zero when a custom range cannot be reduced safely to one major.</summary>
+    public int PowerShellMajorVersion { get; }
+
     /// <summary>Supported operating-system family.</summary>
     public string OperatingSystem { get; }
 
@@ -111,6 +115,25 @@ public sealed class PowerShellCompilationSemanticOracleProfile
         => string.IsNullOrWhiteSpace(value)
             ? throw new ArgumentException("A non-empty value is required.", parameterName)
             : value.Trim();
+
+    private static int ParseMajorVersion(string versionRange)
+    {
+        if (versionRange.Length < 5 || versionRange[0] != '[' ||
+            versionRange[versionRange.Length - 1] is not ')' and not ']')
+            return 0;
+        var separator = versionRange.IndexOf(',');
+        if (separator <= 1 || separator >= versionRange.Length - 2 ||
+            !Version.TryParse(versionRange.Substring(1, separator - 1).Trim(), out var lower) ||
+            !Version.TryParse(versionRange.Substring(separator + 1, versionRange.Length - separator - 2).Trim(), out var upper) ||
+            lower.Major <= 0 || upper.CompareTo(lower) <= 0)
+            return 0;
+        if (upper.Major == lower.Major)
+            return lower.Major;
+        var exclusiveNextMajorBoundary = versionRange[versionRange.Length - 1] == ')' &&
+                                         upper.Major == lower.Major + 1 &&
+                                         upper.Minor == 0 && upper.Build <= 0 && upper.Revision <= 0;
+        return exclusiveNextMajorBoundary ? lower.Major : 0;
+    }
 }
 
 /// <summary>Authoritative evidence used to implement one feature in one semantic profile.</summary>

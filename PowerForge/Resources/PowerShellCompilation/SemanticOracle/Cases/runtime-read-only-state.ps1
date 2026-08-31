@@ -1,1 +1,1 @@
-if ($PSVersionTable.PSVersion.Major -ge 5) { 42 } else { 0 }
+if ($PSVersionTable.PSVersion.Major -ge 5) { return 42 } else { return 0 }
