@@ -9,6 +9,28 @@ namespace PowerForge.Tests;
 public sealed class WebPipelineRunnerLinksTests
 {
     [Fact]
+    public void Schemas_ExposeAdditionalShortlinkSourceContracts()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        using var siteSchema = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(repositoryRoot, "Schemas", "powerforge.web.sitespec.schema.json")));
+        var linkProperties = siteSchema.RootElement.GetProperty("$defs").GetProperty("LinkServiceSpec").GetProperty("properties");
+        Assert.True(linkProperties.TryGetProperty("ShortlinkPaths", out _));
+        Assert.True(linkProperties.TryGetProperty("shortlinkPaths", out _));
+
+        using var pipelineSchema = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(repositoryRoot, "Schemas", "powerforge.web.pipelinespec.schema.json")));
+        foreach (var stepName in new[] { "LinksValidateStep", "LinksExportApacheStep" })
+        {
+            var properties = pipelineSchema.RootElement.GetProperty("$defs").GetProperty(stepName).GetProperty("properties");
+            Assert.True(properties.TryGetProperty("shortlinkSources", out _));
+            Assert.True(properties.TryGetProperty("shortlink-sources", out _));
+            Assert.True(properties.TryGetProperty("shortlinkOverlays", out _));
+            Assert.True(properties.TryGetProperty("shortlink-overlays", out _));
+        }
+    }
+
+    [Fact]
     public void RunPipeline_LinksExportApache_UsesSiteLinksConfig()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-" + Guid.NewGuid().ToString("N"));
@@ -26,6 +48,7 @@ public sealed class WebPipelineRunnerLinksTests
                   "links": {
                     "redirects": "./data/links/redirects.json",
                     "shortlinks": "./data/links/shortlinks.json",
+                    "shortlinkPaths": ["./data/links/managed-shortlinks.json"],
                     "hosts": {
                       "short": "evo.yt"
                     },
@@ -53,6 +76,19 @@ public sealed class WebPipelineRunnerLinksTests
                     "targetUrl": "https://discord.gg/example",
                     "status": 302,
                     "owner": "evotec",
+                    "allowExternal": true
+                  }
+                ]
+                """);
+            File.WriteAllText(Path.Combine(root, "data", "links", "managed-shortlinks.json"),
+                """
+                [
+                  {
+                    "slug": "release",
+                    "host": "evo.yt",
+                    "targetUrl": "https://evotec.xyz/releases/",
+                    "status": 302,
+                    "owner": "release-service",
                     "allowExternal": true
                   }
                 ]
@@ -85,10 +121,51 @@ public sealed class WebPipelineRunnerLinksTests
             var apache = File.ReadAllText(outputPath);
             Assert.Contains("RewriteRule ^/?old/?$ /new/ [R=301,L,QSD]", apache, StringComparison.Ordinal);
             Assert.Contains("RewriteRule ^/?discord/?$ https://discord.gg/example [R=302,L,QSD]", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?release/?$ https://evotec.xyz/releases/ [R=302,L,QSD]", apache, StringComparison.Ordinal);
 
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "links-summary.json")));
             Assert.Equal(1, summary.RootElement.GetProperty("redirects").GetInt32());
-            Assert.Equal(1, summary.RootElement.GetProperty("shortlinks").GetInt32());
+            Assert.Equal(2, summary.RootElement.GetProperty("shortlinks").GetInt32());
+
+            var cachePipelinePath = Path.Combine(root, "pipeline-cache-test.json");
+            File.WriteAllText(cachePipelinePath,
+                """
+                {
+                  "cache": true,
+                  "cachePath": "./Build/pipeline-cache.json",
+                  "steps": [
+                    {
+                      "task": "links-export-apache",
+                      "config": "./site.json"
+                    }
+                  ]
+                }
+                """);
+
+            var cacheFirst = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
+            var cacheSecond = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
+            Assert.True(cacheFirst.Success);
+            Assert.True(cacheSecond.Success);
+            Assert.True(cacheSecond.Steps[0].Cached);
+
+            File.WriteAllText(Path.Combine(root, "data", "links", "managed-shortlinks.json"),
+                """
+                [
+                  {
+                    "slug": "release",
+                    "host": "evo.yt",
+                    "targetUrl": "https://evotec.xyz/releases/updated/",
+                    "status": 302,
+                    "owner": "release-service",
+                    "allowExternal": true
+                  }
+                ]
+                """);
+
+            var cacheAfterOverlayChange = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
+            Assert.True(cacheAfterOverlayChange.Success);
+            Assert.False(cacheAfterOverlayChange.Steps[0].Cached);
+            Assert.Contains("https://evotec.xyz/releases/updated/", File.ReadAllText(outputPath), StringComparison.Ordinal);
         }
         finally
         {
@@ -148,7 +225,7 @@ public sealed class WebPipelineRunnerLinksTests
     }
 
     [Fact]
-    public void RunPipeline_LinksValidate_FailsWhenConfigPathIsMissing()
+    public void RunPipeline_LinksValidate_CachedStepReportsMissingConfigAsFailure()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-missing-config-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -159,6 +236,7 @@ public sealed class WebPipelineRunnerLinksTests
             File.WriteAllText(pipelinePath,
                 """
                 {
+                  "cache": true,
                   "steps": [
                     {
                       "task": "links-validate",
@@ -174,6 +252,131 @@ public sealed class WebPipelineRunnerLinksTests
             Assert.Single(result.Steps);
             Assert.False(result.Steps[0].Success);
             Assert.Contains("links config file not found", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("link-validate")]
+    [InlineData("links")]
+    [InlineData("link-export-apache")]
+    public void RunPipeline_LinkReadAliases_InvalidateCacheWhenConfiguredOverlayChanges(string task)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-alias-cache-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var overlayPath = Path.Combine(root, "managed-shortlinks.json");
+            File.WriteAllText(Path.Combine(root, "redirects.json"), "[]");
+            File.WriteAllText(Path.Combine(root, "shortlinks.json"), "[]");
+            File.WriteAllText(overlayPath, "[]");
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Links Alias Cache Test",
+                  "baseUrl": "https://evotec.xyz",
+                  "collections": [],
+                  "links": {
+                    "redirects": "./redirects.json",
+                    "shortlinks": "./shortlinks.json",
+                    "shortlinkPaths": ["./managed-shortlinks.json"],
+                    "apacheOut": "./link-service-redirects.conf",
+                    "hosts": {
+                      "short": "evo.yt"
+                    }
+                  }
+                }
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "cache": true,
+                  "steps": [
+                    {
+                      "task": "{{task}}",
+                      "config": "./site.json"
+                    }
+                  ]
+                }
+                """);
+
+            var first = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(first.Success);
+            Assert.True(second.Success);
+            Assert.True(second.Steps[0].Cached);
+
+            File.WriteAllText(overlayPath,
+                """
+                [
+                  {
+                    "slug": "managed",
+                    "host": "evo.yt",
+                    "targetUrl": "https://evotec.xyz/managed/",
+                    "status": 302,
+                    "owner": "test",
+                    "allowExternal": true
+                  }
+                ]
+                """);
+
+            var afterOverlayChange = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(afterOverlayChange.Success);
+            Assert.False(afterOverlayChange.Steps[0].Cached);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_LinksExportApache_PreservesCaseDistinctOverlayPathsOnCaseSensitiveVolumes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
+                """);
+            File.WriteAllText(lowerPath,
+                """
+                [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
+                """);
+            if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+                return;
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "links-export-apache",
+                      "shortlinkSources": ["./Managed.json", "./managed.json"],
+                      "apacheOut": "./links.conf",
+                      "hosts": { "short": "evo.yt" }
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            var apache = File.ReadAllText(Path.Combine(root, "links.conf"));
+            Assert.Contains("RewriteRule ^/?upper/?$", apache, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?lower/?$", apache, StringComparison.Ordinal);
         }
         finally
         {
@@ -458,6 +661,63 @@ public sealed class WebPipelineRunnerLinksTests
             using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Build", "import-links-summary.json")));
             Assert.Equal(1, summary.RootElement.GetProperty("importedCount").GetInt32());
             Assert.Equal(1, summary.RootElement.GetProperty("writtenCount").GetInt32());
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_LinksImportWordPress_ConfiguredDestinationDoesNotInvalidateCache()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-links-import-cache-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "Links Import Cache Test",
+                  "baseUrl": "https://evotec.xyz",
+                  "collections": [],
+                  "links": {
+                    "shortlinks": "./shortlinks.json",
+                    "hosts": {
+                      "short": "evo.yt"
+                    }
+                  }
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "pretty-links.csv"),
+                """
+                id,name,slug,url,clicks
+                10,Teams,teams,https://teams.example.test,42
+                """);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "cache": true,
+                  "steps": [
+                    {
+                      "task": "links-import-wordpress",
+                      "config": "./site.json",
+                      "source": "./pretty-links.csv"
+                    }
+                  ]
+                }
+                """);
+
+            var first = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(first.Success);
+            Assert.False(first.Steps[0].Cached);
+            Assert.True(second.Success);
+            Assert.True(second.Steps[0].Cached);
+            Assert.True(File.Exists(Path.Combine(root, "shortlinks.json")));
         }
         finally
         {

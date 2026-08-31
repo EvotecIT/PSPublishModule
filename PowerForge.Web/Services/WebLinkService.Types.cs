@@ -10,6 +10,8 @@ public sealed class WebLinkLoadOptions
     public string? RedirectsPath { get; set; }
     /// <summary>Path to shortlink JSON.</summary>
     public string? ShortlinksPath { get; set; }
+    /// <summary>Additional shortlink JSON sources loaded after the primary shortlink file.</summary>
+    public string[] ShortlinkPaths { get; set; } = Array.Empty<string>();
     /// <summary>Compatibility CSV redirect inputs.</summary>
     public string[] RedirectCsvPaths { get; set; } = Array.Empty<string>();
     /// <summary>Named host aliases, for example en, pl, or short.</summary>
