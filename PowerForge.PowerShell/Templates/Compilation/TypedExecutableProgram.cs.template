@@ -9,6 +9,9 @@ namespace PowerForge.Compiled;
 
 internal static class Program
 {
+    private const string SemanticObservationProtocol = "PowerForge.StrictObservation/1";
+    private const string SemanticObservationProtocolVariable = "POWERFORGE_SEMANTIC_OBSERVATION_PROTOCOL";
+    private const string SemanticObservationCultureVariable = "POWERFORGE_SEMANTIC_OBSERVATION_CULTURE";
     private static readonly bool AcceptsSurplusPositionalArguments = {{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}};
 
     private static readonly ParameterSpec[] Parameters =
@@ -29,6 +32,7 @@ internal static class Program
     {
         Console.InputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        ConfigureSemanticObservationCulture();
         try
         {
             var values = ParseArguments(args, out var boundParameters);
@@ -287,8 +291,21 @@ internal static class Program
     private static bool IsParameterNameStart(char value)
         => char.IsLetter(value) || value == '_';
 
-    private static void WriteResult(object? value)
+    private static void WriteNoResult()
     {
+        if (!UsesSemanticObservationProtocol())
+            return;
+        WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
+        WriteSemanticFrame("END", string.Empty, "0");
+    }
+
+    private static void WriteResult(object? value, ResultCardinality cardinality)
+    {
+        if (UsesSemanticObservationProtocol())
+        {
+            WriteSemanticResult(value, cardinality);
+            return;
+        }
         if (value is null)
             return;
         if (value is IEnumerable values && value is not string)
@@ -300,10 +317,74 @@ internal static class Program
         Console.WriteLine(ToCurrentCultureString(value));
     }
 
+    private static void WriteSemanticResult(object? value, ResultCardinality cardinality)
+    {
+        WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
+        var count = 0;
+        if (cardinality == ResultCardinality.Collection && value is IEnumerable values && value is not string)
+        {
+            foreach (var item in values)
+            {
+                WriteSemanticValue(item);
+                count++;
+            }
+        }
+        else
+        {
+            WriteSemanticValue(value);
+            count = 1;
+        }
+        WriteSemanticFrame("END", string.Empty, count.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static void WriteSemanticValue(object? value)
+    {
+        if (value is null)
+        {
+            WriteSemanticFrame("NULL", string.Empty, string.Empty);
+            return;
+        }
+        WriteSemanticFrame(
+            "VALUE",
+            value.GetType().FullName ?? value.GetType().Name,
+            ToCurrentCultureString(value));
+    }
+
+    private static void WriteSemanticFrame(string state, string typeName, string value)
+    {
+        var typePayload = Convert.ToBase64String(Encoding.UTF8.GetBytes(typeName));
+        var valuePayload = Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+        Console.WriteLine($"{SemanticObservationProtocol}|{state}|{typePayload}|{valuePayload}");
+    }
+
+    private static bool UsesSemanticObservationProtocol()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(SemanticObservationProtocolVariable),
+            SemanticObservationProtocol,
+            StringComparison.Ordinal);
+
+    private static void ConfigureSemanticObservationCulture()
+    {
+        if (!UsesSemanticObservationProtocol())
+            return;
+        var name = Environment.GetEnvironmentVariable(SemanticObservationCultureVariable);
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("The semantic observation protocol requires an explicit culture.");
+        var culture = CultureInfo.GetCultureInfo(name);
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = culture;
+    }
+
     private static string ToCurrentCultureString(object? value)
         => value is IFormattable formattable
             ? formattable.ToString(null, CultureInfo.CurrentCulture) ?? string.Empty
             : value?.ToString() ?? string.Empty;
+
+    private enum ResultCardinality
+    {
+        Scalar,
+        Collection
+    }
 
     private sealed class ParameterSpec
     {

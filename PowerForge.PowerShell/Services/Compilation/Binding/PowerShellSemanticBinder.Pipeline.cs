@@ -69,11 +69,12 @@ internal sealed partial class PowerShellSemanticBinder
             elementType,
             PowerShellTypeFactProvenance.Inferred,
             "The bounded pipeline input provides one stable CLR current-item type.");
-        var processSymbols = new Dictionary<string, PowerShellSemanticSymbolBinding>(symbols, StringComparer.OrdinalIgnoreCase)
-        {
-            ["_"] = new PowerShellSemanticSymbolBinding(itemSymbol, itemType),
-            ["PSItem"] = new PowerShellSemanticSymbolBinding(itemSymbol, itemType)
-        };
+        var processSymbols = symbols.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        processSymbols["_"] = new PowerShellSemanticSymbolBinding(itemSymbol, itemType);
+        processSymbols["PSItem"] = new PowerShellSemanticSymbolBinding(itemSymbol, itemType);
         var body = BindPipelineProcessBlock(document, processBlock, processSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null)
             return true;

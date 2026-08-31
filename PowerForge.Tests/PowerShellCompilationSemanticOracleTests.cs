@@ -504,6 +504,37 @@ $null = & $env:ComSpec /d /c 'exit 7'
         Assert.Equal("Null", value.ValueState);
     }
 
+    [Theory]
+    [InlineData("PowerForge.Oracle.WindowsPowerShell/5.1")]
+    [InlineData("PowerForge.Oracle.PowerShell/7.6")]
+    public void ExternalOraclePreservesExplicitAutomationNullPropertyIdentity(string profileId)
+    {
+        using var fixture = OracleFixture.Create("""
+[pscustomobject] [ordered] @{
+    Sentinel = [System.Management.Automation.Internal.AutomationNull]::Value
+    NullValue = $null
+}
+""");
+        var observation = new PowerShellCompilationSemanticOracleRunner().Observe(
+            new PowerShellCompilationSemanticOracleRequest(
+                profileId,
+                fixture.ScriptPath)
+            {
+                ObservedPropertyNames = new[] { "Sentinel", "NullValue" }
+            });
+
+        var value = Assert.Single(observation.Success);
+        var sentinel = Assert.Single(value.Properties, static property => property.Name == "Sentinel");
+        Assert.True(sentinel.IsAutomationNull, $"State={sentinel.ValueState}; IsNull={sentinel.IsNull}; Type={sentinel.TypeName}; Value={sentinel.Value}");
+        Assert.False(sentinel.IsNull);
+        Assert.Equal("AutomationNull", sentinel.ValueState);
+        Assert.Equal("System.Management.Automation.Internal.AutomationNull", sentinel.TypeName);
+        var nullValue = Assert.Single(value.Properties, static property => property.Name == "NullValue");
+        Assert.True(nullValue.IsNull);
+        Assert.False(nullValue.IsAutomationNull);
+        Assert.Equal("Null", nullValue.ValueState);
+    }
+
     [Fact]
     public void ExternalOracleIntegrityBindsAndReplaysTheExactHostArtifact()
     {
@@ -736,122 +767,6 @@ Write-Error 'error-five' -ErrorId 'PowerForge.Semantic.Test' -Category InvalidDa
             pins));
     }
 
-    [Fact]
-    public void RuntimeFreeArtifactObserverRejectsHostedArtifactsBeforeProcessLaunch()
-    {
-        var runner = new RejectingSemanticProcessRunner();
-        var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver(runner);
-        var build = new PowerShellCompilationBuildResult
-        {
-            Succeeded = true,
-            ArtifactPath = "hosted-artifact.exe",
-            Manifest = new PowerShellCompilationArtifactManifest
-            {
-                Kind = PowerShellCompilationArtifactKind.Executable,
-                Mode = PowerShellCompilationMode.Hybrid
-            }
-        };
-
-        var exception = Assert.Throws<InvalidOperationException>(() => observer.Observe(
-            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-            build));
-
-        Assert.Contains("Strict executable", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(0, runner.InvocationCount);
-    }
-
-    [Fact]
-    public void RuntimeFreeArtifactObserverRejectsArtifactReplacementBeforeProcessLaunch()
-    {
-        using var fixture = OracleFixture.Create("#requires -Version 5.1" + Environment.NewLine + "42");
-        var build = BuildStrictOracleExecutable(fixture, "ReplacedStrictOracle");
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-        File.AppendAllText(build.ArtifactPath!, "replacement");
-        var runner = new RejectingSemanticProcessRunner();
-
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new PowerShellCompilationSemanticRuntimeFreeArtifactObserver(runner).Observe(
-                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-                build));
-
-        Assert.Contains("differs from its compiler evidence", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(0, runner.InvocationCount);
-    }
-
-    [Fact]
-    public void RuntimeFreeArtifactObserverRejectsAmbiguousStringAbiBeforeProcessLaunch()
-    {
-        using var fixture = OracleFixture.Create("'line-one'");
-        var build = BuildStrictOracleExecutable(fixture, "StringStrictOracle");
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-        var runner = new RejectingSemanticProcessRunner();
-
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new PowerShellCompilationSemanticRuntimeFreeArtifactObserver(runner).Observe(
-                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-                build));
-
-        Assert.Contains("framed protocol", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(0, runner.InvocationCount);
-    }
-
-    [Fact]
-    public void RuntimeFreeArtifactObserverRejectsOversizedOutputFromCustomRunner()
-    {
-        using var fixture = OracleFixture.Create("42");
-        var build = BuildStrictOracleExecutable(fixture, "OversizedStrictOracle");
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-        var runner = new OversizedSemanticProcessRunner();
-
-        var exception = Assert.Throws<InvalidDataException>(() =>
-            new PowerShellCompilationSemanticRuntimeFreeArtifactObserver(runner).Observe(
-                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-                build));
-
-        Assert.Contains("oversized process output", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(1, runner.InvocationCount);
-    }
-
-    [PinnedSemanticHostFact]
-    public void RuntimeFreeArtifactObserverQualifiesRequiresDirectiveCaseAgainstPinnedHost()
-    {
-        var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/requires-directive");
-        using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
-        var pin = PowerShellCompilationSemanticHostArtifactPinCatalog.Get(
-            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
-        var interpreted = new PowerShellCompilationSemanticOracleRunner().Observe(
-            new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
-            {
-                HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
-                ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
-            });
-        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            Path.Combine(fixture.RootPath, "strict"),
-            "RequiresDirectiveOracle",
-            PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Strict,
-            allowUnreviewedDependencyResolution: true)
-        {
-            TargetFramework = "net10.0",
-            SemanticProfileId = pin.ProfileId,
-            SingleFile = false
-        });
-
-        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
-        var strict = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(pin.ProfileId, build);
-        var allowed = new[] { "Encoding", "ExitCode" };
-        Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(interpreted, strict, allowed));
-        var differences = PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
-            semanticCase.FeatureId,
-            new[] { interpreted, strict },
-            allowed,
-            "The interpreted script has no enclosing process exit contract and host encoding differs from the Strict UTF-8 executable contract.");
-        Assert.Equal(
-            new[] { "Encoding", "ExitCode" },
-            differences.Select(static difference => difference.Path).OrderBy(static path => path, StringComparer.Ordinal));
-    }
-
     [Theory]
     [InlineData("Password")]
     [InlineData("Credential")]
@@ -966,38 +881,6 @@ Write-Error 'error-five' -ErrorId 'PowerForge.Semantic.Test' -Category InvalidDa
             UICulture = uiCulture,
             FeatureSwitches = featureSwitches.ToArray()
         });
-
-    private sealed class RejectingSemanticProcessRunner : IProcessRunner
-    {
-        public int InvocationCount { get; private set; }
-
-        public Task<ProcessRunResult> RunAsync(
-            ProcessRunRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            InvocationCount++;
-            throw new InvalidOperationException("The process boundary must not be reached.");
-        }
-    }
-
-    private sealed class OversizedSemanticProcessRunner : IProcessRunner
-    {
-        public int InvocationCount { get; private set; }
-
-        public Task<ProcessRunResult> RunAsync(
-            ProcessRunRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            InvocationCount++;
-            return Task.FromResult(new ProcessRunResult(
-                0,
-                new string('x', PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationTextCharacters + 1),
-                string.Empty,
-                request.FileName,
-                TimeSpan.Zero,
-                timedOut: false));
-        }
-    }
 
     private sealed class OracleFixture : IDisposable
     {

@@ -75,10 +75,14 @@ internal static class PowerShellTypedExecutableEmitter
         if (method.RequiresPowerShellBoundParameters)
             arguments.Add("boundParameters");
         var invocation = "CompiledPowerShellScript." + method.GeneratedName + "(" + string.Join(", ", arguments) + ")";
+        var resultCardinality = method.OutputCardinality.Equals("Collection", StringComparison.Ordinal)
+            ? "ResultCardinality.Collection"
+            : "ResultCardinality.Scalar";
         var invocationSource = method.ReturnType == typeof(void)
-            ? "            " + invocation + ";" + Environment.NewLine + "            return 0;"
+            ? "            " + invocation + ";" + Environment.NewLine +
+              "            WriteNoResult();" + Environment.NewLine + "            return 0;"
             : "            var result = " + invocation + ";" + Environment.NewLine +
-              "            WriteResult(result);" + Environment.NewLine + "            return 0;";
+              "            WriteResult(result, " + resultCardinality + ");" + Environment.NewLine + "            return 0;";
         var commonParameterNames = string.Join(Environment.NewLine,
             PowerShellCommonParameterPolicy.GetAvailable(commandBinding, targetFramework).Select(parameter =>
                 "        new string[] { " + PowerShellCSharpLiteral.QuoteString(parameter.Name) + ", " +

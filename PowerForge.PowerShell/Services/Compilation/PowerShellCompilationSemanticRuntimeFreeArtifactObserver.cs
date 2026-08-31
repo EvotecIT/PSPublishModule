@@ -8,6 +8,8 @@ namespace PowerForge;
 /// <summary>Executes a certified Strict executable and converts its typed ABI/output into a schema-3 oracle envelope.</summary>
 public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
 {
+    private const string ObservationProtocol = "PowerForge.StrictObservation/1";
+    private static readonly System.Text.UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private readonly IProcessRunner _processRunner;
 
     /// <summary>Creates an observer using the default structured process runner.</summary>
@@ -41,7 +43,12 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             artifactPath,
             workingDirectory,
             arguments ?? Array.Empty<string>(),
-            TimeSpan.FromSeconds(timeoutSeconds))
+            TimeSpan.FromSeconds(timeoutSeconds),
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["POWERFORGE_SEMANTIC_OBSERVATION_PROTOCOL"] = ObservationProtocol,
+                ["POWERFORGE_SEMANTIC_OBSERVATION_CULTURE"] = culture.Name
+            })
         {
             MaxCapturedOutputCharacters = PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationTextCharacters
         };
@@ -57,21 +64,21 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             run.StdErr.Length > PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationTextCharacters)
             throw new InvalidDataException("Runtime-free semantic observation returned null or oversized process output.");
 
-        object? value = null;
-        if (run.ExitCode == 0)
-            value = ParseSuccessOutput(run.StdOut, method, culture);
-        var envelope = PowerShellCompilationSemanticRuntimeFreeObserver.Observe(
-            profileId,
-            PowerShellCompilationSemanticExecutionSurface.Strict,
-            value,
-            culture: culture,
-            exitCode: run.ExitCode,
-            encoding: new PowerShellCompilationSemanticEncodingObservation
-            {
-                ConsoleInput = "utf-8",
-                ConsoleOutput = "utf-8",
-                ObservationFile = "utf-8"
-            });
+        var encoding = new PowerShellCompilationSemanticEncodingObservation
+        {
+            ConsoleInput = "utf-8",
+            ConsoleOutput = "utf-8",
+            ObservationFile = "utf-8"
+        };
+        var envelope = run.ExitCode == 0
+            ? CreateFramedEnvelope(profileId, ParseSuccessOutput(run.StdOut, method), culture, run.ExitCode, encoding)
+            : PowerShellCompilationSemanticRuntimeFreeObserver.Observe(
+                profileId,
+                PowerShellCompilationSemanticExecutionSurface.Strict,
+                value: null,
+                culture: culture,
+                exitCode: run.ExitCode,
+                encoding: encoding);
         if (run.ExitCode != 0)
         {
             var message = string.IsNullOrWhiteSpace(run.StdErr) ? $"Strict executable exited with code {run.ExitCode}." : run.StdErr.Trim();
@@ -253,22 +260,26 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         if (!cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) &&
             !cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Unsupported Strict executable ABI cardinality '{cardinality}'.");
-        var hasLineSafeState = method.OutputValueStates.Length == 1 &&
-            method.OutputValueStates[0] is "Known" or "Unknown";
-        if (method.CanProduceNull || method.Nullable || !hasLineSafeState)
+        if (method.OutputValueStates.Length == 0 ||
+            method.OutputValueStates.Any(static state => state is not "Known" and not "Unknown" and not "Null"))
             throw new InvalidOperationException(
-                $"Line-based Strict observation rejects nullable or sentinel-bearing ABI output; a framed protocol is required. " +
-                $"States=[{string.Join(",", method.OutputValueStates)}], CanProduceNull={method.CanProduceNull}, Nullable={method.Nullable}.");
+                $"The framed Strict observation protocol does not support ABI states [{string.Join(",", method.OutputValueStates)}].");
+        if (method.OutputValueStates.Contains("Null", StringComparer.Ordinal) && !method.CanProduceNull && !method.Nullable)
+            throw new InvalidOperationException("The Strict executable ABI reports a null output state without a nullable contract.");
         var typeName = cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase)
             ? method.CollectionElementType
             : method.ReturnType;
-        if (!IsLineSafeInvariantType(typeName))
-            throw new InvalidOperationException($"Line-based Strict observation rejects ABI type '{typeName}'; a framed protocol is required.");
+        if (!IsFramedScalarType(typeName))
+            throw new InvalidOperationException($"The framed Strict observation protocol does not support ABI type '{typeName}'.");
     }
 
-    private static bool IsLineSafeInvariantType(string typeName)
-        => typeName is "System.Boolean" or "System.Byte" or "System.SByte" or "System.Int16" or
-            "System.UInt16" or "System.Int32" or "System.UInt32" or "System.Int64" or "System.UInt64";
+    private static bool IsFramedScalarType(string typeName)
+    {
+        typeName = GetFramedScalarTypeName(typeName);
+        return typeName is "System.Boolean" or "System.Byte" or "System.SByte" or "System.Int16" or
+            "System.UInt16" or "System.Int32" or "System.UInt32" or "System.Int64" or "System.UInt64" or
+            "System.Single" or "System.Double" or "System.Decimal" or "System.Char" or "System.String";
+    }
 
     private static string ComputeSha256(string path)
     {
@@ -278,28 +289,150 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             .Select(static value => value.ToString("x2", CultureInfo.InvariantCulture)));
     }
 
-    private static object? ParseSuccessOutput(string output, PowerShellCompilationAbiMethod method, CultureInfo culture)
+    private static PowerShellCompilationSemanticValueObservation[] ParseSuccessOutput(
+        string output,
+        PowerShellCompilationAbiMethod method)
     {
         var lines = SplitLines(output);
-        if (method.OutputCardinality.Equals("None", StringComparison.OrdinalIgnoreCase))
-        {
-            if (lines.Length != 0)
-                throw new InvalidDataException("The Strict executable emitted success output contrary to its ABI cardinality.");
-            return null;
-        }
-
-        if (method.OutputCardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase))
-        {
-            if (lines.Length != 1)
-                throw new InvalidDataException($"The Strict executable emitted {lines.Length} lines for a scalar ABI result.");
-            return ParseValue(lines[0], method.ReturnType, culture);
-        }
-
-        if (!method.OutputCardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Unsupported Strict executable ABI cardinality '{method.OutputCardinality}'.");
-        if (lines.Length > PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationItems)
+        if (lines.Length < 2)
+            throw new InvalidDataException("The Strict executable did not emit a complete framed semantic observation.");
+        var begin = ParseFrame(lines[0]);
+        var end = ParseFrame(lines[lines.Length - 1]);
+        if (begin.State != "BEGIN" || begin.TypeName.Length != 0 || begin.Value.Length != 0)
+            throw new InvalidDataException("The Strict semantic observation has an invalid begin frame.");
+        if (end.State != "END" || end.TypeName.Length != 0 ||
+            !int.TryParse(end.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var declaredCount) || declaredCount < 0)
+            throw new InvalidDataException("The Strict semantic observation has an invalid end frame.");
+        var valueLines = lines.Skip(1).Take(lines.Length - 2).ToArray();
+        if (declaredCount != valueLines.Length)
+            throw new InvalidDataException("The Strict semantic observation frame count is inconsistent.");
+        if (declaredCount > PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationItems)
             throw new InvalidDataException("The Strict executable exceeded the bounded success-output cardinality.");
-        return lines.Select(line => ParseValue(line, method.CollectionElementType, culture)).ToArray();
+
+        var cardinality = method.OutputCardinality;
+        if (cardinality.Equals("None", StringComparison.OrdinalIgnoreCase))
+        {
+            if (valueLines.Length != 0)
+                throw new InvalidDataException("The Strict executable emitted success output contrary to its ABI cardinality.");
+            return Array.Empty<PowerShellCompilationSemanticValueObservation>();
+        }
+        if (cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) && valueLines.Length != 1)
+            throw new InvalidDataException($"The Strict executable emitted {valueLines.Length} framed values for a scalar ABI result.");
+        if (!cardinality.Equals("Scalar", StringComparison.OrdinalIgnoreCase) &&
+            !cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Unsupported Strict executable ABI cardinality '{cardinality}'.");
+
+        var expectedType = cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase)
+            ? method.CollectionElementType
+            : method.ReturnType;
+        expectedType = GetFramedScalarTypeName(expectedType);
+        var result = new PowerShellCompilationSemanticValueObservation[valueLines.Length];
+        for (var index = 0; index < valueLines.Length; index++)
+        {
+            var frame = ParseFrame(valueLines[index]);
+            if (frame.State == "NULL")
+            {
+                if (frame.TypeName.Length != 0 || frame.Value.Length != 0 || !method.CanProduceNull && !method.Nullable)
+                    throw new InvalidDataException("The Strict executable emitted a null frame contrary to its ABI contract.");
+                result[index] = new PowerShellCompilationSemanticValueObservation
+                {
+                    Sequence = index + 1,
+                    IsNull = true,
+                    ValueState = "Null",
+                    EnumerationState = "Scalar"
+                };
+                continue;
+            }
+            if (frame.State != "VALUE" || !frame.TypeName.Equals(expectedType, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    $"The Strict executable emitted framed type '{frame.TypeName}' for ABI type '{expectedType}'.");
+            result[index] = new PowerShellCompilationSemanticValueObservation
+            {
+                Sequence = index + 1,
+                Value = frame.Value,
+                TypeName = frame.TypeName,
+                ValueState = "Value",
+                EnumerationState = "Scalar"
+            };
+        }
+        return result;
+    }
+
+    private static string GetFramedScalarTypeName(string typeName)
+    {
+        const string nullablePrefix = "System.Nullable`1[[";
+        if (!typeName.StartsWith(nullablePrefix, StringComparison.Ordinal))
+            return typeName;
+        var separator = typeName.IndexOf(',', nullablePrefix.Length);
+        if (separator <= nullablePrefix.Length)
+            throw new InvalidDataException($"The Strict executable ABI contains malformed nullable type '{typeName}'.");
+        return typeName.Substring(nullablePrefix.Length, separator - nullablePrefix.Length);
+    }
+
+    private static SemanticFrame ParseFrame(string line)
+    {
+        var fields = line.Split('|');
+        if (fields.Length != 4 || !fields[0].Equals(ObservationProtocol, StringComparison.Ordinal))
+            throw new InvalidDataException("The Strict executable emitted an invalid semantic observation frame.");
+        return new SemanticFrame(fields[1], DecodeFramePayload(fields[2]), DecodeFramePayload(fields[3]));
+    }
+
+    private static string DecodeFramePayload(string payload)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(payload);
+        }
+        catch (FormatException exception)
+        {
+            throw new InvalidDataException("The Strict semantic observation contains invalid base64 payload.", exception);
+        }
+        string value;
+        try
+        {
+            value = StrictUtf8.GetString(bytes);
+        }
+        catch (System.Text.DecoderFallbackException exception)
+        {
+            throw new InvalidDataException("The Strict semantic observation contains invalid UTF-8 payload.", exception);
+        }
+        if (value.Length > PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationTextCharacters)
+            throw new InvalidDataException("The Strict semantic observation contains an oversized frame payload.");
+        return value;
+    }
+
+    private static PowerShellCompilationSemanticOracleEnvelope CreateFramedEnvelope(
+        string profileId,
+        PowerShellCompilationSemanticValueObservation[] success,
+        CultureInfo culture,
+        int exitCode,
+        PowerShellCompilationSemanticEncodingObservation encoding)
+    {
+        var envelope = new PowerShellCompilationSemanticOracleEnvelope
+        {
+            ProfileId = profileId,
+            ExecutionSurface = PowerShellCompilationSemanticExecutionSurface.Strict.ToString(),
+            OperatingSystem = GetOperatingSystem(),
+            Architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+            Culture = culture.Name,
+            Success = success,
+            SuccessState = success.Length == 0 ? "NoOutput" : "Output",
+            ExitCode = exitCode,
+            Encoding = encoding,
+            ProcessState = new PowerShellCompilationSemanticProcessStateObservation(),
+            ProcessEffects = Array.Empty<PowerShellCompilationSemanticProcessEffectObservation>()
+        };
+        PowerShellCompilationSemanticOracleEnvelopeValidator.Validate(envelope, profileId);
+        return envelope;
+    }
+
+    private static string GetOperatingSystem()
+    {
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)) return "Windows";
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)) return "Linux";
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX)) return "macOS";
+        return "Unknown";
     }
 
     private static string[] SplitLines(string value)
@@ -311,19 +444,5 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         return lines.Length > 0 && lines[lines.Length - 1].Length == 0 ? lines.Take(lines.Length - 1).ToArray() : lines;
     }
 
-    private static object ParseValue(string value, string typeName, CultureInfo culture)
-        => typeName switch
-        {
-            "System.String" => value,
-            "System.Boolean" => bool.Parse(value),
-            "System.Byte" => byte.Parse(value, NumberStyles.Integer, culture),
-            "System.SByte" => sbyte.Parse(value, NumberStyles.Integer, culture),
-            "System.Int16" => short.Parse(value, NumberStyles.Integer, culture),
-            "System.UInt16" => ushort.Parse(value, NumberStyles.Integer, culture),
-            "System.Int32" => int.Parse(value, NumberStyles.Integer, culture),
-            "System.UInt32" => uint.Parse(value, NumberStyles.Integer, culture),
-            "System.Int64" => long.Parse(value, NumberStyles.Integer, culture),
-            "System.UInt64" => ulong.Parse(value, NumberStyles.Integer, culture),
-            _ => throw new InvalidDataException($"Runtime-free semantic observation does not support ABI value type '{typeName}'.")
-        };
+    private sealed record SemanticFrame(string State, string TypeName, string Value);
 }

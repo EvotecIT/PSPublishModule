@@ -12,6 +12,106 @@ trap {
 }
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 $maximumObservationItems = 1024
+if ($null -eq ('PowerForge.SemanticOraclePropertyObserver' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Management.Automation;
+namespace PowerForge {
+    public sealed class SemanticOraclePropertyObservation {
+        public string Name { get; set; }
+        public string Value { get; set; }
+        public string TypeName { get; set; }
+        public bool IsNull { get; set; }
+        public bool IsAutomationNull { get; set; }
+        public string ValueState { get; set; }
+        public string EnumerationState { get; set; }
+        public int? CollectionCardinality { get; set; }
+        public string[] ElementTypeNames { get; set; }
+
+        public SemanticOraclePropertyObservation() {
+            Name = String.Empty;
+            Value = String.Empty;
+            TypeName = String.Empty;
+            ValueState = "Value";
+            EnumerationState = "Scalar";
+            ElementTypeNames = new string[0];
+        }
+    }
+
+    public static class SemanticOraclePropertyObserver {
+        public static SemanticOraclePropertyObservation[] Observe(PSObject input, string[] observedNames, int maximumItems) {
+            if (input == null) return new SemanticOraclePropertyObservation[0];
+            if (observedNames == null) observedNames = new string[0];
+            var names = new HashSet<string>(observedNames, StringComparer.OrdinalIgnoreCase);
+            var result = new List<SemanticOraclePropertyObservation>();
+            foreach (PSPropertyInfo property in input.Properties) {
+                if (!names.Contains(property.Name)) continue;
+                if (result.Count >= maximumItems) throw new InvalidOperationException("Observed property count exceeds the semantic observation limit.");
+                result.Add(ObserveProperty(property, maximumItems));
+            }
+            return result.ToArray();
+        }
+
+        private static SemanticOraclePropertyObservation ObserveProperty(PSPropertyInfo property, int maximumItems) {
+            var result = new SemanticOraclePropertyObservation();
+            result.Name = property.Name;
+            var value = property.Value;
+            if (Object.ReferenceEquals(value, System.Management.Automation.Internal.AutomationNull.Value)) {
+                result.IsAutomationNull = true;
+                result.ValueState = "AutomationNull";
+                result.TypeName = "System.Management.Automation.Internal.AutomationNull";
+                return result;
+            }
+            if (value == null) {
+                result.IsNull = true;
+                result.ValueState = "Null";
+                return result;
+            }
+            result.Value = (string)LanguagePrimitives.ConvertTo(value, typeof(string), CultureInfo.CurrentCulture);
+            result.TypeName = value.GetType().FullName;
+            var dictionary = value as IDictionary;
+            if (dictionary != null) {
+                EnsureCount(dictionary.Count, maximumItems);
+                result.EnumerationState = "Dictionary";
+                result.CollectionCardinality = dictionary.Count;
+                result.ElementTypeNames = GetElementTypeNames(dictionary.Values, maximumItems);
+                return result;
+            }
+            var collection = value as ICollection;
+            if (collection != null && !(value is string)) {
+                EnsureCount(collection.Count, maximumItems);
+                result.EnumerationState = "Collection";
+                result.CollectionCardinality = collection.Count;
+                result.ElementTypeNames = GetElementTypeNames(collection, maximumItems);
+                return result;
+            }
+            if (value is IEnumerable && !(value is string)) result.EnumerationState = "Collection";
+            return result;
+        }
+
+        private static string[] GetElementTypeNames(IEnumerable values, int maximumItems) {
+            var result = new List<string>();
+            var count = 0;
+            foreach (var item in values) {
+                count++;
+                EnsureCount(count, maximumItems);
+                var name = item == null ? "Null" : item.GetType().FullName;
+                if (!result.Contains(name, StringComparer.Ordinal)) result.Add(name);
+            }
+            return result.ToArray();
+        }
+
+        private static void EnsureCount(int count, int maximumItems) {
+            if (count > maximumItems) throw new InvalidOperationException("Semantic observation exceeds the bounded collection limit.");
+        }
+    }
+}
+'@
+}
 $culture = [System.Globalization.CultureInfo]::GetCultureInfo([string] $config.Culture)
 [System.Globalization.CultureInfo]::CurrentCulture = $culture
 [System.Globalization.CultureInfo]::CurrentUICulture = $culture
@@ -70,55 +170,12 @@ function Get-OperatingSystemVersion {
     return [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
 }
 
-function Get-PropertyObservation {
-    param(
-        [object] $Value,
-        [string[]] $ObservedPropertyNames
-    )
-
-    if ($null -eq $Value -or $ObservedPropertyNames.Count -eq 0) {
-        return @()
-    }
-
-    $properties = foreach ($property in $Value.PSObject.Properties) {
-        if ($ObservedPropertyNames -notcontains $property.Name) { continue }
-        $propertyValue = $property.Value
-        $shape = Get-ValueShape -Value $propertyValue
-        [ordered] @{
-            Name = [string] $property.Name
-            Value = if ($shape.ValueState -eq 'Value') { [string] $propertyValue } else { '' }
-            TypeName = if ($shape.ValueState -eq 'Null') { '' } else { $propertyValue.GetType().FullName }
-            IsNull = $shape.ValueState -eq 'Null'
-            IsAutomationNull = $shape.ValueState -eq 'AutomationNull'
-            ValueState = $shape.ValueState
-            EnumerationState = $shape.EnumerationState
-            CollectionCardinality = $shape.CollectionCardinality
-            ElementTypeNames = @($shape.ElementTypeNames)
-        }
-    }
-    return @($properties)
-}
-
 function Get-ValueShape {
     param([object] $Value)
 
     if ($null -eq $Value) {
         return [ordered] @{
             ValueState = 'Null'
-            EnumerationState = 'Scalar'
-            CollectionCardinality = $null
-            ElementTypeNames = @()
-        }
-    }
-    $isAutomationNull = $false
-    try {
-        $isAutomationNull = [object]::ReferenceEquals($Value, [System.Management.Automation.Internal.AutomationNull]::Value)
-    } catch {
-        $isAutomationNull = $false
-    }
-    if ($isAutomationNull) {
-        return [ordered] @{
-            ValueState = 'AutomationNull'
             EnumerationState = 'Scalar'
             CollectionCardinality = $null
             ElementTypeNames = @()
@@ -203,6 +260,7 @@ try {
     $runspace.Open()
     $runspace.SessionStateProxy.SetVariable('PowerForgeOracleScriptPath', [string] $config.ScriptPath)
     $runspace.SessionStateProxy.SetVariable('PowerForgeOracleArguments', [object[]] @($config.Arguments))
+    $runspace.SessionStateProxy.SetVariable('PowerForgeOracleObservedPropertyNames', [string[]] @($config.ObservedPropertyNames))
     $powerShell = [System.Management.Automation.PowerShell]::Create()
     $powerShell.Runspace = $runspace
     [void] $powerShell.AddScript(@'
@@ -212,7 +270,29 @@ $VerbosePreference = 'Continue'
 $DebugPreference = 'Continue'
 $InformationPreference = 'Continue'
 $global:LASTEXITCODE = $null
-& $PowerForgeOracleScriptPath @PowerForgeOracleArguments *>&1
+$powerForgeObservedPropertyNamesSnapshot = [string[]] @($PowerForgeOracleObservedPropertyNames)
+if ($powerForgeObservedPropertyNamesSnapshot.Count -eq 0) {
+    & $PowerForgeOracleScriptPath @PowerForgeOracleArguments *>&1
+} else {
+    & $PowerForgeOracleScriptPath @PowerForgeOracleArguments *>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord] -or
+            $_ -is [System.Management.Automation.InformationRecord] -or
+            $_ -is [System.Management.Automation.WarningRecord] -or
+            $_ -is [System.Management.Automation.VerboseRecord] -or
+            $_ -is [System.Management.Automation.DebugRecord]) {
+            $_
+        } else {
+            [pscustomobject] [ordered] @{
+                PowerForgeSemanticPreBoundary = $true
+                Value = $_
+                Properties = @([PowerForge.SemanticOraclePropertyObserver]::Observe(
+                    [System.Management.Automation.PSObject]::AsPSObject($_),
+                    $powerForgeObservedPropertyNamesSnapshot,
+                    1024))
+            }
+        }
+    }
+}
 '@)
     $output = @()
     try {
@@ -280,20 +360,28 @@ $global:LASTEXITCODE = $null
             continue
         }
 
-        $itemShape = Get-ValueShape -Value $item
-        $baseValue = if ($itemShape.ValueState -eq 'Value') { $item.PSObject.BaseObject } else { $null }
+        $preBoundaryProperty = if ($null -eq $item) { $null } else { $item.PSObject.Properties['PowerForgeSemanticPreBoundary'] }
+        $isPreBoundary = $null -ne $preBoundaryProperty -and [bool] $preBoundaryProperty.Value
+        $semanticItem = if ($isPreBoundary) { $item.PSObject.Properties['Value'].Value } else { $item }
+        $itemShape = Get-ValueShape -Value $semanticItem
+        $baseValue = if ($itemShape.ValueState -eq 'Value') { $semanticItem.PSObject.BaseObject } else { $null }
         $shape = if ($itemShape.ValueState -eq 'Value') { Get-ValueShape -Value $baseValue } else { $itemShape }
+        $properties = if ($isPreBoundary) {
+            @($item.PSObject.Properties['Properties'].Value)
+        } else {
+            @()
+        }
         $success.Add([ordered] @{
             Sequence = $sequence
             Value = if ($shape.ValueState -eq 'Value') { [string] $baseValue } else { '' }
-            TypeName = if ($shape.ValueState -eq 'Value') { $baseValue.GetType().FullName } elseif ($shape.ValueState -eq 'AutomationNull') { $item.GetType().FullName } else { '' }
+            TypeName = if ($shape.ValueState -eq 'Value') { $baseValue.GetType().FullName } elseif ($shape.ValueState -eq 'AutomationNull') { 'System.Management.Automation.Internal.AutomationNull' } else { '' }
             IsNull = $shape.ValueState -eq 'Null'
             IsAutomationNull = $shape.ValueState -eq 'AutomationNull'
             ValueState = $shape.ValueState
             EnumerationState = $shape.EnumerationState
             CollectionCardinality = $shape.CollectionCardinality
             ElementTypeNames = @($shape.ElementTypeNames)
-            Properties = @(Get-PropertyObservation -Value $item -ObservedPropertyNames @($config.ObservedPropertyNames))
+            Properties = @($properties)
         })
     }
 
