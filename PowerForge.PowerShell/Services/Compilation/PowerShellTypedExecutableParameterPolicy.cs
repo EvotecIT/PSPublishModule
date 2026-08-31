@@ -40,22 +40,11 @@ internal static class PowerShellTypedExecutableParameterPolicy
     internal static bool IsSupported(Type type)
     {
         var compiledType = GetCompiledType(type);
-        return IsScalar(compiledType) ||
-               compiledType.IsArray && compiledType.GetArrayRank() == 1 && IsScalar(compiledType.GetElementType()!);
+        return PowerShellStableScalarTypePolicy.IsSupported(compiledType) ||
+               compiledType.IsArray && compiledType.GetArrayRank() == 1 && PowerShellStableScalarTypePolicy.IsSupported(compiledType.GetElementType()!);
     }
 
     internal static Type GetCompiledType(Type type)
         => type == typeof(System.Management.Automation.SwitchParameter) ? typeof(bool) : type;
 
-    private static bool IsScalar(Type type)
-    {
-        var scalar = Nullable.GetUnderlyingType(type) ?? type;
-        return scalar.IsEnum ||
-           scalar == typeof(bool) || scalar == typeof(byte) || scalar == typeof(sbyte) ||
-           scalar == typeof(short) || scalar == typeof(ushort) || scalar == typeof(int) || scalar == typeof(uint) ||
-           scalar == typeof(long) || scalar == typeof(ulong) || scalar == typeof(float) || scalar == typeof(double) ||
-           scalar == typeof(decimal) || scalar == typeof(char) || scalar == typeof(string) ||
-           scalar == typeof(DateTime) || scalar == typeof(DateTimeOffset) || scalar == typeof(TimeSpan) ||
-           scalar == typeof(Guid) || scalar == typeof(Uri) || scalar == typeof(Version);
-    }
 }

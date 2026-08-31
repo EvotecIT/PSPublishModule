@@ -40,6 +40,8 @@ public static class PowerShellCompilationFeatureIds
     public const string CatchFilter = "exception.catch-filter";
     /// <summary>PowerShell begin/process/clean pipeline lifecycle blocks.</summary>
     public const string PipelineLifecycle = "pipeline.lifecycle";
+    /// <summary>Bounded runtime-free pipeline input enumeration.</summary>
+    public const string PipelineEnumeration = "pipeline.enumeration";
     /// <summary>Runtime-bearing using statements.</summary>
     public const string RuntimeUsing = "source.using-runtime";
     /// <summary>PowerShell class or enum declarations whose runtime type identity remains hosted.</summary>
@@ -116,6 +118,7 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("read-only automatic variable", StringComparison.OrdinalIgnoreCase) >= 0) return AutomaticVariableAssignment;
         if (message.IndexOf("Switch flags", StringComparison.OrdinalIgnoreCase) >= 0) return SwitchFlags;
         if (message.IndexOf("catch filter", StringComparison.OrdinalIgnoreCase) >= 0) return CatchFilter;
+        if (message.IndexOf("pipeline enumeration", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineEnumeration;
         if (message.IndexOf("pipeline lifecycle", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineLifecycle;
         if (message.IndexOf("runtime-bearing using", StringComparison.OrdinalIgnoreCase) >= 0) return RuntimeUsing;
         if (message.IndexOf("#requires", StringComparison.OrdinalIgnoreCase) >= 0) return RequiresDirective;

@@ -296,6 +296,13 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case CommandAst command:
                     var commandName = command.GetCommandName();
+                    if (command.Parent is PipelineAst mappingPipeline &&
+                        PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeProcess(
+                            mappingPipeline,
+                            _commandRegistry,
+                            out _,
+                            out _))
+                        break;
                     if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
                         (command.InvocationOperator == TokenKind.Dot ||
                          commandName is not null && localFunctionNames?.Contains(commandName) == true))

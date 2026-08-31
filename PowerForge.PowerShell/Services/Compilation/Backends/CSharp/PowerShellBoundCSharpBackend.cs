@@ -254,6 +254,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(specializedVariable)
                         .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
                     builder.Append(prefix).Append("    ")
+                        .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
                         .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
                         .Append(specializedVariable).AppendLine(";");
                     foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
@@ -270,6 +271,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(enumerable).AppendLine(")");
                 builder.Append(prefix).AppendLine("{");
                 builder.Append(prefix).Append("    ")
+                    .Append(loop.DeclareVariable ? PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType) + " " : string.Empty)
                     .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
                     .Append(iterationVariable).AppendLine(";");
                 foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);

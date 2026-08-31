@@ -35,11 +35,9 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateDependencyTopLevels(parsed.Values, entryPoint);
         ValidateEntryPointDeclarationOrder(entrySource);
 
-        var byName = definitions.ToDictionary(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase);
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
-        ValidateCommands(entrySource.Path, statements, byName);
 
         var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
         var semantic = new PowerShellSemanticCompilationPipeline(semanticProfileId).Compile(
@@ -171,21 +169,6 @@ internal static class PowerShellTypedExecutableCompiler
             commandProviders: method.CommandProviders);
         description.DocumentId = function.Symbol.DocumentId;
         return description;
-    }
-
-    private static void ValidateCommands(
-        string path,
-        IEnumerable<StatementAst> statements,
-        IReadOnlyDictionary<string, LocalDefinition> definitions)
-    {
-        foreach (var command in statements
-                     .SelectMany(static statement => statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false))
-                     .Cast<CommandAst>())
-        {
-            var name = command.GetCommandName();
-            if (command.InvocationOperator == TokenKind.Dot || name is null || !definitions.ContainsKey(name))
-                throw new InvalidOperationException($"{path}:{command.Extent.StartLineNumber}: command '{name ?? command.Extent.Text}' is not a statically known local function in this Strict executable.");
-        }
     }
 
     private static ParsedSource Parse(string path, string identityRoot)

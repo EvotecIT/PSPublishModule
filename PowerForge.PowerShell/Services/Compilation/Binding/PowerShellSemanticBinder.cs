@@ -616,6 +616,17 @@ internal sealed partial class PowerShellSemanticBinder
                 ? null
                 : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, streamProvider!, message);
         }
+        if (statement is PipelineAst mappingPipeline &&
+            TryBindRuntimeFreePipelineEnumeration(
+                document,
+                mappingPipeline,
+                symbols,
+                functions,
+                diagnostics,
+                targetFramework,
+                capabilities,
+                out var enumeration))
+            return enumeration;
         if (statement is PipelineAst pipeline)
         {
             var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);

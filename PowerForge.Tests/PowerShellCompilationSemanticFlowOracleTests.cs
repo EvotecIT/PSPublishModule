@@ -54,6 +54,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-ValidatedValue { [CmdletBinding()] param([ValidateRange(1, 100)][int] $Value) return $Value } function Get-MetadataResult { [bool] $Rejected = $false; try { $null = Get-ValidatedValue -Value 101 } catch { $Rejected = $true }; if (-not $Rejected) { return -1 }; [int] $Result = Get-ValidatedValue -Value 40; $Result += 2; return $Result }",
             "Get_MetadataResult",
             "42"
+        },
+        {
+            "pipeline-enumeration",
+            "function Get-PipelineEnumerationValue { [int] $Total = 0; 40, 2 | ForEach-Object { $Total += $_ }; return $Total }",
+            "Get_PipelineEnumerationValue",
+            "42"
         }
     };
 
@@ -122,6 +128,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesParameterMetadataCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/parameter-metadata", "BoundedParameterMetadataOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesPipelineEnumerationCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/pipeline-enumeration", "BoundedPipelineEnumerationOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()

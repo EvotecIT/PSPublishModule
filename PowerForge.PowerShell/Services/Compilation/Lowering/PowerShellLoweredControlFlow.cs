@@ -71,7 +71,8 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         Type elementType,
         PowerShellLoweredExpression collection,
         bool scalarString,
-        PowerShellLoweredStatement[] statements)
+        PowerShellLoweredStatement[] statements,
+        bool declareVariable)
         : base(span)
     {
         Variable = variable;
@@ -79,6 +80,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         Collection = collection;
         ScalarString = scalarString;
         Statements = statements;
+        DeclareVariable = declareVariable;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -86,6 +88,7 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
     internal PowerShellLoweredExpression Collection { get; }
     internal bool ScalarString { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal bool DeclareVariable { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause

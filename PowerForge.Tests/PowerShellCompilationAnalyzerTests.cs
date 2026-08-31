@@ -168,6 +168,26 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.False(plan.CanProceed);
     }
 
+    [Theory]
+    [InlineData("param([int[]] $Values) [int] $value = 0; $Values | ForEach-Object { $value = $_ }; return $value")]
+    [InlineData("40, 2 | ForEach-Object { $_ }; return 42")]
+    [InlineData("40, 2 | ForEach-Object { return }; return 42")]
+    public void Analyze_AttributesRejectedBoundedPipelineShapeToEnumerationOwner(string body)
+    {
+        using var fixture = CompilationFixture.Create(
+            $"function Get-Value {{ {body} }}");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.PipelineEnumeration);
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == "syntax.unsupported");
+    }
+
     [Fact]
     public void Analyze_ReportsParserErrorsAtFileLevel()
     {

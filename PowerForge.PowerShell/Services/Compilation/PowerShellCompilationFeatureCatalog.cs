@@ -33,6 +33,7 @@ internal static class PowerShellCompilationFeatureCatalog
             PowerShellCompilationFeatureIds.SwitchFlags => ("Switch matching modes", "Add conservative regex, wildcard, or file switch semantics with differential tests."),
             PowerShellCompilationFeatureIds.CatchFilter => ("Typed catch filters", "Resolve exception types against the target surface and preserve PowerShell catch ordering."),
             PowerShellCompilationFeatureIds.PipelineLifecycle => ("Pipeline lifecycle blocks", "Model begin/process/clean only for hosts that expose the corresponding pipeline lifecycle."),
+            PowerShellCompilationFeatureIds.PipelineEnumeration => ("Pipeline enumeration", "Lower only statically typed pipeline shapes with explicit current-item and output-cardinality contracts."),
             PowerShellCompilationFeatureIds.RuntimeUsing => ("Runtime using directives", "Retain these on a PowerShell-backed path or add explicit file-backed dependency semantics."),
             PowerShellCompilationFeatureIds.RequiresDirective => ("Source requirements", "Evaluate compatible requirements during build and preserve observable failure behavior."),
             PowerShellCompilationFeatureIds.FilterFunction => ("Filter functions", "Add per-input pipeline invocation semantics before treating filters as typed methods."),

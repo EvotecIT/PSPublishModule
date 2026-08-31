@@ -119,6 +119,53 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         }
     }
 
+    [Theory]
+    [InlineData("$_")]
+    [InlineData("$PSItem")]
+    public void RuntimeFreeForEachObjectOwnsOneLexicalCurrentItem(string automaticVariable)
+    {
+        var document = PowerShellSourceParser.Parse(
+            $"function Get-Total {{ [int] $total = 0; 40, 2 | ForEach-Object {{ $total += {automaticVariable} }}; return $total }}",
+            TestPath("pipeline-enumeration.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var function = Assert.Single(result.Analyzed.Functions);
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(
+            Assert.Single(function.Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        Assert.True(loop.DeclareVariable);
+        Assert.Equal(PowerShellSymbolKind.PipelineVariable, loop.Variable.Kind);
+        var assignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(loop.Body.Statements));
+        var item = Assert.IsType<PowerShellBoundVariableExpression>(assignment.Value);
+        Assert.Equal(loop.Variable.StableKey, item.Symbol.StableKey);
+        var lowered = Assert.IsType<PowerShellLoweredForEachStatement>(
+            Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
+        Assert.True(lowered.DeclareVariable);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("int __pf_pipeline_item_", source, StringComparison.Ordinal);
+        Assert.Contains("total = checked((int)(total + __pf_pipeline_item_", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("PowerShell", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("[int[]] $values = 40, 2; $values | ForEach-Object { $_ }")]
+    [InlineData("[int[]] $values = 40, 2; $values | ForEach-Object { return }")]
+    [InlineData("[int] $value = 42; $value | ForEach-Object { $value += $_ }")]
+    [InlineData("param([int[]] $values); $values | ForEach-Object { $value = $_ }")]
+    [InlineData("[object[]] $values = 40, 2; $values | ForEach-Object { $value = $_ }")]
+    public void RuntimeFreeForEachObjectRejectsUnownedOutputControlFlowAndScalarInput(string body)
+    {
+        var document = PowerShellSourceParser.Parse(
+            $"function Get-Value {{ {body}; return 42 }}",
+            TestPath("unsupported-pipeline-enumeration.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code is "PSB2901" or "PSB2902" or "PSB2903");
+    }
+
     [Fact]
     public void ScalarSwitchMatchingAndBreakUseLoweredControlFlow()
     {

@@ -160,6 +160,56 @@ internal static class PowerShellMappingCommandSemanticBinder
 
     internal static bool IsSupported(CommandAst command)
         => PowerShellBoundedCommandShape.HasOnlyStaticArguments(command, SupportedParameters, allowScriptBlocks: true);
+
+    internal static bool TryGetRuntimeFreeProcess(
+        PipelineAst pipeline,
+        PowerShellCommandSemanticRegistry registry,
+        out ExpressionAst input,
+        out NamedBlockAst processBlock)
+    {
+        input = null!;
+        processBlock = null!;
+        if (pipeline.PipelineElements.Count != 2 ||
+            pipeline.PipelineElements[0] is not CommandExpressionAst source ||
+            pipeline.PipelineElements[1] is not CommandAst command ||
+            command.InvocationOperator != TokenKind.Unknown ||
+            command.Redirections.Count != 0)
+            return false;
+
+        var resolution = registry.Resolve(command.GetCommandName());
+        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved ||
+            resolution.Contract!.Family != PowerShellCompilationCommandFamily.Mapping ||
+            !resolution.Contract.ProviderId.Equals("powerforge.command.mapping.foreach-object", StringComparison.Ordinal))
+            return false;
+
+        var arguments = command.CommandElements.Skip(1).ToArray();
+        ScriptBlockExpressionAst? process = null;
+        if (arguments.Length == 1)
+            process = arguments[0] as ScriptBlockExpressionAst;
+        else if (arguments.Length == 2 &&
+                 arguments[0] is CommandParameterAst parameter &&
+                 parameter.ParameterName.Equals("Process", StringComparison.OrdinalIgnoreCase))
+            process = arguments[1] as ScriptBlockExpressionAst;
+        if (process is null ||
+            process.ScriptBlock.ParamBlock is not null ||
+            process.ScriptBlock.DynamicParamBlock is not null ||
+            process.ScriptBlock.BeginBlock is not null ||
+            process.ScriptBlock.ProcessBlock is not null ||
+            GetCleanBlock(process.ScriptBlock) is not null ||
+            process.ScriptBlock.EndBlock is null ||
+            process.ScriptBlock.EndBlock.Traps?.Count > 0 ||
+            process.ScriptBlock.Attributes?.Count > 0 ||
+            process.ScriptBlock.UsingStatements?.Count > 0 ||
+            process.ScriptBlock.ScriptRequirements is not null)
+            return false;
+
+        input = source.Expression;
+        processBlock = process.ScriptBlock.EndBlock;
+        return true;
+    }
+
+    private static NamedBlockAst? GetCleanBlock(ScriptBlockAst scriptBlock)
+        => scriptBlock.GetType().GetProperty("CleanBlock")?.GetValue(scriptBlock) as NamedBlockAst;
 }
 
 internal static class PowerShellSortingCommandSemanticBinder
