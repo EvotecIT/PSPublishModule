@@ -5,6 +5,63 @@ namespace PowerForge.Tests;
 public sealed class ProcessRunnerEnvironmentTests
 {
     [Fact]
+    public async Task RunAsync_exposes_started_process_before_external_work_boundary()
+    {
+        var order = new List<string>();
+        var processId = 0;
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30));
+        request.SetStartedProcessBoundary(value =>
+        {
+            processId = value;
+            order.Add("process");
+        });
+        request.SetStartBoundary(() => order.Add("start"));
+
+        var result = await new ProcessRunner().RunAsync(request);
+
+        Assert.True(result.Succeeded, result.StdErr);
+        Assert.True(processId > 0);
+        Assert.Equal(new[] { "process", "start" }, order);
+    }
+
+    [Fact]
+    public async Task RunAsync_fails_closed_when_started_process_boundary_rejects_launch()
+    {
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30));
+        request.SetStartedProcessBoundary(_ => throw new InvalidOperationException("reject started process"));
+
+        var result = await new ProcessRunner().RunAsync(request);
+
+        Assert.Equal(127, result.ExitCode);
+        Assert.Contains("reject started process", result.StdErr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_counts_the_started_process_boundary_against_the_request_timeout()
+    {
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Path.GetTempPath(),
+            new[] { "--version" },
+            TimeSpan.FromMilliseconds(100));
+        request.SetStartedProcessBoundary(_ => Thread.Sleep(250));
+
+        var result = await new ProcessRunner().RunAsync(request);
+
+        Assert.True(result.TimedOut);
+        Assert.Equal(124, result.ExitCode);
+        Assert.Equal("Timeout", result.StdErr);
+    }
+
+    [Fact]
     public async Task RunAsync_invokes_completion_boundary_before_inherited_output_pipe_drain()
     {
         if (OperatingSystem.IsWindows()) return;

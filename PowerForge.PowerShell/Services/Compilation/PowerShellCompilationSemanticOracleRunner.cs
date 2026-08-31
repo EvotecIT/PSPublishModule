@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace PowerForge;
 
@@ -25,11 +26,19 @@ public sealed class PowerShellCompilationSemanticOracleRunner
         var hostExecutable = ResolveHostExecutable(profile, request.HostExecutablePath);
         var root = Path.Combine(Path.GetTempPath(), "PowerForgeSemanticOracle", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        PowerShellCompilationSemanticWindowsProcessObserver? processObserver = null;
+        var observationTimeout = TimeSpan.FromSeconds(request.TimeoutSeconds);
+        var observationStopwatch = Stopwatch.StartNew();
         try
         {
             var wrapperPath = Path.Combine(root, "Observe.ps1");
             var configPath = Path.Combine(root, "request.json");
             var outputPath = Path.Combine(root, "observation.json");
+            var readyPath = Path.Combine(root, "process-observer.ready");
+            var gatePath = Path.Combine(root, "process-observer.gate");
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                processObserver = new PowerShellCompilationSemanticWindowsProcessObserver(
+                    PowerShellCompilationSemanticOracleEnvelopeValidator.MaximumObservationItems);
             File.WriteAllText(wrapperPath, LoadWrapperSource(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var config = new
             {
@@ -41,15 +50,28 @@ public sealed class PowerShellCompilationSemanticOracleRunner
                 FileSystemRoot = string.IsNullOrWhiteSpace(request.FileSystemRoot) ? string.Empty : Path.GetFullPath(request.FileSystemRoot),
                 ExecutionSurface = executionSurface,
                 FeatureSwitches = profile.FeatureSwitches,
+                ProcessObserverReadyPath = processObserver is null ? string.Empty : readyPath,
+                ProcessObserverGatePath = processObserver is null ? string.Empty : gatePath,
                 OutputPath = outputPath
             };
             File.WriteAllText(configPath, JsonSerializer.Serialize(config), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-            var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-                    hostExecutable,
-                    root,
-                    new[] { "-NoProfile", "-NonInteractive", "-File", wrapperPath, "-ConfigPath", configPath },
-                    TimeSpan.FromSeconds(request.TimeoutSeconds)))
+            var processRequest = new ProcessRunRequest(
+                hostExecutable,
+                root,
+                new[] { "-NoProfile", "-NonInteractive", "-File", wrapperPath, "-ConfigPath", configPath },
+                Remaining(observationTimeout, observationStopwatch));
+            if (processObserver is not null)
+            {
+                processRequest.SetStartedProcessBoundary(processId =>
+                {
+                    processObserver.Attach(processId);
+                    WaitForObserverReady(readyPath, Remaining(observationTimeout, observationStopwatch));
+                    processObserver.BeginAuthoredObservation(Remaining(observationTimeout, observationStopwatch));
+                    File.WriteAllText(gatePath, string.Empty, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                });
+            }
+            var run = new ProcessRunner().RunAsync(processRequest)
                 .GetAwaiter()
                 .GetResult();
             if (run.TimedOut)
@@ -61,15 +83,37 @@ public sealed class PowerShellCompilationSemanticOracleRunner
             {
                 PropertyNameCaseInsensitive = true
             }) ?? throw new InvalidOperationException("Semantic oracle produced an empty observation.");
+            envelope.ProcessEffects = processObserver?.Complete(Remaining(observationTimeout, observationStopwatch)) ??
+                Array.Empty<PowerShellCompilationSemanticProcessEffectObservation>();
             ValidateHost(profile, envelope, culture, executionSurface, expectedHostArtifact);
             return envelope;
         }
         finally
         {
+            processObserver?.Dispose();
             try { Directory.Delete(root, recursive: true); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    private static void WaitForObserverReady(string path, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (!File.Exists(path))
+        {
+            if (stopwatch.Elapsed >= timeout)
+                throw new TimeoutException("The semantic-oracle host did not reach its process-observation start gate.");
+            Thread.Sleep(10);
+        }
+    }
+
+    private static TimeSpan Remaining(TimeSpan timeout, Stopwatch stopwatch)
+    {
+        var remaining = timeout - stopwatch.Elapsed;
+        if (remaining <= TimeSpan.Zero)
+            throw new TimeoutException("The semantic-oracle observation exceeded its requested timeout before authored source started.");
+        return remaining;
     }
 
     private static string LoadWrapperSource()

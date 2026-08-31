@@ -11,6 +11,8 @@ trap {
     exit 99
 }
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+$processObserverReadyPath = [string] $config.ProcessObserverReadyPath
+$processObserverGatePath = [string] $config.ProcessObserverGatePath
 $maximumObservationItems = 1024
 if ($null -eq ('PowerForge.SemanticOraclePropertyObserver' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -109,6 +111,7 @@ namespace PowerForge {
             if (count > maximumItems) throw new InvalidOperationException("Semantic observation exceeds the bounded collection limit.");
         }
     }
+
 }
 '@
 }
@@ -294,6 +297,21 @@ if ($powerForgeObservedPropertyNamesSnapshot.Count -eq 0) {
     }
 }
 '@)
+    if (-not [string]::IsNullOrWhiteSpace($processObserverReadyPath) -or
+        -not [string]::IsNullOrWhiteSpace($processObserverGatePath)) {
+        if ([string]::IsNullOrWhiteSpace($processObserverReadyPath) -or
+            [string]::IsNullOrWhiteSpace($processObserverGatePath)) {
+            throw 'The semantic process-observer ready/gate contract is incomplete.'
+        }
+        [IO.File]::WriteAllText($processObserverReadyPath, 'ready', [Text.UTF8Encoding]::new($false))
+        $gateDeadline = [DateTime]::UtcNow.AddSeconds(15)
+        while (-not [IO.File]::Exists($processObserverGatePath)) {
+            if ([DateTime]::UtcNow -ge $gateDeadline) {
+                throw 'The semantic process observer did not release the authored-source start gate.'
+            }
+            Start-Sleep -Milliseconds 10
+        }
+    }
     $output = @()
     try {
         $output = @($powerShell.Invoke())

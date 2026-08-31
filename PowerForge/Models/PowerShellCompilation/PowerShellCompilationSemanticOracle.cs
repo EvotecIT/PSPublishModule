@@ -399,7 +399,7 @@ public sealed class PowerShellCompilationSemanticOracleEnvelope
     /// <summary>Final process-related state exposed by the execution surface.</summary>
     public PowerShellCompilationSemanticProcessStateObservation ProcessState { get; set; } = new();
 
-    /// <summary>Reserved sequenced child-process effects. Schema 3 accepts no entries until launches can be observed directly.</summary>
+    /// <summary>Directly observed, ordered child-process launch and exit effects.</summary>
     public PowerShellCompilationSemanticProcessEffectObservation[] ProcessEffects { get; set; } = Array.Empty<PowerShellCompilationSemanticProcessEffectObservation>();
 }
 
@@ -429,14 +429,26 @@ public sealed class PowerShellCompilationSemanticProcessStateObservation
     public int? LastExitCode { get; set; }
 }
 
-/// <summary>One future sequenced process effect observed directly by the semantic boundary.</summary>
+/// <summary>One sequenced direct-child process effect observed by the semantic boundary.</summary>
 public sealed class PowerShellCompilationSemanticProcessEffectObservation
 {
-    /// <summary>Effect kind, currently NativeCommandExit.</summary>
+    /// <summary>Order within the process-effect stream.</summary>
+    public int Sequence { get; set; }
+
+    /// <summary>Stable per-observation invocation ordinal shared by the launch and its optional exit.</summary>
+    public int Invocation { get; set; }
+
+    /// <summary>Effect kind: NativeProcessLaunch or NativeProcessExit.</summary>
     public string Kind { get; set; } = string.Empty;
 
-    /// <summary>Observed native-process exit code.</summary>
-    public int ExitCode { get; set; }
+    /// <summary>Portable executable leaf name reported by the operating-system process boundary.</summary>
+    public string Executable { get; set; } = string.Empty;
+
+    /// <summary>Observed native-process exit code for an exit effect; null for a launch.</summary>
+    public int? ExitCode { get; set; }
+
+    /// <summary>Versioned direct-observation source. This must not describe syntax or LASTEXITCODE inference.</summary>
+    public string ObservationSource { get; set; } = string.Empty;
 }
 
 /// <summary>Black-box interpreted-host execution request used by the semantic oracle runner.</summary>

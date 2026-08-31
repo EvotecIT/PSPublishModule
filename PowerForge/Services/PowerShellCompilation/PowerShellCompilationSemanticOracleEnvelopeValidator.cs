@@ -108,8 +108,45 @@ public static class PowerShellCompilationSemanticOracleEnvelopeValidator
         RequireBounded(envelope.Encoding.NativeArgumentPassing, "Encoding.NativeArgumentPassing", allowEmpty: true);
         if (envelope.ProcessState is null) throw new InvalidOperationException("Semantic observations require process-state evidence.");
         var processEffects = RequireArray(envelope.ProcessEffects, "ProcessEffects");
-        if (processEffects.Length != 0)
-            throw new InvalidOperationException("Schema-3 promotion does not accept process-effect entries until launches are directly observed and sequenced.");
+        ValidateProcessEffects(processEffects);
+    }
+
+    private static void ValidateProcessEffects(PowerShellCompilationSemanticProcessEffectObservation[] effects)
+    {
+        ValidateSequences(effects.Select(static effect => effect?.Sequence ?? 0), "ProcessEffects");
+        var launches = new Dictionary<int, PowerShellCompilationSemanticProcessEffectObservation>();
+        var exits = new HashSet<int>();
+        foreach (var effect in effects)
+        {
+            if (effect is null) throw new InvalidOperationException("ProcessEffects cannot contain null entries.");
+            if (effect.Invocation <= 0 || effect.Invocation > MaximumObservationItems)
+                throw new InvalidOperationException("ProcessEffects invocation ordinals must be positive and bounded.");
+            RequireText(effect.Executable, "ProcessEffects.Executable");
+            RequireText(effect.ObservationSource, "ProcessEffects.ObservationSource");
+            if (!effect.ObservationSource.Equals("Windows.JobObject.ProcessTree/1", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Unknown direct process-observation source '{effect.ObservationSource}'.");
+            if (effect.Kind.Equals("NativeProcessLaunch", StringComparison.Ordinal))
+            {
+                if (effect.ExitCode is not null)
+                    throw new InvalidOperationException("A native-process launch cannot carry an exit code.");
+                if (launches.ContainsKey(effect.Invocation))
+                    throw new InvalidOperationException($"Process invocation {effect.Invocation} has more than one launch.");
+                launches.Add(effect.Invocation, effect);
+                if (effect.Invocation != launches.Count)
+                    throw new InvalidOperationException("Process launch invocation ordinals must be contiguous and ordered.");
+                continue;
+            }
+            if (!effect.Kind.Equals("NativeProcessExit", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Unknown process-effect kind '{effect.Kind}'.");
+            if (effect.ExitCode is null)
+                throw new InvalidOperationException("A native-process exit requires an exit code.");
+            if (!launches.TryGetValue(effect.Invocation, out var launch))
+                throw new InvalidOperationException($"Process invocation {effect.Invocation} exited without an observed launch.");
+            if (!launch.Executable.Equals(effect.Executable, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Process invocation {effect.Invocation} changed executable identity between launch and exit.");
+            if (!exits.Add(effect.Invocation))
+                throw new InvalidOperationException($"Process invocation {effect.Invocation} has more than one exit.");
+        }
     }
 
     private static void ValidateValue(PowerShellCompilationSemanticValueObservation value)

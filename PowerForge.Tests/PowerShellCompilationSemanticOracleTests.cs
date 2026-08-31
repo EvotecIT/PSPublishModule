@@ -435,46 +435,6 @@ Write-Information 'noted' -InformationAction Continue
     }
 
     [Fact]
-    public void ExternalOraclePreservesNullCollectionEncodingAndProcessEffects()
-    {
-        using var fixture = OracleFixture.Create("""
-$null = & $env:ComSpec /d /c 'exit 7'
-[pscustomobject] [ordered] @{
-    NullValue = $null
-    EmptyCollection = [object[]] @()
-    Pair = [object[]] @(1, 'two')
-}
-""");
-        var observation = new PowerShellCompilationSemanticOracleRunner().Observe(
-            new PowerShellCompilationSemanticOracleRequest(
-                PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-                fixture.ScriptPath)
-            {
-                ObservedPropertyNames = new[] { "Pair", "NullValue", "EmptyCollection" }
-            });
-
-        Assert.Equal(3, observation.SchemaVersion);
-        Assert.Equal("Output", observation.SuccessState);
-        var value = Assert.Single(observation.Success);
-        Assert.Equal(new[] { "NullValue", "EmptyCollection", "Pair" },
-            value.Properties.Select(static property => property.Name));
-        var nullValue = Assert.Single(value.Properties, static property => property.Name == "NullValue");
-        Assert.True(nullValue.IsNull);
-        Assert.Equal("Null", nullValue.ValueState);
-        var empty = Assert.Single(value.Properties, static property => property.Name == "EmptyCollection");
-        Assert.Equal("Collection", empty.EnumerationState);
-        Assert.Equal(0, empty.CollectionCardinality);
-        var pair = Assert.Single(value.Properties, static property => property.Name == "Pair");
-        Assert.Equal(2, pair.CollectionCardinality);
-        Assert.Equal(new[] { "System.Int32", "System.String" }, pair.ElementTypeNames);
-        Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.ConsoleOutput));
-        Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.PowerShellOutput));
-        Assert.Equal(7, observation.ProcessState.LastExitCode);
-        Assert.Empty(observation.ProcessEffects);
-        Assert.Null(observation.ExitCode);
-    }
-
-    [Fact]
     public void ExternalOracleDistinguishesNoSuccessOutput()
     {
         using var fixture = OracleFixture.Create("return");

@@ -11,6 +11,8 @@ public sealed class ProcessRunRequest
 {
     private int _startBoundaryInvoked;
     private Action? _startBoundary;
+    private int _startedProcessBoundaryInvoked;
+    private Action<int>? _startedProcessBoundary;
     private int _completionBoundaryInvoked;
     private Action<ProcessRunResult>? _completionBoundary;
     /// <summary>
@@ -207,6 +209,23 @@ public sealed class ProcessRunRequest
     internal void SetStartBoundary(Action startBoundary)
         => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
 
+    internal void SetStartedProcessBoundary(Action<int> startedProcessBoundary)
+        => _startedProcessBoundary = startedProcessBoundary ?? throw new ArgumentNullException(nameof(startedProcessBoundary));
+
+    /// <summary>
+    /// Supplies the operating-system process identifier immediately after a successful start.
+    /// Custom runners must invoke this boundary before allowing externally visible child work.
+    /// </summary>
+    /// <param name="processId">Started operating-system process identifier.</param>
+    public void InvokeStartedProcessBoundary(int processId)
+    {
+        if (processId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(processId));
+        if (_startedProcessBoundary is null || Interlocked.Exchange(ref _startedProcessBoundaryInvoked, 1) != 0)
+            return;
+        _startedProcessBoundary(processId);
+    }
+
     /// <summary>
     /// Signals that the external process was successfully started and may have begun externally
     /// visible work. Custom <see cref="IProcessRunner"/> implementations must invoke this method
@@ -327,8 +346,9 @@ public interface IProcessRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Structured process execution result.</returns>
     /// <remarks>
-    /// Implementations must call <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately
-    /// after the process starts successfully. They must also call
+    /// Implementations must call <see cref="ProcessRunRequest.InvokeStartedProcessBoundary"/> and then
+    /// <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately after the process starts successfully.
+    /// They must also call
     /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
     /// after the process exits and the final result is constructed, before returning from this method
     /// or performing any post-exit mutation of producer outputs.
@@ -358,15 +378,26 @@ public sealed class ProcessRunner : IProcessRunner
         };
 
         var stopwatch = Stopwatch.StartNew();
+        var started = false;
         try
         {
             process.Start();
+            started = true;
+            request.InvokeStartedProcessBoundary(process.Id);
             request.InvokeStartBoundary();
         }
         catch (Exception ex)
         {
+            if (started) TryKill(process);
             stopwatch.Stop();
-            var failedStart = new ProcessRunResult(127, string.Empty, ex.Message, request.FileName, stopwatch.Elapsed, timedOut: false);
+            var boundaryTimedOut = started && ex is TimeoutException;
+            var failedStart = new ProcessRunResult(
+                boundaryTimedOut ? 124 : 127,
+                string.Empty,
+                boundaryTimedOut ? "Timeout" : ex.Message,
+                request.FileName,
+                stopwatch.Elapsed,
+                boundaryTimedOut);
             request.InvokeCompletionBoundary(failedStart);
             return failedStart;
         }
@@ -381,7 +412,14 @@ public sealed class ProcessRunner : IProcessRunner
 
         try
         {
-            await WaitForExitAsync(process, request.Timeout, cancellationToken).ConfigureAwait(false);
+            var remainingTimeout = request.Timeout;
+            if (request.Timeout > TimeSpan.Zero && request.Timeout != Timeout.InfiniteTimeSpan)
+            {
+                remainingTimeout = request.Timeout - stopwatch.Elapsed;
+                if (remainingTimeout <= TimeSpan.Zero)
+                    throw new OperationCanceledException();
+            }
+            await WaitForExitAsync(process, remainingTimeout, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
