@@ -374,7 +374,78 @@ public sealed class PowerForgeCliAppleDeployTests
         }
     }
 
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string workingDirectory, string arguments)
+    [Fact]
+    public async Task AppleDeploy_plan_rejects_generated_roots_inside_the_repository()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone",
+                  "UseBuildMirror": true
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json",
+                new Dictionary<string, string>
+                {
+                    ["TMPDIR"] = tempRoot,
+                    ["TMP"] = tempRoot,
+                    ["TEMP"] = tempRoot
+                });
+
+            Assert.Equal(1, result.ExitCode);
+            Assert.Contains(
+                nameof(AppleAppBuildRequest.DerivedDataPath),
+                result.StdErr + result.StdOut,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "must be outside BuildRoot",
+                result.StdErr + result.StdOut,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
+        string workingDirectory,
+        string arguments,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         using var process = new Process
         {
@@ -389,6 +460,11 @@ public sealed class PowerForgeCliAppleDeployTests
                 CreateNoWindow = true
             }
         };
+        if (environment is not null)
+        {
+            foreach (var pair in environment)
+                process.StartInfo.Environment[pair.Key] = pair.Value;
+        }
         process.Start();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

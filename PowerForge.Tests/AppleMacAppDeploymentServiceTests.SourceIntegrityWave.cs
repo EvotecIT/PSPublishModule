@@ -51,6 +51,77 @@ public sealed partial class AppleMacAppDeploymentServiceTests
     }
 
     [Fact]
+    public async Task DeployAsync_revalidates_an_install_root_replaced_during_build()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var installRoot = ExternalOutputPath(root, "Applications");
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var derived = Directory.CreateDirectory(
+                ExternalOutputPath(root, "DerivedData"));
+            Directory.CreateDirectory(installRoot);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName == "/usr/bin/xcodebuild")
+                {
+                    Directory.Delete(installRoot);
+                    Directory.CreateSymbolicLink(installRoot, root.FullName);
+                }
+                return Success("ok");
+            });
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleMacAppDeploymentService(runner).DeployAsync(
+                    new AppleMacAppDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Platform = ApplePlatform.macOS,
+                        ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                        DerivedDataPath = derived.FullName,
+                        InstallRoot = installRoot,
+                        Launch = false,
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        DittoExecutable = "/usr/bin/ditto"
+                    }));
+
+            Assert.Contains(
+                nameof(AppleMacAppDeploymentRequest.InstallRoot),
+                error.Message,
+                StringComparison.Ordinal);
+            Assert.Single(runner.Requests);
+            Assert.Equal("/usr/bin/xcodebuild", runner.Requests[0].FileName);
+            Assert.DoesNotContain(
+                Directory.EnumerateFileSystemEntries(root.FullName),
+                path => path.Contains("powerforge-stage", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try
+            {
+                if ((File.GetAttributes(installRoot) & FileAttributes.ReparsePoint) != 0)
+                    Directory.Delete(installRoot);
+            }
+            catch { /* best effort */ }
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task DeployAsync_rejects_a_product_mutation_before_mac_replacement()
     {
         var root = Directory.CreateDirectory(Path.Combine(

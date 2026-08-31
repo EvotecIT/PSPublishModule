@@ -73,11 +73,15 @@ public sealed class AppleMacAppDeploymentService
         var productSnapshot = buildOperation.ProductSnapshot ?? throw new InvalidOperationException(
             "The successful macOS build did not retain its provenance-bound app snapshot.");
         var retainedAppPath = buildOperation.PreserveResultProduct();
+        var installRoot = ResolveInstallRootAtBoundary(
+            request.InstallRoot,
+            sourceRoot);
 
-        var installedAppPath = Path.Combine(Path.GetFullPath(request.InstallRoot), Path.GetFileName(build.AppPath));
+        var installedAppPath = Path.Combine(installRoot, Path.GetFileName(build.AppPath));
         using var installLock = AppleMacAppBundleReplacement.AcquireInstallLock(installedAppPath);
         var install = await InstallAsync(
             request,
+            installRoot,
             productSnapshot.AppPath,
             productSnapshot,
             dittoExecutable,
@@ -89,6 +93,7 @@ public sealed class AppleMacAppDeploymentService
 
         deployment.Launch = await LaunchAsync(
             request,
+            installRoot,
             install.InstalledAppPath,
             openExecutable!,
             pkillExecutable,
@@ -98,6 +103,7 @@ public sealed class AppleMacAppDeploymentService
 
     private async Task<AppleMacAppInstallResult> InstallAsync(
         AppleMacAppDeploymentRequest request,
+        string installRoot,
         string sourceAppPath,
         AppleBuiltAppSnapshot productSnapshot,
         string dittoExecutable,
@@ -107,8 +113,6 @@ public sealed class AppleMacAppDeploymentService
         if (!Directory.Exists(source))
             throw new DirectoryNotFoundException($"Built app path was not found: {source}");
 
-        var installRoot = Path.GetFullPath(request.InstallRoot);
-        Directory.CreateDirectory(installRoot);
         var destination = Path.Combine(installRoot, Path.GetFileName(source));
         var suffix = Guid.NewGuid().ToString("N");
         var stageRoot = Path.Combine(installRoot, $".{Path.GetFileName(source)}.powerforge-stage-{suffix}");
@@ -172,6 +176,7 @@ public sealed class AppleMacAppDeploymentService
 
     private async Task<AppleMacAppLaunchResult> LaunchAsync(
         AppleMacAppDeploymentRequest request,
+        string installRoot,
         string appPath,
         string openExecutable,
         string? pkillExecutable,
@@ -180,6 +185,7 @@ public sealed class AppleMacAppDeploymentService
         if (request.TerminateExisting)
             await TerminateExistingAsync(
                 request,
+                installRoot,
                 appPath,
                 pkillExecutable ?? throw new InvalidOperationException(
                     "Exact-source macOS termination requires a trusted pkill executable."),
@@ -204,7 +210,7 @@ public sealed class AppleMacAppDeploymentService
                 "open",
                 "/usr/bin/open",
                 "Exact-source macOS app launch",
-                request.InstallRoot,
+                installRoot,
                 arguments,
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
@@ -218,6 +224,7 @@ public sealed class AppleMacAppDeploymentService
 
     private async Task TerminateExistingAsync(
         AppleMacAppDeploymentRequest request,
+        string installRoot,
         string appPath,
         string pkillExecutable,
         CancellationToken cancellationToken)
@@ -230,13 +237,37 @@ public sealed class AppleMacAppDeploymentService
                 "pkill",
                 "/usr/bin/pkill",
                 "Exact-source macOS app launch",
-                request.InstallRoot,
+                installRoot,
                 new[] { "-f", pattern },
                 request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
             cancellationToken).ConfigureAwait(false);
 
         if (process.ExitCode is not 0 and not 1)
             throw new InvalidOperationException($"Could not terminate the existing installed app: {process.StdErr.Trim()}");
+    }
+
+    private static string ResolveInstallRootAtBoundary(
+        string requestedInstallRoot,
+        string sourceRoot)
+    {
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(
+            sourceRoot);
+        var resolved = AppleReleaseArtifactService.ResolvePhysicalPath(
+            Path.GetFullPath(requestedInstallRoot));
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            resolved,
+            sourceRoot,
+            nameof(AppleMacAppDeploymentRequest.InstallRoot),
+            comparison);
+        Directory.CreateDirectory(resolved);
+
+        var stable = AppleReleaseArtifactService.ResolvePhysicalPath(resolved);
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            stable,
+            sourceRoot,
+            nameof(AppleMacAppDeploymentRequest.InstallRoot),
+            comparison);
+        return stable;
     }
 
 }

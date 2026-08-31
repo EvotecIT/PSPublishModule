@@ -29,7 +29,10 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 }
                 if (request.FileName == "/usr/bin/open")
                 {
-                    var destination = Path.Combine(installRoot.FullName, "CasaRay.app");
+                    var destination = Path.Combine(
+                        AppleReleaseArtifactService.ResolvePhysicalPath(
+                            installRoot.FullName),
+                        "CasaRay.app");
                     Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
                 }
                 return Success("ok");
@@ -81,14 +84,22 @@ public sealed partial class AppleMacAppDeploymentServiceTests
             Assert.Equal("-f", terminate.Arguments[0]);
             Assert.StartsWith("^", terminate.Arguments[1], StringComparison.Ordinal);
             Assert.Contains(
-                System.Text.RegularExpressions.Regex.Escape(Path.Combine(installRoot.FullName, "CasaRay.app", "Contents", "MacOS")),
+                System.Text.RegularExpressions.Regex.Escape(Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(
+                        installRoot.FullName),
+                    "CasaRay.app",
+                    "Contents",
+                    "MacOS")),
                 terminate.Arguments[1],
                 StringComparison.Ordinal);
             var launch = Assert.Single(runner.Requests, request => request.FileName == "/usr/bin/open");
             Assert.Equal(new[]
             {
                 "--new", "--fresh", "--env", "CASARAY_ENABLE_SANDBOX_PURCHASES=1",
-                Path.Combine(installRoot.FullName, "CasaRay.app")
+                Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(
+                        installRoot.FullName),
+                    "CasaRay.app")
             }, launch.Arguments);
         }
         finally
