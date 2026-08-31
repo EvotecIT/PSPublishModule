@@ -450,7 +450,7 @@ internal static partial class WebPipelineRunner
                     copiedExampleFiles++;
                 }
 
-                var matchedExamplesCandidate = TryGetMatchedSourceCandidate(sourcesRoot, slug, sourceExamplesRoot, examplesSourceCandidates);
+                var matchedExamplesCandidate = TryGetMatchedSourceCandidate(sourcesRoot, slug, sourceExamplesRoot, projectExamplesSourceCandidates);
                 if (!string.IsNullOrWhiteSpace(matchedExamplesCandidate))
                     examplesArtifactSources[slug] = matchedExamplesCandidate;
 
@@ -1378,12 +1378,13 @@ internal static partial class WebPipelineRunner
             var slug = project.Slug.Trim().ToLowerInvariant();
             if (project.HasDocsSurface)
             {
+                var projectDocsSourceCandidates = GetProjectSourceCandidates(project.ArtifactDocs, docsSourceCandidates);
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Docs,
                     slug,
                     sourcesRoot,
-                    docsSourceCandidates,
+                    projectDocsSourceCandidates,
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
@@ -1394,12 +1395,13 @@ internal static partial class WebPipelineRunner
 
             if (syncApi && project.HasApiSurface)
             {
+                var projectApiSourceCandidates = GetProjectSourceCandidates(project.ArtifactApi, apiSourceCandidates);
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Api,
                     slug,
                     sourcesRoot,
-                    apiSourceCandidates,
+                    projectApiSourceCandidates,
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
@@ -1410,12 +1412,13 @@ internal static partial class WebPipelineRunner
 
             if (syncExamples && project.HasExamplesSurface)
             {
+                var projectExamplesSourceCandidates = GetProjectSourceCandidates(project.ArtifactExamples, examplesSourceCandidates);
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Examples,
                     slug,
                     sourcesRoot,
-                    examplesSourceCandidates,
+                    projectExamplesSourceCandidates,
                     artifactWorkRoot,
                     timeoutSeconds,
                     artifactToken,
@@ -1554,7 +1557,8 @@ internal static partial class WebPipelineRunner
         var value = source.Trim();
         if (IsZipArtifactSource(value) ||
             Path.IsPathRooted(value) ||
-            value.StartsWith("//", StringComparison.Ordinal) ||
+            value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("\\", StringComparison.Ordinal) ||
             Uri.TryCreate(value, UriKind.Absolute, out _))
             return false;
 
@@ -1571,7 +1575,7 @@ internal static partial class WebPipelineRunner
             return configuredCandidates;
 
         var localArtifactPath = declaredArtifactPath!.Trim();
-        if (configuredCandidates.Contains(localArtifactPath, StringComparer.OrdinalIgnoreCase))
+        if (configuredCandidates.Contains(localArtifactPath, StringComparer.Ordinal))
             return configuredCandidates;
 
         var candidates = new List<string>(configuredCandidates.Count + 1) { localArtifactPath };
