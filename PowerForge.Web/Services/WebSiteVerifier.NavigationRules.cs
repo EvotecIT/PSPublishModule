@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
@@ -210,7 +211,7 @@ public static partial class WebSiteVerifier
             .Where(route => !string.IsNullOrWhiteSpace(route))
             .Select(NormalizeRouteForNavigationMatch)
             .Where(route => !string.IsNullOrWhiteSpace(route))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
 
         var knownStaticRoutes = (staticRoutes ?? Array.Empty<string>())
@@ -222,7 +223,7 @@ public static partial class WebSiteVerifier
         var knownPatternRoutes = knownRoutes
             .Concat(knownStaticRoutes)
             .Concat(knownRedirectRoutes.PatternRoutes)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
 
         var knownCollections = (spec.Collections ?? Array.Empty<CollectionSpec>())
@@ -538,7 +539,7 @@ public static partial class WebSiteVerifier
         var knownPatternRoutes = knownRoutes
             .Concat(knownStaticRoutes?.AsEnumerable() ?? Enumerable.Empty<string>())
             .Concat(redirectRoutes.PatternRoutes)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         ValidateVisibilityPatterns(item.Visibility, context + ".Visibility", knownPatternRoutes, routeScopedPrefixes, knownCollections, knownProjects, warnings);
 
@@ -1016,19 +1017,19 @@ public static partial class WebSiteVerifier
             var routeHasWildcard = route.Contains('*', StringComparison.Ordinal);
             if (hasWildcard)
             {
-                if (GlobMatch(normalizedPattern, route) ||
-                    GlobMatch(normalizedStaticPattern, route))
+                if (NavigationRouteGlobMatch(normalizedPattern, route) ||
+                    NavigationRouteGlobMatch(normalizedStaticPattern, route))
                     return true;
             }
-            else if (string.Equals(normalizedPattern, route, StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(normalizedStaticPattern, route, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(normalizedPattern, route, StringComparison.Ordinal) ||
+                     string.Equals(normalizedStaticPattern, route, StringComparison.Ordinal))
             {
                 return true;
             }
 
             if (routeHasWildcard &&
-                (GlobMatch(route, normalizedPattern) ||
-                 GlobMatch(route, normalizedStaticPattern) ||
+                (NavigationRouteGlobMatch(route, normalizedPattern) ||
+                 NavigationRouteGlobMatch(route, normalizedStaticPattern) ||
                  IsGlobPatternCoveredBy(normalizedPattern, route) ||
                  IsGlobPatternCoveredBy(normalizedStaticPattern, route)))
             {
@@ -1054,13 +1055,28 @@ public static partial class WebSiteVerifier
                 ? selectorPattern[..selectorWildcard]
                 : selectorPattern)
             .TrimEnd('/');
-        if (selectorFixedPart.StartsWith(coveringPrefix + "/", StringComparison.OrdinalIgnoreCase))
+        if (selectorFixedPart.StartsWith(coveringPrefix + "/", StringComparison.Ordinal))
             return true;
-        if (!string.Equals(selectorFixedPart, coveringPrefix, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(selectorFixedPart, coveringPrefix, StringComparison.Ordinal))
             return false;
 
         return selectorPattern.Length == coveringPrefix.Length ||
                selectorPattern[coveringPrefix.Length] == '/';
+    }
+
+    private static bool NavigationRouteGlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var escaped = Regex.Escape(pattern.Trim())
+            .Replace("\\*\\*", ".*", StringComparison.Ordinal)
+            .Replace("\\*", "[^/]*", StringComparison.Ordinal);
+        return Regex.IsMatch(
+            value,
+            "^" + escaped + "$",
+            RegexOptions.CultureInvariant,
+            RegexTimeout);
     }
 
     private sealed record NavigationRedirectRoutes(RedirectSpec[] Rules, string[] PatternRoutes)

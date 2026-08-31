@@ -102,6 +102,19 @@ public static partial class WebSiteVerifier
         }
     }
 
+    private static IEnumerable<string> DiscoverGeneratedArtifactRoutes(string? generatedSiteRoot)
+    {
+        if (string.IsNullOrWhiteSpace(generatedSiteRoot) || !Directory.Exists(generatedSiteRoot))
+            yield break;
+
+        var root = Path.GetFullPath(generatedSiteRoot);
+        foreach (var file in EnumerateStaticFiles(root))
+        {
+            foreach (var route in GetStaticAssetRoutes(file))
+                yield return route;
+        }
+    }
+
     private static IEnumerable<string> EnumerateStaticFiles(string sourceRoot)
     {
         var root = new DirectoryInfo(sourceRoot);
@@ -354,32 +367,29 @@ public static partial class WebSiteVerifier
             };
             foreach (var format in WebSiteBuilder.ResolveOutputFormats(spec, item))
             {
+                var physicalBaseRoute = route.Route.Replace('\\', '/').Trim('/');
                 if (EmitsIndexHtml(format))
                 {
-                    var normalizedBaseRoute = NormalizeRouteForNavigationMatch(route.Route).Trim('/');
-                    if (normalizedBaseRoute.Equals("404", StringComparison.OrdinalIgnoreCase))
+                    if (physicalBaseRoute.Equals("404", StringComparison.OrdinalIgnoreCase))
                     {
                         foreach (var physicalRoute in GetStaticAssetRoutes("404.html"))
                             yield return physicalRoute;
                         continue;
                     }
 
-                    var physicalOutput = string.IsNullOrWhiteSpace(normalizedBaseRoute)
+                    var htmlOutput = string.IsNullOrWhiteSpace(physicalBaseRoute)
                         ? "index.html"
-                        : normalizedBaseRoute + "/index.html";
-                    foreach (var physicalRoute in GetStaticAssetRoutes(physicalOutput))
+                        : physicalBaseRoute + "/index.html";
+                    foreach (var physicalRoute in GetStaticAssetRoutes(htmlOutput))
                         yield return physicalRoute;
                     continue;
                 }
-                var outputRoute = WebSiteBuilder.ResolveOutputRoute(route.Route, format);
-                if (!string.IsNullOrWhiteSpace(outputRoute) &&
-                    !NormalizeRouteForNavigationMatch(outputRoute).Equals(
-                        NormalizeRouteForNavigationMatch(route.Route),
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    foreach (var physicalRoute in GetStaticAssetRoutes(outputRoute))
-                        yield return physicalRoute;
-                }
+                var suffix = string.IsNullOrWhiteSpace(format.Suffix) ? format.Name : format.Suffix;
+                var physicalOutput = string.IsNullOrWhiteSpace(physicalBaseRoute)
+                    ? $"index.{suffix}"
+                    : $"{physicalBaseRoute}/index.{suffix}";
+                foreach (var physicalRoute in GetStaticAssetRoutes(physicalOutput))
+                    yield return physicalRoute;
             }
         }
     }
@@ -397,12 +407,12 @@ public static partial class WebSiteVerifier
                 if (string.IsNullOrWhiteSpace(relative))
                     continue;
 
-                var normalizedRoute = NormalizeRouteForNavigationMatch(route.Route).TrimEnd('/');
-                var baseRoute = normalizedRoute.Equals("/404", StringComparison.OrdinalIgnoreCase)
+                var physicalRoute = route.Route.Replace('\\', '/').Trim('/');
+                var baseRoute = physicalRoute.Equals("404", StringComparison.OrdinalIgnoreCase)
                     ? string.Empty
-                    : normalizedRoute;
+                    : physicalRoute;
                 var destination = string.IsNullOrWhiteSpace(baseRoute)
-                    ? "/" + relative
+                    ? relative
                     : baseRoute + "/" + relative;
                 foreach (var resourceRoute in GetStaticAssetRoutes(destination))
                     yield return resourceRoute;

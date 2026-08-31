@@ -826,6 +826,185 @@ public partial class WebSiteVerifierTests
         }
     }
 
+    [Fact]
+    public void Verify_ProjectsReservedRouteCharactersFromPhysicalOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-reserved-route-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content", "about"));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "content", "about", "index.md"),
+                "---\ntitle: About\nslug: about#us\n---\nAbout us.");
+            File.WriteAllText(Path.Combine(root, "content", "about", "manual#one.pdf"), "manual");
+            var pageRoute = "/about%23us/";
+            var jsonRoute = "/about%23us/index.json";
+            var resourceRoute = "/about%23us/manual%23one.pdf";
+            var spec = new SiteSpec
+            {
+                Name = "Reserved route characters",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections =
+                [
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content",
+                        Output = "/",
+                        Outputs = ["html", "json"]
+                    }
+                ],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Page", Url = pageRoute },
+                                new MenuItemSpec { Title = "JSON", Url = jsonRoute },
+                                new MenuItemSpec { Title = "Resource", Url = resourceRoute }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "manual#one.pdf")));
+            Assert.False(HasMissingRouteWarning(result, pageRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, jsonRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.False(HasMissingRouteWarning(result, resourceRoute), string.Join(Environment.NewLine, result.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_RequiresHostAccurateRouteCasing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-route-case-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Guide\nslug: index\n---\nGuide.");
+            const string exactRoute = "/Guide/";
+            const string wrongCaseRoute = "/guide/";
+            var spec = new SiteSpec
+            {
+                Name = "Route case",
+                BaseUrl = "https://example.test",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/Guide" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items =
+                            [
+                                new MenuItemSpec { Title = "Exact", Url = exactRoute },
+                                new MenuItemSpec { Title = "Wrong case", Url = wrongCaseRoute },
+                                new MenuItemSpec { Title = "Exact match", Kind = "button", Match = "/Guide/**" },
+                                new MenuItemSpec { Title = "Wrong-case match", Kind = "button", Match = "/guide/**" }
+                            ]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            Assert.Equal(exactRoute, Assert.Single(WebSiteBuilder.BuildContentItemsForVerification(spec, plan)).OutputPath);
+
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.False(HasMissingRouteWarning(result, exactRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.True(HasMissingRouteWarning(result, wrongCaseRoute), string.Join(Environment.NewLine, result.Warnings));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Match '/Guide/**'", StringComparison.Ordinal));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Match '/guide/**'", StringComparison.Ordinal) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_UsesObservedPipelineArtifactsAsAuthoritativeRoutes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-pipeline-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nHome.");
+            const string downstreamRoute = "/projects/foo/api/";
+            var spec = new SiteSpec
+            {
+                Name = "Pipeline artifacts",
+                BaseUrl = "https://example.test",
+                Collections = [new CollectionSpec { Name = "pages", Input = "content", Output = "/" }],
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus =
+                    [
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = [new MenuItemSpec { Title = "API", Url = downstreamRoute }]
+                        }
+                    ]
+                }
+            };
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+            var downstreamDirectory = Path.Combine(outputRoot, "projects", "foo", "api");
+            Directory.CreateDirectory(downstreamDirectory);
+            File.WriteAllText(Path.Combine(downstreamDirectory, "index.html"), "<h1>API</h1>");
+
+            var plannedOnly = WebSiteVerifier.Verify(spec, plan);
+            var observed = WebSiteVerifier.Verify(
+                spec,
+                plan,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web),
+                outputRoot);
+
+            Assert.True(HasMissingRouteWarning(plannedOnly, downstreamRoute), string.Join(Environment.NewLine, plannedOnly.Warnings));
+            Assert.False(HasMissingRouteWarning(observed, downstreamRoute), string.Join(Environment.NewLine, observed.Warnings));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     private static bool HasMissingRouteWarning(WebVerifyResult result, string route)
         => result.Warnings.Any(warning =>
             warning.Contains($"points to '{route}'", StringComparison.Ordinal) &&

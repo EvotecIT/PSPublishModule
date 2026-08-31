@@ -50,7 +50,20 @@ public static partial class WebSiteVerifier
     /// <param name="plan">Resolved site plan.</param>
     /// <param name="options">Optional JSON serializer options shared with the corresponding site build.</param>
     /// <returns>Verification result.</returns>
-    public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan, JsonSerializerOptions? options)
+    public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan, JsonSerializerOptions? options) =>
+        Verify(spec, plan, options, generatedSiteRoot: null);
+
+    /// <summary>Validates the site spec against discovered content and files emitted into the generated site root.</summary>
+    /// <param name="spec">Site configuration.</param>
+    /// <param name="plan">Resolved site plan.</param>
+    /// <param name="options">Optional JSON serializer options shared with the corresponding site build.</param>
+    /// <param name="generatedSiteRoot">Optional generated site root whose current files contribute authoritative navigation routes.</param>
+    /// <returns>Verification result.</returns>
+    public static WebVerifyResult Verify(
+        SiteSpec spec,
+        WebSitePlan plan,
+        JsonSerializerOptions? options,
+        string? generatedSiteRoot)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -75,7 +88,10 @@ public static partial class WebSiteVerifier
         {
             warnings.Add("No collections defined.");
             ValidateNavigationDefaults(spec, warnings);
-            var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
+            var staticOnlyRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath)
+                .Concat(DiscoverGeneratedArtifactRoutes(generatedSiteRoot))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
             var staticOnlyRedirects = DiscoverGeneratedNavigationRedirects(builderState.Redirects).ToArray();
             var staticOnlyFileRoutes = staticOnlyRoutes
                 .Concat(DiscoverGeneratedThemeAssetRoutes(spec, plan.RootPath))
@@ -322,7 +338,10 @@ public static partial class WebSiteVerifier
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
-        var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath).Distinct(StringComparer.Ordinal).ToArray();
+        var staticRoutes = DiscoverStaticAssetRoutes(spec, plan.RootPath)
+            .Concat(DiscoverGeneratedArtifactRoutes(generatedSiteRoot))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         var builderRoutes = builderState.Items
             .Where(static item => item is not null)
             .Select(ProjectBuilderContentRoute)

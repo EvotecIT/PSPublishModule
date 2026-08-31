@@ -277,6 +277,13 @@ public class WebSiteScaffolderTests
             var seoDoctorStep = presetSteps.First(step =>
                 string.Equals(step.GetProperty("task").GetString(), "seo-doctor", StringComparison.OrdinalIgnoreCase));
             Assert.Equal("project-apis", seoDoctorStep.GetProperty("dependsOn").GetString());
+            var verifySteps = presetSteps.Where(step =>
+                string.Equals(step.GetProperty("task").GetString(), "verify", StringComparison.OrdinalIgnoreCase));
+            Assert.All(verifySteps, verifyStep =>
+            {
+                Assert.Equal("project-apis", verifyStep.GetProperty("dependsOn").GetString());
+                Assert.Equal("./_site", verifyStep.GetProperty("siteRoot").GetString());
+            });
 
             var readme = File.ReadAllText(Path.Combine(root, "README.md"));
             Assert.Contains("Starter profile:", readme, StringComparison.Ordinal);

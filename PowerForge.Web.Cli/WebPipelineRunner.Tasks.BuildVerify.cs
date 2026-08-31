@@ -63,7 +63,13 @@ internal static partial class WebPipelineRunner
         spec.Social.AutoGenerateCards = socialAutoGenerate.Value;
     }
 
-    private static void ExecuteVerify(JsonElement step, string baseDir, bool fast, string effectiveMode, WebPipelineStepResult stepResult)
+    private static void ExecuteVerify(
+        JsonElement step,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        string lastBuildOutPath,
+        WebPipelineStepResult stepResult)
     {
         var config = ResolvePath(baseDir, GetString(step, "config"));
         if (string.IsNullOrWhiteSpace(config))
@@ -84,7 +90,10 @@ internal static partial class WebPipelineRunner
         var baselinePath = GetString(step, "baseline") ?? GetString(step, "baselinePath");
         var failOnNewWarnings = GetBool(step, "failOnNewWarnings") ?? GetBool(step, "failOnNew") ?? false;
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-        var verify = WebSiteVerifier.Verify(spec, plan, WebCliJson.Options);
+        var generatedSiteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+        if (string.IsNullOrWhiteSpace(generatedSiteRoot))
+            generatedSiteRoot = lastBuildOutPath;
+        var verify = WebSiteVerifier.Verify(spec, plan, WebCliJson.Options, generatedSiteRoot);
         var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
 
         if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePath))

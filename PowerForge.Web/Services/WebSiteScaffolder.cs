@@ -730,8 +730,8 @@ body.pf-api-body { background:
                 { "task": "indexnow", "id": "indexnow-ci", "dependsOn": "sitemap", "modes": ["ci"], "sitemap": "./_site/sitemap.xml", "keyEnv": "INDEXNOW_KEY", "optionalKey": true, "continueOnError": true, "reportPath": "./_reports/indexnow.json", "summaryPath": "./_reports/indexnow.md" },
                 { "task": "github-artifacts-prune", "id": "github-artifacts-hygiene-ci", "modes": ["ci"], "tokenEnv": "GITHUB_TOKEN", "optional": true, "dryRun": true, "reportPath": "./_reports/github-artifacts.json", "summaryPath": "./_reports/github-artifacts.md" },
 
-                { "task": "verify", "id": "verify-dev", "dependsOn": "build-site", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
-                { "task": "verify", "id": "verify-ci", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
+                { "task": "verify", "id": "verify-dev", "dependsOn": "{{seoDoctorDependsOn}}", "config": "./site.json", "siteRoot": "./_site", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
+                { "task": "verify", "id": "verify-ci", "dependsOn": "{{seoDoctorDependsOn}}", "config": "./site.json", "siteRoot": "./_site", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
 
                 {
                   "task": "audit",
