@@ -135,6 +135,12 @@ public sealed partial class AppleDeviceDeploymentService
         var appPath = deploymentProductRoot is null
             ? ResolveAppPath(request, derivedDataPath)
             : Path.Combine(productDirectory, ResolveProductName(request) + ".app");
+        if (deploymentProductRoot is not null)
+        {
+            appPath = EnsurePathWithinProductDirectory(
+                appPath,
+                deploymentProductRoot);
+        }
         var buildProjectPath = projectPath;
         var workingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
         string? mirrorPath = null;

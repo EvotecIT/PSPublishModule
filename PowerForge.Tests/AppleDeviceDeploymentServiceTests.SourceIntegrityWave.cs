@@ -134,6 +134,51 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
+    public async Task DeployAsync_rejects_a_path_bearing_product_name_before_building()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var staleApp = Directory.CreateDirectory(ExternalOutputPath(
+                root,
+                "Stale.app"));
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).DeployAsync(
+                    new AppleAppDeviceDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        ProductName = Path.Combine(
+                            staleApp.Parent!.FullName,
+                            Path.GetFileNameWithoutExtension(staleApp.Name)),
+                        DeviceIdentifier = "device-1"
+                    }));
+
+            Assert.Contains(
+                "ProductName must be a simple app bundle name",
+                error.Message,
+                StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_rejects_additional_xcodebuild_arguments_before_tools_run()
     {
         var root = Directory.CreateDirectory(Path.Combine(

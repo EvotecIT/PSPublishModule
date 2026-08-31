@@ -58,7 +58,9 @@ public class AppleAppBuildRequest
     /// <summary>Xcode scheme to build.</summary>
     public string Scheme { get; set; } = string.Empty;
 
-    /// <summary>Built product name. Defaults to Scheme.</summary>
+    /// <summary>
+    /// Built product bundle name without a path. Defaults to Scheme.
+    /// </summary>
     public string? ProductName { get; set; }
 
     /// <summary>Build configuration, typically Debug for local device deployment.</summary>

@@ -113,7 +113,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                     metadataPaths,
                     Array.Empty<string>());
 
-                EnsureTrackedSharedScheme(
+                var schemeScope = EnsureTrackedSharedScheme(
                     root,
                     root,
                     new AppleAppConfiguration
@@ -123,6 +123,12 @@ internal sealed partial class AppleReleaseSourceTrustService
                         Scheme = scheme
                     },
                     metadataPaths);
+                var executionScopes = schemeScope.IsComplete &&
+                                      schemeScope.Targets.Count > 0
+                    ? ResolveExecutionMetadataScopes(
+                        metadataPaths,
+                        schemeScope.Targets)
+                    : null;
 
                 foreach (var projectMetadata in metadataPaths.Where(path =>
                              path.EndsWith(
@@ -133,7 +139,10 @@ internal sealed partial class AppleReleaseSourceTrustService
                         root,
                         projectMetadata,
                         metadataPaths,
-                        Array.Empty<string>());
+                        Array.Empty<string>(),
+                        executionScopes is null
+                            ? null
+                            : executionScopes[Path.GetFullPath(projectMetadata)]);
                 }
             }
             finally

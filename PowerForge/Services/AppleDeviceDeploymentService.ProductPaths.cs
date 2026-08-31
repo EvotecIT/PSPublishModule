@@ -35,6 +35,9 @@ public sealed partial class AppleDeviceDeploymentService
         string productDirectory,
         string expectedAppPath)
     {
+        expectedAppPath = EnsurePathWithinProductDirectory(
+            expectedAppPath,
+            productDirectory);
         if (!string.IsNullOrWhiteSpace(request.AppPath) ||
             !string.IsNullOrWhiteSpace(request.ProductName) ||
             Directory.Exists(expectedAppPath))
@@ -50,13 +53,44 @@ public sealed partial class AppleDeviceDeploymentService
                 "*.app",
                 SearchOption.TopDirectoryOnly)
             .ToArray();
-        return candidates.Length == 1 ? candidates[0] : expectedAppPath;
+        return candidates.Length == 1
+            ? EnsurePathWithinProductDirectory(candidates[0], productDirectory)
+            : expectedAppPath;
     }
 
     private static string ResolveProductName(AppleAppBuildRequest request)
-        => string.IsNullOrWhiteSpace(request.ProductName)
+    {
+        var productName = string.IsNullOrWhiteSpace(request.ProductName)
             ? request.Scheme.Trim()
             : request.ProductName!.Trim();
+        if (productName is "." or ".." ||
+            Path.IsPathRooted(productName) ||
+            productName.IndexOfAny(new[] { '/', '\\', '\0' }) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"ProductName must be a simple app bundle name without a path: '{productName}'.");
+        }
+        return productName;
+    }
+
+    private static string EnsurePathWithinProductDirectory(
+        string appPath,
+        string productDirectory)
+    {
+        var fullProductDirectory = Path.GetFullPath(productDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullAppPath = Path.GetFullPath(appPath);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(
+            fullProductDirectory);
+        if (!fullAppPath.StartsWith(
+                EnsureTrailingDirectorySeparator(fullProductDirectory),
+                comparison))
+        {
+            throw new InvalidOperationException(
+                $"Built app path '{fullAppPath}' must remain inside the private product directory '{fullProductDirectory}'.");
+        }
+        return fullAppPath;
+    }
 
     private static string GetProductDirectory(AppleAppBuildRequest request)
     {

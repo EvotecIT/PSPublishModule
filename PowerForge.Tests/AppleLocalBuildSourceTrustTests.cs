@@ -7,6 +7,64 @@ namespace PowerForge.Tests;
 public sealed class AppleLocalBuildSourceTrustTests
 {
     [Fact]
+    public void ValidateLocalBuildInputContainment_ignores_an_unrelated_target_script_phase()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LocalAppleTrust",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = WriteTargetScopedProject(
+                root.FullName,
+                selectedTargetDependsOnUnsafeTarget: false);
+            InitializeGitRepository(root.FullName, writeInputs: null);
+
+            new AppleReleaseSourceTrustService()
+                .ValidateLocalBuildInputContainment(
+                    root.FullName,
+                    project,
+                    "CasaRay");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateLocalBuildInputContainment_rejects_a_dependency_script_phase()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LocalAppleTrust",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = WriteTargetScopedProject(
+                root.FullName,
+                selectedTargetDependsOnUnsafeTarget: true);
+            InitializeGitRepository(root.FullName, writeInputs: null);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService()
+                    .ValidateLocalBuildInputContainment(
+                        root.FullName,
+                        project,
+                        "CasaRay"));
+
+            Assert.Contains(
+                "shell-script build phases",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateLocalBuildInputContainment_rejects_untracked_empty_built_directories()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -171,6 +229,72 @@ public sealed class AppleLocalBuildSourceTrustTests
         writeInputs?.Invoke();
         RunGit(workingDirectory, "add", ".");
         RunGit(workingDirectory, "commit", "-m", "fixture");
+    }
+
+    private static string WriteTargetScopedProject(
+        string root,
+        bool selectedTargetDependsOnUnsafeTarget)
+    {
+        const string selectedTarget = "AA0000000000000000000001";
+        const string unsafeTarget = "AA0000000000000000000002";
+        const string scriptPhase = "AA0000000000000000000003";
+        const string dependency = "AA0000000000000000000004";
+        var project = Directory.CreateDirectory(Path.Combine(
+            root,
+            "CasaRay.xcodeproj"));
+        var selectedDependencies = selectedTargetDependsOnUnsafeTarget
+            ? dependency
+            : string.Empty;
+        File.WriteAllText(
+            Path.Combine(project.FullName, "project.pbxproj"),
+            $$"""
+            {
+                objects = {
+                    {{selectedTarget}} = {
+                        isa = PBXNativeTarget;
+                        buildPhases = ();
+                        buildRules = ();
+                        dependencies = ({{selectedDependencies}});
+                        productType = "com.apple.product-type.application";
+                    };
+                    {{unsafeTarget}} = {
+                        isa = PBXNativeTarget;
+                        buildPhases = ({{scriptPhase}});
+                        buildRules = ();
+                        dependencies = ();
+                        productType = "com.apple.product-type.application";
+                    };
+                    {{scriptPhase}} = {
+                        isa = PBXShellScriptBuildPhase;
+                        files = ();
+                    };
+                    {{dependency}} = {
+                        isa = PBXTargetDependency;
+                        target = {{unsafeTarget}};
+                    };
+                };
+            }
+            """);
+        var schemeRoot = Directory.CreateDirectory(Path.Combine(
+            project.FullName,
+            "xcshareddata",
+            "xcschemes"));
+        File.WriteAllText(
+            Path.Combine(schemeRoot.FullName, "CasaRay.xcscheme"),
+            $$"""
+            <Scheme>
+              <BuildAction>
+                <BuildActionEntries>
+                  <BuildActionEntry>
+                    <BuildableReference
+                      BlueprintIdentifier="{{selectedTarget}}"
+                      ReferencedContainer="container:CasaRay.xcodeproj" />
+                  </BuildActionEntry>
+                </BuildActionEntries>
+              </BuildAction>
+            </Scheme>
+            """);
+        return project.FullName;
     }
 
     private static string ReadGit(string workingDirectory, params string[] arguments)
