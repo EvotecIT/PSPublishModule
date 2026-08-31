@@ -4,11 +4,11 @@
     "net10.0": {
       "DBAClientX.SQLite": {
         "type": "Direct",
-        "requested": "[0.15.0, )",
-        "resolved": "0.15.0",
-        "contentHash": "s97XhgF8sczbnhHkFZ11bLlGzZHd+MmKc2xmdDOJUCS4tNJdiopunRYJG5qURKvrM3r/cZCUNw9p90yyHCb4uQ==",
+        "requested": "[1.0.8, )",
+        "resolved": "1.0.8",
+        "contentHash": "JnV3wk12rGVLTYiPYiL3SuKcRYvrCqCn14+usCZdniScWlQAnf7dMX022IWBXymmKApP8Nj8+/1g1yctptVLJg==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.1",
+          "DBAClientX.Core": "1.0.8",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -71,8 +71,8 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "uyAREPsJoJCu3G32HHCW81myiIbqxaxBKSCBinZ1MBArFDKod+gRS7Hw1VnYD1yGOooQ47LMKKBnKpKDekGYuw=="
+        "resolved": "1.0.8",
+        "contentHash": "Od9B70xSvPq7y0n0v0bcWv6uJiwnnslan07touL6C5JBWSN3bBA7FYRcZ8jzuDds/LMkarCH77aSHVTUmOOWxQ=="
       },
       "Google.Apis": {
         "type": "Transitive",
@@ -368,7 +368,7 @@
           "HtmlTinkerX": "[3.0.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.2.4, )",
-          "PowerForge": "[3.0.124, )",
+          "PowerForge": "[3.0.126, )",
           "Scriban": "[7.2.6, )",
           "YamlDotNet": "[18.1.0, )"
         }
