@@ -2,6 +2,55 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests {
     [Fact]
+    public void Execute_source_bound_archive_implicitly_uses_an_immutable_snapshot() {
+        var root = CreateSandbox();
+        try {
+            CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "build/\n");
+            RunSnapshotGit(root, "init", "--quiet");
+            RunSnapshotGit(root, "config", "user.name", "PowerForge Tests");
+            RunSnapshotGit(root, "config", "user.email", "powerforge-tests@example.invalid");
+            RunSnapshotGit(root, "add", ".");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "exact source");
+            var sourceCommit = RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Archive = true;
+            spec.AppleApps.Upload = false;
+            spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
+            spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            AppleAppArchiveRequest? archiveRequest = null;
+
+            var result = CreateAppleAutomationService(
+                    _ => throw new InvalidOperationException("Archive-only execution must not query App Store Connect."),
+                    archiveAppleApp: request => {
+                        archiveRequest = request;
+                        var archive = Directory.CreateDirectory(request.ArchivePath!);
+                        File.WriteAllText(Path.Combine(archive.FullName, "payload"), "signed archive");
+                        return CreateSuccessfulArchive(request);
+                    })
+                .Execute(spec, new PowerForgeReleaseRequest {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"),
+                    AppleAction = PowerForgeAppleReleaseAction.Archive,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var captured = Assert.IsType<AppleAppArchiveRequest>(archiveRequest);
+            Assert.True(captured.RequireExactPackageSnapshot);
+            Assert.NotEqual(
+                Path.GetFullPath(Path.Combine(root, "CasaRay.xcodeproj")),
+                Path.GetFullPath(captured.ProjectPath));
+            Assert.Contains(
+                $"POWERFORGE_SOURCE_REVISION={sourceCommit}",
+                captured.AdditionalArguments);
+        } finally {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_AppleCheckpoint_rejects_linked_swiftpm_metadata_root() {
         if (OperatingSystem.IsWindows())
             return;
@@ -30,7 +79,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(CreateAppleAutomationSpec(root, keyPath), new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Archive,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     RequireImmutableAppleSourceSnapshot = true
                 });
 
@@ -107,7 +156,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(CreateAppleAutomationSpec(root, keyPath), new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Archive,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     RequireImmutableAppleSourceSnapshot = true
                 });
 
@@ -146,7 +195,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(CreateAppleAutomationSpec(root, keyPath), new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Archive,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     RequireImmutableAppleSourceSnapshot = true
                 });
 
@@ -204,7 +253,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
     [Fact]
     public void Execute_AppleUpload_persists_attestation_before_public_archive_recheck() {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -230,7 +279,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.False(result.Success);
@@ -247,7 +296,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
     [Fact]
     public void Execute_AppleUpload_rejects_transient_private_archive_snapshot_mutation() {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -276,7 +325,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.False(result.Success);
@@ -295,7 +344,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     [InlineData("rg00hz")]
     [InlineData("3qvlpX")]
     public void Execute_AppleUpload_allows_transient_xcode_sandbox_scratch_for_approved_archive_file(string finalToken) {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -325,7 +374,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -337,7 +386,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
     [Fact]
     public async Task Execute_AppleUpload_allows_delayed_xcode_sandbox_scratch_cleanup_after_process_exit() {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         Task? cleanup = null;
         try {
@@ -372,7 +421,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -514,7 +563,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     [InlineData("Unapproved.plist.sb-2f65fadd-rg00hz")]
     [InlineData("Products/Info.plist.sb-2f65fadd-rg00hz")]
     public void Execute_AppleUpload_rejects_xcode_sandbox_scratch_outside_exact_archive_info_plist(string scratchRelativePath) {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -544,7 +593,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.False(result.Success);
@@ -556,7 +605,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
 
     [Fact]
     public void Execute_AppleUpload_rejects_transient_private_archive_hard_link_alias_mutation() {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         string? aliasRoot = null;
         try {
@@ -592,7 +641,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.False(result.Success);
@@ -674,7 +723,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     [InlineData("archive-root")]
     [InlineData("export-root")]
     public void Execute_AppleUploadResume_rejects_changed_execution_policy(string changedControl) {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -695,7 +744,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
             Assert.True(seeded.Success, seeded.ErrorMessage);
             var seededTarget = Assert.Single(
@@ -719,7 +768,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                 .Execute(spec, new PowerForgeReleaseRequest {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.False(resumed.Success);

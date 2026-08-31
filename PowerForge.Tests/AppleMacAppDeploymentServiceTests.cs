@@ -1,8 +1,9 @@
+using System.Diagnostics;
 using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleMacAppDeploymentServiceTests
+public sealed partial class AppleMacAppDeploymentServiceTests
 {
     [Fact]
     public async Task DeployAsync_replaces_existing_app_and_launches_selected_profile()
@@ -12,28 +13,32 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
-            var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var existing = Directory.CreateDirectory(Path.Combine(installRoot.FullName, "CasaRay.app"));
             File.WriteAllText(Path.Combine(existing.FullName, "version.txt"), "old");
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/xcodebuild")
+                    MaterializeBuildVersion(request, "new");
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                     return Success("copied");
                 }
-                if (request.FileName == "open-test")
+                if (request.FileName == "/usr/bin/open")
                 {
-                    var destination = Path.Combine(installRoot.FullName, "CasaRay.app");
+                    var destination = Path.Combine(
+                        AppleReleaseArtifactService.ResolvePhysicalPath(
+                            installRoot.FullName),
+                        "CasaRay.app");
                     Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
                 }
                 return Success("ok");
             });
             var service = new AppleMacAppDeploymentService(runner);
+            InitializeGitRepository(root.FullName);
 
             var result = await service.DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -48,30 +53,58 @@ public sealed class AppleMacAppDeploymentServiceTests
                 {
                     ["CASARAY_ENABLE_SANDBOX_PURCHASES"] = "1"
                 },
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test",
-                OpenExecutable = "open-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto",
+                OpenExecutable = "/usr/bin/open"
             });
 
             Assert.True(result.Succeeded);
+            Assert.True(Directory.Exists(result.Build.AppPath));
+            Assert.StartsWith(
+                Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(derived.FullName),
+                    "PowerForge",
+                    "DeploymentProducts"),
+                result.Build.AppPath,
+                StringComparison.Ordinal);
+            Assert.Equal(result.Build.AppPath, result.Install!.SourceAppPath);
+            var privateProductRoot = runner.Requests.Single(request =>
+                    request.FileName == "/usr/bin/xcodebuild")
+                .Arguments.Single(argument =>
+                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
+                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            Assert.False(Directory.Exists(privateProductRoot));
             Assert.Equal("new", File.ReadAllText(Path.Combine(installRoot.FullName, "CasaRay.app", "version.txt")));
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-backup", StringComparison.Ordinal));
+            Assert.All(runner.Requests, request => Assert.False(request.InheritEnvironment));
+            Assert.All(
+                runner.Requests,
+                request => Assert.DoesNotContain("DEVELOPER_DIR", request.EnvironmentVariables!.Keys));
             var terminate = Assert.Single(runner.Requests, request => request.FileName == "/usr/bin/pkill");
             Assert.Equal("-f", terminate.Arguments[0]);
             Assert.StartsWith("^", terminate.Arguments[1], StringComparison.Ordinal);
             Assert.Contains(
-                System.Text.RegularExpressions.Regex.Escape(Path.Combine(installRoot.FullName, "CasaRay.app", "Contents", "MacOS")),
+                System.Text.RegularExpressions.Regex.Escape(Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(
+                        installRoot.FullName),
+                    "CasaRay.app",
+                    "Contents",
+                    "MacOS")),
                 terminate.Arguments[1],
                 StringComparison.Ordinal);
-            var launch = Assert.Single(runner.Requests, request => request.FileName == "open-test");
+            var launch = Assert.Single(runner.Requests, request => request.FileName == "/usr/bin/open");
             Assert.Equal(new[]
             {
                 "--new", "--fresh", "--env", "CASARAY_ENABLE_SANDBOX_PURCHASES=1",
-                Path.Combine(installRoot.FullName, "CasaRay.app")
+                Path.Combine(
+                    AppleReleaseArtifactService.ResolvePhysicalPath(
+                        installRoot.FullName),
+                    "CasaRay.app")
             }, launch.Arguments);
         }
         finally
         {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -84,13 +117,13 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
             Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/ditto")
                 {
                     Directory.CreateDirectory(request.Arguments[1]);
                     File.WriteAllText(Path.Combine(request.Arguments[1], "partial"), string.Empty);
@@ -98,6 +131,7 @@ public sealed class AppleMacAppDeploymentServiceTests
                 }
                 return Success("ok");
             });
+            InitializeGitRepository(root.FullName);
 
             var result = await new AppleMacAppDeploymentService(runner).DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -108,16 +142,81 @@ public sealed class AppleMacAppDeploymentServiceTests
                 DerivedDataPath = derived.FullName,
                 InstallRoot = installRoot.FullName,
                 Launch = false,
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto"
             });
 
             Assert.False(result.Succeeded);
             Assert.False(result.Install?.Succeeded);
+            Assert.True(Directory.Exists(result.Build.AppPath));
+            Assert.Equal(result.Build.AppPath, result.Install!.SourceAppPath);
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-stage", StringComparison.Ordinal));
         }
         finally
         {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeployAsync_removes_stage_when_copy_does_not_return_a_valid_app(
+        bool copyThrows)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
+
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName != "/usr/bin/ditto")
+                    return Success("ok");
+                if (!copyThrows)
+                    return Success("copy claimed success");
+
+                Directory.CreateDirectory(request.Arguments[1]);
+                File.WriteAllText(
+                    Path.Combine(request.Arguments[1], "partial"),
+                    string.Empty);
+                throw new IOException("copy interrupted");
+            });
+            InitializeGitRepository(root.FullName);
+
+            _ = await Assert.ThrowsAnyAsync<Exception>(() =>
+                new AppleMacAppDeploymentService(runner).DeployAsync(
+                    new AppleMacAppDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Platform = ApplePlatform.macOS,
+                        ArchiveVariant = AppleArchiveVariant.MacCatalyst,
+                        DerivedDataPath = derived.FullName,
+                        InstallRoot = installRoot.FullName,
+                        Launch = false,
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        DittoExecutable = "/usr/bin/ditto"
+                    }));
+
+            Assert.DoesNotContain(
+                Directory.EnumerateDirectories(installRoot.FullName),
+                path => path.Contains("powerforge-stage", StringComparison.Ordinal));
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -130,19 +229,20 @@ public sealed class AppleMacAppDeploymentServiceTests
         {
             var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
             File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
-            var derived = Directory.CreateDirectory(Path.Combine(root.FullName, "DerivedData"));
-            var source = Directory.CreateDirectory(Path.Combine(derived.FullName, "Build", "Products", "Debug-maccatalyst", "CasaRay.app"));
-            File.WriteAllText(Path.Combine(source.FullName, "version.txt"), "new");
-            var installRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Applications"));
+            var derived = Directory.CreateDirectory(ExternalOutputPath(root, "DerivedData"));
+            var installRoot = Directory.CreateDirectory(ExternalOutputPath(root, "Applications"));
             var orphanedBackup = Directory.CreateDirectory(Path.Combine(installRoot.FullName, ".CasaRay.app.powerforge-backup-interrupted"));
             File.WriteAllText(Path.Combine(orphanedBackup.FullName, "version.txt"), "old");
 
             var runner = new CapturingProcessRunner(request =>
             {
-                if (request.FileName == "ditto-test")
+                if (request.FileName == "/usr/bin/xcodebuild")
+                    MaterializeBuildVersion(request, "new");
+                if (request.FileName == "/usr/bin/ditto")
                     CopyDirectory(request.Arguments[0], request.Arguments[1]);
                 return Success("ok");
             });
+            InitializeGitRepository(root.FullName);
 
             var result = await new AppleMacAppDeploymentService(runner).DeployAsync(new AppleMacAppDeploymentRequest
             {
@@ -153,8 +253,8 @@ public sealed class AppleMacAppDeploymentServiceTests
                 DerivedDataPath = derived.FullName,
                 InstallRoot = installRoot.FullName,
                 Launch = false,
-                XcodeBuildExecutable = "xcodebuild-test",
-                DittoExecutable = "ditto-test"
+                XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                DittoExecutable = "/usr/bin/ditto"
             });
 
             Assert.True(result.Succeeded);
@@ -163,6 +263,50 @@ public sealed class AppleMacAppDeploymentServiceTests
         }
         finally
         {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_rejects_an_install_root_inside_the_source()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => new AppleMacAppDeploymentService(runner).DeployAsync(
+                    new AppleMacAppDeploymentRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Platform = ApplePlatform.macOS,
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        InstallRoot = Path.Combine(root.FullName, "Applications"),
+                        Launch = false
+                    }));
+
+            Assert.Contains(
+                nameof(AppleMacAppDeploymentRequest.InstallRoot),
+                exception.Message,
+                StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
@@ -176,17 +320,142 @@ public sealed class AppleMacAppDeploymentServiceTests
         Assert.Throws<InvalidOperationException>(() => AppleMacAppBundleReplacement.AcquireInstallLock(destination));
     }
 
-    private static void CopyDirectory(string source, string destination)
+    [Theory]
+    [InlineData("ditto")]
+    [InlineData("open")]
+    [InlineData("pkill")]
+    public async Task DeployAsync_rejects_non_system_mac_deployment_tools_before_building(string tool)
     {
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.EnumerateFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
-        foreach (var directory in Directory.EnumerateDirectories(source))
-            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var request = new AppleMacAppDeploymentRequest
+            {
+                ProjectPath = project.FullName,
+                Scheme = "CasaRay",
+                Platform = ApplePlatform.macOS,
+                Launch = true
+            };
+            switch (tool)
+            {
+                case "ditto":
+                    request.DittoExecutable = "/tmp/ditto-wrapper";
+                    break;
+                case "open":
+                    request.OpenExecutable = "/tmp/open-wrapper";
+                    break;
+                case "pkill":
+                    request.PkillExecutable = "/tmp/pkill-wrapper";
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown test tool: {tool}");
+            }
+            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleMacAppDeploymentService(runner).DeployAsync(request));
+
+            Assert.Contains("trusted system tool", error.Message, StringComparison.Ordinal);
+            Assert.Empty(runner.Requests);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static string ExternalOutputPath(
+        DirectoryInfo sourceRoot,
+        string leaf)
+        => Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs",
+            leaf);
+
+    private static void DeleteExternalOutputs(DirectoryInfo sourceRoot)
+    {
+        var outputRoot = Path.Combine(
+            sourceRoot.Parent!.FullName,
+            sourceRoot.Name + ".outputs");
+        try
+        {
+            if (Directory.Exists(outputRoot))
+                Directory.Delete(outputRoot, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup for test outputs.
+        }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+        => AppleArtifactCopy.CopyDirectory(source, destination);
+
+    private static void MaterializeBuildVersion(
+        ProcessRunRequest request,
+        string version)
+    {
+        AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
+        var productRoot = request.Arguments.Single(argument =>
+                argument.StartsWith(
+                    "CONFIGURATION_BUILD_DIR=",
+                    StringComparison.Ordinal))
+            .Substring("CONFIGURATION_BUILD_DIR=".Length);
+        File.WriteAllText(
+            Path.Combine(productRoot, "CasaRay.app", "version.txt"),
+            version);
     }
 
     private static ProcessRunResult Success(string stdOut)
         => new(0, stdOut, string.Empty, "tool", TimeSpan.FromMilliseconds(1), false);
+
+    private static void InitializeGitRepository(string workingDirectory)
+    {
+        WriteSharedSchemes(workingDirectory);
+        RunGit(workingDirectory, "init");
+        RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
+        RunGit(
+            workingDirectory,
+            "config",
+            "user.email",
+            "powerforge-tests@example.invalid");
+        RunGit(workingDirectory, "add", ".");
+        RunGit(workingDirectory, "commit", "-m", "fixture");
+    }
+
+    private static void WriteSharedSchemes(string workingDirectory)
+        => AppleDeploymentTestFixture.WriteSharedSchemes(
+            workingDirectory,
+            "CasaRay");
+
+    private static void RunGit(
+        string workingDirectory,
+        params string[] arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "git",
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+        foreach (var argument in arguments)
+            process.StartInfo.ArgumentList.Add(argument);
+        process.Start();
+        var standardError = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException(standardError);
+    }
 
     private sealed class CapturingProcessRunner : IProcessRunner
     {
@@ -202,7 +471,13 @@ public sealed class AppleMacAppDeploymentServiceTests
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            return Task.FromResult(_execute(request));
+            request.InvokePreStartBoundary();
+            request.InvokeStartBoundary();
+            var result = _execute(request);
+            if (result.Succeeded)
+                AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
+            request.InvokeCompletionBoundary(result);
+            return Task.FromResult(result);
         }
     }
 }

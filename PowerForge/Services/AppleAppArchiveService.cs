@@ -92,12 +92,23 @@ public sealed partial class AppleAppArchiveService
             if (request.RequireExactPackageSnapshot)
             {
                 AppleSwiftPackageBuildSnapshot.RejectConflictingArguments(additionalArguments);
+                var approvedPackageRevisions =
+                    AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
+                        projectPath);
+                var packageSourceRoot =
+                    AppleSwiftPackageBuildSnapshot.ResolveRepositoryRoot(
+                        projectPath);
+                var packageSourceComparison = FrameworkCompatibility.GetPathStringComparison(
+                    Path.GetPathRoot(packageSourceRoot) ?? packageSourceRoot);
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
                         _processRunner,
                         xcodeBuildExecutable,
                         projectPath,
                         request.IsWorkspace,
                         request.Scheme.Trim(),
+                        approvedPackageRevisions,
+                        packageSourceRoot,
+                        packageSourceComparison,
                         timeout,
                         cancellationToken,
                         request.Progress)
@@ -128,16 +139,20 @@ public sealed partial class AppleAppArchiveService
                     captureOutput: true,
                     captureError: true,
                     inheritEnvironment: packageSnapshot is null);
+            if (packageSnapshot is not null)
+                processRequest.SetPreStartBoundary(packageSnapshot.ValidateRootDirectoryUnchanged);
             processRequest.SetCompletionBoundary(completionResult =>
             {
                 if (completionResult.Succeeded && Directory.Exists(archivePath))
                 {
+                    packageSnapshot?.ValidateRootDirectoryUnchanged();
                     archiveIdentity = archiveOutputMonitor!.CaptureExpectedProducerOutput(
                         () => AppleArchiveUploadSnapshot.CaptureCompleteIdentity(archivePath),
                         "xcodebuild archive");
                     archiveSha256 = archiveIdentity.Sha256;
                 }
             });
+            processRequest.ValidatePreStartBoundaryForCompatibility();
             result = await _processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
             if (result.Succeeded)

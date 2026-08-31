@@ -510,8 +510,14 @@ public sealed partial class AppleAppArchiveServiceTests
 
     private static void WritePackageLock(string root, string url, string revision)
     {
+        var lockRoot = Directory.CreateDirectory(Path.Combine(
+            root,
+            "App.xcodeproj",
+            "project.xcworkspace",
+            "xcshareddata",
+            "swiftpm"));
         File.WriteAllText(
-            Path.Combine(root, "Package.resolved"),
+            Path.Combine(lockRoot.FullName, "Package.resolved"),
             System.Text.Json.JsonSerializer.Serialize(new
             {
                 pins = new[]
@@ -532,7 +538,7 @@ public sealed partial class AppleAppArchiveServiceTests
     {
         RunGit(root, "config", "user.name", "PowerForge Tests");
         RunGit(root, "config", "user.email", "powerforge-tests@example.invalid");
-        RunGit(root, "add", "App.xcodeproj/project.pbxproj", "Package.resolved");
+        RunGit(root, "add", ".");
         RunGit(root, "commit", "--quiet", "-m", "Approved exact inputs");
     }
 

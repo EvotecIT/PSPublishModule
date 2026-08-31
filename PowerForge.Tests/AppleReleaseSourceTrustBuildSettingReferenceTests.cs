@@ -15,6 +15,16 @@ public sealed class AppleReleaseSourceTrustBuildSettingReferenceTests
     }
 
     [Fact]
+    public void ValidateUnclassifiedBuildSettingReferences_AllowsPowerForgeSourceRevision()
+    {
+        var exception = Record.Exception(() => ValidateReferences(
+            "INFOPLIST_FILE contents",
+            "$(POWERFORGE_SOURCE_REVISION)"));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void ValidateUnclassifiedBuildSettingReferences_StillRejectsHostEnvironmentReferences()
     {
         var exception = Assert.Throws<TargetInvocationException>(() =>

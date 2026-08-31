@@ -60,6 +60,11 @@ internal static partial class Program
             var projectPath = ResolvePathFromBase(projectRoot, selectedTarget.ProjectPath);
             if (!Directory.Exists(projectPath) && !File.Exists(projectPath))
                 throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
+            AppleDeviceDeploymentService.EnsurePathWithinBuildRoot(
+                projectPath,
+                projectRoot,
+                FrameworkCompatibility.GetPathStringComparisonForPath(
+                    projectRoot));
 
             var profile = SelectAppleDeployProfile(local, TryGetOptionValue(argv, "--profile"));
             var configuration = TryGetOptionValue(argv, "--configuration") ?? local.Configuration;
@@ -78,6 +83,58 @@ internal static partial class Program
             var buildMirrorPath = useBuildMirror ? Path.Combine(localRoot, "Source") : null;
             var installRoot = TryGetOptionValue(argv, "--install-root") ?? local.InstallRoot;
             var planOnly = argv.Any(static value => value.Equals("--plan", StringComparison.OrdinalIgnoreCase));
+            var provenanceRoot = AppleBuildProvenance.ResolveRepositoryRoot(
+                projectRoot) ?? projectRoot;
+            var provenancePathComparison =
+                FrameworkCompatibility.GetPathStringComparisonForPath(
+                    provenanceRoot);
+            AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+                derivedDataPath,
+                provenanceRoot,
+                nameof(AppleAppBuildRequest.DerivedDataPath),
+                provenancePathComparison);
+            if (buildMirrorPath is not null)
+            {
+                AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+                    buildMirrorPath,
+                    provenanceRoot,
+                    nameof(AppleAppBuildRequest.BuildMirrorPath),
+                    provenancePathComparison);
+            }
+            var resolvedInstallRoot = requestedPlatform == ApplePlatform.macOS
+                ? Path.GetFullPath(installRoot)
+                : null;
+            if (resolvedInstallRoot is not null)
+            {
+                AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+                    resolvedInstallRoot,
+                    provenanceRoot,
+                    nameof(AppleMacAppDeploymentRequest.InstallRoot),
+                    provenancePathComparison);
+            }
+            AppleBuildProvenance.Snapshot? planSnapshot = null;
+            if (planOnly)
+            {
+                _ = AppleDeviceDeploymentService.ResolveProductName(
+                    new AppleAppBuildRequest
+                    {
+                        Scheme = scheme,
+                        ProductName = selectedTarget.ProductName
+                    });
+                _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                    apple.XcodeBuildExecutable,
+                    "xcodebuild",
+                    "/usr/bin/xcodebuild",
+                    "Exact-source local Apple builds");
+                planSnapshot = AppleBuildProvenance.CaptureStableBuildInputs(
+                    provenanceRoot,
+                    excludesGeneratedDirectories: useBuildMirror,
+                    inspectBuildGraph: () =>
+                        AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                            provenanceRoot,
+                            projectPath,
+                            scheme));
+            }
 
             var cliResult = new AppleLocalDeploymentCliResult
             {
@@ -90,8 +147,9 @@ internal static partial class Program
                 ProjectPath = projectPath,
                 Scheme = scheme,
                 DerivedDataPath = derivedDataPath,
+                SourceRevision = planSnapshot?.Revision,
                 Device = deviceIdentifier ?? device,
-                InstallRoot = requestedPlatform == ApplePlatform.macOS ? Path.GetFullPath(installRoot) : null,
+                InstallRoot = resolvedInstallRoot,
                 Launch = launch,
                 UseBuildMirror = useBuildMirror,
                 BuildMirrorPath = buildMirrorPath
@@ -152,6 +210,7 @@ internal static partial class Program
             };
             var deployment = new AppleMacAppDeploymentService().DeployAsync(request).GetAwaiter().GetResult();
             cliResult.AppPath = deployment.Build.AppPath;
+            cliResult.SourceRevision = deployment.Build.SourceRevision;
             cliResult.InstalledAppPath = deployment.Install?.InstalledAppPath;
             cliResult.BuildSucceeded = deployment.Build.Succeeded;
             cliResult.InstallSucceeded = deployment.Install?.Succeeded ?? false;
@@ -190,6 +249,7 @@ internal static partial class Program
         };
         var deviceDeployment = new AppleDeviceDeploymentService().DeployAsync(deviceRequest).GetAwaiter().GetResult();
         cliResult.AppPath = deviceDeployment.Build.AppPath;
+        cliResult.SourceRevision = deviceDeployment.Build.SourceRevision;
         cliResult.DeviceIdentifier = deviceDeployment.Install?.DeviceIdentifier;
         cliResult.BuildSucceeded = deviceDeployment.Build.Succeeded;
         cliResult.InstallSucceeded = deviceDeployment.Install?.Succeeded ?? false;
@@ -296,6 +356,8 @@ internal static partial class Program
         logger.Info($"Target: {result.Target} ({result.Platform}, {result.Configuration})");
         if (!string.IsNullOrWhiteSpace(result.Profile))
             logger.Info($"Profile: {result.Profile}");
+        if (!string.IsNullOrWhiteSpace(result.SourceRevision))
+            logger.Info($"Source: {result.SourceRevision}");
         if (result.Planned)
         {
             logger.Success("Apple local deployment plan is valid.");

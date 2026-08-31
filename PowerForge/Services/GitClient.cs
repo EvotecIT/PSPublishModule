@@ -51,6 +51,7 @@ public sealed class GitClient
             ["GIT_CONFIG_NOSYSTEM"] = "1",
             ["GIT_CONFIG_GLOBAL"] = nullDevice,
             ["GIT_TERMINAL_PROMPT"] = "0",
+            ["GIT_NO_REPLACE_OBJECTS"] = "1",
             ["GCM_INTERACTIVE"] = "Never",
             ["GIT_OPTIONAL_LOCKS"] = "0",
             ["GIT_CONFIG_COUNT"] = "2",

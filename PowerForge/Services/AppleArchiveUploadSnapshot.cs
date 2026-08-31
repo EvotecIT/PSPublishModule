@@ -116,6 +116,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string archivePath,
         string description = "private Apple upload archive snapshot")
     {
+        var rootAttributes = File.GetAttributes(archivePath);
+        if ((rootAttributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"The {description} must not be a symbolic link or reparse point: {archivePath}");
+        }
         var sha256 = AppleNotarizationService.ComputeArtifactSha256(archivePath);
         if (File.Exists(archivePath))
         {
@@ -219,6 +225,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string description)
     {
         var result = new Dictionary<string, string>(GetPathComparer(archivePath));
+        result.Add(
+            ".",
+            ExistingFilePathIdentityResolver.ResolveDirectoryStatus(archivePath).MutationIdentity);
         var files = new List<(string RelativePath, string FullPath)>();
         var pending = new Stack<string>();
         pending.Push(archivePath);
@@ -227,16 +236,18 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             var directory = pending.Pop();
             foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
             {
+                var relativePath = FrameworkCompatibility.GetRelativePath(archivePath, entry).Replace('\\', '/');
                 var attributes = File.GetAttributes(entry);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                     continue;
                 if ((attributes & FileAttributes.Directory) != 0)
                 {
+                    result.Add(
+                        relativePath + "/",
+                        ExistingFilePathIdentityResolver.ResolveDirectoryStatus(entry).MutationIdentity);
                     pending.Push(entry);
                     continue;
                 }
-
-                var relativePath = FrameworkCompatibility.GetRelativePath(archivePath, entry).Replace('\\', '/');
                 files.Add((relativePath, entry));
             }
         }

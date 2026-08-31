@@ -1,25 +1,31 @@
 namespace PowerForge;
 
 /// <summary>
-/// Owns the private Swift package materialization consumed by one exact-source Xcode archive.
+/// Owns the private Swift package materialization consumed by one exact-source Xcode build.
 /// </summary>
 internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 {
     private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
     private readonly AppleReleaseSourceMutationMonitor _monitor;
+    private readonly AppleReleaseSourceMutationMonitor _rootMonitor;
     private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _materializedPackagesIdentity;
+    private readonly AppleStableDirectoryIdentity _rootDirectory;
     private bool _disposed;
 
     private AppleSwiftPackageBuildSnapshot(
         string rootPath,
+        AppleStableDirectoryIdentity rootDirectory,
         IReadOnlyDictionary<string, string> approvedPackageRevisions,
         IReadOnlyDictionary<string, string?> environmentVariables,
         AppleReleaseSourceMutationMonitor monitor,
+        AppleReleaseSourceMutationMonitor rootMonitor,
         AppleArchiveUploadSnapshot.SnapshotIdentity materializedPackagesIdentity)
     {
         RootPath = rootPath;
+        _rootDirectory = rootDirectory;
         _environmentVariables = environmentVariables;
         _monitor = monitor;
+        _rootMonitor = rootMonitor;
         _materializedPackagesIdentity = materializedPackagesIdentity;
     }
 
@@ -33,21 +39,58 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
     internal IReadOnlyDictionary<string, string?> EnvironmentVariables => _environmentVariables;
 
+    internal static IReadOnlyDictionary<string, string> ReadApprovedRemotePackages(
+        string projectPath)
+    {
+        var repositoryRoot = ResolveRepositoryRoot(projectPath);
+        return new AppleReleaseSourceTrustService()
+            .ReadApprovedLocalBuildPackageRevisions(
+                repositoryRoot,
+                projectPath);
+    }
+
     internal static async Task<AppleSwiftPackageBuildSnapshot> CreateAsync(
         IProcessRunner processRunner,
         string xcodeBuildExecutable,
         string projectPath,
         bool isWorkspace,
         string scheme,
+        IReadOnlyDictionary<string, string> approvedPackageRevisions,
+        string sourceRoot,
+        StringComparison sourcePathComparison,
         TimeSpan timeout,
         CancellationToken cancellationToken,
         Action<string>? progress = null)
     {
-        var parent = Path.Combine(Path.GetTempPath(), "PowerForge", "apple-swiftpm-build-snapshots");
+        var parent = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "apple-swiftpm-build-snapshots");
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            parent,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
         Directory.CreateDirectory(parent);
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            parent,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
+        parent = AppleReleaseArtifactService.ResolvePhysicalPath(parent);
         var root = Path.Combine(parent, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        var rootDirectory = AppleStableDirectoryIdentity.Capture(
+            root,
+            "private Swift package snapshot directory");
+        AppleDeviceDeploymentService.EnsureOutputPathOutsideBuildRoot(
+            rootDirectory.Path,
+            sourceRoot,
+            "Swift package snapshot root",
+            sourcePathComparison);
+        root = rootDirectory.Path;
         AppleReleaseSourceMutationMonitor? monitor = null;
+        AppleReleaseSourceMutationMonitor? rootMonitor = null;
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -58,10 +101,13 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
-            var repositoryRoot = FindRepositoryRoot(projectPath);
-            var approvedPackageRevisions = new AppleReleaseSourceTrustService().ReadApprovedTrackedPackageRevisions(
-                repositoryRoot,
-                DiscoverApprovedPackageLocks(repositoryRoot, projectPath));
+            rootMonitor = new AppleReleaseSourceMutationMonitor(
+                parent,
+                "private Swift package snapshot directory",
+                "xcodebuild exact-source package resolution and build",
+                "Discard the Apple product and resolve the exact package graph again.",
+                exactPath: root,
+                includeExactPathDescendants: false);
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {
@@ -83,8 +129,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             monitor = new AppleReleaseSourceMutationMonitor(
                 sourcePackagesPath,
                 "materialized Swift package root",
-                "xcodebuild archive",
-                "Discard the archive and resolve the exact package graph again.",
+                "xcodebuild exact-source build",
+                "Discard the Apple product and resolve the exact package graph again.",
                 enableImmediately: false);
             AppleArchiveUploadSnapshot.SnapshotIdentity? materializedPackagesIdentity = null;
             var processRequest = new ProcessRunRequest(
@@ -96,10 +142,12 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 captureOutput: true,
                 captureError: true,
                 inheritEnvironment: false);
+            processRequest.SetPreStartBoundary(rootDirectory.ValidateUnchanged);
             processRequest.SetCompletionBoundary(completionResult =>
             {
                 if (!completionResult.Succeeded)
                     return;
+                rootDirectory.ValidateUnchanged();
                 materializedPackagesIdentity = monitor.CaptureExpectedProducerOutput(
                     () => CaptureMaterializedPackageIdentity(sourcePackagesPath),
                     "xcodebuild -resolvePackageDependencies");
@@ -110,11 +158,12 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 {
                     throw new InvalidOperationException(
                         "The materialized Swift package root changed while its exact package graph was being validated. " +
-                        "Discard the archive and resolve the exact package graph again.");
+                        "Discard the Apple product and resolve the exact package graph again.");
                 }
-                monitor.ValidateNoChanges();
+                rootDirectory.ValidateUnchanged();
                 progress?.Invoke("Pinned Swift package graph validated");
             });
+            processRequest.ValidatePreStartBoundaryForCompatibility();
             var result = await processRunner.RunAsync(processRequest, cancellationToken).ConfigureAwait(false);
             processRequest.InvokeCompletionBoundary(result);
             if (!result.Succeeded)
@@ -133,23 +182,28 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 
             var snapshot = new AppleSwiftPackageBuildSnapshot(
                 root,
+                rootDirectory,
                 approvedPackageRevisions,
                 environmentVariables,
                 monitor,
+                rootMonitor,
                 materializedPackagesIdentity);
             monitor = null;
+            rootMonitor = null;
             return snapshot;
         }
         catch
         {
             monitor?.Dispose();
-            try { AppleArtifactCopy.DeleteOwnedDirectory(root); } catch { /* best effort private cleanup */ }
+            rootMonitor?.Dispose();
+            try { rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
             throw;
         }
     }
 
     internal void AppendArchiveArguments(ICollection<string> arguments)
     {
+        _rootDirectory.ValidateUnchanged();
         arguments.Add("-clonedSourcePackagesDirPath");
         arguments.Add(SourcePackagesPath);
         arguments.Add("-derivedDataPath");
@@ -159,17 +213,41 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         arguments.Add("-skipPackageUpdates");
     }
 
+    internal void AppendLocalBuildArguments(ICollection<string> arguments)
+    {
+        _rootDirectory.ValidateUnchanged();
+        arguments.Add("-clonedSourcePackagesDirPath");
+        arguments.Add(SourcePackagesPath);
+        arguments.Add("-onlyUsePackageVersionsFromResolvedFile");
+        arguments.Add("-disableAutomaticPackageResolution");
+        arguments.Add("-skipPackageUpdates");
+    }
+
     internal void ValidateUnchanged()
     {
-        var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
-        if (!actual.Equals(_materializedPackagesIdentity))
+        void ValidateCurrentIdentity()
         {
-            throw new InvalidOperationException(
-                "The materialized Swift package root changed before xcodebuild archive. " +
-                "A transient write or hard-link alias invalidates the exact package graph.");
+            _rootDirectory.ValidateUnchanged();
+            var actual = CaptureMaterializedPackageIdentity(SourcePackagesPath);
+            if (!actual.Equals(_materializedPackagesIdentity))
+            {
+                throw new InvalidOperationException(
+                    "The materialized Swift package root changed before the exact-source xcodebuild completed. " +
+                    "A transient write or hard-link alias invalidates the exact package graph.");
+            }
+            _rootDirectory.ValidateUnchanged();
         }
-        _monitor.ValidateNoChanges();
+
+        // Preserve the most specific identity diagnostic while both observers
+        // are still active, then close them around a second identical boundary.
+        ValidateCurrentIdentity();
+        AppleReleaseSourceMutationMonitor.ValidateNoChangesTogether(
+            new[] { _monitor, _rootMonitor },
+            ValidateCurrentIdentity);
     }
+
+    internal void ValidateRootDirectoryUnchanged()
+        => _rootDirectory.ValidateUnchanged();
 
     private static AppleArchiveUploadSnapshot.SnapshotIdentity CaptureMaterializedPackageIdentity(
         string sourcePackagesPath)
@@ -247,26 +325,11 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             return;
         _disposed = true;
         _monitor.Dispose();
-        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after archive */ }
+        _rootMonitor.Dispose();
+        try { _rootDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort after archive */ }
     }
 
-    private static IEnumerable<string> DiscoverApprovedPackageLocks(string repositoryRoot, string projectPath)
-    {
-        var project = Path.GetFullPath(projectPath);
-        var projectDirectory = Path.GetDirectoryName(project)
-            ?? throw new InvalidOperationException($"Xcode project path has no parent: {project}");
-        return new[]
-            {
-                Path.Combine(repositoryRoot, "Package.resolved"),
-                Path.Combine(projectDirectory, "Package.resolved"),
-                Path.Combine(project, "xcshareddata", "swiftpm", "Package.resolved"),
-                Path.Combine(project, "project.xcworkspace", "xcshareddata", "swiftpm", "Package.resolved")
-            }
-            .Distinct(Path.DirectorySeparatorChar == '\\' ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-            .Where(File.Exists);
-    }
-
-    private static string FindRepositoryRoot(string startPath)
+    internal static string ResolveRepositoryRoot(string startPath)
     {
         var fullStartPath = Path.GetFullPath(startPath);
         var current = new DirectoryInfo(Directory.Exists(fullStartPath) ? fullStartPath : Path.GetDirectoryName(fullStartPath)!);

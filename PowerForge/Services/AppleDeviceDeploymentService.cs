@@ -1,12 +1,11 @@
 using System.Text.RegularExpressions;
-using System.Text.Json;
 
 namespace PowerForge;
 
 /// <summary>
 /// Builds, installs, launches, and discovers Apple devices through xcodebuild and xcrun devicectl.
 /// </summary>
-public sealed class AppleDeviceDeploymentService
+public sealed partial class AppleDeviceDeploymentService
 {
     private static readonly Regex DeviceLineRegex = new(
         @"^(?<name>.+?)\s{2,}(?<hostname>\S+)\s{2,}(?<identifier>[0-9A-Fa-f-]{36})\s{2,}(?<state>.+?)\s{2,}(?<model>.+)$",
@@ -40,32 +39,10 @@ public sealed class AppleDeviceDeploymentService
     public async Task<IReadOnlyList<AppleDeviceInfo>> GetDevicesAsync(
         AppleDeviceListRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                new[] { "devicectl", "list", "devices" },
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(1) : request.Timeout),
+        => await GetDevicesCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (!result.Succeeded)
-            throw CreateProcessException(result, "devicectl list devices failed.");
-
-        var devices = ParseDevices(result.StdOut)
-            .Where(device => request.IncludeUnavailable || device.IsAvailable);
-
-        if (!string.IsNullOrWhiteSpace(request.Device))
-        {
-            var filter = request.Device!.Trim();
-            devices = devices.Where(device => MatchesDevice(device, filter));
-        }
-
-        return devices.ToArray();
-    }
 
     /// <summary>
     /// Builds an Apple app for local device installation.
@@ -76,6 +53,27 @@ public sealed class AppleDeviceDeploymentService
     public async Task<AppleAppBuildResult> BuildAsync(
         AppleAppBuildRequest request,
         CancellationToken cancellationToken = default)
+        => (await BuildCoreAsync(
+            request,
+            bindProductForDeployment: false,
+            cancellationToken).ConfigureAwait(false)).Result;
+
+    /// <summary>
+    /// Builds an app while retaining an exact product identity through the
+    /// deployment consumer boundary.
+    /// </summary>
+    internal Task<AppleAppBuildOperation> BuildForDeploymentAsync(
+        AppleAppBuildRequest request,
+        CancellationToken cancellationToken = default)
+        => BuildCoreAsync(
+            request,
+            bindProductForDeployment: true,
+            cancellationToken);
+
+    private async Task<AppleAppBuildOperation> BuildCoreAsync(
+        AppleAppBuildRequest request,
+        bool bindProductForDeployment,
+        CancellationToken cancellationToken)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
@@ -88,41 +86,272 @@ public sealed class AppleDeviceDeploymentService
         if (!File.Exists(projectPath) && !Directory.Exists(projectPath))
             throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
 
+        // The local exact-source build surface is intentionally closed. Every
+        // build input must be represented by tracked Xcode metadata that the
+        // source-trust validator can inspect.
+        AppleBuildProvenance.RejectLocalBuildAdditionalArguments(
+            request.AdditionalArguments);
+        if (bindProductForDeployment && !string.IsNullOrWhiteSpace(request.AppPath))
+        {
+            throw new InvalidOperationException(
+                "Exact-source Apple deployment does not accept AppPath because xcodebuild does not produce a caller-selected path. " +
+                "Use ProductName when the built app name differs from Scheme.");
+        }
+        var xcodeBuildExecutable = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            request.XcodeBuildExecutable,
+            "xcodebuild",
+            "/usr/bin/xcodebuild",
+            "Exact-source local Apple builds");
+        var rsyncExecutable = request.UseBuildMirror
+            ? AppleTrustedExecutionEnvironment.ResolveSystemTool(
+                request.RsyncExecutable,
+                "rsync",
+                "/usr/bin/rsync",
+                "Exact-source local Apple build mirroring")
+            : null;
+
         var deviceIdentifier = await ResolveDeviceIdentifierAsync(
             request.DeviceIdentifier,
             request.Device,
             request.XcrunExecutable,
             request.Timeout,
+            requireTrustedSystemTool: true,
             cancellationToken).ConfigureAwait(false);
 
         var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform, request.ArchiveVariant);
         var derivedDataPath = ResolveDerivedDataPath(request);
-        var appPath = ResolveAppPath(request, derivedDataPath);
+        var resultDerivedDataPath = derivedDataPath;
+        var deploymentProductRoot = bindProductForDeployment
+            ? Path.Combine(
+                Path.GetTempPath(),
+                "PowerForge",
+                "apple-local-products",
+                Guid.NewGuid().ToString("N"))
+            : null;
+        string productDirectory = deploymentProductRoot ?? Path.Combine(
+            derivedDataPath,
+            "Build",
+            "Products",
+            GetProductDirectory(request));
+        string appPath = deploymentProductRoot is null
+            ? ResolveAppPath(request, derivedDataPath)
+            : Path.Combine(productDirectory, ResolveProductName(request) + ".app");
+        if (deploymentProductRoot is not null)
+        {
+            appPath = EnsurePathWithinProductDirectory(
+                appPath,
+                deploymentProductRoot);
+        }
         var buildProjectPath = projectPath;
         var workingDirectory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
         string? mirrorPath = null;
+        if (!string.IsNullOrWhiteSpace(request.BuildRoot))
+        {
+            var declaredBuildRoot = Path.GetFullPath(request.BuildRoot!);
+            EnsurePathWithinBuildRoot(
+                projectPath,
+                declaredBuildRoot,
+                FrameworkCompatibility.GetPathStringComparisonForPath(
+                    declaredBuildRoot));
+        }
+        var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
+        var sourcePathComparison =
+            FrameworkCompatibility.GetPathStringComparisonForPath(sourceRoot);
+        EnsurePathWithinBuildRoot(
+            projectPath,
+            sourceRoot,
+            sourcePathComparison);
+        EnsureOutputPathOutsideBuildRoot(
+            derivedDataPath,
+            sourceRoot,
+            nameof(request.DerivedDataPath),
+            sourcePathComparison);
+        if (deploymentProductRoot is not null)
+        {
+            EnsureOutputPathOutsideBuildRoot(
+                deploymentProductRoot,
+                sourceRoot,
+                "private Apple product directory",
+                sourcePathComparison);
+        }
+        EnsureOutputPathOutsideBuildRoot(
+            appPath,
+            sourceRoot,
+            nameof(request.AppPath),
+            sourcePathComparison);
+        AppleBuildProvenance.Snapshot sourceSnapshot;
+        AppleReleaseSourceMutationMonitor buildInputMonitor;
+        AppleReleaseSourceMutationMonitor? liveSourceMonitor = null;
 
         if (request.UseBuildMirror)
         {
-            var mirror = await MirrorBuildRootAsync(projectPath, request, cancellationToken).ConfigureAwait(false);
-            if (!mirror.ProcessResult.Succeeded)
+            var sourceMonitor = new AppleReleaseSourceMutationMonitor(
+                sourceRoot,
+                "local Apple source",
+                "rsync",
+                "Discard the build mirror and retry from a stable working tree.",
+                ignoredMutation: args =>
+                    AppleBuildProvenance.IsGitMetadataMutation(
+                        args,
+                        sourceRoot,
+                        sourcePathComparison));
+            try
             {
-                return new AppleAppBuildResult
+                sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
+                    sourceRoot,
+                    excludesGeneratedDirectories: true);
+                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                    sourceRoot,
+                    projectPath,
+                    request.Scheme);
+                var mirror = await MirrorBuildRootAsync(
+                    projectPath,
+                    request,
+                    rsyncExecutable!,
+                    sourcePathComparison,
+                    cancellationToken).ConfigureAwait(false);
+                if (!mirror.ProcessResult.Succeeded)
                 {
-                    AppPath = appPath,
-                    Destination = destination,
-                    DerivedDataPath = derivedDataPath,
-                    BuildMirrorPath = mirror.MirrorPath,
-                    ProcessResult = mirror.ProcessResult
-                };
+                    sourceMonitor.Dispose();
+                    return new AppleAppBuildOperation(
+                        new AppleAppBuildResult
+                        {
+                            AppPath = appPath,
+                            Destination = destination,
+                            DerivedDataPath = resultDerivedDataPath,
+                            BuildMirrorPath = mirror.MirrorPath,
+                            SourceRevision = sourceSnapshot.Revision,
+                            ProcessResult = mirror.ProcessResult
+                        },
+                        productSnapshot: null,
+                        derivedDataDirectory: null,
+                        ownedDerivedDataDirectory: null);
+                }
+
+                var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
+                    "The Apple build mirror completed without an active source monitor.");
+                AppleReleaseSourceMutationMonitor? continuedSourceMonitor = null;
+                try
+                {
+                    continuedSourceMonitor = new AppleReleaseSourceMutationMonitor(
+                        sourceRoot,
+                        "local Apple source",
+                        "xcodebuild",
+                        "Discard the product and rebuild from a stable working tree.",
+                        ignoredMutation: args =>
+                            AppleBuildProvenance.IsGitMetadataMutation(
+                                args,
+                                sourceRoot,
+                                sourcePathComparison));
+                    sourceMonitor.ValidateNoChanges(
+                        () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                    sourceMonitor.Dispose();
+
+                    buildProjectPath = RewritePath(
+                        projectPath,
+                        mirror.SourceRoot,
+                        mirror.MirrorPath,
+                        sourcePathComparison);
+                    workingDirectory = mirror.MirrorPath;
+                    mirrorPath = mirror.MirrorPath;
+                    buildInputMonitor = mirrorMonitor;
+                    liveSourceMonitor = continuedSourceMonitor;
+                }
+                catch
+                {
+                    continuedSourceMonitor?.Dispose();
+                    mirrorMonitor.Dispose();
+                    throw;
+                }
             }
-
-            buildProjectPath = RewritePath(projectPath, mirror.SourceRoot, mirror.MirrorPath);
-            workingDirectory = mirror.MirrorPath;
-            mirrorPath = mirror.MirrorPath;
+            catch
+            {
+                sourceMonitor.Dispose();
+                throw;
+            }
         }
+        else
+        {
+            var sourceMonitor = new AppleReleaseSourceMutationMonitor(
+                sourceRoot,
+                "local Apple source",
+                "xcodebuild",
+                "Discard the product and rebuild from a stable working tree.",
+                ignoredMutation: args =>
+                    AppleBuildProvenance.IsGitMetadataMutation(
+                        args,
+                        sourceRoot,
+                        sourcePathComparison));
+            try
+            {
+                sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
+                    sourceRoot,
+                    excludesGeneratedDirectories: false);
+                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                    sourceRoot,
+                    projectPath,
+                    request.Scheme);
+                buildInputMonitor = sourceMonitor;
+            }
+            catch
+            {
+                sourceMonitor.Dispose();
+                throw;
+            }
+        }
+        using var buildInputMonitorLease = buildInputMonitor;
+        using var liveSourceMonitorLease = liveSourceMonitor;
 
-        Directory.CreateDirectory(derivedDataPath);
+        using var derivedDataRoot = AppleDerivedDataBuildRoot.Create(
+            derivedDataPath,
+            sourceRoot,
+            sourcePathComparison);
+        derivedDataPath = derivedDataRoot.BuildPath;
+        resultDerivedDataPath = bindProductForDeployment
+            ? derivedDataRoot.ResultPath
+            : derivedDataRoot.BuildPath;
+        var derivedDataDirectory = derivedDataRoot.BuildDirectory;
+        var resultDerivedDataDirectory = derivedDataRoot.ResultDirectory;
+        if (deploymentProductRoot is null)
+        {
+            productDirectory = Path.Combine(
+                derivedDataPath,
+                "Build",
+                "Products",
+                GetProductDirectory(request));
+            appPath = ResolveAppPath(request, derivedDataPath);
+            EnsureOutputPathOutsideBuildRoot(
+                appPath,
+                sourceRoot,
+                nameof(request.AppPath),
+                sourcePathComparison);
+        }
+        AppleStableDirectoryIdentity? deploymentProductDirectory = null;
+        if (deploymentProductRoot is not null)
+        {
+            Directory.CreateDirectory(deploymentProductRoot);
+#if NET8_0_OR_GREATER
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(
+                    deploymentProductRoot,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+#endif
+            deploymentProductDirectory = AppleStableDirectoryIdentity.Capture(
+                deploymentProductRoot,
+                "private Apple product directory");
+            EnsureOutputPathOutsideBuildRoot(
+                deploymentProductDirectory.Path,
+                sourceRoot,
+                "private Apple product directory",
+                sourcePathComparison);
+            deploymentProductRoot = deploymentProductDirectory.Path;
+            productDirectory = deploymentProductDirectory.Path;
+            appPath = Path.Combine(
+                productDirectory,
+                ResolveProductName(request) + ".app");
+        }
 
         var args = new List<string>
         {
@@ -140,30 +369,148 @@ public sealed class AppleDeviceDeploymentService
 
         if (request.AllowProvisioningUpdates)
             args.Add("-allowProvisioningUpdates");
+        if (deploymentProductRoot is not null)
+            args.Add($"CONFIGURATION_BUILD_DIR={deploymentProductRoot}");
 
         args.Add("build");
-        args.AddRange(request.AdditionalArguments ?? Array.Empty<string>());
+        args.AddRange(AppleBuildProvenance.AppendXcodeBuildSetting(
+            request.AdditionalArguments,
+            sourceSnapshot.Revision));
 
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcodeBuildExecutable, "xcodebuild"),
+        AppleBuiltAppSnapshot? productSnapshot = null;
+        AppleSwiftPackageBuildSnapshot? packageSnapshot = null;
+
+        try
+        {
+            var approvedPackageRevisions =
+                AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
+                    projectPath);
+            if (approvedPackageRevisions.Count > 0)
+            {
+                packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
+                        _processRunner,
+                        xcodeBuildExecutable,
+                        projectPath,
+                        request.IsWorkspace,
+                        request.Scheme.Trim(),
+                        approvedPackageRevisions,
+                        sourceRoot,
+                        sourcePathComparison,
+                        request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                packageSnapshot.AppendLocalBuildArguments(args);
+            }
+
+            var processRequest = AppleTrustedExecutionEnvironment.CreateProcessRequest(
+                xcodeBuildExecutable,
+                "xcodebuild",
+                "/usr/bin/xcodebuild",
+                "Exact-source local Apple builds",
                 workingDirectory,
                 args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
+                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout,
+                isolateGitConfiguration: packageSnapshot is not null);
+            processRequest.SetPreStartBoundary(() =>
+            {
+                derivedDataRoot.ValidateFreshBeforeBuild();
+                deploymentProductDirectory?.ValidateUnchanged();
+                packageSnapshot?.ValidateRootDirectoryUnchanged();
+                EnsureOutputPathOutsideBuildRoot(
+                    derivedDataDirectory.Path,
+                    sourceRoot,
+                    nameof(request.DerivedDataPath),
+                    sourcePathComparison);
+            });
+            if (bindProductForDeployment)
+            {
+                var boundProductDirectory = deploymentProductDirectory
+                    ?? throw new InvalidOperationException(
+                        "Exact-source deployment did not bind its private product directory.");
+                processRequest.SetCompletionBoundary(completionResult =>
+                {
+                    if (!completionResult.Succeeded)
+                        return;
+                    derivedDataDirectory.ValidateUnchanged();
+                    boundProductDirectory.ValidateUnchanged();
+                    packageSnapshot?.ValidateRootDirectoryUnchanged();
+                    var producedAppPath = ResolveBuiltAppPath(
+                        request,
+                        productDirectory,
+                        appPath);
+                    productSnapshot = AppleBuiltAppSnapshot.Create(
+                        producedAppPath,
+                        boundProductDirectory.Path);
+                    boundProductDirectory.ValidateUnchanged();
+                });
+            }
 
-        var resolvedAppPath = result.Succeeded
-            ? ResolveBuiltAppPath(request, derivedDataPath, appPath)
-            : appPath;
+            processRequest.ValidatePreStartBoundaryForCompatibility();
+            var result = await _processRunner.RunAsync(
+                processRequest,
+                cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
 
-        return new AppleAppBuildResult
+            var resolvedAppPath = result.Succeeded
+                ? ResolveBuiltAppPath(request, productDirectory, appPath)
+                : appPath;
+
+            if (result.Succeeded)
+            {
+                packageSnapshot?.ValidateUnchanged();
+                buildInputMonitor.ValidateNoChanges(
+                    request.UseBuildMirror
+                        ? null
+                        : () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                liveSourceMonitor?.ValidateNoChanges(
+                    () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                derivedDataDirectory.ValidateUnchanged();
+                deploymentProductDirectory?.ValidateUnchanged();
+                if (bindProductForDeployment && productSnapshot is null)
+                {
+                    throw new InvalidOperationException(
+                        "xcodebuild completed without binding the built app product at its process completion boundary.");
+                }
+            }
+            else
+            {
+                productSnapshot?.Dispose();
+                productSnapshot = null;
+            }
+
+            var ownedDerivedDataDirectory = bindProductForDeployment
+                ? derivedDataRoot.ReleaseBuildDirectory()
+                : null;
+            if (!bindProductForDeployment && result.Succeeded)
+                derivedDataRoot.RetainBuildDirectory();
+            return new AppleAppBuildOperation(
+                new AppleAppBuildResult
+                {
+                    AppPath = resolvedAppPath,
+                    Destination = destination,
+                    DerivedDataPath = resultDerivedDataPath,
+                    BuildMirrorPath = mirrorPath,
+                    SourceRevision = sourceSnapshot.Revision,
+                    ProcessResult = result
+                },
+                productSnapshot,
+                resultDerivedDataDirectory,
+                ownedDerivedDataDirectory,
+                deploymentProductDirectory);
+        }
+        catch
         {
-            AppPath = resolvedAppPath,
-            Destination = destination,
-            DerivedDataPath = derivedDataPath,
-            BuildMirrorPath = mirrorPath,
-            ProcessResult = result
-        };
+            productSnapshot?.Dispose();
+            if (deploymentProductDirectory is not null)
+            {
+                try { deploymentProductDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
+            }
+            throw;
+        }
+        finally
+        {
+            packageSnapshot?.Dispose();
+        }
     }
 
     /// <summary>
@@ -175,43 +522,10 @@ public sealed class AppleDeviceDeploymentService
     public async Task<AppleAppInstallResult> InstallAsync(
         AppleAppInstallRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-        if (string.IsNullOrWhiteSpace(request.AppPath))
-            throw new ArgumentException("AppPath is required.", nameof(request));
-
-        var appPath = Path.GetFullPath(request.AppPath);
-        if (!Directory.Exists(appPath))
-            throw new DirectoryNotFoundException($"App path was not found: {appPath}");
-
-        var deviceIdentifier = await ResolveDeviceIdentifierAsync(
-            request.DeviceIdentifier,
-            request.Device,
-            request.XcrunExecutable,
-            request.Timeout,
+        => await InstallCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(deviceIdentifier))
-            throw new ArgumentException("DeviceIdentifier or Device is required.", nameof(request));
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                new[] { "devicectl", "device", "install", "app", "--device", deviceIdentifier!, appPath },
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(10) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        return new AppleAppInstallResult
-        {
-            DeviceIdentifier = deviceIdentifier!,
-            AppPath = appPath,
-            BundleIdentifier = MatchValue(BundleIdRegex, result.StdOut),
-            InstallationUrl = MatchValue(InstallationUrlRegex, result.StdOut),
-            ProcessResult = result
-        };
-    }
 
     /// <summary>
     /// Launches an installed app on a physical device.
@@ -222,51 +536,10 @@ public sealed class AppleDeviceDeploymentService
     public async Task<AppleAppLaunchResult> LaunchAsync(
         AppleAppLaunchRequest request,
         CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-        if (string.IsNullOrWhiteSpace(request.BundleIdentifier))
-            throw new ArgumentException("BundleIdentifier is required.", nameof(request));
-
-        var deviceIdentifier = await ResolveDeviceIdentifierAsync(
-            request.DeviceIdentifier,
-            request.Device,
-            request.XcrunExecutable,
-            request.Timeout,
+        => await LaunchCoreAsync(
+            request,
+            requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(deviceIdentifier))
-            throw new ArgumentException("DeviceIdentifier or Device is required.", nameof(request));
-
-        var arguments = new List<string>
-        {
-            "devicectl", "device", "process", "launch", "--device", deviceIdentifier!
-        };
-        if (request.EnvironmentVariables.Count > 0)
-        {
-            arguments.Add("--environment-variables");
-            arguments.Add(JsonSerializer.Serialize(request.EnvironmentVariables));
-        }
-        if (request.TerminateExisting)
-            arguments.Add("--terminate-existing");
-        arguments.Add(request.BundleIdentifier.Trim());
-        arguments.AddRange(request.Arguments);
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.XcrunExecutable, "xcrun"),
-                Directory.GetCurrentDirectory(),
-                arguments,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(2) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        return new AppleAppLaunchResult
-        {
-            DeviceIdentifier = deviceIdentifier!,
-            BundleIdentifier = request.BundleIdentifier.Trim(),
-            ProcessResult = result
-        };
-    }
 
     /// <summary>
     /// Builds, installs, and optionally launches an Apple app on a physical device.
@@ -280,8 +553,16 @@ public sealed class AppleDeviceDeploymentService
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
+            request.XcrunExecutable,
+            "xcrun",
+            "/usr/bin/xcrun",
+            "Exact-source Apple device deployment");
 
-        var build = await BuildAsync(request, cancellationToken).ConfigureAwait(false);
+        using var buildOperation = await BuildForDeploymentAsync(
+            request,
+            cancellationToken).ConfigureAwait(false);
+        var build = buildOperation.Result;
         var deployment = new AppleAppDeviceDeploymentResult
         {
             Build = build,
@@ -291,15 +572,19 @@ public sealed class AppleDeviceDeploymentService
         if (!build.Succeeded)
             return deployment;
 
+        var retainedAppPath = buildOperation.PreserveResultProduct();
+
         var deployDeviceIdentifier = request.DeviceIdentifier ?? TryParseDestinationDeviceIdentifier(request.Destination);
-        var install = await InstallAsync(new AppleAppInstallRequest
+        var install = await InstallCoreAsync(new AppleAppInstallRequest
         {
             DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
-            AppPath = build.AppPath,
+            AppPath = buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
             XcrunExecutable = request.XcrunExecutable,
             Timeout = request.Timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
+        buildOperation.ProductSnapshot?.ValidateUnchanged();
+        install.AppPath = retainedAppPath;
         deployment.Install = install;
 
         if (!install.Succeeded || !request.Launch)
@@ -311,7 +596,7 @@ public sealed class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(bundleIdentifier))
             throw new InvalidOperationException("BundleIdentifier is required to launch and could not be parsed from the install output.");
 
-        deployment.Launch = await LaunchAsync(new AppleAppLaunchRequest
+        deployment.Launch = await LaunchCoreAsync(new AppleAppLaunchRequest
         {
             DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
@@ -321,7 +606,7 @@ public sealed class AppleDeviceDeploymentService
             Arguments = request.LaunchArguments,
             TerminateExisting = request.TerminateExisting,
             Timeout = request.Timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
 
         return deployment;
     }
@@ -364,6 +649,7 @@ public sealed class AppleDeviceDeploymentService
         string? device,
         string xcrunExecutable,
         TimeSpan timeout,
+        bool requireTrustedSystemTool,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(deviceIdentifier))
@@ -372,12 +658,12 @@ public sealed class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(device))
             return null;
 
-        var matches = await GetDevicesAsync(new AppleDeviceListRequest
+        var matches = await GetDevicesCoreAsync(new AppleDeviceListRequest
         {
             XcrunExecutable = xcrunExecutable,
             Device = device,
             Timeout = timeout <= TimeSpan.Zero ? TimeSpan.FromMinutes(1) : timeout
-        }, cancellationToken).ConfigureAwait(false);
+        }, requireTrustedSystemTool, cancellationToken).ConfigureAwait(false);
 
         if (matches.Count == 0)
             throw new InvalidOperationException($"No available Apple device matched '{device}'.");
@@ -385,49 +671,6 @@ public sealed class AppleDeviceDeploymentService
             throw new InvalidOperationException($"Multiple available Apple devices matched '{device}'. Use DeviceIdentifier.");
 
         return matches[0].Identifier;
-    }
-
-    private async Task<MirrorResult> MirrorBuildRootAsync(
-        string projectPath,
-        AppleAppBuildRequest request,
-        CancellationToken cancellationToken)
-    {
-        var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
-        var mirrorPath = ResolveBuildMirrorPath(request);
-        var normalizedSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        var normalizedMirrorPath = EnsureTrailingDirectorySeparator(Path.GetFullPath(mirrorPath));
-        if (normalizedMirrorPath.StartsWith(normalizedSourceRoot, StringComparison.Ordinal))
-            throw new InvalidOperationException("BuildMirrorPath must not be inside the mirrored build root.");
-
-        Directory.CreateDirectory(mirrorPath);
-
-        var args = new List<string>
-        {
-            "-a",
-            "--delete",
-            "--exclude",
-            ".git",
-            "--exclude",
-            ".build",
-            "--exclude",
-            ".swiftpm",
-            "--exclude",
-            "build",
-            "--exclude",
-            "DerivedData",
-            normalizedSourceRoot,
-            normalizedMirrorPath
-        };
-
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                NormalizeExecutable(request.RsyncExecutable, "rsync"),
-                sourceRoot,
-                args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
-
-        return new MirrorResult(sourceRoot, mirrorPath, result);
     }
 
     private static string ResolveDestination(
@@ -444,68 +687,17 @@ public sealed class AppleDeviceDeploymentService
         return AppleAppArchiveService.GetGenericDestination(platform, archiveVariant);
     }
 
-    private static string ResolveDerivedDataPath(AppleAppBuildRequest request)
+    internal static string ResolveBuildRoot(string projectPath, string? buildRoot)
     {
-        if (!string.IsNullOrWhiteSpace(request.DerivedDataPath))
-            return Path.GetFullPath(request.DerivedDataPath!);
-
-        var safeScheme = SanitizePathPart(request.Scheme);
-        var uniqueSuffix = Guid.NewGuid().ToString("N").Substring(0, 12);
-        return Path.Combine(Path.GetTempPath(), "powerforge-apple-derived-data", $"{safeScheme}-{uniqueSuffix}");
-    }
-
-    private static string ResolveAppPath(AppleAppBuildRequest request, string derivedDataPath)
-    {
-        if (!string.IsNullOrWhiteSpace(request.AppPath))
-            return Path.GetFullPath(request.AppPath!);
-
-        var productName = string.IsNullOrWhiteSpace(request.ProductName) ? request.Scheme.Trim() : request.ProductName!.Trim();
-        return Path.Combine(derivedDataPath, "Build", "Products", GetProductDirectory(request), $"{productName}.app");
-    }
-
-    private static string ResolveBuiltAppPath(AppleAppBuildRequest request, string derivedDataPath, string expectedAppPath)
-    {
-        if (!string.IsNullOrWhiteSpace(request.AppPath) ||
-            !string.IsNullOrWhiteSpace(request.ProductName) ||
-            Directory.Exists(expectedAppPath))
-        {
-            return expectedAppPath;
-        }
-
-        var productDirectory = Path.Combine(derivedDataPath, "Build", "Products", GetProductDirectory(request));
-        if (!Directory.Exists(productDirectory))
-            return expectedAppPath;
-
-        var candidates = Directory.EnumerateDirectories(productDirectory, "*.app", SearchOption.TopDirectoryOnly).ToArray();
-        return candidates.Length == 1 ? candidates[0] : expectedAppPath;
-    }
-
-    private static string GetProductDirectory(AppleAppBuildRequest request)
-    {
-        var configuration = string.IsNullOrWhiteSpace(request.Configuration) ? "Debug" : request.Configuration.Trim();
-        return request.Platform == ApplePlatform.macOS
-            ? request.ArchiveVariant == AppleArchiveVariant.MacCatalyst
-                ? $"{configuration}-maccatalyst"
-                : configuration
-            : $"{configuration}-{GetSdkProductSuffix(request.Platform)}";
-    }
-
-    private static string GetSdkProductSuffix(ApplePlatform platform)
-        => platform switch
-        {
-            ApplePlatform.iOS => "iphoneos",
-            ApplePlatform.iPadOS => "iphoneos",
-            ApplePlatform.tvOS => "appletvos",
-            ApplePlatform.watchOS => "watchos",
-            ApplePlatform.visionOS => "xros",
-            ApplePlatform.macOS => "macosx",
-            _ => "iphoneos"
-        };
-
-    private static string ResolveBuildRoot(string projectPath, string? buildRoot)
-    {
+        var requestedRoot = !string.IsNullOrWhiteSpace(buildRoot)
+            ? Path.GetFullPath(buildRoot!)
+            : projectPath;
+        var repositoryRoot = AppleBuildProvenance.ResolveRepositoryRoot(
+            requestedRoot);
+        if (!string.IsNullOrWhiteSpace(repositoryRoot))
+            return repositoryRoot!;
         if (!string.IsNullOrWhiteSpace(buildRoot))
-            return Path.GetFullPath(buildRoot!);
+            return requestedRoot;
 
         var root = Directory.Exists(projectPath)
             ? Path.GetDirectoryName(projectPath)
@@ -516,25 +708,60 @@ public sealed class AppleDeviceDeploymentService
         return Path.GetFullPath(root!);
     }
 
-    private static string ResolveBuildMirrorPath(AppleAppBuildRequest request)
+    internal static void EnsurePathWithinBuildRoot(
+        string projectPath,
+        string sourceRoot,
+        StringComparison sourcePathComparison)
     {
-        if (!string.IsNullOrWhiteSpace(request.BuildMirrorPath))
-            return Path.GetFullPath(request.BuildMirrorPath!);
+        var fullProjectPath = Path.GetFullPath(projectPath);
+        var fullSourceRoot = Path.GetFullPath(sourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var prefix = EnsureTrailingDirectorySeparator(fullSourceRoot);
+        if (!fullProjectPath.Equals(fullSourceRoot, sourcePathComparison) &&
+            !fullProjectPath.StartsWith(prefix, sourcePathComparison))
+        {
+            throw new InvalidOperationException(
+                $"ProjectPath '{fullProjectPath}' must be contained by BuildRoot '{fullSourceRoot}'.");
+        }
 
-        var safeScheme = SanitizePathPart(request.Scheme);
-        var uniqueSuffix = Guid.NewGuid().ToString("N").Substring(0, 12);
-        return Path.Combine(Path.GetTempPath(), "powerforge-apple-build-mirror", $"{safeScheme}-{uniqueSuffix}");
+        var current = fullProjectPath;
+        while (true)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"ProjectPath must not traverse a symbolic link or reparse point: '{current}'.");
+            }
+            if (current.Equals(fullSourceRoot, sourcePathComparison))
+                break;
+            current = Path.GetDirectoryName(current)
+                ?? throw new InvalidOperationException(
+                    $"Unable to verify ProjectPath '{fullProjectPath}' against BuildRoot '{fullSourceRoot}'.");
+        }
     }
 
-    private static string RewritePath(string path, string sourceRoot, string mirrorPath)
+    internal static void EnsureOutputPathOutsideBuildRoot(
+        string outputPath,
+        string sourceRoot,
+        string parameterName,
+        StringComparison sourcePathComparison)
     {
-        var fullPath = Path.GetFullPath(path);
-        var fullSourceRoot = EnsureTrailingDirectorySeparator(Path.GetFullPath(sourceRoot));
-        if (!fullPath.StartsWith(fullSourceRoot, StringComparison.Ordinal))
-            return fullPath;
-
-        var relative = fullPath.Substring(fullSourceRoot.Length);
-        return Path.Combine(mirrorPath, relative);
+        var fullOutputPath = AppleReleaseArtifactService.ResolvePhysicalPath(outputPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullSourceRoot = AppleReleaseArtifactService.ResolvePhysicalPath(sourceRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (fullSourceRoot.Equals(fullOutputPath, sourcePathComparison) ||
+            fullSourceRoot.StartsWith(
+                EnsureTrailingDirectorySeparator(fullOutputPath),
+                sourcePathComparison) ||
+            fullOutputPath.StartsWith(
+                EnsureTrailingDirectorySeparator(fullSourceRoot),
+                sourcePathComparison))
+        {
+            throw new InvalidOperationException(
+                $"{parameterName} '{fullOutputPath}' must be outside BuildRoot '{fullSourceRoot}'.");
+        }
     }
 
     private static bool MatchesDevice(AppleDeviceInfo device, string filter)
@@ -598,19 +825,4 @@ public sealed class AppleDeviceDeploymentService
         return path + Path.DirectorySeparatorChar;
     }
 
-    private sealed class MirrorResult
-    {
-        public MirrorResult(string sourceRoot, string mirrorPath, ProcessRunResult processResult)
-        {
-            SourceRoot = sourceRoot;
-            MirrorPath = mirrorPath;
-            ProcessResult = processResult;
-        }
-
-        public string SourceRoot { get; }
-
-        public string MirrorPath { get; }
-
-        public ProcessRunResult ProcessResult { get; }
-    }
 }

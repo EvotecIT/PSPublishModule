@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -40,16 +39,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         "SWIFT_SYSTEM_INCLUDE_PATHS"
     };
 
-    private static readonly HashSet<string> FlagBuildSettings = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "OTHER_CFLAGS",
-        "OTHER_CPLUSPLUSFLAGS",
-        "OTHER_LDFLAGS",
-        "OTHER_LIBTOOLFLAGS",
-        "MTL_COMPILER_FLAGS",
-        "OTHER_SWIFT_FLAGS",
-        "INFOPLIST_OTHER_PREPROCESSOR_FLAGS"
-    };
+    private static bool IsFlagBuildSetting(string key)
+        => key.EndsWith("FLAGS", StringComparison.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> DefinitionBuildSettings = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -89,12 +80,49 @@ internal sealed partial class AppleReleaseSourceTrustService
         IReadOnlyCollection<string> generatedOutputPaths)
     {
         foreach (var app in apps.Where(static value => value.Enabled && !string.IsNullOrWhiteSpace(value.ProjectPath)))
-            EnsureTrackedSharedScheme(repositoryRoot, projectRoot, app, metadataPaths);
+        {
+            EnsureTrackedSharedScheme(
+                repositoryRoot,
+                projectRoot,
+                app,
+                metadataPaths);
+        }
 
         foreach (var metadataPath in metadataPaths.Where(path =>
                      path.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase) && File.Exists(path)))
         {
-            ValidateProjectGraph(repositoryRoot, metadataPath, metadataPaths, generatedOutputPaths);
+            ValidateWholeProjectGraph(
+                repositoryRoot,
+                metadataPath,
+                metadataPaths,
+                generatedOutputPaths);
+        }
+    }
+
+    private void ValidateWholeProjectGraph(
+        string repositoryRoot,
+        string metadataPath,
+        IReadOnlyCollection<string> metadataPaths,
+        IReadOnlyCollection<string> generatedOutputPaths)
+    {
+        try
+        {
+            ValidateProjectGraph(
+                repositoryRoot,
+                metadataPath,
+                metadataPaths,
+                generatedOutputPaths);
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or FileNotFoundException)
+        {
+            throw new InvalidOperationException(
+                "Exact-source Apple builds conservatively attest the complete referenced Xcode project because " +
+                "xcodebuild does not expose an authoritative pre-build selected-target input graph. " +
+                "Fix the reported project input; if it belongs only to an unrelated target, move that target or input " +
+                "into a separate project before retrying. " +
+                exception.Message,
+                exception);
         }
     }
 
@@ -144,121 +172,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private void EnsureTrackedSharedScheme(
-        string repositoryRoot,
-        string projectRoot,
-        AppleAppConfiguration app,
-        IReadOnlyCollection<string> metadataPaths)
-    {
-        if (string.IsNullOrWhiteSpace(app.Scheme))
-            throw new InvalidOperationException($"Apple app '{app.Name}' requires a shared Xcode scheme for an exact-source checkpoint.");
-
-        var scheme = app.Scheme!.Trim();
-        if (!Path.GetFileName(scheme).Equals(scheme, StringComparison.Ordinal) ||
-            scheme.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }) >= 0)
-            throw new InvalidOperationException($"Apple app '{app.Name}' scheme must be a simple shared scheme name: {scheme}");
-
-        var configuredContainer = ResolvePath(projectRoot, app.ProjectPath!);
-        var containers = new HashSet<string>(GetPathComparer()) { configuredContainer };
-        if (configuredContainer.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var metadataPath in metadataPaths)
-            {
-                if (metadataPath.EndsWith("project.pbxproj", StringComparison.OrdinalIgnoreCase))
-                    containers.Add(Path.GetDirectoryName(metadataPath)!);
-            }
-        }
-
-        var candidates = containers
-            .Select(container => Path.Combine(container, "xcshareddata", "xcschemes", scheme + ".xcscheme"))
-            .Where(File.Exists)
-            .Distinct(GetPathComparer())
-            .ToArray();
-        if (candidates.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"Apple app '{app.Name}' scheme '{scheme}' must exist as tracked shared Xcode metadata. " +
-                "User schemes under xcuserdata are not exact-source release inputs.");
-        }
-        if (candidates.Length > 1)
-        {
-            throw new InvalidOperationException(
-                $"Apple app '{app.Name}' scheme '{scheme}' is ambiguous across {candidates.Length} shared Xcode containers.");
-        }
-
-        EnsureTrackedFile(repositoryRoot, candidates[0], $"Apple app '{app.Name}' shared scheme");
-        ValidateScheme(repositoryRoot, candidates[0], metadataPaths);
-    }
-
-    private void ValidateScheme(
-        string repositoryRoot,
-        string schemePath,
-        IReadOnlyCollection<string> metadataPaths)
-    {
-        var document = XDocument.Load(schemePath, LoadOptions.None);
-        if (document.Descendants().Any(element =>
-                element.Name.LocalName.Equals("ExecutionAction", StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException(
-                $"Shared Xcode scheme actions are not accepted for exact-source checkpoints because their runtime inputs cannot be proven: {schemePath}");
-        }
-
-        var schemeContainer = FindXcodeContainer(schemePath)
-            ?? throw new InvalidOperationException($"Shared Xcode scheme is not inside an Xcode project or workspace: {schemePath}");
-        var containerRoot = Path.GetDirectoryName(schemeContainer)!;
-        var knownMetadata = new HashSet<string>(metadataPaths.Select(Path.GetFullPath), GetPathComparer());
-        foreach (var reference in document.Descendants()
-                     .Select(element => element.Attribute("ReferencedContainer")?.Value)
-                     .Where(static value => !string.IsNullOrWhiteSpace(value)))
-        {
-            var referencedContainer = ResolveSchemeContainer(reference!, containerRoot);
-            EnsurePathWithinRepository(repositoryRoot, referencedContainer, "Xcode scheme referenced container");
-            if (!Directory.Exists(referencedContainer))
-                throw new DirectoryNotFoundException($"Xcode scheme referenced container was not found: {referencedContainer}");
-            EnsureNoLinkedTraversal(repositoryRoot, referencedContainer, "Xcode scheme referenced container");
-
-            var metadataPath = referencedContainer.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase)
-                ? Path.Combine(referencedContainer, "contents.xcworkspacedata")
-                : referencedContainer.EndsWith(".xcodeproj", StringComparison.OrdinalIgnoreCase)
-                    ? Path.Combine(referencedContainer, "project.pbxproj")
-                    : throw new InvalidOperationException(
-                        $"Xcode scheme referenced container is not a project or workspace: {referencedContainer}");
-            EnsureTrackedFile(repositoryRoot, metadataPath, "Xcode scheme referenced container metadata");
-            if (!knownMetadata.Contains(Path.GetFullPath(metadataPath)))
-            {
-                throw new InvalidOperationException(
-                    $"Xcode scheme references a container outside the validated project/workspace graph: {referencedContainer}");
-            }
-        }
-    }
-
-    private static string? FindXcodeContainer(string schemePath)
-    {
-        var current = Path.GetDirectoryName(schemePath);
-        while (!string.IsNullOrWhiteSpace(current))
-        {
-            if (current.EndsWith(".xcodeproj", StringComparison.OrdinalIgnoreCase) ||
-                current.EndsWith(".xcworkspace", StringComparison.OrdinalIgnoreCase))
-                return current;
-            current = Path.GetDirectoryName(current);
-        }
-        return null;
-    }
-
-    private static string ResolveSchemeContainer(string reference, string containerRoot)
-    {
-        var separator = reference.IndexOf(':');
-        var kind = separator < 0 ? "container" : reference.Substring(0, separator);
-        var value = separator < 0 ? reference : reference.Substring(separator + 1);
-        return kind.ToLowerInvariant() switch
-        {
-            "container" or "group" => ResolvePath(containerRoot, value),
-            "absolute" => throw new InvalidOperationException(
-                $"Absolute Xcode scheme references are not accepted for exact-source snapshot builds: {reference}"),
-            _ => throw new InvalidOperationException($"Unsupported Xcode scheme container kind '{kind}'.")
-        };
-    }
-
     private void ValidateProjectGraph(
         string repositoryRoot,
         string metadataPath,
@@ -269,18 +182,14 @@ internal sealed partial class AppleReleaseSourceTrustService
         var packageLockPaths = ResolveEffectivePackageLockPaths(metadataPath, metadataPaths);
         var objects = ParsePbxObjects(File.ReadAllText(metadataPath));
         var parents = BuildPbxParentMap(objects);
-        var buildFileReferences = objects.Values
-            .Where(static value => value.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
-            .Select(value => ReadPbxScalar(value.Body, "fileRef"))
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var nativeTargetProductReferences = objects.Values
-            .Where(static value => value.Isa.Equals("PBXNativeTarget", StringComparison.OrdinalIgnoreCase))
-            .Select(value => ReadPbxScalar(value.Body, "productReference"))
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value!.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)[0])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var buildFileReferences = ResolvePbxReferences(
+            objects,
+            "PBXBuildFile",
+            "fileRef");
+        var nativeTargetProductReferences = ResolvePbxReferences(
+            objects,
+            "PBXNativeTarget",
+            "productReference");
         var shippingSources = ResolveShippingSourceOwnership(
             repositoryRoot,
             projectDirectory,
@@ -317,7 +226,10 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         foreach (var item in objects.Values)
         {
-            EnsureExecutionMetadataAccepted(item.Isa, metadataPath, _validationScope);
+            EnsureExecutionMetadataAccepted(
+                item.Isa,
+                metadataPath,
+                _validationScope);
 
             if (item.Isa.Equals("PBXBuildFile", StringComparison.OrdinalIgnoreCase))
             {
@@ -343,7 +255,10 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             if (item.Isa.Equals("XCRemoteSwiftPackageReference", StringComparison.OrdinalIgnoreCase))
             {
-                ValidateRemotePackageReference(repositoryRoot, packageLockPaths, item);
+                ValidateRemotePackageReference(
+                    repositoryRoot,
+                    packageLockPaths,
+                    item);
                 continue;
             }
 
@@ -503,7 +418,11 @@ internal sealed partial class AppleReleaseSourceTrustService
         foreach (var packageLock in locks)
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
         var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!);
-        ValidateRemotePackageSource(repositoryUrl!, resolvedRevision, packageLockPaths);
+        ValidateRemotePackageIdentity(repositoryUrl!, resolvedRevision);
+        ValidateRemotePackageSource(
+            repositoryUrl!,
+            resolvedRevision,
+            packageLockPaths);
     }
 
     private void ValidateResolvedProjectInput(
@@ -595,6 +514,32 @@ internal sealed partial class AppleReleaseSourceTrustService
             .ToHashSet(GetPathComparer());
         var headBlobs = ReadHeadTreeBlobIds(repositoryRoot, relativeRoot);
         var entries = EnumerateTreeWithoutLinks(path, name);
+        var impliedDirectories = new HashSet<string>(GetPathComparer());
+        foreach (var trackedPath in tracked.Where(File.Exists))
+        {
+            var directory = Path.GetDirectoryName(trackedPath);
+            while (!string.IsNullOrWhiteSpace(directory) &&
+                   IsPathAtOrWithin(directory!, path))
+            {
+                if (!impliedDirectories.Add(Path.GetFullPath(directory!)) ||
+                    GetPathComparer().Equals(
+                        Path.GetFullPath(directory!),
+                        Path.GetFullPath(path)))
+                {
+                    break;
+                }
+                directory = Path.GetDirectoryName(directory);
+            }
+        }
+        var untrackedDirectory = new[] { Path.GetFullPath(path) }
+            .Concat(entries.Where(Directory.Exists).Select(Path.GetFullPath))
+            .FirstOrDefault(directory => !impliedDirectories.Contains(directory));
+        if (untrackedDirectory is not null)
+        {
+            throw new InvalidOperationException(
+                $"{name} contains a directory that is not represented by tracked source at the exact commit: " +
+                FrameworkCompatibility.GetRelativePath(repositoryRoot, untrackedDirectory).Replace('\\', '/'));
+        }
         var trackedFiles = entries
             .Where(File.Exists)
             .Select(Path.GetFullPath)

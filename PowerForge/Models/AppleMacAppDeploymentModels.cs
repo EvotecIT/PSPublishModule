@@ -20,13 +20,22 @@ public sealed class AppleMacAppDeploymentRequest : AppleAppBuildRequest
     /// <summary>Terminate processes running from the installed bundle before applying the launch profile.</summary>
     public bool TerminateExisting { get; set; } = true;
 
-    /// <summary>ditto executable used to preserve the application bundle while copying.</summary>
+    /// <summary>
+    /// ditto executable used to preserve the application bundle while copying.
+    /// Exact-source deployment accepts only ditto or /usr/bin/ditto.
+    /// </summary>
     public string DittoExecutable { get; set; } = "/usr/bin/ditto";
 
-    /// <summary>open executable used to launch the installed app.</summary>
+    /// <summary>
+    /// open executable used to launch the installed app. Exact-source deployment
+    /// accepts only open or /usr/bin/open.
+    /// </summary>
     public string OpenExecutable { get; set; } = "/usr/bin/open";
 
-    /// <summary>pkill executable used to terminate prior instances from the installed bundle.</summary>
+    /// <summary>
+    /// pkill executable used to terminate prior instances from the installed bundle.
+    /// Exact-source deployment accepts only pkill or /usr/bin/pkill.
+    /// </summary>
     public string PkillExecutable { get; set; } = "/usr/bin/pkill";
 }
 
@@ -35,7 +44,7 @@ public sealed class AppleMacAppDeploymentRequest : AppleAppBuildRequest
 /// </summary>
 public sealed class AppleMacAppInstallResult
 {
-    /// <summary>Source app bundle produced by xcodebuild.</summary>
+    /// <summary>Durable source app bundle retained from the exact xcodebuild product.</summary>
     public string SourceAppPath { get; set; } = string.Empty;
 
     /// <summary>Final installed app bundle path.</summary>
