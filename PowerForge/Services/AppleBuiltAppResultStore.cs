@@ -19,10 +19,14 @@ internal static class AppleBuiltAppResultStore
                 Path.GetFullPath(derivedDataPath)),
             "PowerForge",
             "DeploymentProducts");
-        var retainedRoot = Path.Combine(outputRoot, identity.Sha256);
+        var bundleName = Path.GetFileName(snapshot.AppPath);
+        var contentRoot = Path.Combine(outputRoot, identity.Sha256);
+        var retainedRoot = Path.Combine(
+            contentRoot,
+            ComputeBundleNameKey(bundleName));
         var retainedAppPath = Path.Combine(
             retainedRoot,
-            Path.GetFileName(snapshot.AppPath));
+            bundleName);
 
         Directory.CreateDirectory(outputRoot);
         EnsurePathHasNoLinkedAncestor(
@@ -39,6 +43,10 @@ internal static class AppleBuiltAppResultStore
                 UnixFileMode.UserExecute);
         }
 #endif
+        Directory.CreateDirectory(contentRoot);
+        EnsurePathHasNoLinkedAncestor(
+            contentRoot,
+            "Apple deployment result content store");
         if (Directory.Exists(retainedRoot) || File.Exists(retainedRoot))
         {
             ValidateRetainedProduct(retainedAppPath, identity.Sha256);
@@ -51,7 +59,7 @@ internal static class AppleBuiltAppResultStore
             $".powerforge-stage-{Guid.NewGuid():N}");
         var stagedAppPath = Path.Combine(
             stageRoot,
-            Path.GetFileName(snapshot.AppPath));
+            bundleName);
         Directory.CreateDirectory(stageRoot);
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
@@ -88,6 +96,15 @@ internal static class AppleBuiltAppResultStore
                 try { AppleArtifactCopy.DeleteOwnedDirectory(stageRoot); } catch { /* best effort private cleanup */ }
             }
         }
+    }
+
+    private static string ComputeBundleNameKey(string bundleName)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return BitConverter.ToString(
+                sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(bundleName)))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
     }
 
     private static void ValidateRetainedProduct(

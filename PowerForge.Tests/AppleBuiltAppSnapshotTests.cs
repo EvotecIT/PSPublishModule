@@ -95,6 +95,38 @@ public sealed class AppleBuiltAppSnapshotTests
         }
     }
 
+    [Fact]
+    public void Preserve_namespaces_identical_products_by_bundle_name()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.BuiltAppSnapshot",
+            Guid.NewGuid().ToString("N")));
+        var firstApp = Directory.CreateDirectory(Path.Combine(root.FullName, "First.app"));
+        var secondApp = Directory.CreateDirectory(Path.Combine(root.FullName, "Second.app"));
+        File.WriteAllText(Path.Combine(firstApp.FullName, "payload"), "identical");
+        File.WriteAllText(Path.Combine(secondApp.FullName, "payload"), "identical");
+        var derivedData = Path.Combine(root.FullName, "DerivedData");
+        try
+        {
+            using var firstSnapshot = AppleBuiltAppSnapshot.Create(firstApp.FullName);
+            using var secondSnapshot = AppleBuiltAppSnapshot.Create(secondApp.FullName);
+
+            var first = AppleBuiltAppResultStore.Preserve(firstSnapshot, derivedData);
+            var second = AppleBuiltAppResultStore.Preserve(secondSnapshot, derivedData);
+
+            Assert.NotEqual(first, second);
+            Assert.Equal("First.app", Path.GetFileName(first));
+            Assert.Equal("Second.app", Path.GetFileName(second));
+            Assert.True(Directory.Exists(first));
+            Assert.True(Directory.Exists(second));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static DirectoryInfo CreateAppFixture(out string payload)
     {
         var root = Directory.CreateDirectory(Path.Combine(
