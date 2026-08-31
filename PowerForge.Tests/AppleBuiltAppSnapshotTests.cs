@@ -174,6 +174,42 @@ public sealed class AppleBuiltAppSnapshotTests
         }
     }
 
+    [Fact]
+    public void Preserve_rejects_an_existing_symlink_below_derived_data_before_writing()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = CreateAppFixture(out _);
+        var derivedData = Path.Combine(root.Parent!.FullName, "DerivedData");
+        var redirected = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.BuiltAppResultRedirect",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            using var snapshot = AppleBuiltAppSnapshot.Create(root.FullName);
+            var store = CreateResultStore(derivedData);
+            Directory.CreateSymbolicLink(
+                Path.Combine(derivedData, "PowerForge"),
+                redirected.FullName);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                AppleBuiltAppResultStore.Preserve(snapshot, store));
+
+            Assert.Contains(
+                "must not traverse a symbolic link",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(redirected.EnumerateFileSystemInfos());
+        }
+        finally
+        {
+            try { root.Parent!.Delete(recursive: true); } catch { /* best effort */ }
+            try { redirected.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static AppleStableDirectoryIdentity CreateResultStore(string path)
     {
         Directory.CreateDirectory(path);

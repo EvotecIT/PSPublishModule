@@ -104,6 +104,7 @@ public sealed partial class AppleDeviceDeploymentService
                 }
             });
 
+            processRequest.ValidatePreStartBoundaryForCompatibility();
             var result = await _processRunner.RunAsync(
                 processRequest,
                 cancellationToken).ConfigureAwait(false);

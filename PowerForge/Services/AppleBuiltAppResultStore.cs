@@ -31,10 +31,7 @@ internal static class AppleBuiltAppResultStore
             retainedRoot,
             bundleName);
 
-        derivedDataDirectory.ValidateUnchanged();
-        Directory.CreateDirectory(outputRoot);
-        derivedDataDirectory.ValidateUnchanged();
-        EnsurePathHasNoLinkedAncestor(
+        CreateDirectoryWithoutLinkedAncestors(
             outputRoot,
             "Apple deployment result store");
 #if NET8_0_OR_GREATER
@@ -48,8 +45,7 @@ internal static class AppleBuiltAppResultStore
                 UnixFileMode.UserExecute);
         }
 #endif
-        Directory.CreateDirectory(contentRoot);
-        EnsurePathHasNoLinkedAncestor(
+        CreateDirectoryWithoutLinkedAncestors(
             contentRoot,
             "Apple deployment result content store");
         if (Directory.Exists(retainedRoot) || File.Exists(retainedRoot))
@@ -65,7 +61,9 @@ internal static class AppleBuiltAppResultStore
         var stagedAppPath = Path.Combine(
             stageRoot,
             bundleName);
-        Directory.CreateDirectory(stageRoot);
+        CreateDirectoryWithoutLinkedAncestors(
+            stageRoot,
+            "Apple deployment result staging directory");
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
         {
@@ -83,6 +81,9 @@ internal static class AppleBuiltAppResultStore
             snapshot.ValidateUnchanged();
             try
             {
+                EnsurePathHasNoLinkedAncestor(
+                    retainedRoot,
+                    "retained Apple deployment product root");
                 Directory.Move(stageRoot, retainedRoot);
             }
             catch (IOException) when (Directory.Exists(retainedRoot))
@@ -147,5 +148,14 @@ internal static class AppleBuiltAppResultStore
             throw new InvalidOperationException(
                 $"The {description} must not traverse a symbolic link or reparse point: {fullPath}");
         }
+    }
+
+    private static void CreateDirectoryWithoutLinkedAncestors(
+        string path,
+        string description)
+    {
+        EnsurePathHasNoLinkedAncestor(path, description);
+        Directory.CreateDirectory(path);
+        EnsurePathHasNoLinkedAncestor(path, description);
     }
 }

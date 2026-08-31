@@ -310,6 +310,26 @@ public sealed class PowerForgeReleaseProgressAdaptersTests
 public sealed class ProcessRunnerStreamingTests
 {
     [Fact]
+    public void Compatibility_validation_does_not_consume_true_pre_start_boundary()
+    {
+        var validations = 0;
+        var request = new ProcessRunRequest(
+            "dotnet",
+            Directory.GetCurrentDirectory(),
+            new[] { "--version" },
+            TimeSpan.FromSeconds(30));
+        request.SetPreStartBoundary(() => validations++);
+
+        request.ValidatePreStartBoundaryForCompatibility();
+        Assert.Equal(1, validations);
+
+        request.InvokePreStartBoundary();
+        request.InvokePreStartBoundary();
+
+        Assert.Equal(2, validations);
+    }
+
+    [Fact]
     public async Task RunAsync_propagates_pre_start_boundary_failure_before_process_creation()
     {
         var validations = 0;

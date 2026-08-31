@@ -64,4 +64,14 @@ internal sealed class AppleStableDirectoryIdentity
                 $"{_description} changed after validation: {Path}");
         }
     }
+
+    /// <summary>
+    /// Removes an owned directory only while the accepted path still resolves
+    /// to the same physical directory identity.
+    /// </summary>
+    internal void DeleteOwnedDirectoryIfUnchanged()
+    {
+        ValidateUnchanged();
+        AppleArtifactCopy.DeleteOwnedDirectory(Path);
+    }
 }

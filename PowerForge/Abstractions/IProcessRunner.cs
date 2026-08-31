@@ -206,6 +206,14 @@ public sealed class ProcessRunRequest
     internal void SetPreStartBoundary(Action preStartBoundary)
         => _preStartBoundary = preStartBoundary ?? throw new ArgumentNullException(nameof(preStartBoundary));
 
+    /// <summary>
+    /// Runs the pre-start validation before delegating to a potentially older
+    /// custom process runner without consuming the runner's true start-boundary
+    /// invocation.
+    /// </summary>
+    internal void ValidatePreStartBoundaryForCompatibility()
+        => _preStartBoundary?.Invoke();
+
     internal void SetStartBoundary(Action startBoundary)
         => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
 

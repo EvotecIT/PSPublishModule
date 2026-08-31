@@ -549,6 +549,72 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         }
     }
 
+    [Fact]
+    public async Task BuildForDeploymentAsync_revalidates_private_product_directory_before_xcodebuild_starts()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var redirected = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.ProductRedirect",
+            Guid.NewGuid().ToString("N")));
+        var sentinel = Path.Combine(redirected.FullName, "sentinel");
+        File.WriteAllText(sentinel, "preserve");
+        var runner = new PrivateProductPreStartSwapRunner(
+            redirected.FullName);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            InitializeGitRepository(root.FullName);
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildForDeploymentAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        Destination = "id=device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                    }));
+
+            Assert.Contains(
+                "private Apple product directory changed",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.False(runner.ProcessStarted);
+            Assert.Single(runner.Requests);
+            Assert.Equal("preserve", File.ReadAllText(sentinel));
+            Assert.Single(redirected.EnumerateFileSystemInfos());
+        }
+        finally
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(runner.ProductRoot) &&
+                    (Directory.Exists(runner.ProductRoot) || File.Exists(runner.ProductRoot)) &&
+                    (File.GetAttributes(runner.ProductRoot) & FileAttributes.ReparsePoint) != 0)
+                {
+                    Directory.Delete(runner.ProductRoot);
+                }
+            }
+            catch { /* best effort */ }
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { redirected.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class DerivedDataPreStartSwapRunner : IProcessRunner
     {
         private readonly string _sourceRoot;
@@ -573,6 +639,41 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var path = request.Arguments[argumentIndex + 1];
             Directory.Delete(path, recursive: true);
             Directory.CreateSymbolicLink(path, _sourceRoot);
+
+            request.InvokePreStartBoundary();
+            ProcessStarted = true;
+            return Task.FromResult(Success("unexpected"));
+        }
+    }
+
+    private sealed class PrivateProductPreStartSwapRunner : IProcessRunner
+    {
+        private readonly string _redirectRoot;
+
+        internal PrivateProductPreStartSwapRunner(string redirectRoot)
+        {
+            _redirectRoot = redirectRoot;
+        }
+
+        internal List<ProcessRunRequest> Requests { get; } = new();
+
+        internal bool ProcessStarted { get; private set; }
+
+        internal string? ProductRoot { get; private set; }
+
+        public Task<ProcessRunResult> RunAsync(
+            ProcessRunRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(request);
+            var productRoot = request.Arguments.Single(argument =>
+                    argument.StartsWith(
+                        "CONFIGURATION_BUILD_DIR=",
+                        StringComparison.Ordinal))
+                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            ProductRoot = productRoot;
+            Directory.Delete(productRoot, recursive: true);
+            Directory.CreateSymbolicLink(productRoot, _redirectRoot);
 
             request.InvokePreStartBoundary();
             ProcessStarted = true;
