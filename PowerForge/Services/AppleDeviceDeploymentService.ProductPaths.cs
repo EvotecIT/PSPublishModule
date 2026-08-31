@@ -35,11 +35,15 @@ public sealed partial class AppleDeviceDeploymentService
         string productDirectory,
         string expectedAppPath)
     {
+        // AppPath is a standalone-build lookup override. Deployment builds
+        // reject it before execution and bind their product to a private root.
+        if (!string.IsNullOrWhiteSpace(request.AppPath))
+            return Path.GetFullPath(expectedAppPath);
+
         expectedAppPath = EnsurePathWithinProductDirectory(
             expectedAppPath,
             productDirectory);
-        if (!string.IsNullOrWhiteSpace(request.AppPath) ||
-            !string.IsNullOrWhiteSpace(request.ProductName) ||
+        if (!string.IsNullOrWhiteSpace(request.ProductName) ||
             Directory.Exists(expectedAppPath))
         {
             return expectedAppPath;
