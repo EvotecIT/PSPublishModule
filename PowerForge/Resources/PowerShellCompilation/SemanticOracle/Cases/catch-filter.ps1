@@ -1,9 +1,9 @@
 try {
-    throw [System.ArgumentException] 'expected'
+    return [int]::Parse('expected')
 } catch [System.InvalidOperationException] {
-    -1
-} catch [System.ArgumentException] {
-    42
+    return -1
+} catch [System.FormatException] {
+    return 42
 } catch {
-    -2
+    return -2
 }

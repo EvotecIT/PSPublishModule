@@ -556,6 +556,19 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void LoweredUnknownLiteralValuesFailClosedBeforeCSharpCompilation()
+    {
+        var literal = new PowerShellLoweredLiteralExpression(
+            default,
+            typeof(ArgumentException),
+            new ArgumentException("expected"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => PowerShellBoundCSharpBackend.EmitLiteral(literal));
+
+        Assert.Contains("has no canonical C# encoding", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ForAndForEachVariablesRemainDeclaredAfterTheirLoopScopes()
     {
         var document = PowerShellSourceParser.Parse(

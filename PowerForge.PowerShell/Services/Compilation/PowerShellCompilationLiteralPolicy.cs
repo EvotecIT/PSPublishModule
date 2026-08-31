@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Numerics;
 
 namespace PowerForge;
 
@@ -86,6 +87,20 @@ internal static class PowerShellCompilationLiteralPolicy
         }
         literal = new PowerShellCompilationLiteral(kind.Value, typeName, invariant);
         return true;
+    }
+
+    internal static bool CanEmitBoundValue(object? value, Type targetType)
+    {
+        if (TryEncodeValue(value, targetType, out _)) return true;
+        if (value is null) return false;
+        if (targetType.IsArray && targetType.GetArrayRank() == 1 && value is Array array)
+        {
+            var elementType = targetType.GetElementType()!;
+            return array.Cast<object?>().All(item => CanEmitBoundValue(item, elementType));
+        }
+        var scalar = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        return scalar == typeof(BigInteger) && value is BigInteger ||
+               scalar == typeof(SwitchParameter) && value is SwitchParameter;
     }
 
     private static PowerShellCompilationLiteralKind? GetKind(Type type)

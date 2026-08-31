@@ -36,6 +36,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-ExpandableStringResult { [string] $Value = '42'; return [string]::CompareOrdinal(\"value=$Value\", 'value=42') }",
             "Get_ExpandableStringResult",
             "0"
+        },
+        {
+            "catch-filter",
+            "function Get-CatchValue { try { return [int]::Parse('expected') } catch [System.InvalidOperationException] { return -1 } catch [System.FormatException] { return 42 } catch { return -2 } }",
+            "Get_CatchValue",
+            "42"
         }
     };
 
@@ -92,6 +98,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesExpandableStringCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/expandable-string", "BoundedExpandableStringOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesCatchFilterCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/catch-filter", "BoundedCatchFilterOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()

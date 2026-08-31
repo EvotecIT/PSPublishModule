@@ -36,6 +36,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 ? EmitCanonicalLiteral(literal)
                 : doubleValue.ToString("R", CultureInfo.InvariantCulture) + "d";
         if (literal.Value is decimal decimalValue) return decimalValue.ToString(CultureInfo.InvariantCulture) + "m";
+        if (literal.Value is sbyte signedByte) return $"(sbyte){signedByte.ToString(CultureInfo.InvariantCulture)}";
+        if (literal.Value is byte unsignedByte) return $"(byte){unsignedByte.ToString(CultureInfo.InvariantCulture)}";
+        if (literal.Value is short signedShort) return $"(short){signedShort.ToString(CultureInfo.InvariantCulture)}";
+        if (literal.Value is ushort unsignedShort) return $"(ushort){unsignedShort.ToString(CultureInfo.InvariantCulture)}";
+        if (literal.Value is int integer) return integer.ToString(CultureInfo.InvariantCulture);
         if (literal.Value is long longValue) return longValue.ToString(CultureInfo.InvariantCulture) + "L";
         if (literal.Value is ulong unsignedLong) return unsignedLong.ToString(CultureInfo.InvariantCulture) + "UL";
         if (literal.Value is uint unsignedInteger) return unsignedInteger.ToString(CultureInfo.InvariantCulture) + "U";
@@ -51,7 +56,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             return $"global::System.Numerics.BigInteger.Parse({PowerShellCSharpLiteral.QuoteString(bigInteger.ToString(CultureInfo.InvariantCulture))}, global::System.Globalization.CultureInfo.InvariantCulture)";
         }
-        return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
+        throw new InvalidOperationException($"Literal value for '{literal.ClrType.FullName}' has no canonical C# encoding.");
     }
 
     private static string EmitCanonicalLiteral(PowerShellLoweredLiteralExpression literal)

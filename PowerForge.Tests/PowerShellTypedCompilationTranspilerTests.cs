@@ -86,6 +86,20 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Fact]
+    public void Transpile_RejectsExceptionConstructionConversionWithoutEmittingInvalidCSharp()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Invoke-Failure { throw [System.ArgumentException] 'expected' }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("requires the PowerShell language-conversion runtime", StringComparison.Ordinal));
+        Assert.DoesNotContain("System.ArgumentException: expected", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Transpile_EmitsPowerShellNegativeIndexNormalizationForArrays()
     {
         using var fixture = TranspilerFixture.Create(

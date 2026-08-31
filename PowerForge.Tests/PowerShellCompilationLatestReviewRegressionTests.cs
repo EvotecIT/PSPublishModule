@@ -550,6 +550,28 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_StrictLibraryPreservesCompileTimeBigIntegerConversions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-BigValue { return [bigint] '42' } " +
+            "function Get-BigValues { return [bigint[]] ('42', '43') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.BigIntegerConversions",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var type = assembly.GetType("PowerForge.Compiled.PowerForge_BigIntegerConversionsMethods", throwOnError: true)!;
+        Assert.Equal(new System.Numerics.BigInteger(42), type.GetMethod("Get_BigValue")!.Invoke(null, null));
+        Assert.Equal(
+            new[] { new System.Numerics.BigInteger(42), new System.Numerics.BigInteger(43) },
+            Assert.IsType<System.Numerics.BigInteger[]>(type.GetMethod("Get_BigValues")!.Invoke(null, null)));
+    }
+
+    [Fact]
     public void Build_StrictLibraryPreservesObservablePowerShellArrayTypes()
     {
         using var fixture = ArtifactFixture.Create(
