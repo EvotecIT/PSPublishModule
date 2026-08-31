@@ -94,6 +94,9 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 foreach (var assembly in request.Assemblies.OrderBy(static assembly => assembly.PackagePath, StringComparer.Ordinal))
                     AddFile(archive, assembly.PackagePath, assembly.SourcePath);
             }
+            _ = new PowerShellCompilationProviderPackageReader().Resolve(
+                new[] { new PowerShellCompilationProviderPackageReference(temporary) },
+                semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault());
             if (File.Exists(request.OutputPath))
                 File.Replace(temporary, request.OutputPath, destinationBackupFileName: null);
             else
@@ -194,7 +197,8 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                     {
                         AssemblyPath = source.Adapter.EntryPoint.AssemblyPath.Replace('\\', '/'),
                         TypeName = source.Adapter.EntryPoint.TypeName,
-                        MethodName = source.Adapter.EntryPoint.MethodName
+                        MethodName = source.Adapter.EntryPoint.MethodName,
+                        ResultType = source.Adapter.EntryPoint.ResultType
                     }
             },
             CompileTimeOnly = source.CompileTimeOnly,

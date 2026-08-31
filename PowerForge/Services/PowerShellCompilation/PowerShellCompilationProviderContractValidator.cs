@@ -44,6 +44,9 @@ public static class PowerShellCompilationProviderContractValidator
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' requires an adapter operation.");
         if (contract.Adapter.RuntimeFree && contract.Adapter.EntryPoint is null)
             throw new InvalidOperationException($"Runtime-free package provider '{contract.ProviderId}' requires an executable adapter entry point.");
+        if (contract.Adapter.EntryPoint is { } entryPoint &&
+            !Enum.IsDefined(typeof(PowerShellCompilationProviderValueType), entryPoint.ResultType))
+            throw new InvalidOperationException($"Provider '{contract.ProviderId}' declares an unknown executable result type.");
         if (!(manifest.SemanticProfiles ?? Array.Empty<string>()).Contains(contract.Adapter.SemanticProfile, StringComparer.Ordinal))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' targets an undeclared semantic profile.");
         if (!KnownStreams.Contains(contract.Stream, StringComparer.Ordinal))
@@ -65,6 +68,9 @@ public static class PowerShellCompilationProviderContractValidator
         {
             throw new InvalidOperationException($"Non-success provider '{contract.ProviderId}' cannot declare success output or cardinality.");
         }
+        if (!contract.Stream.Equals("Success", StringComparison.Ordinal) &&
+            contract.Adapter.EntryPoint?.ResultType != PowerShellCompilationProviderValueType.String)
+            throw new InvalidOperationException($"Non-success provider '{contract.ProviderId}' must return a string for its stream sink.");
         if (contract.Adapter.RuntimeFree && contract.Errors == PowerShellCompilationCommandErrors.PowerShellHost)
             throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' cannot delegate errors to a PowerShell host.");
         if (contract.Adapter.RuntimeFree && (contract.Adapter.Dependencies ?? Array.Empty<string>()).Any(static dependency =>

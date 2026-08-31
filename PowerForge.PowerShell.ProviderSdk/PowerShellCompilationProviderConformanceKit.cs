@@ -92,7 +92,8 @@ public sealed class PowerShellCompilationProviderConformanceKit
                     {
                         contract.Adapter.EntryPoint.AssemblyPath,
                         contract.Adapter.EntryPoint.TypeName,
-                        contract.Adapter.EntryPoint.MethodName
+                        contract.Adapter.EntryPoint.MethodName,
+                        contract.Adapter.EntryPoint.ResultType
                     }
             });
         using var sha256 = SHA256.Create();

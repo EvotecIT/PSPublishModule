@@ -187,6 +187,61 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void ReaderRejectsExecutableResultTypeThatConflictsWithAssemblyMetadata()
+    {
+        using var fixture = ProviderFixture.Create();
+        fixture.Manifest.Providers = new[]
+        {
+            Provider(
+                "generic.command.output.mismatched-type",
+                "Write-PackageMismatchedTypeCore",
+                "Success",
+                "Transform",
+                PowerShellCompilationCommandOutput.Projected,
+                PowerShellCompilationCommandCardinality.Scalar,
+                resultType: PowerShellCompilationProviderValueType.Int32)
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("mismatched-type.nupkg"));
+
+        Assert.Contains("int Method(string)", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuilderPreservesExistingPackageWhenReplacementFailsValidation()
+    {
+        using var fixture = ProviderFixture.Create();
+        var packagePath = fixture.PackagePath("replace.nupkg");
+        var valid = fixture.BuildPackage("replace.nupkg");
+        var validHash = Hash(packagePath);
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Stream = "Success";
+        provider.Output = PowerShellCompilationCommandOutput.Projected;
+        provider.Cardinality = PowerShellCompilationCommandCardinality.Scalar;
+        provider.Adapter.Operation = "WriteOutput";
+        provider.Adapter.EntryPoint!.ResultType = PowerShellCompilationProviderValueType.Int32;
+
+        Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("replace.nupkg"));
+
+        Assert.Equal(validHash, Hash(packagePath));
+        var preserved = new PowerShellCompilationProviderPackageReader().Resolve(
+            new[] { new PowerShellCompilationProviderPackageReference(packagePath) });
+        Assert.Equal(valid.Lock.LockSha256, preserved.Lock.LockSha256);
+    }
+
+    [Fact]
+    public void ReaderRejectsStaticAbstractInterfaceEntryPoint()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Adapter.EntryPoint!.TypeName = "Generic.Semantic.Provider.AbstractAdapter";
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("abstract-entrypoint.nupkg"));
+
+        Assert.Contains("public static non-generic string", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReaderAppliesCanonicalContractValidationToManuallyAuthoredPackages()
     {
         using var fixture = ProviderFixture.Create();
@@ -295,7 +350,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         string methodName,
         PowerShellCompilationCommandOutput output = PowerShellCompilationCommandOutput.None,
         PowerShellCompilationCommandCardinality cardinality = PowerShellCompilationCommandCardinality.None,
-        PowerShellCompilationCommandErrors errors = PowerShellCompilationCommandErrors.None)
+        PowerShellCompilationCommandErrors errors = PowerShellCompilationCommandErrors.None,
+        PowerShellCompilationProviderValueType resultType = PowerShellCompilationProviderValueType.String)
         => new()
         {
             ProviderId = providerId,
@@ -319,7 +375,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 {
                     AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.dll",
                     TypeName = "Generic.Semantic.Provider.NoticeAdapter",
-                    MethodName = methodName
+                    MethodName = methodName,
+                    ResultType = resultType
                 }
             }
         };

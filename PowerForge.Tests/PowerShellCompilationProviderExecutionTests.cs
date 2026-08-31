@@ -100,6 +100,21 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 PowerShellCompilationCommandOutput.Projected, PowerShellCompilationCommandCardinality.Scalar),
             Provider("generic.command.output.collection", "Write-PackageOutputManyCore", "Success", "TransformMany",
                 PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection),
+            Provider("generic.command.output.int32", "Write-PackageInt32Core", "Success", "ParseInt32",
+                PowerShellCompilationCommandOutput.Projected, PowerShellCompilationCommandCardinality.Scalar,
+                resultType: PowerShellCompilationProviderValueType.Int32),
+            Provider("generic.command.output.int32-collection", "Write-PackageInt32ManyCore", "Success", "ParseInt32Many",
+                PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection,
+                resultType: PowerShellCompilationProviderValueType.Int32),
+            Provider("generic.command.output.boolean", "Write-PackageBooleanCore", "Success", "ParseBoolean",
+                PowerShellCompilationCommandOutput.Projected, PowerShellCompilationCommandCardinality.Scalar,
+                resultType: PowerShellCompilationProviderValueType.Boolean),
+            Provider("generic.command.output.int64", "Write-PackageInt64Core", "Success", "ParseInt64",
+                PowerShellCompilationCommandOutput.Projected, PowerShellCompilationCommandCardinality.Scalar,
+                resultType: PowerShellCompilationProviderValueType.Int64),
+            Provider("generic.command.output.double", "Write-PackageDoubleCore", "Success", "ParseDouble",
+                PowerShellCompilationCommandOutput.Projected, PowerShellCompilationCommandCardinality.Scalar,
+                resultType: PowerShellCompilationProviderValueType.Double),
             Provider("generic.command.stream.verbose", "Write-PackageVerboseCore", "Verbose", "Transform"),
             Provider("generic.command.stream.debug", "Write-PackageDebugCore", "Debug", "Transform"),
             Provider("generic.command.stream.warning", "Write-PackageWarningCore", "Warning", "Transform"),
@@ -126,6 +141,11 @@ public sealed partial class PowerShellCompilationProviderPackageTests
 function Invoke-ProviderMatrix {
     Write-PackageOutputCore 'value'
     Write-PackageOutputManyCore 'value'
+    Write-PackageInt32Core '42'
+    Write-PackageInt32ManyCore '7'
+    Write-PackageBooleanCore 'true'
+    Write-PackageInt64Core '9007199254740991'
+    Write-PackageDoubleCore '3.5'
     Write-PackageVerboseCore 'verbose'
     Write-PackageDebugCore 'debug'
     Write-PackageWarningCore 'warning'
@@ -195,7 +215,13 @@ function Invoke-ProviderKeyword {
                 (Action<string>)(error.Add)
             });
 
-            Assert.Equal(new object?[] { "provider:value", "provider:first:value", "provider:second:value" }, output);
+            Assert.Equal(
+                new object?[]
+                {
+                    "provider:value", "provider:first:value", "provider:second:value",
+                    42, 7, 8, true, 9007199254740991L, 3.5d
+                },
+                output);
             Assert.Equal(new[] { "provider:verbose" }, verbose);
             Assert.Equal(new[] { "provider:debug" }, debug);
             Assert.Equal(new[] { "provider:warning" }, warning);

@@ -73,7 +73,13 @@ internal static class PowerShellCompilationAbiBuilder
                     provider.Adapter.SemanticProfile,
                     Boolean(provider.Adapter.RuntimeFree),
                     Boolean(provider.Adapter.AotCompatible),
-                    string.Join("\0", provider.Adapter.Dependencies.OrderBy(static value => value, StringComparer.Ordinal)));
+                    provider.Adapter.Cancellation.ToString(),
+                    provider.Adapter.Cleanup.ToString(),
+                    string.Join("\0", provider.Adapter.Dependencies.OrderBy(static value => value, StringComparer.Ordinal)),
+                    provider.Adapter.EntryPoint?.AssemblyPath ?? string.Empty,
+                    provider.Adapter.EntryPoint?.TypeName ?? string.Empty,
+                    provider.Adapter.EntryPoint?.MethodName ?? string.Empty,
+                    provider.Adapter.EntryPoint?.ResultType.ToString() ?? string.Empty);
             }
             foreach (var parameter in method.Parameters)
             {

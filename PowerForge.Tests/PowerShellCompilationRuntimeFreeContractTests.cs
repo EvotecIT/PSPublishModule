@@ -287,7 +287,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Fact]
     public void AbiHashCoversCommandProviderAndAdapterVersions()
     {
-        PowerShellCompilationCommandProviderContract Provider(string version) => new()
+        PowerShellCompilationCommandProviderContract Provider(
+            string version,
+            PowerShellCompilationProviderValueType resultType = PowerShellCompilationProviderValueType.String) => new()
         {
             ProviderId = "proof.command.provider",
             ProviderVersion = version,
@@ -302,7 +304,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             {
                 SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
                 RuntimeFree = true,
-                AotCompatible = true
+                AotCompatible = true,
+                EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
+                {
+                    AssemblyPath = "lib/net8.0/Proof.dll",
+                    TypeName = "Proof.Adapter",
+                    MethodName = "Transform",
+                    ResultType = resultType
+                }
             }
         };
         PowerShellCompiledMethod Method(PowerShellCompilationCommandProviderContract provider) => new(
@@ -312,8 +321,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var first = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { Method(Provider("1.0")) });
         var second = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[] { Method(Provider("2.0")) });
+        var typed = PowerShellCompilationAbiBuilder.Create("Proof", "Commands", new[]
+        {
+            Method(Provider("1.0", PowerShellCompilationProviderValueType.Int32))
+        });
 
         Assert.NotEqual(first.Sha256, second.Sha256);
+        Assert.NotEqual(first.Sha256, typed.Sha256);
         Assert.Equal("1.0", Assert.Single(Assert.Single(first.Methods).CommandProviders).ProviderVersion);
     }
 }

@@ -30,20 +30,31 @@ internal sealed partial class PowerShellBoundCSharpBackend
             stream.Provider.Cardinality == PowerShellCompilationCommandCardinality.Collection)
         {
             var item = getTemporaryIdentifier("providerItem");
-            builder.Append(prefix).Append("foreach (string ").Append(item).Append(" in (global::")
+            builder.Append(prefix).Append("foreach (").Append(GetProviderResultTypeName(entryPoint.ResultType)).Append(' ')
+                .Append(item).Append(" in (global::")
                 .Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.').Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
                 .Append(convertedMessage).Append(") ?? throw ").Append(nullFailure).AppendLine("))")
-                .Append(prefix).AppendLine("{")
-                .Append(prefix).Append("    if (").Append(item).Append(" is null) throw ").Append(nullFailure).AppendLine(";")
-                .Append(prefix).Append("    ").Append(sink).Append("((object?)").Append(item).AppendLine(");")
+                .Append(prefix).AppendLine("{");
+            if (entryPoint.ResultType == PowerShellCompilationProviderValueType.String)
+                builder.Append(prefix).Append("    if (").Append(item).Append(" is null) throw ").Append(nullFailure).AppendLine(";");
+            builder.Append(prefix).Append("    ").Append(sink).Append("((object?)").Append(item).AppendLine(");")
                 .Append(prefix).AppendLine("}");
             return;
         }
         builder.Append(prefix).Append(sink).Append('(');
         if (entryPoint is not null)
-            builder.Append(stream.Kind == PowerShellStreamCommandKind.Success ? "(object?)" : string.Empty)
-                .Append("(global::").Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.').Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
-                .Append(convertedMessage).Append(") ?? throw ").Append(nullFailure).Append(')');
+        {
+            var nullableResult = entryPoint.ResultType == PowerShellCompilationProviderValueType.String;
+            if (stream.Kind == PowerShellStreamCommandKind.Success)
+                builder.Append(nullableResult ? "(object?)(" : "(object?)");
+            else if (nullableResult)
+                builder.Append('(');
+            builder.Append("global::").Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.')
+                .Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
+                .Append(convertedMessage).Append(')');
+            if (nullableResult)
+                builder.Append(" ?? throw ").Append(nullFailure).Append(')');
+        }
         else if (stream.Kind == PowerShellStreamCommandKind.Success)
             builder.Append("(object?)").Append(EmitExpression(stream.Message));
         else
@@ -55,4 +66,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         => string.Join(".", value.Split('.').Select(EscapeProviderIdentifier));
 
     private static string EscapeProviderIdentifier(string value) => "@" + value;
+
+    private static string GetProviderResultTypeName(PowerShellCompilationProviderValueType valueType)
+        => valueType switch
+        {
+            PowerShellCompilationProviderValueType.String => "string",
+            PowerShellCompilationProviderValueType.Int32 => "int",
+            PowerShellCompilationProviderValueType.Int64 => "long",
+            PowerShellCompilationProviderValueType.Double => "double",
+            PowerShellCompilationProviderValueType.Boolean => "bool",
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Provider result type is not defined.")
+        };
 }

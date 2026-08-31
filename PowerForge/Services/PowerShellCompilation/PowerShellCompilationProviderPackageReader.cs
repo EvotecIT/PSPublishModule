@@ -307,27 +307,35 @@ public sealed class PowerShellCompilationProviderPackageReader
                 var typeNamespace = reader.GetString(type.Namespace);
                 var fullName = string.IsNullOrWhiteSpace(typeNamespace) ? typeName : typeNamespace + "." + typeName;
                 if (!fullName.Equals(entryPoint.TypeName, StringComparison.Ordinal) ||
-                    (type.Attributes & TypeAttributes.VisibilityMask) != TypeAttributes.Public)
+                    (type.Attributes & TypeAttributes.VisibilityMask) != TypeAttributes.Public ||
+                    (type.Attributes & TypeAttributes.ClassSemanticsMask) == TypeAttributes.Interface)
                     continue;
                 foreach (var methodHandle in type.GetMethods())
                 {
                     var method = reader.GetMethodDefinition(methodHandle);
                     if (reader.GetString(method.Name).Equals(entryPoint.MethodName, StringComparison.Ordinal) &&
                         (method.Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public &&
-                        (method.Attributes & MethodAttributes.Static) != 0)
+                        (method.Attributes & MethodAttributes.Static) != 0 &&
+                        (method.Attributes & MethodAttributes.Abstract) == 0)
                         matches.Add(method);
                 }
             }
             var collection = provider.Stream.Equals("Success", StringComparison.Ordinal) &&
                              provider.Cardinality == PowerShellCompilationCommandCardinality.Collection;
-            if (matches.Count != 1 || !HasStringTransformSignature(reader, matches[0], collection))
+            if (matches.Count != 1 || !HasTransformSignature(reader, matches[0], collection, entryPoint.ResultType))
                 throw new InvalidOperationException(
                     $"Provider '{provider.ProviderId}' entry point must be one public static non-generic " +
-                    (collection ? "string[] Method(string)." : "string Method(string)."));
+                    (collection
+                        ? $"{GetValueTypeName(entryPoint.ResultType)}[] Method(string)."
+                        : $"{GetValueTypeName(entryPoint.ResultType)} Method(string)."));
         }
     }
 
-    private static bool HasStringTransformSignature(MetadataReader reader, MethodDefinition method, bool collection)
+    private static bool HasTransformSignature(
+        MetadataReader reader,
+        MethodDefinition method,
+        bool collection,
+        PowerShellCompilationProviderValueType resultType)
     {
         var blob = reader.GetBlobReader(method.Signature);
         var header = blob.ReadSignatureHeader();
@@ -336,15 +344,37 @@ public sealed class PowerShellCompilationProviderPackageReader
         if (collection)
         {
             if (blob.ReadSignatureTypeCode() != SignatureTypeCode.SZArray ||
-                blob.ReadSignatureTypeCode() != SignatureTypeCode.String)
+                blob.ReadSignatureTypeCode() != GetSignatureTypeCode(resultType))
                 return false;
         }
-        else if (blob.ReadSignatureTypeCode() != SignatureTypeCode.String)
+        else if (blob.ReadSignatureTypeCode() != GetSignatureTypeCode(resultType))
         {
             return false;
         }
         return blob.ReadSignatureTypeCode() == SignatureTypeCode.String;
     }
+
+    private static SignatureTypeCode GetSignatureTypeCode(PowerShellCompilationProviderValueType valueType)
+        => valueType switch
+        {
+            PowerShellCompilationProviderValueType.String => SignatureTypeCode.String,
+            PowerShellCompilationProviderValueType.Int32 => SignatureTypeCode.Int32,
+            PowerShellCompilationProviderValueType.Int64 => SignatureTypeCode.Int64,
+            PowerShellCompilationProviderValueType.Double => SignatureTypeCode.Double,
+            PowerShellCompilationProviderValueType.Boolean => SignatureTypeCode.Boolean,
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Provider result type is not defined.")
+        };
+
+    private static string GetValueTypeName(PowerShellCompilationProviderValueType valueType)
+        => valueType switch
+        {
+            PowerShellCompilationProviderValueType.String => "string",
+            PowerShellCompilationProviderValueType.Int32 => "int",
+            PowerShellCompilationProviderValueType.Int64 => "long",
+            PowerShellCompilationProviderValueType.Double => "double",
+            PowerShellCompilationProviderValueType.Boolean => "bool",
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Provider result type is not defined.")
+        };
 
     private static bool IsQualifiedIdentifier(string value)
         => !string.IsNullOrWhiteSpace(value) && value.Split('.').All(IsIdentifier);

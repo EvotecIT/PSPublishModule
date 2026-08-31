@@ -88,6 +88,21 @@ public enum PowerShellCompilationProviderCleanup
     PowerShellHost
 }
 
+/// <summary>Closed runtime-free value types supported by the executable provider ABI.</summary>
+public enum PowerShellCompilationProviderValueType
+{
+    /// <summary>CLR <see cref="string"/>.</summary>
+    String,
+    /// <summary>CLR <see cref="int"/>.</summary>
+    Int32,
+    /// <summary>CLR <see cref="long"/>.</summary>
+    Int64,
+    /// <summary>CLR <see cref="double"/>.</summary>
+    Double,
+    /// <summary>CLR <see cref="bool"/>.</summary>
+    Boolean
+}
+
 /// <summary>A narrowly typed public static provider method invoked only by generated artifacts.</summary>
 public sealed class PowerShellCompilationProviderAdapterEntryPoint
 {
@@ -97,8 +112,11 @@ public sealed class PowerShellCompilationProviderAdapterEntryPoint
     /// <summary>Public non-nested CLR type name.</summary>
     public string TypeName { get; set; } = string.Empty;
 
-    /// <summary>Public static method accepting and returning one string.</summary>
+    /// <summary>Public static method accepting one string.</summary>
     public string MethodName { get; set; } = string.Empty;
+
+    /// <summary>Exact scalar or collection-element result type returned by the entry point.</summary>
+    public PowerShellCompilationProviderValueType ResultType { get; set; }
 }
 
 /// <summary>Runtime adapter required by a command provider.</summary>

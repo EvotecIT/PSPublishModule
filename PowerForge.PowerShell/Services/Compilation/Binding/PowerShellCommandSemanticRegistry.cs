@@ -359,7 +359,8 @@ internal sealed class PowerShellCommandSemanticRegistry
                     {
                         AssemblyPath = source.Adapter.EntryPoint.AssemblyPath,
                         TypeName = source.Adapter.EntryPoint.TypeName,
-                        MethodName = source.Adapter.EntryPoint.MethodName
+                        MethodName = source.Adapter.EntryPoint.MethodName,
+                        ResultType = source.Adapter.EntryPoint.ResultType
                     }
             }
         };

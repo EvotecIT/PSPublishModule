@@ -13,4 +13,21 @@ public static class NoticeAdapter
     public static string[] ReturnNullMany(string value) => null!;
 
     public static string[] ReturnNullItem(string value) => new[] { "provider:" + value, null! };
+
+    public static int ParseInt32(string value) => int.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+
+    public static int[] ParseInt32Many(string value)
+    {
+        var number = ParseInt32(value);
+        return new[] { number, number + 1 };
+    }
+
+    public static bool ParseBoolean(string value) => bool.Parse(value);
+
+    public static long ParseInt64(string value) => long.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+
+    public static double ParseDouble(string value) => double.Parse(
+        value,
+        System.Globalization.NumberStyles.Float,
+        System.Globalization.CultureInfo.InvariantCulture);
 }
