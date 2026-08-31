@@ -1257,19 +1257,29 @@ internal static partial class WebPipelineRunner
 
             if (onlyLocalLinks)
             {
-                if (hasDocsSurface && !IsLocalSurfaceLink(docsLink) && !IsZipArtifactSource(artifactDocs))
+                if (hasDocsSurface &&
+                    !IsLocalSurfaceLink(docsLink) &&
+                    !IsLocalProjectArtifactPath(artifactDocs) &&
+                    !IsZipArtifactSource(artifactDocs))
                     hasDocsSurface = false;
 
-                if (hasApiDotNetSurface && !IsLocalSurfaceLink(apiDotNetLink) && !IsZipArtifactSource(artifactApi))
+                if (hasApiDotNetSurface &&
+                    !IsLocalSurfaceLink(apiDotNetLink) &&
+                    !IsLocalProjectArtifactPath(artifactApi) &&
+                    !IsZipArtifactSource(artifactApi))
                     hasApiDotNetSurface = false;
 
                 if (hasApiPowerShellSurface &&
                     !IsLocalSurfaceLink(apiPowerShellLink) &&
+                    !IsLocalProjectArtifactPath(artifactApi) &&
                     !IsZipArtifactSource(artifactApi) &&
                     !HasPowerShellGalleryPackage(powerShellGalleryPackageId, powerShellGalleryPackageVersion))
                     hasApiPowerShellSurface = false;
 
-                if (hasExamplesSurface && !IsLocalSurfaceLink(examplesLink) && !IsZipArtifactSource(artifactExamples))
+                if (hasExamplesSurface &&
+                    !IsLocalSurfaceLink(examplesLink) &&
+                    !IsLocalProjectArtifactPath(artifactExamples) &&
+                    !IsZipArtifactSource(artifactExamples))
                     hasExamplesSurface = false;
             }
 
@@ -1531,6 +1541,18 @@ internal static partial class WebPipelineRunner
         }
 
         return value.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLocalProjectArtifactPath(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            return false;
+
+        var value = source.Trim();
+        if (Path.IsPathRooted(value) || value.StartsWith("//", StringComparison.Ordinal))
+            return false;
+
+        return !Uri.TryCreate(value, UriKind.Absolute, out _);
     }
 
     private static bool TryExtractArtifactZip(

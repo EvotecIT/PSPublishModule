@@ -289,6 +289,69 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectDocsSync_OnlyLocalLinksIncludesRepositoryLocalDotNetApiArtifact()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-local-dotnet-api-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "dotnetonly",
+                      "surfaces": { "apiDotNet": true, "apiPowerShell": false },
+                      "artifacts": { "api": "WebsiteArtifacts/apidocs" }
+                    }
+                  ]
+                }
+                """);
+
+            var sourceApi = Path.Combine(root, "projects-sources", "dotnetonly", "WebsiteArtifacts", "apidocs");
+            Directory.CreateDirectory(sourceApi);
+            File.WriteAllText(Path.Combine(sourceApi, "Library.xml"), "<doc />");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-docs-sync",
+                      "catalog": "./data/projects/catalog.json",
+                      "sourcesRoot": "./projects-sources",
+                      "contentRoot": "./content/docs",
+                      "syncDocs": false,
+                      "syncApi": true,
+                      "apiRoot": "./data/apidocs",
+                      "sourceApiPaths": ["WebsiteArtifacts/apidocs"],
+                      "syncExamples": false,
+                      "onlyLocalLinks": true,
+                      "failOnMissingApiSource": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("api=1/1", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "dotnetonly", "Library.xml")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectDocsSync_FailsWhenMissingApiSourceAndFailOnMissingApiSourceEnabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-fail-missing-api-" + Guid.NewGuid().ToString("N"));
