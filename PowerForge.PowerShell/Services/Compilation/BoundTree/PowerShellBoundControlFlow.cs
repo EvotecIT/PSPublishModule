@@ -110,6 +110,12 @@ internal sealed class PowerShellBoundSwitchClause
     internal PowerShellBoundBlock Body { get; }
 }
 
+internal enum PowerShellBoundSwitchMatchMode
+{
+    Exact,
+    Regex
+}
+
 internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundSwitchStatement(
@@ -117,6 +123,7 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         PowerShellBoundExpression value,
         PowerShellBoundSwitchClause[] clauses,
         PowerShellBoundBlock? defaultBlock,
+        PowerShellBoundSwitchMatchMode matchMode,
         bool caseSensitive)
         : base(
             span,
@@ -126,12 +133,14 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         Value = value;
         Clauses = clauses;
         DefaultBlock = defaultBlock;
+        MatchMode = matchMode;
         CaseSensitive = caseSensitive;
     }
 
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellImmutableArray<PowerShellBoundSwitchClause> Clauses { get; }
     internal PowerShellBoundBlock? DefaultBlock { get; }
+    internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
 }
 

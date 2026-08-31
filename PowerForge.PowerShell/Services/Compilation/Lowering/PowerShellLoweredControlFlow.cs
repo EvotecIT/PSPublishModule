@@ -107,18 +107,21 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         PowerShellLoweredExpression value,
         PowerShellLoweredSwitchClause[] clauses,
         PowerShellLoweredStatement[]? defaultStatements,
+        PowerShellBoundSwitchMatchMode matchMode,
         bool caseSensitive)
         : base(span)
     {
         Value = value;
         Clauses = clauses;
         DefaultStatements = defaultStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(defaultStatements);
+        MatchMode = matchMode;
         CaseSensitive = caseSensitive;
     }
 
     internal PowerShellLoweredExpression Value { get; }
     internal PowerShellImmutableArray<PowerShellLoweredSwitchClause> Clauses { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? DefaultStatements { get; }
+    internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
 }
 

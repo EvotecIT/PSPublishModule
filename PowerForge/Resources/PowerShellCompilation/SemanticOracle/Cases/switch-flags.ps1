@@ -1,3 +1,4 @@
 switch -Regex ('forty-two') {
-    '^forty' { 42 }
+    '^forty' { return 42 }
+    default { return -1 }
 }

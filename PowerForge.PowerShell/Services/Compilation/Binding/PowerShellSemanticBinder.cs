@@ -495,45 +495,7 @@ internal sealed partial class PowerShellSemanticBinder
             return body is null ? null : new PowerShellBoundForEachStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), target.Symbol, elementType, collection, scalarString, body);
         }
         if (statement is SwitchStatementAst switchStatement)
-        {
-            if ((switchStatement.Flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0)
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304", $"Switch flags '{switchStatement.Flags}' require PowerShell runtime matching semantics.", PowerShellSourceParser.GetSpan(document, switchStatement.Extent)));
-                return null;
-            }
-            var value = BindExpression(document, switchStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-            if (value is null) return null;
-            var valueType = value.Type.ClrType;
-            if (valueType != typeof(bool) && valueType != typeof(char) && valueType != typeof(string) && !PowerShellClrTypeSemantics.IsNumeric(valueType))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305", $"Scalar switch requires a Boolean, character, string, or numeric condition; resolved type was '{valueType.FullName}'.", value.Span));
-                return null;
-            }
-            var clauses = new List<PowerShellBoundSwitchClause>();
-            foreach (var clause in switchStatement.Clauses)
-            {
-                var clauseValue = BindExpression(document, clause.Item1, symbols, functions, diagnostics, valueType, targetFramework, capabilities);
-                if (clauseValue is null) return null;
-                if (clauseValue.Type.ClrType != valueType)
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2306", $"Scalar switch clause type '{clauseValue.Type.ClrType.FullName}' must exactly match condition type '{valueType.FullName}' to avoid PowerShell coercion semantics.", clauseValue.Span));
-                    return null;
-                }
-                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework, capabilities);
-                if (body is null) return null;
-                clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body));
-            }
-            var defaultBlock = switchStatement.Default is null
-                ? null
-                : BindBlock(document, switchStatement.Default, symbols, functions, diagnostics, targetFramework, capabilities);
-            if (switchStatement.Default is not null && defaultBlock is null) return null;
-            return new PowerShellBoundSwitchStatement(
-                PowerShellSourceParser.GetSpan(document, statement.Extent),
-                value,
-                clauses.ToArray(),
-                defaultBlock,
-                (switchStatement.Flags & SwitchFlags.CaseSensitive) != 0);
-        }
+            return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ThrowStatementAst throwStatement)
         {
             if (throwStatement.IsRethrow)

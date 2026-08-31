@@ -465,7 +465,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             InvokeMemberExpressionAst or IndexExpressionAst;
 
     private static bool HasUnsupportedSwitchFlags(SwitchFlags flags)
-        => (flags & (SwitchFlags.File | SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
+        => (flags & (SwitchFlags.File | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0;
 
     private static bool IsSupportedCatchType(TypeConstraintAst constraint)
     {

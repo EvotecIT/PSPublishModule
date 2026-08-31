@@ -58,9 +58,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
         foreach (var clause in statement.Clauses)
         {
             var clauseSource = EmitExpression(clause.Value);
-            var comparison = statement.Value.ClrType == typeof(string)
-                ? $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})"
-                : $"{valueIdentifier} == {clauseSource}";
+            var comparison = statement.MatchMode switch
+            {
+                PowerShellBoundSwitchMatchMode.Regex =>
+                    $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",
+                _ when statement.Value.ClrType == typeof(string) =>
+                    $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})",
+                _ => $"{valueIdentifier} == {clauseSource}"
+            };
             builder.Append(prefix).Append("    if (").Append(comparison).AppendLine(")");
             builder.Append(prefix).AppendLine("    {");
             builder.Append(prefix).Append("        ").Append(matchedIdentifier).AppendLine(" = true;");

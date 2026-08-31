@@ -42,6 +42,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             "function Get-CatchValue { try { return [int]::Parse('expected') } catch [System.InvalidOperationException] { return -1 } catch [System.FormatException] { return 42 } catch { return -2 } }",
             "Get_CatchValue",
             "42"
+        },
+        {
+            "switch-flags",
+            "function Get-SwitchFlagValue { switch -Regex ('forty-two') { '^forty' { return 42 } default { return -1 } } }",
+            "Get_SwitchFlagValue",
+            "42"
         }
     };
 
@@ -102,6 +108,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesCatchFilterCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/catch-filter", "BoundedCatchFilterOracle");
+
+    [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesSwitchFlagsCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/switch-flags", "BoundedSwitchFlagsOracle");
 
     [Fact]
     public void RuntimeFreeArtifactObserverSelectsOnlyTheGeneratedExecutableEntryPoint()

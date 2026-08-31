@@ -179,7 +179,7 @@ internal static class PowerShellOperatorSemanticBinder
         Func<Ast, PowerShellBoundExpression?> bindOperand,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        if (ObservesMatchesAutomaticVariable(syntax))
+        if (PowerShellAutomaticVariableObservationPolicy.Observes(syntax, "Matches"))
             return Reject(diagnostics, span, "PSB2221", "Regex matching whose $Matches automatic-variable state is observed requires PowerShell runtime semantics.");
         var input = bindOperand(syntax.Left);
         var pattern = bindOperand(syntax.Right);
@@ -307,18 +307,6 @@ internal static class PowerShellOperatorSemanticBinder
         if (values.Type.ClrType != typeof(string[]) || separator.Type.ClrType != typeof(string))
             return Reject(diagnostics, span, "PSB2229", "Operator '-join' requires a String array and scalar String separator.");
         return new PowerShellBoundStringJoinExpression(span, values, separator);
-    }
-
-    private static bool ObservesMatchesAutomaticVariable(Ast syntax)
-    {
-        Ast root = syntax;
-        while (root.Parent is not null && root is not FunctionDefinitionAst) root = root.Parent;
-        if (root is FunctionDefinitionAst function) root = function.Body;
-        return root.FindAll(
-            static node => node is VariableExpressionAst variable &&
-                           variable.VariablePath.UserPath.Equals("Matches", StringComparison.OrdinalIgnoreCase) &&
-                           !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
-            searchNestedScriptBlocks: true).Any();
     }
 
     internal static PowerShellBoundExpression? BindUnary(
