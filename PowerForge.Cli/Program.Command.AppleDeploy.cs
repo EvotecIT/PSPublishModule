@@ -93,7 +93,8 @@ internal static partial class Program
                     excludesGeneratedDirectories: useBuildMirror);
                 AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
                     provenanceRoot,
-                    projectPath);
+                    projectPath,
+                    scheme);
             }
 
             var cliResult = new AppleLocalDeploymentCliResult

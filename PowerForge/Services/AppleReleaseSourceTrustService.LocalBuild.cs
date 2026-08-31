@@ -4,12 +4,12 @@ internal sealed partial class AppleReleaseSourceTrustService
 {
     internal void ValidateLocalBuildInputContainment(
         string repositoryRoot,
-        string projectPath)
+        string projectPath,
+        string scheme)
     {
         lock (_validationGate)
         {
             ResetValidationState();
-            _inspectRemotePackageSource = false;
             try
             {
                 var root = Path.GetFullPath(repositoryRoot);
@@ -53,6 +53,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                     metadataPaths,
                     Array.Empty<string>());
 
+                EnsureTrackedSharedScheme(
+                    root,
+                    root,
+                    new AppleAppConfiguration
+                    {
+                        Name = scheme,
+                        ProjectPath = configuredProjectPath,
+                        Scheme = scheme
+                    },
+                    metadataPaths);
+
                 foreach (var projectMetadata in metadataPaths.Where(path =>
                              path.EndsWith(
                                  "project.pbxproj",
@@ -62,8 +73,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                         root,
                         projectMetadata,
                         metadataPaths,
-                        Array.Empty<string>(),
-                        inspectRemotePackageSource: false);
+                        Array.Empty<string>());
                 }
             }
             finally

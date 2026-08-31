@@ -76,6 +76,27 @@ public sealed partial class AppleDeviceDeploymentService
     public async Task<AppleAppBuildResult> BuildAsync(
         AppleAppBuildRequest request,
         CancellationToken cancellationToken = default)
+        => (await BuildCoreAsync(
+            request,
+            bindProductForDeployment: false,
+            cancellationToken).ConfigureAwait(false)).Result;
+
+    /// <summary>
+    /// Builds an app while retaining an exact product identity through the
+    /// deployment consumer boundary.
+    /// </summary>
+    internal Task<AppleAppBuildOperation> BuildForDeploymentAsync(
+        AppleAppBuildRequest request,
+        CancellationToken cancellationToken = default)
+        => BuildCoreAsync(
+            request,
+            bindProductForDeployment: true,
+            cancellationToken);
+
+    private async Task<AppleAppBuildOperation> BuildCoreAsync(
+        AppleAppBuildRequest request,
+        bool bindProductForDeployment,
+        CancellationToken cancellationToken)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
@@ -88,11 +109,11 @@ public sealed partial class AppleDeviceDeploymentService
         if (!File.Exists(projectPath) && !Directory.Exists(projectPath))
             throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
 
-        // Reject the owned setting before any external process can run. The
-        // revision is always resolved by PowerForge from the source boundary.
-        AppleBuildProvenance.AppendXcodeBuildSetting(
-            request.AdditionalArguments,
-            sourceRevision: null);
+        // The local exact-source build surface is intentionally closed. Every
+        // build input must be represented by tracked Xcode metadata that the
+        // source-trust validator can inspect.
+        AppleBuildProvenance.RejectLocalBuildAdditionalArguments(
+            request.AdditionalArguments);
 
         var deviceIdentifier = await ResolveDeviceIdentifierAsync(
             request.DeviceIdentifier,
@@ -156,7 +177,8 @@ public sealed partial class AppleDeviceDeploymentService
                     excludesGeneratedDirectories: true);
                 AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
                     sourceRoot,
-                    projectPath);
+                    projectPath,
+                    request.Scheme);
                 var mirror = await MirrorBuildRootAsync(
                     projectPath,
                     request,
@@ -165,15 +187,17 @@ public sealed partial class AppleDeviceDeploymentService
                 if (!mirror.ProcessResult.Succeeded)
                 {
                     sourceMonitor.Dispose();
-                    return new AppleAppBuildResult
-                    {
-                        AppPath = appPath,
-                        Destination = destination,
-                        DerivedDataPath = derivedDataPath,
-                        BuildMirrorPath = mirror.MirrorPath,
-                        SourceRevision = sourceSnapshot.Revision,
-                        ProcessResult = mirror.ProcessResult
-                    };
+                    return new AppleAppBuildOperation(
+                        new AppleAppBuildResult
+                        {
+                            AppPath = appPath,
+                            Destination = destination,
+                            DerivedDataPath = derivedDataPath,
+                            BuildMirrorPath = mirror.MirrorPath,
+                            SourceRevision = sourceSnapshot.Revision,
+                            ProcessResult = mirror.ProcessResult
+                        },
+                        productSnapshot: null);
                 }
 
                 var mirrorMonitor = mirror.MutationMonitor ?? throw new InvalidOperationException(
@@ -237,7 +261,8 @@ public sealed partial class AppleDeviceDeploymentService
                     excludesGeneratedDirectories: false);
                 AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
                     sourceRoot,
-                    projectPath);
+                    projectPath,
+                    request.Scheme);
                 buildInputMonitor = sourceMonitor;
             }
             catch
@@ -273,37 +298,75 @@ public sealed partial class AppleDeviceDeploymentService
             request.AdditionalArguments,
             sourceSnapshot.Revision));
 
-        var result = await _processRunner.RunAsync(
-            new ProcessRunRequest(
+        AppleBuiltAppSnapshot? productSnapshot = null;
+
+        try
+        {
+            var processRequest = new ProcessRunRequest(
                 NormalizeExecutable(request.XcodeBuildExecutable, "xcodebuild"),
                 workingDirectory,
                 args,
-                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout),
-            cancellationToken).ConfigureAwait(false);
+                request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout);
+            if (bindProductForDeployment)
+            {
+                processRequest.SetCompletionBoundary(completionResult =>
+                {
+                    if (!completionResult.Succeeded)
+                        return;
+                    var producedAppPath = ResolveBuiltAppPath(
+                        request,
+                        derivedDataPath,
+                        appPath);
+                    productSnapshot = AppleBuiltAppSnapshot.Create(producedAppPath);
+                });
+            }
 
-        var resolvedAppPath = result.Succeeded
-            ? ResolveBuiltAppPath(request, derivedDataPath, appPath)
-            : appPath;
+            var result = await _processRunner.RunAsync(
+                processRequest,
+                cancellationToken).ConfigureAwait(false);
+            processRequest.InvokeCompletionBoundary(result);
 
-        if (result.Succeeded)
-        {
-            buildInputMonitor.ValidateNoChanges(
-                request.UseBuildMirror
-                    ? null
-                    : () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
-            liveSourceMonitor?.ValidateNoChanges(
-                () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+            var resolvedAppPath = result.Succeeded
+                ? ResolveBuiltAppPath(request, derivedDataPath, appPath)
+                : appPath;
+
+            if (result.Succeeded)
+            {
+                buildInputMonitor.ValidateNoChanges(
+                    request.UseBuildMirror
+                        ? null
+                        : () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                liveSourceMonitor?.ValidateNoChanges(
+                    () => AppleBuildProvenance.ValidateUnchanged(sourceSnapshot));
+                if (bindProductForDeployment && productSnapshot is null)
+                {
+                    throw new InvalidOperationException(
+                        "xcodebuild completed without binding the built app product at its process completion boundary.");
+                }
+            }
+            else
+            {
+                productSnapshot?.Dispose();
+                productSnapshot = null;
+            }
+
+            return new AppleAppBuildOperation(
+                new AppleAppBuildResult
+                {
+                    AppPath = resolvedAppPath,
+                    Destination = destination,
+                    DerivedDataPath = derivedDataPath,
+                    BuildMirrorPath = mirrorPath,
+                    SourceRevision = sourceSnapshot.Revision,
+                    ProcessResult = result
+                },
+                productSnapshot);
         }
-
-        return new AppleAppBuildResult
+        catch
         {
-            AppPath = resolvedAppPath,
-            Destination = destination,
-            DerivedDataPath = derivedDataPath,
-            BuildMirrorPath = mirrorPath,
-            SourceRevision = sourceSnapshot.Revision,
-            ProcessResult = result
-        };
+            productSnapshot?.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -421,7 +484,10 @@ public sealed partial class AppleDeviceDeploymentService
         if (request is null)
             throw new ArgumentNullException(nameof(request));
 
-        var build = await BuildAsync(request, cancellationToken).ConfigureAwait(false);
+        using var buildOperation = await BuildForDeploymentAsync(
+            request,
+            cancellationToken).ConfigureAwait(false);
+        var build = buildOperation.Result;
         var deployment = new AppleAppDeviceDeploymentResult
         {
             Build = build,
@@ -436,10 +502,12 @@ public sealed partial class AppleDeviceDeploymentService
         {
             DeviceIdentifier = deployDeviceIdentifier,
             Device = request.Device,
-            AppPath = build.AppPath,
+            AppPath = buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
             XcrunExecutable = request.XcrunExecutable,
             Timeout = request.Timeout
         }, cancellationToken).ConfigureAwait(false);
+        buildOperation.ProductSnapshot?.ValidateUnchanged();
+        install.AppPath = build.AppPath;
         deployment.Install = install;
 
         if (!install.Succeeded || !request.Launch)
@@ -659,9 +727,9 @@ public sealed partial class AppleDeviceDeploymentService
         string parameterName,
         StringComparison sourcePathComparison)
     {
-        var fullOutputPath = Path.GetFullPath(outputPath)
+        var fullOutputPath = AppleReleaseArtifactService.ResolvePhysicalPath(outputPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var fullSourceRoot = Path.GetFullPath(sourceRoot)
+        var fullSourceRoot = AppleReleaseArtifactService.ResolvePhysicalPath(sourceRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (fullSourceRoot.Equals(fullOutputPath, sourcePathComparison) ||
             fullSourceRoot.StartsWith(

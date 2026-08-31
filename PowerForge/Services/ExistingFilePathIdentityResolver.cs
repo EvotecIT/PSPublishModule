@@ -40,6 +40,46 @@ internal static class ExistingFilePathIdentityResolver
 #endif
     }
 
+    /// <summary>
+    /// Returns the physical identity and metadata-change token for an existing
+    /// directory without following a later pathname replacement.
+    /// </summary>
+    internal static ExistingFilePhysicalStatus ResolveDirectoryStatus(string path)
+    {
+#if NET8_0_OR_GREATER
+        var fullPath = System.IO.Path.GetFullPath(path);
+        SafeFileHandle handle;
+        if (System.IO.Path.DirectorySeparatorChar == '\\')
+        {
+            const uint fileFlagBackupSemantics = 0x02000000;
+            handle = CreateFileForDirectory(
+                fullPath,
+                0,
+                FileShare.Read | FileShare.Write | FileShare.Delete,
+                IntPtr.Zero,
+                FileMode.Open,
+                fileFlagBackupSemantics,
+                IntPtr.Zero);
+        }
+        else
+        {
+            var descriptor = OpenUnixDirectory(fullPath, 0);
+            handle = new SafeFileHandle(new IntPtr(descriptor), ownsHandle: true);
+        }
+
+        using (handle)
+        {
+            if (handle.IsInvalid)
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return System.IO.Path.DirectorySeparatorChar == '\\'
+                ? ReadWindowsFileStatus(handle)
+                : ReadUnixFileStatus(handle);
+        }
+#else
+        throw new PlatformNotSupportedException("Physical directory identity requires .NET 8 or newer.");
+#endif
+    }
+
     /// <summary>Returns physical status for an already-open file without resolving its pathname again.</summary>
     internal static ExistingFilePhysicalStatus ResolveStatus(SafeFileHandle handle)
     {
@@ -350,6 +390,21 @@ internal static class ExistingFilePathIdentityResolver
     private static extern bool GetFileInformationByHandle(
         SafeFileHandle file,
         out WindowsFileInformation information);
+
+#if NET8_0_OR_GREATER
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileForDirectory(
+        string fileName,
+        uint desiredAccess,
+        FileShare shareMode,
+        IntPtr securityAttributes,
+        FileMode creationDisposition,
+        uint flagsAndAttributes,
+        IntPtr templateFile);
+
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenUnixDirectory(string path, int flags);
+#endif
 
     [DllImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

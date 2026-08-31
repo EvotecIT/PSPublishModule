@@ -106,7 +106,11 @@ public class AppleAppBuildRequest
     /// <summary>rsync executable name or path used for build mirroring.</summary>
     public string RsyncExecutable { get; set; } = "rsync";
 
-    /// <summary>Additional structured arguments appended to the xcodebuild build command.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Local exact-source deployment
+    /// rejects non-empty values because arbitrary xcodebuild arguments can add
+    /// inputs that are absent from tracked Xcode metadata.
+    /// </summary>
     public string[] AdditionalArguments { get; set; } = Array.Empty<string>();
 
     /// <summary>Maximum build runtime.</summary>

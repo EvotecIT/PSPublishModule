@@ -3,7 +3,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleMacAppDeploymentServiceTests
+public sealed partial class AppleMacAppDeploymentServiceTests
 {
     [Fact]
     public async Task DeployAsync_replaces_existing_app_and_launches_selected_profile()
@@ -264,6 +264,7 @@ public sealed class AppleMacAppDeploymentServiceTests
 
     private static void InitializeGitRepository(string workingDirectory)
     {
+        WriteSharedSchemes(workingDirectory);
         RunGit(workingDirectory, "init");
         RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
         RunGit(
@@ -274,6 +275,11 @@ public sealed class AppleMacAppDeploymentServiceTests
         RunGit(workingDirectory, "add", ".");
         RunGit(workingDirectory, "commit", "-m", "fixture");
     }
+
+    private static void WriteSharedSchemes(string workingDirectory)
+        => AppleDeploymentTestFixture.WriteSharedSchemes(
+            workingDirectory,
+            "CasaRay");
 
     private static void RunGit(
         string workingDirectory,

@@ -91,6 +91,8 @@ internal static class AppleBuildProvenance
         bool excludesGeneratedDirectories)
     {
         var snapshot = Capture(sourceRoot);
+        if (excludesGeneratedDirectories)
+            RejectTrackedMirrorExclusions(sourceRoot);
         RejectIgnoredBuildInputs(sourceRoot, excludesGeneratedDirectories);
         RejectSymbolicLinkBuildInputs(sourceRoot, excludesGeneratedDirectories);
         return snapshot;
@@ -98,12 +100,58 @@ internal static class AppleBuildProvenance
 
     internal static void ValidateXcodeBuildInputsWithinSource(
         string sourceRoot,
-        string projectPath)
+        string projectPath,
+        string scheme)
     {
         var canonicalRoot = ResolveRepositoryRoot(projectPath) ??
                             Path.GetFullPath(sourceRoot);
         new AppleReleaseSourceTrustService()
-            .ValidateLocalBuildInputContainment(canonicalRoot, projectPath);
+            .ValidateLocalBuildInputContainment(canonicalRoot, projectPath, scheme);
+    }
+
+    internal static void RejectLocalBuildAdditionalArguments(
+        IEnumerable<string>? additionalArguments)
+    {
+        var supplied = (additionalArguments ?? Array.Empty<string>())
+            .FirstOrDefault(static argument => !string.IsNullOrWhiteSpace(argument));
+        if (supplied is null)
+            return;
+
+        throw new InvalidOperationException(
+            $"Local exact-source Apple builds do not accept AdditionalArguments ('{supplied}'). " +
+            "Declare build inputs in tracked Xcode project or workspace metadata instead.");
+    }
+
+    private static void RejectTrackedMirrorExclusions(string sourceRoot)
+    {
+        var root = Path.GetFullPath(sourceRoot);
+        var git = GitClient.CreateTrustedSystemClient(
+            defaultTimeout: TimeSpan.FromSeconds(10));
+        var tracked = git.RunRawAsync(
+                root,
+                ["ls-files", "-z", "--", ".build", ".swiftpm", "build", "DerivedData"])
+            .GetAwaiter()
+            .GetResult();
+        if (!tracked.Succeeded)
+        {
+            throw new InvalidOperationException(
+                "Unable to verify tracked Apple build-mirror exclusions. " +
+                (string.IsNullOrWhiteSpace(tracked.StdErr)
+                    ? "git ls-files failed."
+                    : tracked.StdErr.Trim()));
+        }
+
+        var excluded = tracked.StdOut
+            .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Take(5)
+            .ToArray();
+        if (excluded.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Apple build-mirror exclusions contain tracked source inputs: " +
+            string.Join(", ", excluded) +
+            ". Relocate those tracked inputs or disable the build mirror so xcodebuild consumes the complete attested source tree.");
     }
 
     internal static void RejectIgnoredBuildInputs(

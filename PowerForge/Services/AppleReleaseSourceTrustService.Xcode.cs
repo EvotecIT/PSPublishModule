@@ -263,8 +263,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         string repositoryRoot,
         string metadataPath,
         IReadOnlyCollection<string> metadataPaths,
-        IReadOnlyCollection<string> generatedOutputPaths,
-        bool inspectRemotePackageSource = true)
+        IReadOnlyCollection<string> generatedOutputPaths)
     {
         var projectDirectory = Path.GetDirectoryName(Path.GetDirectoryName(metadataPath)!)!;
         var packageLockPaths = ResolveEffectivePackageLockPaths(metadataPath, metadataPaths);
@@ -343,8 +342,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                 ValidateRemotePackageReference(
                     repositoryRoot,
                     packageLockPaths,
-                    item,
-                    inspectRemotePackageSource);
+                    item);
                 continue;
             }
 
@@ -489,8 +487,7 @@ internal sealed partial class AppleReleaseSourceTrustService
     private void ValidateRemotePackageReference(
         string repositoryRoot,
         IReadOnlyCollection<string> packageLockPaths,
-        PbxObject item,
-        bool inspectRemotePackageSource)
+        PbxObject item)
     {
         var repositoryUrl = ReadPbxScalar(item.Body, "repositoryURL")?.Trim();
         if (string.IsNullOrWhiteSpace(repositoryUrl))
@@ -506,13 +503,10 @@ internal sealed partial class AppleReleaseSourceTrustService
             EnsureTrackedFile(repositoryRoot, packageLock, "Swift package resolution lock");
         var resolvedRevision = ResolvePackageRevision(packageLockPaths, repositoryUrl!);
         ValidateRemotePackageIdentity(repositoryUrl!, resolvedRevision);
-        if (inspectRemotePackageSource)
-        {
-            ValidateRemotePackageSource(
-                repositoryUrl!,
-                resolvedRevision,
-                packageLockPaths);
-        }
+        ValidateRemotePackageSource(
+            repositoryUrl!,
+            resolvedRevision,
+            packageLockPaths);
     }
 
     private void ValidateResolvedProjectInput(

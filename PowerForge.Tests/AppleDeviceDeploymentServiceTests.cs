@@ -9,7 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleDeviceDeploymentServiceTests
+public sealed partial class AppleDeviceDeploymentServiceTests
 {
     [Fact]
     public async Task GetDevicesAsync_parses_available_devices()
@@ -1140,7 +1140,11 @@ App installed:
             Assert.NotNull(result.Launch);
             Assert.Equal(3, runner.Requests.Count);
             Assert.Equal("xcodebuild-test", runner.Requests[0].FileName);
-            Assert.Equal(new[] { "devicectl", "device", "install", "app", "--device", "device-1", app.FullName }, runner.Requests[1].Arguments);
+            Assert.Equal(
+                new[] { "devicectl", "device", "install", "app", "--device", "device-1" },
+                runner.Requests[1].Arguments.Take(6));
+            Assert.EndsWith("Tactra.app", runner.Requests[1].Arguments[6], StringComparison.Ordinal);
+            Assert.NotEqual(app.FullName, runner.Requests[1].Arguments[6]);
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }
         finally
@@ -1182,7 +1186,11 @@ App installed:
             });
 
             Assert.True(result.Succeeded);
-            Assert.Equal(new[] { "devicectl", "device", "install", "app", "--device", "device-1", app.FullName }, runner.Requests[1].Arguments);
+            Assert.Equal(
+                new[] { "devicectl", "device", "install", "app", "--device", "device-1" },
+                runner.Requests[1].Arguments.Take(6));
+            Assert.EndsWith("Tactra.app", runner.Requests[1].Arguments[6], StringComparison.Ordinal);
+            Assert.NotEqual(app.FullName, runner.Requests[1].Arguments[6]);
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }
         finally
@@ -1338,6 +1346,7 @@ App installed:
 
     private static void InitializeGitRepository(string workingDirectory)
     {
+        WriteSharedSchemes(workingDirectory);
         RunGit(workingDirectory, "init");
         RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
         RunGit(
@@ -1348,6 +1357,13 @@ App installed:
         RunGit(workingDirectory, "add", ".");
         RunGit(workingDirectory, "commit", "-m", "fixture");
     }
+
+    private static void WriteSharedSchemes(string workingDirectory)
+        => AppleDeploymentTestFixture.WriteSharedSchemes(
+            workingDirectory,
+            "CasaRay",
+            "Tactra",
+            "TactraMac");
 
     private static void RunGit(
         string workingDirectory,

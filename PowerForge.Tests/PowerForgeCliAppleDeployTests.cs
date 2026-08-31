@@ -297,6 +297,9 @@ public sealed class PowerForgeCliAppleDeployTests
 
     private static void InitializeGitRepository(string workingDirectory)
     {
+        AppleDeploymentTestFixture.WriteSharedSchemes(
+            workingDirectory,
+            "Sample");
         RunGit(workingDirectory, "init");
         RunGit(workingDirectory, "config", "user.name", "PowerForge Tests");
         RunGit(

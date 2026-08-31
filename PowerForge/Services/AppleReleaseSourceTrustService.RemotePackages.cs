@@ -15,8 +15,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         IReadOnlyCollection<string> packageLockPaths)
     {
         ValidateRemotePackageIdentity(repositoryUrl, revision);
-        if (!_inspectRemotePackageSource)
-            return;
 
         var identity = NormalizePackageLocation(repositoryUrl) + "@" + revision.ToLowerInvariant();
         if (_validatedRemotePackages.Contains(identity))

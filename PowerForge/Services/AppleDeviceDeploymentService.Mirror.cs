@@ -17,8 +17,8 @@ public sealed partial class AppleDeviceDeploymentService
                 sourcePathComparison))
             throw new InvalidOperationException("BuildMirrorPath must not be inside the mirrored build root.");
 
-        var physicalSourceRoot = ResolvePhysicalPathForWrite(sourceRoot);
-        var physicalMirrorPath = ResolvePhysicalPathForWrite(mirrorPath);
+        var physicalSourceRoot = AppleReleaseArtifactService.ResolvePhysicalPath(sourceRoot);
+        var physicalMirrorPath = AppleReleaseArtifactService.ResolvePhysicalPath(mirrorPath);
         if (IsSameOrDescendant(
                 physicalMirrorPath,
                 physicalSourceRoot,
@@ -96,51 +96,6 @@ public sealed partial class AppleDeviceDeploymentService
         var safeScheme = SanitizePathPart(request.Scheme);
         var uniqueSuffix = Guid.NewGuid().ToString("N").Substring(0, 12);
         return Path.Combine(Path.GetTempPath(), "powerforge-apple-build-mirror", $"{safeScheme}-{uniqueSuffix}");
-    }
-
-    private static string ResolvePhysicalPathForWrite(string path)
-    {
-        var fullPath = Path.GetFullPath(path);
-#if NET8_0_OR_GREATER
-        if (OperatingSystem.IsWindows())
-            return fullPath;
-
-        var existingPath = fullPath;
-        while (!Directory.Exists(existingPath) && !File.Exists(existingPath))
-        {
-            existingPath = Path.GetDirectoryName(existingPath)
-                ?? throw new InvalidOperationException(
-                    $"Unable to resolve physical Apple build path '{fullPath}'.");
-        }
-        var relativeTail = FrameworkCompatibility.GetRelativePath(
-            existingPath,
-            fullPath);
-        var realpathExecutable = File.Exists("/usr/bin/realpath")
-            ? "/usr/bin/realpath"
-            : "/bin/realpath";
-        var resolved = new ProcessRunner().RunAsync(new ProcessRunRequest(
-                realpathExecutable,
-                Directory.GetCurrentDirectory(),
-                [existingPath],
-                TimeSpan.FromSeconds(10),
-                AppleTrustedExecutionEnvironment.Create(),
-                captureOutput: true,
-                captureError: true,
-                inheritEnvironment: false))
-            .GetAwaiter()
-            .GetResult();
-        if (!resolved.Succeeded || string.IsNullOrWhiteSpace(resolved.StdOut))
-        {
-            throw new InvalidOperationException(
-                $"Unable to resolve physical Apple build path '{fullPath}'. " +
-                resolved.StdErr.Trim());
-        }
-        return Path.GetFullPath(Path.Combine(
-            resolved.StdOut.Trim(),
-            relativeTail));
-#else
-        return fullPath;
-#endif
     }
 
     private static bool IsSameOrDescendant(

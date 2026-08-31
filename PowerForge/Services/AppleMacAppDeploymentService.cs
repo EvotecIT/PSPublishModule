@@ -44,14 +44,22 @@ public sealed class AppleMacAppDeploymentService
             nameof(request.InstallRoot),
             FrameworkCompatibility.GetPathStringComparisonForPath(sourceRoot));
 
-        var build = await _buildService.BuildAsync(request, cancellationToken).ConfigureAwait(false);
+        using var buildOperation = await _buildService.BuildForDeploymentAsync(
+            request,
+            cancellationToken).ConfigureAwait(false);
+        var build = buildOperation.Result;
         var deployment = new AppleMacAppDeploymentResult { Build = build };
         if (!build.Succeeded)
             return deployment;
 
         var installedAppPath = Path.Combine(Path.GetFullPath(request.InstallRoot), Path.GetFileName(build.AppPath));
         using var installLock = AppleMacAppBundleReplacement.AcquireInstallLock(installedAppPath);
-        var install = await InstallAsync(request, build.AppPath, cancellationToken).ConfigureAwait(false);
+        var install = await InstallAsync(
+            request,
+            buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
+            buildOperation.ProductSnapshot,
+            cancellationToken).ConfigureAwait(false);
+        install.SourceAppPath = build.AppPath;
         deployment.Install = install;
         if (!install.Succeeded || !request.Launch)
             return deployment;
@@ -63,6 +71,7 @@ public sealed class AppleMacAppDeploymentService
     private async Task<AppleMacAppInstallResult> InstallAsync(
         AppleMacAppDeploymentRequest request,
         string sourceAppPath,
+        AppleBuiltAppSnapshot? productSnapshot,
         CancellationToken cancellationToken)
     {
         var source = Path.GetFullPath(sourceAppPath);
@@ -101,6 +110,7 @@ public sealed class AppleMacAppDeploymentService
 
         try
         {
+            productSnapshot?.ValidateUnchanged();
             var replacementWarning = AppleMacAppBundleReplacement.Replace(stage, destination, backup);
             result.Succeeded = true;
             result.Warning = string.Join(" ", new[] { recoveryWarning, replacementWarning }.Where(static value => !string.IsNullOrWhiteSpace(value)));

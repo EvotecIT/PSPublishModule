@@ -219,6 +219,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string description)
     {
         var result = new Dictionary<string, string>(GetPathComparer(archivePath));
+        result.Add(
+            ".",
+            ExistingFilePathIdentityResolver.ResolveDirectoryStatus(archivePath).MutationIdentity);
         var files = new List<(string RelativePath, string FullPath)>();
         var pending = new Stack<string>();
         pending.Push(archivePath);
@@ -227,16 +230,18 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             var directory = pending.Pop();
             foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
             {
+                var relativePath = FrameworkCompatibility.GetRelativePath(archivePath, entry).Replace('\\', '/');
                 var attributes = File.GetAttributes(entry);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
                     continue;
                 if ((attributes & FileAttributes.Directory) != 0)
                 {
+                    result.Add(
+                        relativePath + "/",
+                        ExistingFilePathIdentityResolver.ResolveDirectoryStatus(entry).MutationIdentity);
                     pending.Push(entry);
                     continue;
                 }
-
-                var relativePath = FrameworkCompatibility.GetRelativePath(archivePath, entry).Replace('\\', '/');
                 files.Add((relativePath, entry));
             }
         }

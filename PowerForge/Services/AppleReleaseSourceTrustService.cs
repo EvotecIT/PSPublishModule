@@ -13,7 +13,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 {
     private AppleReleaseSourceTrustValidationScope _validationScope =
         AppleReleaseSourceTrustValidationScope.BuildExecution;
-    private bool _inspectRemotePackageSource = true;
     private static readonly HashSet<string> AlwaysRejectedIgnoredExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".swift", ".m", ".mm", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp",
@@ -173,7 +172,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private void ResetValidationState()
     {
-        _inspectRemotePackageSource = true;
         _remotePackagesUnderValidation.Clear();
         _validatedRemotePackages.Clear();
         _validatedTrackedFileBlobs.Clear();
