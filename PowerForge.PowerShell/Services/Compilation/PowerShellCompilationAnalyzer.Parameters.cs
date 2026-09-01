@@ -165,7 +165,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var typeCapabilities = hasExplicitType
                 ? PowerShellCompilationParameterTypePolicy.Classify(isSwitch ? typeof(bool) : type, targetFramework)
-                : PowerShellCompilationParameterTypeCapability.None;
+                : PowerShellCompilationParameterTypePolicy.ClassifyUntyped(capabilities);
             if (!typeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             {
                 diagnostics.Add(CreateDiagnostic(
@@ -226,7 +226,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterDefault));
                 AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
             }
-            result.Add(PowerShellParameterContractBinder.Bind(parameter, targetFramework));
+            result.Add(PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);

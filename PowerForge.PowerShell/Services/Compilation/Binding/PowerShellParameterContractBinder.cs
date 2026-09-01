@@ -8,7 +8,8 @@ internal static class PowerShellParameterContractBinder
 {
     internal static PowerShellCompilationParameter Bind(
         ParameterAst parameter,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var type = parameter.StaticType;
         var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
@@ -28,7 +29,7 @@ internal static class PowerShellParameterContractBinder
             GetValidations(parameter),
             parameter.Attributes.OfType<TypeConstraintAst>().Any()
                 ? PowerShellCompilationParameterTypePolicy.Classify(clrType, targetFramework)
-                : PowerShellCompilationParameterTypeCapability.None,
+                : PowerShellCompilationParameterTypePolicy.ClassifyUntyped(capabilities),
             bindings,
             HasMetadataAttribute(parameter, "AllowEmptyString"),
             HasMetadataAttribute(parameter, "AllowEmptyCollection"),

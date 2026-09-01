@@ -189,7 +189,7 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
             }
 
-            var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework);
+            var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities);
             var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;
@@ -219,14 +219,17 @@ internal sealed partial class PowerShellSemanticBinder
                 invalid = true;
             }
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
-            var type = clrType == typeof(object) && !hasAuthoredType
+            var type = clrType == typeof(object) && !hasAuthoredType &&
+                       !PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities)
                 ? PowerShellTypeFact.Unknown
                 : new PowerShellTypeFact(
                     clrType,
-                    PowerShellTypeFactProvenance.Explicit,
+                    hasAuthoredType ? PowerShellTypeFactProvenance.Explicit : PowerShellTypeFactProvenance.Inferred,
                     parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                         ? $"Parameter '${name}' has an authored SwitchParameter contract represented as Boolean only when its object identity is not observed."
-                        : $"Parameter '${name}' has an authored type constraint.");
+                        : hasAuthoredType
+                            ? $"Parameter '${name}' has an authored type constraint."
+                            : $"Untyped parameter '${name}' preserves the PowerShell host's object-valued parameter contract.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
             var bound = new PowerShellBoundParameter(symbol, type, contract);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));

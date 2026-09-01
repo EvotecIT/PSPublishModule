@@ -360,7 +360,7 @@ Eligibility is whole-function and intentionally conservative. One unsupported co
 
 The current subset supports:
 
-- capability-classified CLR, PowerShell-host, process-bindable, `SwitchParameter`, nullable, enum, and one-dimensional typed-array parameters;
+- capability-classified CLR, PowerShell-host, process-bindable, `SwitchParameter`, nullable, enum, and one-dimensional typed-array parameters, plus untyped parameters preserved as `System.Object` only by generated binary-module hosts with the explicit `UntypedObjectParameters` capability;
 - preserved function and parameter aliases plus parameter-set, position, pipeline, remaining-argument, literal-help, empty-value, wildcard, and validation metadata on hosts that implement those contracts;
 - bounded `$PSBoundParameters.ContainsKey('CanonicalParameterName')` queries, including metadata propagation across typed local calls and runtime-free Strict executable argument binding;
 - target-backed `$PSEdition`, `$PSVersionTable.PSVersion.Major`, and PowerShell Core `$IsCoreCLR`, `$IsWindows`, `$IsLinux`, and `$IsMacOS` facts in runtime-free artifacts; the selected semantic profile fixes the version-major value, while the complete live `$PSVersionTable.PSVersion` object remains host-bound; read-only `$env:NAME` access lowers to CLR environment lookup; generated binary cmdlets can additionally inject the live `$PSVersionTable.PSVersion`, `$WhatIfPreference`, supported action/confirm preferences, one read-only `$Error` snapshot, and one- or two-argument `$PSCmdlet.ShouldProcess(...)` contracts, including explicitly bound common-parameter overrides and the host-specific Windows PowerShell 5.1 versus PowerShell 7 `-Debug` preference behavior;
@@ -391,7 +391,7 @@ The analyzer rejects dynamic behavior rather than guessing. Current blockers inc
 
 - commands and pipelines outside the bounded binary-module region contract, including nested closures over unresolved runtime variables;
 - dynamic member names, unbounded PowerShell-adapted properties, ambiguous overloads, and general object-property semantics;
-- script blocks, unproven closures, mutable script/global/private/variable-provider scope, environment-provider mutation, and untyped parameters;
+- script blocks, unproven closures, mutable script/global/private/variable-provider scope, environment-provider mutation, and untyped parameters outside the explicit binary-module object-host contract;
 - automatic or preference variables outside the explicit read-only intrinsic set, arbitrary `$PSVersionTable` keys, and `$PSCmdlet` interactions other than the bounded `ShouldProcess` overloads;
 - dynamic or host-incompatible parameter attributes, PowerShell default expressions, `dynamicparam`, and lifecycle blocks outside the explicitly supported PowerShell 7 Hybrid/version matrix;
 - dynamic `$PSBoundParameters` access, noncanonical or computed keys, dynamic/string throw operands, and `[pscustomobject]` construction outside generated binary modules;

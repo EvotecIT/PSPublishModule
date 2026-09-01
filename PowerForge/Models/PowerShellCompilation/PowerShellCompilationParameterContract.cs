@@ -22,7 +22,8 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.PowerShellHostTypes |
         PowerShellCompilationCapability.PowerShellLanguageConversions |
         PowerShellCompilationCapability.PowerShellLanguageOperators |
-        PowerShellCompilationCapability.RuntimeStateIntrinsics;
+        PowerShellCompilationCapability.RuntimeStateIntrinsics |
+        PowerShellCompilationCapability.UntypedObjectParameters;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =

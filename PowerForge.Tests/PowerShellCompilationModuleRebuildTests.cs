@@ -278,10 +278,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     private static string RunModuleProof(string modulePath, string command)
+        => RunModuleProof(modulePath, command, "pwsh");
+
+    private static string RunModuleProof(string modulePath, string command, string host)
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "pwsh",
+            FileName = host,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

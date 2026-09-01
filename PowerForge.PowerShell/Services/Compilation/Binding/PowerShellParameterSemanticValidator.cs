@@ -30,7 +30,7 @@ internal static class PowerShellParameterSemanticValidator
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
-            if (!hasAuthoredType)
+            if (!hasAuthoredType && !PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities))
             {
                 Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,
                     $"Parameter '${name}' is untyped; add an explicit type before compiling it to a CLR method.", span);

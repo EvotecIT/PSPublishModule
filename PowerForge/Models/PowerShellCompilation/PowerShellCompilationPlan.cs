@@ -53,7 +53,10 @@ public enum PowerShellCompilationCapability
     RuntimeStateIntrinsics = 512,
 
     /// <summary>Runtime-free targets may invoke separately packaged executable provider operations through generated stream delegates.</summary>
-    RuntimeFreeProviderOperations = 1024
+    RuntimeFreeProviderOperations = 1024,
+
+    /// <summary>Generated PowerShell hosts may preserve an untyped parameter as an object-valued binding contract.</summary>
+    UntypedObjectParameters = 2048
 }
 
 /// <summary>
@@ -408,7 +411,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
-                              PowerShellCompilationCapability.RuntimeFreeProviderOperations)) != 0)
+                              PowerShellCompilationCapability.RuntimeFreeProviderOperations |
+                              PowerShellCompilationCapability.UntypedObjectParameters)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

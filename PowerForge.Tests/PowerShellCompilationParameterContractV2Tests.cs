@@ -5,6 +5,64 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Theory]
+    [InlineData("net472")]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void Analyze_BinaryModuleClassifiesUntypedParameterAsHostObjectContract(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Copy-Value { param([AllowNull()] $Value) return $Value }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var parameter = Assert.Single(unit.Parameters);
+        Assert.Equal(typeof(object).FullName, parameter.TypeName);
+        Assert.True(parameter.TypeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod));
+        Assert.True(parameter.TypeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.PowerShellHost));
+        Assert.False(parameter.TypeCapabilities.HasFlag(PowerShellCompilationParameterTypeCapability.ProcessArgument));
+        Assert.True(PowerShellCompilationCapabilities.BinaryModule.HasFlag(PowerShellCompilationCapability.UntypedObjectParameters));
+        Assert.False(PowerShellCompilationCapabilities.TypedExecutable.HasFlag(PowerShellCompilationCapability.UntypedObjectParameters));
+    }
+
+    [Fact]
+    public void Analyze_TypedExecutableRejectsUntypedObjectParameter()
+    {
+        using var fixture = ArtifactFixture.Create("param($Value) return $Value");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.TypedExecutable));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterType);
+    }
+
+    [Fact]
+    public void Analyze_BinaryModuleDoesNotTreatUntypedObjectAsDynamicMemberContract()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Name { param($Value) return $Value.Name }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterType);
+        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("MemberExpressionAst"));
+    }
+
     [Fact]
     public void Analyze_ClassifiesHostTypesAndPreservesParameterSetBindings()
     {
@@ -103,6 +161,44 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 "$secret = ConvertTo-SecureString x -AsPlainText -Force; " +
                 "$credential = [PSCredential]::new('user', $secret); " +
                 "(Get-TypedCredential -Credential $credential).UserName"));
+    }
+
+    [Theory]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_BinaryModulePreservesUntypedObjectParameterBehavior(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !OperatingSystem.IsWindows()) return;
+        using var fixture = ArtifactFixture.Create(
+            "function Copy-UntypedValue { [CmdletBinding()] param([Parameter(Position=0)][AllowNull()] $Value) return $Value }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.UntypedObjectParameter",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true,
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        const string proof =
+            "$parameter = (Get-Command Copy-UntypedValue).Parameters['Value']; $parameter.ParameterType.FullName; " +
+            "$scalar = Copy-UntypedValue -Value 42; $scalar.GetType().FullName; $scalar; " +
+            "@(Copy-UntypedValue -Value $null).Count; " +
+            "@(Copy-UntypedValue -Value @('a','b')).Count; " +
+            "(Copy-UntypedValue -Value ([pscustomobject]@{ Name = 'Ada' })).Name";
+        var original = RunModuleProof(fixture.ScriptPath, proof, host);
+        var compiled = RunModuleProof(result.ArtifactPath!, proof, host);
+
+        Assert.Equal(original, compiled);
+        Assert.Equal(
+            new[] { "System.Object", "System.Int32", "42", "1", "2", "Ada" },
+            compiled.Split(Environment.NewLine));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("Copy_UntypedValue(object Value)", generated, StringComparison.Ordinal);
     }
 
     [Fact]

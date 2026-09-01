@@ -40,6 +40,16 @@ internal static class PowerShellCompilationParameterTypePolicy
         return result;
     }
 
+    internal static PowerShellCompilationParameterTypeCapability ClassifyUntyped(
+        PowerShellCompilationCapability capabilities)
+        => CanUseUntypedObject(capabilities)
+            ? PowerShellCompilationParameterTypeCapability.ClrMethod |
+              PowerShellCompilationParameterTypeCapability.PowerShellHost
+            : PowerShellCompilationParameterTypeCapability.None;
+
+    internal static bool CanUseUntypedObject(PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.UntypedObjectParameters);
+
     internal static bool CanUseInMethod(
         Type type,
         string? targetFramework,
