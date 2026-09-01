@@ -391,10 +391,13 @@ public sealed partial class AppleDeviceDeploymentService
         {
             // SYMROOT keeps the exact-source product inside PowerForge's
             // private boundary while preserving Xcode's configuration- and
-            // SDK-specific subdirectories. CONFIGURATION_BUILD_DIR flattens
-            // embedded iOS/watchOS products and makes their package outputs
-            // collide.
+            // SDK-specific subdirectories. Override a project-level
+            // CONFIGURATION_BUILD_DIR with Xcode variables that remain
+            // target-specific so embedded iOS/watchOS products cannot collide
+            // or escape the private root.
             args.Add($"SYMROOT={deploymentProductRoot}");
+            args.Add(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)");
         }
 
         args.Add("build");
@@ -816,13 +819,19 @@ public sealed partial class AppleDeviceDeploymentService
         if (string.IsNullOrWhiteSpace(destination))
             return null;
 
-        var trimmed = destination!.Trim();
         const string prefix = "id=";
-        if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return null;
+        foreach (var field in destination!.Split(','))
+        {
+            var trimmed = field.Trim();
+            if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
 
-        var value = trimmed.Substring(prefix.Length).Trim();
-        return string.IsNullOrWhiteSpace(value) ? null : value;
+            var value = trimmed.Substring(prefix.Length).Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
     }
 
     private static string? MatchValue(Regex regex, string output)

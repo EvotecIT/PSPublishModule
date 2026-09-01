@@ -247,12 +247,10 @@ internal static partial class Program
             cliResult.Success = deployment.Succeeded;
             cliResult.Warning = deployment.Install?.Warning;
             cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
+                CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
                 deployment.Build.ProcessResult,
                 deployment.Install?.ProcessResult,
                 deployment.Launch?.ProcessResult);
-            cliResult.Diagnostic = RedactAppleDeployDiagnostic(
-                cliResult.Diagnostic,
-                CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot));
             return;
         }
 
@@ -292,12 +290,10 @@ internal static partial class Program
         cliResult.DeviceLocked = deviceDeployment.Launch?.DeviceLocked ?? false;
         cliResult.Success = deviceDeployment.RequestedStagesSucceeded;
         cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
+            CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
             deviceDeployment.Build.ProcessResult,
             deviceDeployment.Install?.ProcessResult,
             deviceDeployment.Launch?.ProcessResult);
-        cliResult.Diagnostic = RedactAppleDeployDiagnostic(
-            cliResult.Diagnostic,
-            CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot));
     }
 
     private static AppleAppConfiguration SelectAppleDeployTarget(
@@ -440,13 +436,6 @@ internal static partial class Program
     private static string? FirstNonEmptyAppleDeploy(params string?[] values)
         => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
-    private static string? RedactAppleDeployDiagnostic(
-        string? diagnostic,
-        IEnumerable<string> sensitiveValues)
-        => diagnostic is null
-            ? null
-            : RedactReleaseCredentialText(diagnostic, sensitiveValues);
-
     private static ApplePlatform ParseAppleDeployPlatform(string? value, ApplePlatform fallback)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -542,7 +531,9 @@ internal static partial class Program
     private static string FormatAppleDeployTargetSuffix(string? target)
         => string.IsNullOrWhiteSpace(target) ? string.Empty : $" and target '{target}'";
 
-    private static string? ResolveAppleDeployDiagnostic(params ProcessRunResult?[] stages)
+    private static string? ResolveAppleDeployDiagnostic(
+        IEnumerable<string> sensitiveValues,
+        params ProcessRunResult?[] stages)
     {
         var failed = stages.FirstOrDefault(static stage => stage is not null && !stage.Succeeded);
         if (failed is null)
@@ -550,7 +541,7 @@ internal static partial class Program
         var text = string.IsNullOrWhiteSpace(failed.StdErr) ? failed.StdOut : failed.StdErr;
         if (string.IsNullOrWhiteSpace(text))
             return $"{failed.Executable} exited with code {failed.ExitCode}.";
-        var compact = text.Trim();
+        var compact = RedactReleaseCredentialText(text, sensitiveValues).Trim();
         return compact.Length <= 2000 ? compact : compact[^2000..];
     }
 

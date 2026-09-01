@@ -6,6 +6,44 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliAppleDeployTests
 {
     [Fact]
+    public void AppleDeploy_diagnostic_redacts_credentials_before_truncation()
+    {
+        var cliAssembly = System.Reflection.Assembly.LoadFrom(
+            GetCliPath(FindRepositoryRoot()));
+        var program = cliAssembly.GetType("Program", throwOnError: true)!;
+        var formatter = program.GetMethod(
+            "ResolveAppleDeployDiagnostic",
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Static)
+            ?? throw new MissingMethodException(
+                "Program.ResolveAppleDeployDiagnostic was not found.");
+        const string credential = "credential-sensitive-value";
+        var failure = new ProcessRunResult(
+            1,
+            credential + new string('x', 1980),
+            string.Empty,
+            "xcodebuild",
+            TimeSpan.FromSeconds(1),
+            timedOut: false);
+
+        var diagnostic = (string?)formatter.Invoke(
+            null,
+            new object[]
+            {
+                new[] { credential },
+                new ProcessRunResult?[] { failure }
+            });
+
+        Assert.NotNull(diagnostic);
+        Assert.Contains("[REDACTED]", diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "sensitive-value",
+            diagnostic,
+            StringComparison.Ordinal);
+        Assert.True(diagnostic.Length <= 2000);
+    }
+
+    [Fact]
     public async Task AppleDeploy_plan_uses_nonempty_alias_credentials_when_primary_environment_values_are_empty()
     {
         var repoRoot = FindRepositoryRoot();

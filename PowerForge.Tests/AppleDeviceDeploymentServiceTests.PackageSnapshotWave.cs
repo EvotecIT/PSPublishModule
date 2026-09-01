@@ -90,11 +90,9 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             Assert.Equal(
                 ReadArgumentValue(resolve, "-clonedSourcePackagesDirPath"),
                 ReadArgumentValue(build, "-clonedSourcePackagesDirPath"));
-            Assert.DoesNotContain(
-                build.Arguments,
-                argument => argument.StartsWith(
-                    "CONFIGURATION_BUILD_DIR=",
-                    StringComparison.Ordinal));
+            Assert.Contains(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)",
+                build.Arguments);
             var productRoot = AppleDeploymentTestFixture
                 .TryResolvePrivateProductRoot(build);
             Assert.NotNull(productRoot);
@@ -132,7 +130,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         var sourcePackages = Directory.CreateDirectory(Path.Combine(
             snapshotRoot.FullName,
             "SourcePackages"));
-        var aliasPath = Path.Combine(aliasRoot.FullName, "SourcePackages");
+        var aliasPath = Path.Combine(aliasRoot.FullName, "SnapshotAlias");
         try
         {
             var repositories = Directory.CreateDirectory(Path.Combine(
@@ -149,13 +147,14 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 mirror);
             RunGit(mirror, "remote", "set-url", "origin", fixture.RemoteUrl);
 
-            Directory.CreateSymbolicLink(aliasPath, sourcePackages.FullName);
+            Directory.CreateSymbolicLink(aliasPath, snapshotRoot.FullName);
             var checkouts = Directory.CreateDirectory(Path.Combine(
                 sourcePackages.FullName,
                 "checkouts"));
             var checkout = Path.Combine(checkouts.FullName, "Shared");
             var aliasedMirror = Path.Combine(
                 aliasPath,
+                "SourcePackages",
                 "repositories",
                 Path.GetFileName(mirror));
             RunGit(
@@ -193,6 +192,153 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 // Best effort fixture cleanup.
             }
             try { aliasRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Materialized_package_validation_rejects_a_linked_repositories_directory()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var snapshotRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LinkedPackageRepositories",
+            Guid.NewGuid().ToString("N")));
+        var externalRepositories = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.ExternalPackageRepositories",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sourcePackages = Directory.CreateDirectory(Path.Combine(
+                snapshotRoot.FullName,
+                "SourcePackages"));
+            var linkedRepositories = Path.Combine(
+                sourcePackages.FullName,
+                "repositories");
+            Directory.CreateSymbolicLink(
+                linkedRepositories,
+                externalRepositories.FullName);
+            var mirror = Path.Combine(
+                linkedRepositories,
+                "Shared-96812fe1");
+            RunGit(
+                linkedRepositories,
+                "clone",
+                "--mirror",
+                "--quiet",
+                "--no-hardlinks",
+                fixture.RemoteRoot,
+                mirror);
+            RunGit(mirror, "remote", "set-url", "origin", fixture.RemoteUrl);
+
+            var checkouts = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "checkouts"));
+            var checkout = Path.Combine(checkouts.FullName, "Shared");
+            RunGit(
+                checkouts.FullName,
+                "clone",
+                "--quiet",
+                "--no-hardlinks",
+                mirror,
+                checkout);
+            var revision = ReadGit(checkout, "rev-parse", "HEAD").Trim();
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                    sourcePackages.FullName,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [fixture.RemoteUrl[..^4]] = revision
+                    }));
+
+            Assert.Contains(
+                "must not traverse a symbolic link or reparse point",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { externalRepositories.Delete(recursive: true); } catch { /* best effort */ }
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Materialized_package_validation_rejects_a_linked_mirror_entry()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var snapshotRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LinkedPackageMirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sourcePackages = Directory.CreateDirectory(Path.Combine(
+                snapshotRoot.FullName,
+                "SourcePackages"));
+            var repositories = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "repositories"));
+            var physicalMirror = Path.Combine(
+                repositories.FullName,
+                "Physical-96812fe1");
+            RunGit(
+                repositories.FullName,
+                "clone",
+                "--mirror",
+                "--quiet",
+                "--no-hardlinks",
+                fixture.RemoteRoot,
+                physicalMirror);
+            RunGit(
+                physicalMirror,
+                "remote",
+                "set-url",
+                "origin",
+                fixture.RemoteUrl);
+            var linkedMirror = Path.Combine(
+                repositories.FullName,
+                "Shared-96812fe1");
+            Directory.CreateSymbolicLink(linkedMirror, physicalMirror);
+
+            var checkouts = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "checkouts"));
+            var checkout = Path.Combine(checkouts.FullName, "Shared");
+            RunGit(
+                checkouts.FullName,
+                "clone",
+                "--quiet",
+                "--no-hardlinks",
+                linkedMirror,
+                checkout);
+            var revision = ReadGit(checkout, "rev-parse", "HEAD").Trim();
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                    sourcePackages.FullName,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [fixture.RemoteUrl[..^4]] = revision
+                    }));
+
+            Assert.Contains(
+                "must not traverse a symbolic link or reparse point",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
             try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
             fixture.Dispose();
         }

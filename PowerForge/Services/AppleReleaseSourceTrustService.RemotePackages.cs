@@ -189,7 +189,17 @@ internal sealed partial class AppleReleaseSourceTrustService
             return origin;
         }
 
-        ValidateXcodeRepositoryMirrorMetadata(physicalRepositories, physicalOrigin);
+        // Preserve the lexical paths for link checks below the accepted
+        // repositories boundary. Only ancestor aliases are allowed; neither
+        // the repositories directory nor a mirror entry may itself be a link.
+        EnsureNoLinkedTraversal(
+            repositories,
+            repositories,
+            "Xcode materialized Swift package repository root");
+        var originRepositories = Path.GetDirectoryName(resolvedOrigin)
+            ?? throw new InvalidOperationException(
+                $"Xcode materialized Swift package repository mirror has no parent directory: {resolvedOrigin}");
+        ValidateXcodeRepositoryMirrorMetadata(originRepositories, resolvedOrigin);
         var canonicalOrigin = RunGitAllowFailure(physicalOrigin, "remote", "get-url", "origin");
         if (!canonicalOrigin.Succeeded || string.IsNullOrWhiteSpace(canonicalOrigin.StdOut))
         {

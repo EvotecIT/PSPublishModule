@@ -1296,11 +1296,9 @@ App installed:
                 runner.Requests[0],
                 "-derivedDataPath");
             Assert.False(Directory.Exists(privateDerivedDataRoot));
-            Assert.DoesNotContain(
-                runner.Requests[0].Arguments,
-                argument => argument.StartsWith(
-                    "CONFIGURATION_BUILD_DIR=",
-                    StringComparison.Ordinal));
+            Assert.Contains(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)",
+                runner.Requests[0].Arguments);
             var privateProductRoot = AppleDeploymentTestFixture
                 .TryResolvePrivateProductRoot(runner.Requests[0]);
             Assert.NotNull(privateProductRoot);
@@ -1315,7 +1313,7 @@ App installed:
     }
 
     [Fact]
-    public async Task DeployAsync_reuses_id_destination_for_install_and_launch()
+    public async Task DeployAsync_reuses_composite_id_destination_for_install_and_launch()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1340,7 +1338,7 @@ App installed:
                 ProjectPath = project.FullName,
                 Scheme = "Tactra",
                 DerivedDataPath = derived,
-                Destination = "id=device-1",
+                Destination = "platform=iOS,id=device-1",
                 BundleIdentifier = "com.evotecit.tactra",
                 Launch = true,
                 XcodeBuildExecutable = "/usr/bin/xcodebuild",
