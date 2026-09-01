@@ -120,6 +120,232 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Transpile_BinaryModuleReadsEnvironmentValuesInsideControlFlow()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Test-EnvironmentState { param([string] $InvocationName) " +
+            "if ($InvocationName -ne '.') { return $true }; " +
+            "if (-not $env:CI) { return $false }; " +
+            "[bool] $should = $true; " +
+            "if ($null -ne $env:POWERFORGE_NOINSTALL) { $should = $false }; " +
+            "return $should }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.EnvironmentStateModule",
+            "CompiledPowerShell",
+            "net10.0");
+
+        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        var method = Assert.Single(typed.Methods);
+        Assert.Contains("global::System.Environment.GetEnvironmentVariable(\"CI\")", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("global::System.Environment.GetEnvironmentVariable(\"POWERFORGE_NOINSTALL\")", typed.SourceCode, StringComparison.Ordinal);
+        Assert.False(method.RequiresPowerShellRuntimeState);
+    }
+
+    [Fact]
+    public void Transpile_BinaryModuleBindsOnlyBooleanGetCommandDiscovery()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-LiteralCommandAvailability { if (Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.CommandDiscoveryModule",
+            "CompiledPowerShell",
+            "net10.0");
+
+        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        Assert.Equal(2, typed.Methods.Length);
+        Assert.All(typed.Methods, static method =>
+        {
+            Assert.True(method.RequiresPowerShellCommandRegions);
+            Assert.False(method.RequiresPowerShellRuntimeState);
+            Assert.Equal(1, method.HostedRegionSiteCount);
+        });
+        Assert.Contains("__invokePowerShellCapture", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.PowerShell.Core\\\\Get-Command", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("\"SilentlyContinue\"", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("\"Ignore\"", typed.SourceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("__commandAvailable", typed.SourceCode, StringComparison.Ordinal);
+        var providers = typed.Methods.SelectMany(static method => method.CommandProviders).ToArray();
+        Assert.All(providers, static provider =>
+        {
+            Assert.Equal("powerforge.command.discovery.get-command", provider.ProviderId);
+            Assert.Equal(PowerShellCompilationCommandFamily.CommandDiscovery, provider.Family);
+            Assert.False(provider.Adapter.RuntimeFree);
+        });
+    }
+
+    [Fact]
+    public void Transpile_BasicCommandDiscoveryDoesNotPermitOtherHostedRegions()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Test-MixedCommandHost { [bool] $available = Get-Command Get-Command -EA Ignore; $ignored = Get-Date; return $available }",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.MixedCommandHost",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("Basic function", StringComparison.Ordinal));
+
+        const string helper =
+            "function Invoke-HostedHelper { [CmdletBinding()] param() $ignored = Get-Date }; ";
+        using var transitiveFixture = ArtifactFixture.Create(
+            helper + "function Test-TransitiveAvailability { Invoke-HostedHelper; return [bool](Get-Command Get-Command -EA Ignore) }",
+            ".psm1");
+        var transitive = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { transitiveFixture.ScriptPath },
+            "PowerForge.TransitiveCommandHost",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.DoesNotContain(transitive.Methods, static method => method.SourceName == "Test-TransitiveAvailability");
+        Assert.Contains(transitive.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("Basic function 'Test-TransitiveAvailability'", StringComparison.Ordinal));
+
+        using var countedFixture = ArtifactFixture.Create(
+            helper + "function Test-CountedAvailability { [CmdletBinding()] param() Invoke-HostedHelper; return [bool](Get-Command Get-Command -EA Ignore) }",
+            ".psm1");
+        var counted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { countedFixture.ScriptPath },
+            "PowerForge.CountedCommandHost",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.Empty(counted.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        var caller = Assert.Single(counted.Methods, static method => method.SourceName == "Test-CountedAvailability");
+        Assert.Equal(2, caller.HostedRegionSiteCount);
+    }
+
+    [Fact]
+    public void Transpile_CommandDiscoveryNameParticipatesInFlowAndCallGraphAnalysis()
+    {
+        using var invalidFixture = ArtifactFixture.Create(
+            "function Test-UnassignedDiscovery { param([bool] $UseName) if ($UseName) { $Name = 'Get-Command' }; return [bool](Get-Command $Name -EA Ignore) }",
+            ".psm1");
+        var invalid = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { invalidFixture.ScriptPath },
+            "PowerForge.InvalidCommandDiscovery",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.Empty(invalid.Methods);
+        Assert.Contains(invalid.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("may remain unassigned", StringComparison.OrdinalIgnoreCase));
+
+        using var nestedFixture = ArtifactFixture.Create(
+            "function Get-DiscoveryName { [CmdletBinding()] param() Write-Verbose 'discovery'; return 'Get-Command' }; " +
+            "function Test-NestedCommandAvailability { [CmdletBinding()] param() return [bool](Get-Command (Get-DiscoveryName) -EA Ignore) }",
+            ".psm1");
+        var nested = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { nestedFixture.ScriptPath },
+            "PowerForge.NestedCommandDiscovery",
+            "CompiledPowerShell",
+            "net8.0");
+
+        Assert.Empty(nested.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        var caller = Assert.Single(nested.Methods, static method => method.SourceName == "Test-NestedCommandAvailability");
+        Assert.True(caller.RequiresPowerShellCommandRegions);
+        Assert.True(caller.RequiresPowerShellStreams);
+        Assert.Contains("Get_DiscoveryName(__writeOutput", nested.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("net8.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_BinaryModulePreservesBooleanGetCommandDiscovery(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        using var fixture = ArtifactFixture.Create(
+            "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-IgnoreCommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction Ignore) }; " +
+            "function Test-LiteralCommandAvailability { if (Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            ".psm1");
+        var discoveryModuleRoot = Path.Combine(fixture.RootPath, "modules");
+        var discoveryModulePath = Path.Combine(discoveryModuleRoot, "PowerForgeCommandDiscoveryFixture");
+        Directory.CreateDirectory(discoveryModulePath);
+        File.WriteAllText(
+            Path.Combine(discoveryModulePath, "PowerForgeCommandDiscoveryFixture.psm1"),
+            "function Get-PowerForgeDiscoveryFixture { 'available' }; Export-ModuleMember -Function Get-PowerForgeDiscoveryFixture");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.CommandDiscoveryModule",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var provider = Assert.Single(result.Manifest!.CommandProviders);
+        Assert.Equal("powerforge.command.discovery.get-command", provider.ProviderId);
+        Assert.Equal(PowerShellCompilationCommandFamily.CommandDiscovery, provider.Family);
+        Assert.True(result.Manifest.RequiresPowerShellRuntime);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        Assert.All(ledger.Entries, static entry =>
+        {
+            Assert.Equal(1, entry.RuntimeCommandRegions);
+            Assert.Equal(1, entry.BoundaryCrossings);
+        });
+        var escapedModuleRoot = discoveryModuleRoot.Replace("'", "''", StringComparison.Ordinal);
+        var setup = $"$env:PSModulePath = '{escapedModuleRoot}' + [IO.Path]::PathSeparator + $env:PSModulePath; ";
+        const string calls =
+            "$qualified = Test-CommandAvailability 'PowerForgeCommandDiscoveryFixture\\Get-PowerForgeDiscoveryFixture'; " +
+            "Remove-Module PowerForgeCommandDiscoveryFixture -ErrorAction Ignore; " +
+            "$exact = Test-CommandAvailability 'Get-PowerForgeDiscoveryFixture'; " +
+            "$wildcard = Test-CommandAvailability 'Get-PowerForgeDiscoveryF*'; " +
+            "$Error.Clear(); $silent = Test-CommandAvailability 'PowerForge-Definitely-Missing-*'; $silentErrors = $Error.Count; " +
+            "$Error.Clear(); $ignored = Test-IgnoreCommandAvailability 'PowerForge-Definitely-Missing-*'; $ignoredErrors = $Error.Count; " +
+            "$literal = Test-LiteralCommandAvailability; " +
+            "@($qualified, $exact, $wildcard, $silent, $silentErrors, $ignored, $ignoredErrors, $literal) -join '|'";
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"{setup} Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"{setup} Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {calls}");
+
+        Assert.Equal(0, original.ExitCode);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardError + Environment.NewLine + compiled.StandardOutput);
+        Assert.Equal(original.StandardOutput.Trim(), compiled.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(original.StandardError), original.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
+    }
+
+    [Fact]
+    public void Build_StrictLibraryRejectsGetCommandDiscovery()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.RuntimeFreeCommandDiscovery",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.ArtifactPath);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            capabilities: PowerShellCompilationCapability.None));
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == "command.get-command");
+    }
+
+    [Fact]
     public void Build_StrictLibraryAbiMarksEnvironmentValueAsNullable()
     {
         using var fixture = ArtifactFixture.Create(

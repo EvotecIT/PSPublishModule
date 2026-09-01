@@ -326,12 +326,13 @@ internal sealed partial class PowerShellSemanticAnalyzer
                                expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey));
     }
 
-    private static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
+    internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {
         yield return expression;
         IEnumerable<PowerShellBoundExpression> children = expression switch
         {
             PowerShellBoundConversionExpression conversion => new[] { conversion.Operand },
+            PowerShellBoundCommandAvailabilityExpression discovery => new[] { discovery.Name },
             PowerShellBoundInvocationExpression invocation => invocation.Arguments,
             PowerShellBoundBinaryExpression binary => new[] { binary.Left, binary.Right },
             PowerShellBoundUnaryExpression unary => new[] { unary.Operand },
@@ -440,7 +441,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
     }
 
-    private static IEnumerable<PowerShellBoundExpression> EnumerateDirectExpressions(PowerShellBoundStatement statement)
+    internal static IEnumerable<PowerShellBoundExpression> EnumerateDirectExpressions(PowerShellBoundStatement statement)
     {
         var expression = GetExpression(statement);
         if (expression is not null) yield return expression;
@@ -488,6 +489,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
     internal static IEnumerable<PowerShellBoundVariableExpression> EnumerateVariableReads(PowerShellBoundExpression expression)
     {
         if (expression is PowerShellBoundVariableExpression variable) yield return variable;
+        if (expression is PowerShellBoundCommandAvailabilityExpression discovery)
+        {
+            foreach (var read in EnumerateVariableReads(discovery.Name)) yield return read;
+        }
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             foreach (var read in EnumerateVariableReads(conversion.Operand)) yield return read;
@@ -600,6 +605,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
     private static IEnumerable<PowerShellBoundInvocationExpression> EnumerateInvocations(PowerShellBoundExpression expression)
     {
+        if (expression is PowerShellBoundCommandAvailabilityExpression discovery)
+        {
+            foreach (var nested in EnumerateInvocations(discovery.Name)) yield return nested;
+        }
         if (expression is PowerShellBoundInvocationExpression invocation)
         {
             yield return invocation;

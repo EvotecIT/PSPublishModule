@@ -306,6 +306,7 @@ internal sealed partial class PowerShellTypedLowerer
         => expression switch
         {
             PowerShellBoundRuntimeStateExpression runtime => runtime.RequiresHostBinding,
+            PowerShellBoundCommandAvailabilityExpression discovery => ExpressionRequiresRuntimeStateHostBinding(discovery.Name),
             PowerShellBoundConversionExpression conversion => ExpressionRequiresRuntimeStateHostBinding(conversion.Operand),
             PowerShellBoundBinaryExpression binary => ExpressionRequiresRuntimeStateHostBinding(binary.Left) || ExpressionRequiresRuntimeStateHostBinding(binary.Right),
             PowerShellBoundUnaryExpression unary => ExpressionRequiresRuntimeStateHostBinding(unary.Operand),
@@ -605,6 +606,11 @@ internal sealed partial class PowerShellTypedLowerer
                 runtime.TargetFramework,
                 runtime.SemanticProfileId,
                 runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray()),
+            PowerShellBoundCommandAvailabilityExpression discovery => new PowerShellLoweredCommandAvailabilityExpression(
+                discovery.Span,
+                LowerExpression(discovery.Name, functions, names, targetCapabilities),
+                discovery.ErrorAction,
+                discovery.Provider),
             PowerShellBoundParameterPresenceExpression presence => new PowerShellLoweredParameterPresenceExpression(presence.Span, presence.ParameterName),
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(
                 conversion.Span,

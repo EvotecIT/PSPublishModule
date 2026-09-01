@@ -359,7 +359,7 @@ internal sealed partial class PowerShellSemanticBinder
             var clauses = new List<PowerShellBoundConditionalClause>();
             foreach (var clause in ifStatement.Clauses)
             {
-                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
                 if (condition is null) return null;
                 condition = BindConditionTruthiness(condition, capabilities, diagnostics);
                 if (condition is null) return null;
@@ -375,7 +375,7 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is WhileStatementAst whileStatement)
         {
-            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
             condition = BindConditionTruthiness(condition, capabilities, diagnostics);
             if (condition is null) return null;
@@ -390,7 +390,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (forStatement.Initializer is not null && initializer is null) return null;
             var condition = forStatement.Condition is null
                 ? null
-                : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+                : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
             if (forStatement.Condition is not null && condition is null) return null;
             var iterator = forStatement.Iterator is null

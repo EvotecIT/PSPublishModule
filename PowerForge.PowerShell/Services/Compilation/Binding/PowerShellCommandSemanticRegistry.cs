@@ -180,6 +180,33 @@ internal sealed class PowerShellCommandSemanticRegistry
             "Success",
             PowerShellCompilationCommandErrors.PowerShellHost,
             runtimeFree: false);
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.discovery.get-command",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Get-Command"),
+            Family = PowerShellCompilationCommandFamily.CommandDiscovery,
+            CommandName = "Get-Command",
+            ModuleNames = new[] { "Microsoft.PowerShell.Core" },
+            Aliases = new[] { "gcm" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "Name", Position = 0 },
+                new PowerShellCompilationCommandParameterContract { Name = "ErrorAction", Aliases = new[] { "EA" }, Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.PowerShellHost,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "InvokePowerShellCapture",
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                RuntimeFree = false,
+                AotCompatible = false,
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
     }
 
     private static PowerShellCompilationCommandProviderContract Stream(

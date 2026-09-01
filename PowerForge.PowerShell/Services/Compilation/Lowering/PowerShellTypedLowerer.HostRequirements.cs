@@ -105,22 +105,10 @@ internal sealed partial class PowerShellTypedLowerer
         };
 
     private static bool ContainsPowerShellCommandRegion(PowerShellBoundBlock block)
-        => block.Statements.Any(StatementContainsPowerShellCommandRegion);
-
-    private static bool StatementContainsPowerShellCommandRegion(PowerShellBoundStatement statement)
-        => statement switch
-        {
-            PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement => true,
-            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
-                (conditional.ElseBlock is not null && ContainsPowerShellCommandRegion(conditional.ElseBlock)),
-            PowerShellBoundWhileStatement loop => ContainsPowerShellCommandRegion(loop.Body),
-            PowerShellBoundForStatement loop => ContainsPowerShellCommandRegion(loop.Body),
-            PowerShellBoundForEachStatement loop => ContainsPowerShellCommandRegion(loop.Body),
-            PowerShellBoundSwitchStatement switchStatement => switchStatement.Clauses.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
-                (switchStatement.DefaultBlock is not null && ContainsPowerShellCommandRegion(switchStatement.DefaultBlock)),
-            PowerShellBoundTryStatement tryStatement => ContainsPowerShellCommandRegion(tryStatement.Body) ||
-                tryStatement.Catches.Any(clause => ContainsPowerShellCommandRegion(clause.Body)) ||
-                (tryStatement.FinallyBlock is not null && ContainsPowerShellCommandRegion(tryStatement.FinallyBlock)),
-            _ => false
-        };
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block).Any(static statement =>
+               statement is PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement) ||
+           PowerShellSemanticAnalyzer.EnumerateStatements(block)
+               .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+               .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression);
 }

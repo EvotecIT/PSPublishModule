@@ -20,7 +20,9 @@ public enum PowerShellCompilationCommandFamily
     /// <summary>A bounded command region executed by the PowerShell host.</summary>
     HostedRegion,
     /// <summary>A separately packaged runtime-free operation whose result is routed to a declared stream.</summary>
-    ExternalOperation
+    ExternalOperation,
+    /// <summary>Read-only discovery against the current PowerShell command table.</summary>
+    CommandDiscovery
 }
 
 /// <summary>Success-output shape produced by a command provider.</summary>

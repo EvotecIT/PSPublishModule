@@ -205,9 +205,23 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities,
                     diagnostics);
+            case CommandAst command when
+                _commandRegistry.Resolve(command.GetCommandName()) is
+                {
+                    Status: PowerShellCommandResolutionStatus.Resolved,
+                    Contract.Family: PowerShellCompilationCommandFamily.CommandDiscovery
+                } discovery:
+                return PowerShellCommandDiscoverySemanticBinder.Bind(
+                    document,
+                    command,
+                    discovery.Contract!,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    contextualType,
+                    capabilities,
+                    diagnostics);
             case CommandAst command:
                 var commandName = command.GetCommandName();
-                var commandResolution = PowerShellCommandSemanticRegistry.Default.Resolve(commandName);
+                var commandResolution = _commandRegistry.Resolve(commandName);
                 var featureId = commandResolution.Status == PowerShellCommandResolutionStatus.Resolved
                     ? commandResolution.Contract!.FeatureId
                     : commandName is null

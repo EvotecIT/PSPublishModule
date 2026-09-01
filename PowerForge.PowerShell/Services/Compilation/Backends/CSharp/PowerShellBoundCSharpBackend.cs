@@ -76,6 +76,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
         foreach (var statement in function.Statements) EmitStatement(builder, statement, 3, GetTemporaryIdentifier, sourceMap);
 
         builder.AppendLine("        }").Append("    }");
+        var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
+        var hostedRegionSiteCount = CountHostedRegionSites(function.Statements);
+        var supportsBasicCommandDiscoverySurface =
+            function.RequiresPowerShellCommandRegions &&
+            !function.RequiresPowerShellStreams &&
+            !ContainsNonDiscoveryHostedBoundary(function.Statements) &&
+            commandProviders.Length > 0 &&
+            commandProviders.All(static provider => provider.Family == PowerShellCompilationCommandFamily.CommandDiscovery);
         return new PowerShellCSharpMethodEmission(
             function.GeneratedName,
             function.ReturnType,
@@ -91,7 +99,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             aliases: function.Aliases.ToArray(),
             commandBinding: function.CommandBinding,
             sourceMap: sourceMap.ToArray(),
-            commandProviders: PowerShellLoweredCommandProviderCollector.Collect(function.Statements),
+            commandProviders: commandProviders,
             outputCardinality: function.OutputCardinality.ToString(),
             outputValueStates: function.OutputValueStates.Select(static state => state.ToString()).ToArray(),
             collectionElementType: function.OutputCardinality == PowerShellOutputCardinality.Collection
@@ -104,7 +112,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 PowerShellOutputCardinality.Scalar => "PreserveScalar",
                 _ => "RuntimeDependent"
             },
-            hostedRegionSiteCount: CountHostedRegionSites(function.Statements));
+            hostedRegionSiteCount: hostedRegionSiteCount,
+            supportsBasicCommandDiscoverySurface: supportsBasicCommandDiscoverySurface);
     }
 
     private static void EmitStatement(
@@ -270,6 +279,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
+            PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
             PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
@@ -298,6 +308,20 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredInvocationExpression invocation => EmitLocalInvocation(invocation),
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitCommandAvailability(PowerShellLoweredCommandAvailabilityExpression discovery)
+    {
+        const string script = "param([string] $__pfName, [string] $__pfErrorAction) [bool](Microsoft.PowerShell.Core\\Get-Command -Name $__pfName -ErrorAction $__pfErrorAction)";
+        var errorAction = discovery.ErrorAction switch
+        {
+            PowerShellCommandDiscoveryErrorAction.Ignore => "Ignore",
+            PowerShellCommandDiscoveryErrorAction.SilentlyContinue => "SilentlyContinue",
+            _ => throw new InvalidOperationException($"Unsupported command-discovery error action '{discovery.ErrorAction}'.")
+        };
+        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
+               PowerShellCSharpLiteral.QuoteString(script) + ", new object?[] { " +
+               EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
+    }
 
     private static string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
     {

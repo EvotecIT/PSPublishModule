@@ -6,11 +6,21 @@ namespace PowerForge.Tests;
 [Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCommandSemanticRegistryTests
 {
+    [Fact]
+    public void CommandFamilyOrdinalsRemainBackwardCompatible()
+    {
+        Assert.Equal(7, (int)PowerShellCompilationCommandFamily.ExternalOperation);
+        Assert.Equal(8, (int)PowerShellCompilationCommandFamily.CommandDiscovery);
+    }
+
     [Theory]
     [InlineData("Select-Object", "powerforge.command.projection.select-object")]
     [InlineData("select", "powerforge.command.projection.select-object")]
     [InlineData("Microsoft.PowerShell.Utility\\Select-Object", "powerforge.command.projection.select-object")]
     [InlineData("Microsoft.PowerShell.Utility\\Write-Verbose", "powerforge.command.stream.verbose")]
+    [InlineData("Get-Command", "powerforge.command.discovery.get-command")]
+    [InlineData("gcm", "powerforge.command.discovery.get-command")]
+    [InlineData("Microsoft.PowerShell.Core\\Get-Command", "powerforge.command.discovery.get-command")]
     public void DefaultRegistryResolvesCanonicalAliasesAndModuleQualification(string commandName, string providerId)
     {
         var result = PowerShellCommandSemanticRegistry.Default.Resolve(commandName);
