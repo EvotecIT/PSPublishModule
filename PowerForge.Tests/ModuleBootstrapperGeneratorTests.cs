@@ -81,7 +81,10 @@ public partial class ModuleBootstrapperGeneratorTests
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-lib-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
         Directory.CreateDirectory(Path.Combine(root, "Public"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core", "DemoModule.dll"),
+            overwrite: true);
         File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo { 'demo' }");
 
         try
@@ -98,7 +101,7 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("# DemoModule.Libraries.ps1", libraries);
             Assert.Contains("Lib\\Core\\DemoModule.dll", libraries);
             Assert.Contains("$L -split '[\\\\/]'", libraries);
-            Assert.Contains("[System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)", libraries);
+            Assert.Contains("Add-Type -Path $LibraryPath -ErrorAction Stop", libraries);
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("# DemoModule bootstrapper", bootstrapper);
@@ -144,8 +147,14 @@ public partial class ModuleBootstrapperGeneratorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ignore-native-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "Dependency.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "Dependency.dll"),
+            overwrite: true);
         File.WriteAllText(Path.Combine(root, "Lib", "Default", "libgcc_s_seh-1.dll"), string.Empty);
 
         try
@@ -417,9 +426,18 @@ public partial class ModuleBootstrapperGeneratorTests
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "DemoModule.dll"),
+            overwrite: true);
 
         try
         {
