@@ -79,6 +79,62 @@ public sealed class DocumentationCollectorBuiltinIsolationTests
 
     [Theory]
     [MemberData(nameof(PowerShellHosts))]
+    public void CollectorParameterDiscovery_HandlesParameterNamedKeys(string host)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-parameter-keys-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            const string moduleName = "ParameterKeysFixture";
+            File.WriteAllText(
+                Path.Combine(root, moduleName + ".psm1"),
+                "function Get-ParameterKeysFixture { [CmdletBinding()] param([string]$Keys) }" + Environment.NewLine +
+                "Export-ModuleMember -Function Get-ParameterKeysFixture",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(root, moduleName + ".psd1"),
+                "@{" + Environment.NewLine +
+                "RootModule = 'ParameterKeysFixture.psm1'" + Environment.NewLine +
+                "ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "GUID = '60606060-6060-6060-6060-606060606060'" + Environment.NewLine +
+                "FunctionsToExport = @('Get-ParameterKeysFixture')" + Environment.NewLine +
+                "CmdletsToExport = @()" + Environment.NewLine +
+                "AliasesToExport = @()" + Environment.NewLine +
+                "VariablesToExport = @()" + Environment.NewLine +
+                "}",
+                new UTF8Encoding(false));
+
+            var scriptPath = Path.Combine(root, "ValidateParameterKeys.ps1");
+            var outputPath = Path.Combine(root, "parameters.txt");
+            File.WriteAllText(
+                scriptPath,
+                "param([string]$ManifestPath, [string]$OutputPath)" + Environment.NewLine +
+                EmbeddedScripts.Load("Scripts/Documentation/Export-HelpJson.Protocol.ps1") +
+                Environment.NewLine + "try {" + Environment.NewLine +
+                "$getParameterNames = (Microsoft.PowerShell.Core\\Get-Command GetDocumentationParameterNames -CommandType Function).ScriptBlock" + Environment.NewLine +
+                "$module = Microsoft.PowerShell.Core\\Import-Module -Name $ManifestPath -Force -PassThru -Function '*' -Cmdlet '*' -Alias '__none__' -Variable '__none__'" + Environment.NewLine +
+                "$command = Microsoft.PowerShell.Core\\Get-Command Get-ParameterKeysFixture -CommandType Function" + Environment.NewLine +
+                "$names = @(& $getParameterNames $command @())" + Environment.NewLine +
+                "[System.IO.File]::WriteAllLines($OutputPath, $names, [System.Text.UTF8Encoding]::new($false))" + Environment.NewLine +
+                "} finally { if ($module) { Microsoft.PowerShell.Core\\Remove-Module $module -Force -ErrorAction SilentlyContinue } }",
+                new UTF8Encoding(false));
+
+            var run = new ExecutablePowerShellRunner(host, root).Run(
+                new PowerShellRunRequest(
+                    scriptPath,
+                    new[] { Path.Combine(root, moduleName + ".psd1"), outputPath },
+                    TimeSpan.FromSeconds(20)));
+            Assert.Equal(0, run.ExitCode);
+            Assert.Equal(new[] { "Keys" }, File.ReadAllLines(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(PowerShellHosts))]
     public void RuntimeValueHelpers_IsolateBuiltinCmdletsFromTargetExports(string host)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-helper-isolation-" + Guid.NewGuid().ToString("N"));

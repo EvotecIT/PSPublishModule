@@ -431,6 +431,35 @@ public sealed class BinaryDependencyPreflightServiceTests
             Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("Windows.Foundation.FoundationContract")]
+    [InlineData("Windows.Foundation.UniversalApiContract")]
+    [InlineData("Windows.Networking.Connectivity.WwanContract")]
+    public void WindowsRuntimeContractNames_AreRecognizedAsHostContracts(string assemblyName)
+    {
+        Assert.True(BinaryDependencyPreflightService.IsWindowsRuntimeContractAssemblyName(assemblyName));
+    }
+
+    [Theory]
+    [InlineData("WindowsBase")]
+    [InlineData("Windows.Foundation")]
+    [InlineData("Contoso.Foundation.UniversalApiContract")]
+    public void NonContractAssemblyNames_AreNotRecognizedAsWindowsRuntimeContracts(string assemblyName)
+    {
+        Assert.False(BinaryDependencyPreflightService.IsWindowsRuntimeContractAssemblyName(assemblyName));
+    }
+
+    [Fact]
+    public void DesktopHostBaseline_IncludesWindowsRuntimeFacadeOnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var hostAssemblies = GetHostProvidedAssemblyNamesForTest("Desktop");
+
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Runtime.WindowsRuntime", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void CoreHostBaseline_IncludesKnownPowerShellRuntimeAssemblies()
     {

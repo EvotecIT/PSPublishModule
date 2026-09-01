@@ -183,7 +183,7 @@ public sealed class BinaryDependencyPreflightService
             foreach (var reference in ReadAssemblyReferences(assemblyPath))
             {
                 if (string.IsNullOrWhiteSpace(reference.Name)) continue;
-                if (providedByHost.Contains(reference.Name)) continue;
+                if (IsHostProvidedAssemblyReference(providedByHost, reference.Name)) continue;
 
                 var key = assemblyFileName + "->" + reference.Name;
                 if (!seen.Add(key)) continue;
@@ -264,7 +264,7 @@ public sealed class BinaryDependencyPreflightService
                     continue;
                 }
 
-                if (providedByHost.Contains(reference.Name)) continue;
+                if (IsHostProvidedAssemblyReference(providedByHost, reference.Name)) continue;
 
                 var key = assemblyFileName + "->" + reference.Name;
                 if (!seenIssues.Add(key)) continue;
@@ -693,6 +693,10 @@ public sealed class BinaryDependencyPreflightService
                     set,
                     Path.Combine(windir, "Microsoft.NET", "assembly"),
                     "System.Management.Automation.dll");
+                AddSpecificAssemblyIfPresent(
+                    set,
+                    Path.Combine(windir, "Microsoft.NET", "assembly"),
+                    "System.Runtime.WindowsRuntime.dll");
             }
 
             return set;
@@ -706,6 +710,23 @@ public sealed class BinaryDependencyPreflightService
         AddAssembliesFromDirectory(set, Path.GetDirectoryName(typeof(PSObject).Assembly.Location));
 
         return set;
+    }
+
+    private static bool IsHostProvidedAssemblyReference(ISet<string> providedByHost, string assemblyName)
+    {
+        if (providedByHost.Contains(assemblyName))
+            return true;
+
+        return Path.DirectorySeparatorChar == '\\' && IsWindowsRuntimeContractAssemblyName(assemblyName);
+    }
+
+    internal static bool IsWindowsRuntimeContractAssemblyName(string? assemblyName)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyName))
+            return false;
+
+        return assemblyName!.StartsWith("Windows.", StringComparison.OrdinalIgnoreCase) &&
+               assemblyName.EndsWith("Contract", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<string> GetDesktopReferenceAssemblyDirectories()
