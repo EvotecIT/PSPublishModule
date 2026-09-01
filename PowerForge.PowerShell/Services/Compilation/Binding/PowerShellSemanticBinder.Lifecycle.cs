@@ -72,6 +72,17 @@ internal sealed partial class PowerShellSemanticBinder
             collectionSymbol,
             collectionType,
             PowerShellValueState.Known);
+        if (!PowerShellPipelineNullInputSemanticPolicy.TryBindElement(
+                sourceParameter.Type.ClrType,
+                sourceParameter.Symbol.Declaration,
+                out var nullCollectionElement))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2927",
+                $"A null pipeline collection cannot be converted to lifecycle parameter type '{sourceParameter.Type.ClrType.FullName}' without PowerShell parameter-binding error semantics.",
+                sourceParameter.Symbol.Declaration));
+            return null;
+        }
         var lifecycleLoop = new PowerShellBoundForEachStatement(
             PowerShellSourceParser.GetSpan(document, function.Body.ProcessBlock!.Extent),
             sourceParameter.Symbol,
@@ -79,7 +90,8 @@ internal sealed partial class PowerShellSemanticBinder
             collection,
             scalarString: false,
             process,
-            declareVariable: true);
+            declareVariable: true,
+            nullCollectionElement);
         var body = new PowerShellBoundBlock(
             PowerShellSourceParser.GetSpan(document, function.Body.Extent),
             begin.Statements.Concat(new PowerShellBoundStatement[] { lifecycleLoop }).Concat(end.Statements).ToArray());
@@ -181,7 +193,7 @@ internal sealed partial class PowerShellSemanticBinder
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2922",
-                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' requires one statically typed '{arrayType.FullName}' array expression or variable; null arrays enumerate as empty.",
+                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' requires one statically typed '{arrayType.FullName}' array expression or variable.",
                 PowerShellSourceParser.GetSpan(document, pipeline.Extent)));
             return null;
         }

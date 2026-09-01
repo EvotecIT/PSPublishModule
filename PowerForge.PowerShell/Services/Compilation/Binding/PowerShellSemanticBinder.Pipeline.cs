@@ -43,7 +43,7 @@ internal sealed partial class PowerShellSemanticBinder
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2901",
-                "Runtime-free pipeline enumeration requires a statically typed, one-dimensional CLR array expression; null arrays enumerate as empty.",
+                "Runtime-free pipeline enumeration requires a statically typed, one-dimensional CLR array expression or variable.",
                 input.Span));
             return true;
         }
@@ -54,6 +54,16 @@ internal sealed partial class PowerShellSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2903",
                 $"Runtime-free pipeline enumeration requires a stable scalar element type; '{elementType.FullName}' may have nested or provider-defined enumeration semantics.",
+                input.Span));
+            return true;
+        }
+        PowerShellBoundExpression? nullCollectionElement = null;
+        if (input is PowerShellBoundVariableExpression &&
+            !PowerShellPipelineNullInputSemanticPolicy.TryBindElement(elementType, input.Span, out nullCollectionElement))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2904",
+                $"A null '{collectionType.FullName}' pipeline value cannot be converted to '{elementType.FullName}' without PowerShell parameter-binding error semantics; variable input remains hosted.",
                 input.Span));
             return true;
         }
@@ -96,7 +106,8 @@ internal sealed partial class PowerShellSemanticBinder
             input,
             scalarString: false,
             body,
-            declareVariable: true);
+            declareVariable: true,
+            nullCollectionElement);
         return true;
     }
 

@@ -68,6 +68,8 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
                 ReportReads(forEachLoop.Collection, assigned, locals, diagnostics);
+                if (forEachLoop.NullCollectionElement is not null)
+                    ReportReads(forEachLoop.NullCollectionElement, assigned, locals, diagnostics);
                 var loopState = assigned.ToHashSet(StringComparer.Ordinal);
                 loopState.Add(forEachLoop.Variable.StableKey);
                 Analyze(forEachLoop.Body, loopState, locals, diagnostics);

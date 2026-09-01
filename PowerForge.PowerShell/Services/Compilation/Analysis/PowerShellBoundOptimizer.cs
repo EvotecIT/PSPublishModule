@@ -104,7 +104,14 @@ internal sealed class PowerShellBoundOptimizer
                 loop.Iterator is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Iterator),
                 OptimizeBlock(loop.Body)),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
-                loop.Span, loop.Variable, loop.ElementType, OptimizeExpression(loop.Collection), loop.ScalarString, OptimizeBlock(loop.Body), loop.DeclareVariable),
+                loop.Span,
+                loop.Variable,
+                loop.ElementType,
+                OptimizeExpression(loop.Collection),
+                loop.ScalarString,
+                OptimizeBlock(loop.Body),
+                loop.DeclareVariable,
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement)),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression)),
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(

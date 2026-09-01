@@ -40,6 +40,92 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("}");
     }
 
+    private static void EmitForEach(
+        StringBuilder builder,
+        PowerShellLoweredForEachStatement loop,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', indent * 4);
+        var collection = EmitExpression(loop.Collection);
+        if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
+        {
+            EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, sourceMap);
+            return;
+        }
+
+        var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+        var enumerable = loop.ScalarString
+            ? $"new[] {{ {collection} }}"
+            : $"({collection} ?? global::System.Array.Empty<{elementTypeName}>())";
+        var iterationVariable = getTemporaryIdentifier("foreachItem");
+        builder.Append(prefix).Append("foreach (").Append(elementTypeName).Append(' ')
+            .Append(iterationVariable).Append(" in ").Append(enumerable).AppendLine(")");
+        builder.Append(prefix).AppendLine("{");
+        EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, sourceMap);
+        builder.Append(prefix).AppendLine("}");
+    }
+
+    private static void EmitArrayForEach(
+        StringBuilder builder,
+        PowerShellLoweredForEachStatement loop,
+        string collection,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', indent * 4);
+        var arrayIdentifier = getTemporaryIdentifier("foreachArray");
+        var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+        builder.Append(prefix).Append(elementTypeName).Append("[] ").Append(arrayIdentifier)
+            .Append(" = ").Append(collection);
+        if (loop.NullCollectionElement is null)
+        {
+            builder.Append(" ?? global::System.Array.Empty<").Append(elementTypeName).AppendLine(">();");
+        }
+        else
+        {
+            var nullElement = loop.NullCollectionElement is PowerShellLoweredLiteralExpression { Value: null } &&
+                              !loop.ElementType.IsValueType
+                ? "default!"
+                : EmitExpression(loop.NullCollectionElement);
+            builder.Append(" ?? new ").Append(elementTypeName).Append("[] { ")
+                .Append(nullElement).AppendLine(" };");
+        }
+
+        var indexIdentifier = getTemporaryIdentifier("foreachIndex");
+        var itemIdentifier = getTemporaryIdentifier("foreachItem");
+        builder.Append(prefix).Append("for (int ").Append(indexIdentifier).Append(" = 0; ")
+            .Append(indexIdentifier).Append(" < ").Append(arrayIdentifier).Append(".Length; ")
+            .Append(indexIdentifier).AppendLine("++)");
+        builder.Append(prefix).AppendLine("{");
+        builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(itemIdentifier)
+            .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
+        EmitForEachBody(builder, loop, itemIdentifier, indent, getTemporaryIdentifier, sourceMap);
+        builder.Append(prefix).AppendLine("}");
+    }
+
+    private static void EmitForEachBody(
+        StringBuilder builder,
+        PowerShellLoweredForEachStatement loop,
+        string itemIdentifier,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', (indent + 1) * 4);
+        var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
+        builder.Append(prefix)
+            .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
+            .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
+            .Append(itemIdentifier).AppendLine(";");
+        foreach (var nested in loop.Statements)
+        {
+            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
+        }
+    }
+
     private static void EmitSwitch(
         StringBuilder builder,
         PowerShellLoweredSwitchStatement statement,

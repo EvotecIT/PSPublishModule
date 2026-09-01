@@ -219,45 +219,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
                 return;
             case PowerShellLoweredForEachStatement loop:
-                var collection = EmitExpression(loop.Collection);
-                if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
-                {
-                    var arrayIdentifier = getTemporaryIdentifier("foreachArray");
-                    var indexIdentifier = getTemporaryIdentifier("foreachIndex");
-                    var specializedVariable = getTemporaryIdentifier("foreachItem");
-                    var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
-                    builder.Append(prefix).Append(elementTypeName).Append("[] ").Append(arrayIdentifier)
-                        .Append(" = ").Append(collection).Append(" ?? global::System.Array.Empty<")
-                        .Append(elementTypeName).AppendLine(">();");
-                    builder.Append(prefix).Append("for (int ").Append(indexIdentifier).Append(" = 0; ")
-                        .Append(indexIdentifier).Append(" < ").Append(arrayIdentifier).Append(".Length; ")
-                        .Append(indexIdentifier).AppendLine("++)");
-                    builder.Append(prefix).AppendLine("{");
-                    builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(specializedVariable)
-                        .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
-                    builder.Append(prefix).Append("    ")
-                        .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
-                        .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
-                        .Append(specializedVariable).AppendLine(";");
-                    foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
-                    builder.Append(prefix).AppendLine("}");
-                    return;
-                }
-                var enumerable = loop.ScalarString
-                    ? $"new[] {{ {collection} }}"
-                    : $"({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)}>())";
-                var iterationVariable = getTemporaryIdentifier("foreachItem");
-                builder.Append(prefix).Append("foreach (")
-                    .Append(PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType)).Append(' ')
-                    .Append(iterationVariable).Append(" in ")
-                    .Append(enumerable).AppendLine(")");
-                builder.Append(prefix).AppendLine("{");
-                builder.Append(prefix).Append("    ")
-                    .Append(loop.DeclareVariable ? PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType) + " " : string.Empty)
-                    .Append(PowerShellCSharpSymbolRenderer.Identifier(loop.Variable.Name)).Append(" = ")
-                    .Append(iterationVariable).AppendLine(";");
-                foreach (var nested in loop.Statements) EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
-                builder.Append(prefix).AppendLine("}");
+                EmitForEach(builder, loop, indent, getTemporaryIdentifier, sourceMap);
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
                 EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, sourceMap);

@@ -472,6 +472,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         else if (statement is PowerShellBoundForEachStatement forEachLoop)
         {
             yield return forEachLoop.Collection;
+            if (forEachLoop.NullCollectionElement is not null) yield return forEachLoop.NullCollectionElement;
         }
         else if (statement is PowerShellBoundSwitchStatement switchStatement)
         {

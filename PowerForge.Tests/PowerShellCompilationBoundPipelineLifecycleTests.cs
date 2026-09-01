@@ -23,10 +23,14 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.Single(lifecycle.Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
         Assert.True(loop.DeclareVariable);
         Assert.Equal("Value", loop.Variable.Name);
+        var nullElement = Assert.IsType<PowerShellBoundLiteralExpression>(loop.NullCollectionElement);
+        Assert.Equal(typeof(int), nullElement.Type.ClrType);
+        Assert.Equal(0, nullElement.Value);
         Assert.IsType<PowerShellBoundAssignmentStatement>(lifecycle.Body.Statements[0]);
         Assert.True(Assert.IsType<PowerShellBoundExpressionStatement>(lifecycle.Body.Statements[^1]).EmitsOutput);
         var lifecycleSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Total").Source;
         Assert.Contains("Measure_Total(int[] __pf_pipeline_input_", lifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("?? new int[] { 0 }", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("int Total = 0;", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("int Value = __foreachItem_", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("Total = checked((int)(Total + Value));", lifecycleSource, StringComparison.Ordinal);
@@ -73,6 +77,23 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_Measure");
         Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2922");
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleRejectsNullInputWithBindingErrorSemantics()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Test-Value { [CmdletBinding()] param([Parameter(ValueFromPipeline)][bool] $Value) begin { [int] $Result = 42 } process { } end { $Result } } " +
+            "function Invoke-Test { param([bool[]] $Values) $Values | Test-Value }",
+            TestPath("pipeline-lifecycle-null-binding-error.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Test_Value");
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2927");
     }
 
     [Theory]

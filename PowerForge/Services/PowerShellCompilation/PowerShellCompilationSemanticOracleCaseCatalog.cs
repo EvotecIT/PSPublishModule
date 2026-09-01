@@ -50,7 +50,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("assignment-target", PowerShellCompilationFeatureIds.AssignmentTarget, expectedValue: "0");
         yield return Case("switch-flags", PowerShellCompilationFeatureIds.SwitchFlags);
         yield return Case("catch-filter", PowerShellCompilationFeatureIds.CatchFilter);
-        yield return Case("pipeline-lifecycle", PowerShellCompilationFeatureIds.PipelineLifecycle);
+        yield return Case("pipeline-lifecycle", PowerShellCompilationFeatureIds.PipelineLifecycle, expectedValue: "1000");
         yield return Case("function-graph", PowerShellCompilationFeatureIds.FunctionGraph);
         yield return Case("member-null-propagation", PowerShellCompilationFeatureIds.ForSyntax("MemberExpressionAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("typed-generic-list-invocation", PowerShellCompilationFeatureIds.ForSyntax("InvokeMemberExpressionAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
@@ -60,7 +60,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("operator-arithmetic", "operator.arithmetic");
         yield return Case("operator-comparison", "operator.comparison", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("operator-logical", "operator.logical", expectedValue: "True", expectedTypeName: "System.Boolean");
-        yield return Case("pipeline-enumeration", "pipeline.enumeration", expectedValue: "True", expectedTypeName: "System.Boolean");
+        yield return Case("pipeline-enumeration", "pipeline.enumeration", expectedValue: "1000");
         yield return Case("runtime-process-user-culture-state", "runtime.read-only-state", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("runtime-read-only-state", "runtime.read-only-state");
         yield return Case("try-terminal-output", PowerShellCompilationFeatureIds.ForSyntax("PipelineAst"), expectedValue: "True", expectedTypeName: "System.Boolean");

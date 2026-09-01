@@ -225,7 +225,10 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Condition) || ContainsBoundParameterPresence(clause.Body)) || conditional.ElseBlock is not null && ContainsBoundParameterPresence(conditional.ElseBlock),
             PowerShellBoundWhileStatement loop => ExpressionContainsBoundParameterPresence(loop.Condition) || ContainsBoundParameterPresence(loop.Body),
             PowerShellBoundForStatement loop => (loop.Initializer is not null && ExpressionContainsBoundParameterPresence(loop.Initializer)) || (loop.Condition is not null && ExpressionContainsBoundParameterPresence(loop.Condition)) || (loop.Iterator is not null && ExpressionContainsBoundParameterPresence(loop.Iterator)) || ContainsBoundParameterPresence(loop.Body),
-            PowerShellBoundForEachStatement loop => ExpressionContainsBoundParameterPresence(loop.Collection) || ContainsBoundParameterPresence(loop.Body),
+            PowerShellBoundForEachStatement loop =>
+                ExpressionContainsBoundParameterPresence(loop.Collection) ||
+                (loop.NullCollectionElement is not null && ExpressionContainsBoundParameterPresence(loop.NullCollectionElement)) ||
+                ContainsBoundParameterPresence(loop.Body),
             PowerShellBoundSwitchStatement switchStatement => ExpressionContainsBoundParameterPresence(switchStatement.Value) || switchStatement.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Value) || ContainsBoundParameterPresence(clause.Body)) || switchStatement.DefaultBlock is not null && ContainsBoundParameterPresence(switchStatement.DefaultBlock),
             PowerShellBoundThrowStatement thrown => thrown.Expression is not null && ExpressionContainsBoundParameterPresence(thrown.Expression),
             PowerShellBoundTryStatement tryStatement => ContainsBoundParameterPresence(tryStatement.Body) || tryStatement.Catches.Any(clause => ContainsBoundParameterPresence(clause.Body)) || tryStatement.FinallyBlock is not null && ContainsBoundParameterPresence(tryStatement.FinallyBlock),
@@ -283,7 +286,10 @@ internal sealed partial class PowerShellTypedLowerer
                 (loop.Condition is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Condition)) ||
                 (loop.Iterator is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Iterator)) ||
                 RequiresRuntimeStateHostBinding(loop.Body),
-            PowerShellBoundForEachStatement loop => ExpressionRequiresRuntimeStateHostBinding(loop.Collection) || RequiresRuntimeStateHostBinding(loop.Body),
+            PowerShellBoundForEachStatement loop =>
+                ExpressionRequiresRuntimeStateHostBinding(loop.Collection) ||
+                (loop.NullCollectionElement is not null && ExpressionRequiresRuntimeStateHostBinding(loop.NullCollectionElement)) ||
+                RequiresRuntimeStateHostBinding(loop.Body),
             PowerShellBoundSwitchStatement switchStatement =>
                 ExpressionRequiresRuntimeStateHostBinding(switchStatement.Value) ||
                 switchStatement.Clauses.Any(clause => ExpressionRequiresRuntimeStateHostBinding(clause.Value) || RequiresRuntimeStateHostBinding(clause.Body)) ||
@@ -567,7 +573,10 @@ internal sealed partial class PowerShellTypedLowerer
             LowerExpression(loop.Collection, functions, names, targetCapabilities),
             loop.ScalarString,
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-            loop.DeclareVariable);
+            loop.DeclareVariable,
+            loop.NullCollectionElement is null
+                ? null
+                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities));
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

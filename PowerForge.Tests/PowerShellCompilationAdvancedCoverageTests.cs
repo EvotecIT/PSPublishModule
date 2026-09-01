@@ -56,6 +56,30 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_StrictExecutableKeepsScalarStringForEachBodyInsideLoop()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $Value); [int] $Count = 0; foreach ($Item in $Value) { $Count += 1; break }; return $Count");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.TypedScalarStringForEach",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            EmitSource = true
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var process = RunProcess(result.ArtifactPath!, "--Value=PowerForge");
+        Assert.Equal((0, "1", string.Empty), (process.ExitCode, process.StandardOutput.Trim(), process.StandardError.Trim()));
+        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
+        Assert.Contains("foreach (string", generated, StringComparison.Ordinal);
+        Assert.Contains("break;", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StrictBinaryModuleCompilesWritableClrMemberMutation()
     {
         using var fixture = ArtifactFixture.Create(

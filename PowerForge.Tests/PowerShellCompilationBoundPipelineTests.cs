@@ -149,7 +149,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
-    public void RuntimeFreeForEachObjectEnumeratesNullableTypedArrayParameter()
+    public void RuntimeFreeForEachObjectPreservesNullArrayAsOnePipelineRecord()
     {
         var document = PowerShellSourceParser.Parse(
             "function Get-Total { param([int[]] $Values) [int] $total = 0; $Values | ForEach-Object { $total += $_ }; return $total }",
@@ -162,9 +162,25 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
         Assert.IsType<PowerShellBoundVariableExpression>(loop.Collection);
         Assert.Equal(typeof(int[]), loop.Collection.Type.ClrType);
+        var nullElement = Assert.IsType<PowerShellBoundLiteralExpression>(loop.NullCollectionElement);
+        Assert.Equal(typeof(int), nullElement.Type.ClrType);
+        Assert.Equal(0, nullElement.Value);
         var source = Assert.Single(result.Emitted.Methods).Source;
-        Assert.Contains("Values ?? global::System.Array.Empty<int>()", source, StringComparison.Ordinal);
+        Assert.Contains("Values ?? new int[] { 0 }", source, StringComparison.Ordinal);
         Assert.Contains("total = checked((int)(total + __pf_pipeline_item_", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreeForEachObjectRejectsPotentialNullInputWithBindingErrorSemantics()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Value { param([bool[]] $Values) [bool] $Result = $false; $Values | ForEach-Object { $Result = $_ }; return $Result }",
+            TestPath("pipeline-null-binding-error.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2904");
     }
 
     [Theory]

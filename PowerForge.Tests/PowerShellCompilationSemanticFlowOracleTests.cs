@@ -104,7 +104,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public void RuntimeFreePipelineParameterEnumerationExecutesAcrossTargets(string targetFramework)
     {
         const string source = "function Get-PipelineTotal { param([int[]] $Values) " +
-                              "[int] $Total = 0; $Values | ForEach-Object { $Total += $_ }; return $Total }";
+                              "[int] $Total = 0; [int] $Count = 0; $Values | ForEach-Object { $Total += $_; $Count += 1 }; " +
+                              "[int] $Result = $Count; $Result *= 1000; $Result += $Total; return $Result }";
         using var fixture = OracleFixture.Create(source);
         var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -124,8 +125,46 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var assembly = System.Reflection.Assembly.LoadFrom(build.ArtifactPath!);
         var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
             .Single(static candidate => candidate.Name == "Get_PipelineTotal");
-        Assert.Equal(42, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
-        Assert.Equal(0, method.Invoke(null, new object?[] { null }));
+        Assert.Equal(2042, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
+        Assert.Equal(1000, method.Invoke(null, new object?[] { null }));
+        Assert.Equal(0, method.Invoke(null, new object?[] { Array.Empty<int>() }));
+    }
+
+    [Fact]
+    public void RuntimeFreeReferencePipelineNullFallbackBuildsWithoutNullableWarnings()
+    {
+        const string source = "function Get-UriCount { param([uri[]] $Values) [int] $Count = 0; " +
+                              "$Values | ForEach-Object { $Count += 1 }; return $Count } " +
+                              "function Get-VersionCount { param([version[]] $Values) [int] $Count = 0; " +
+                              "$Values | ForEach-Object { $Count += 1 }; return $Count }";
+        using var fixture = OracleFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, "reference-null-fallback"),
+            "PipelineReferenceNullFallback",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = "net10.0",
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false,
+            EmitSource = true
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.DoesNotContain("CS8625", build.BuildOutput, StringComparison.Ordinal);
+        var generated = File.ReadAllText(Path.Combine(build.GeneratedSourcePath!, "CompiledPowerShell.cs"));
+        Assert.Contains("global::System.Uri[] { default! }", generated, StringComparison.Ordinal);
+        Assert.Contains("global::System.Version[] { default! }", generated, StringComparison.Ordinal);
+        var assembly = System.Reflection.Assembly.LoadFrom(build.ArtifactPath!);
+        var methods = assembly.GetTypes().SelectMany(static type => type.GetMethods()).ToArray();
+        var uri = Assert.Single(methods, static candidate => candidate.Name == "Get_UriCount");
+        var version = Assert.Single(methods, static candidate => candidate.Name == "Get_VersionCount");
+        Assert.Equal(1, uri.Invoke(null, new object?[] { null }));
+        Assert.Equal(0, uri.Invoke(null, new object?[] { Array.Empty<Uri>() }));
+        Assert.Equal(1, version.Invoke(null, new object?[] { null }));
+        Assert.Equal(0, version.Invoke(null, new object?[] { Array.Empty<Version>() }));
     }
 
     [Theory]
@@ -153,13 +192,13 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var observation = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(
             PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
             build);
-        Assert.Equal("42", Assert.Single(observation.Success).Value);
+        Assert.Equal("1000", Assert.Single(observation.Success).Value);
     }
 
     [Theory]
     [InlineData("net8.0")]
     [InlineData("net10.0")]
-    public void RuntimeFreePipelineLifecycleParameterInputTreatsNullAsEmpty(string targetFramework)
+    public void RuntimeFreePipelineLifecycleParameterInputPreservesNullAndEmptyCardinality(string targetFramework)
     {
         var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/pipeline-lifecycle");
         using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
@@ -182,8 +221,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var assembly = System.Reflection.Assembly.LoadFrom(typedAssembly.Path);
         var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
             .Single(static candidate => candidate.Name == "Invoke_Measure");
-        Assert.Equal(42, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
-        Assert.Equal(0, method.Invoke(null, new object?[] { null }));
+        Assert.Equal(2042, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
+        Assert.Equal(1000, method.Invoke(null, new object?[] { null }));
+        Assert.Equal(0, method.Invoke(null, new object?[] { Array.Empty<int>() }));
     }
 
     [Theory]

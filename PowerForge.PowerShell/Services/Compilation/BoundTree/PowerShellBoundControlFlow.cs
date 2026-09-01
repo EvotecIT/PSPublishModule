@@ -82,8 +82,12 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         PowerShellBoundExpression collection,
         bool scalarString,
         PowerShellBoundBlock body,
-        bool declareVariable = false)
-        : base(span, PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects, collection.Capabilities | body.Capabilities)
+        bool declareVariable = false,
+        PowerShellBoundExpression? nullCollectionElement = null)
+        : base(
+            span,
+            PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None),
+            collection.Capabilities | body.Capabilities | (nullCollectionElement?.Capabilities ?? PowerShellRequiredCapability.None))
     {
         Variable = variable;
         ElementType = elementType;
@@ -91,6 +95,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         ScalarString = scalarString;
         Body = body;
         DeclareVariable = declareVariable;
+        NullCollectionElement = nullCollectionElement;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -99,6 +104,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
     internal bool ScalarString { get; }
     internal PowerShellBoundBlock Body { get; }
     internal bool DeclareVariable { get; }
+    internal PowerShellBoundExpression? NullCollectionElement { get; }
 }
 
 internal sealed class PowerShellBoundSwitchClause
