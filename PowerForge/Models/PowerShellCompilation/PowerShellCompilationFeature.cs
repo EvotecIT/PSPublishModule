@@ -108,12 +108,16 @@ public static class PowerShellCompilationFeatureIds
     {
         if (message.IndexOf("default value", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterDefault;
         if (message.IndexOf("parameter alias", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterBinding;
+        if (message.IndexOf("positional-binding contract", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterBinding;
+        if (message.IndexOf("member mutation", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
+        if (message.IndexOf("CLR member", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("MemberExpressionAst");
+        if (message.IndexOf("CLR overload", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("InvokeMemberExpressionAst");
+        if (message.IndexOf("OutputType metadata", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterMetadata;
         if (message.IndexOf("attribute", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("validation", StringComparison.OrdinalIgnoreCase) >= 0) return ParameterMetadata;
         if (message.IndexOf("conversion", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("Typed local declaration", StringComparison.OrdinalIgnoreCase) >= 0) return Conversion;
         if (message.IndexOf("Expandable string", StringComparison.OrdinalIgnoreCase) >= 0) return ExpandableString;
-        if (message.IndexOf("member mutation", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
         if (message.IndexOf("assignment target", StringComparison.OrdinalIgnoreCase) >= 0) return AssignmentTarget;
         if (message.IndexOf("read-only automatic variable", StringComparison.OrdinalIgnoreCase) >= 0) return AutomaticVariableAssignment;
         if (message.IndexOf("Switch flags", StringComparison.OrdinalIgnoreCase) >= 0) return SwitchFlags;
@@ -137,8 +141,6 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("Typed dictionary local", StringComparison.OrdinalIgnoreCase) >= 0 ||
             message.IndexOf("Typed hashtable literal", StringComparison.OrdinalIgnoreCase) >= 0) return DictionaryFlow;
         if (message.IndexOf("PipelineAst", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("PipelineAst");
-        if (message.IndexOf("CLR member", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("MemberExpressionAst");
-        if (message.IndexOf("CLR overload", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("InvokeMemberExpressionAst");
         if (message.IndexOf("foreach currently requires", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("ForEachStatementAst");
         if (message.IndexOf("must be declared at function scope", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("VariableExpressionAst");
         if (message.IndexOf("Increment or decrement", StringComparison.OrdinalIgnoreCase) >= 0) return ForOperator("increment");

@@ -367,7 +367,7 @@ The current subset supports:
 - typed or safely inferred local variables, including a `$null` seed followed only by one exact target-compatible reference type; optional branches, loops, switch/try paths, and lifecycle `process` blocks merge null state conservatively, while mixed, unknown, value-type, and type-varying null `Length` flows remain hosted or rejected;
 - explicit `return` values and one terminal implicit-output expression;
 - `if`/`elseif`/`else`, conservative scalar `switch`, `for`, `while`, `foreach` over typed arrays or an explicitly typed scalar string, plus generated-binary-module `foreach` over an authored `[array]`/`System.Array` with object-valued items, ordered CLR exception catches with bounded `finally` blocks, typed CLR exception throws, and bare rethrow inside a supported catch;
-- Boolean logic and scalar comparisons with known compatible types;
+- Boolean logic and scalar comparisons with known compatible types, including exact left-directed widening of a right integral operand to the left integral type; nullable integral and decimal equality use the corresponding lifted CLR equality, while nullable floating equality, nullable relational ordering, precision-changing promotion, narrowing, and otherwise dynamic coercion remain rejected;
 - string equality with PowerShell case-sensitive or case-insensitive behavior;
 - scalar type tests, regex match/replace, wildcard match, and membership operators, with PowerShell-host primitives enabled only for generated binary modules where their runtime contract is available;
 - scalar string `-split` and string-array `-join`;

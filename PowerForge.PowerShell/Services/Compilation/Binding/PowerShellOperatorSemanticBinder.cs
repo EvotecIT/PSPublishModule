@@ -118,17 +118,40 @@ internal static class PowerShellOperatorSemanticBinder
                 (right.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
                 return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
+            var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
+            if (relational && (Nullable.GetUnderlyingType(leftType) is not null || Nullable.GetUnderlyingType(rightType) is not null))
+                return Reject(diagnostics, span, "PSB2217", "Relational comparison involving a nullable CLR value requires PowerShell's sign-sensitive null ordering and is not supported by the typed compiler.");
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
+            var leftNumericType = Nullable.GetUnderlyingType(leftType) ?? leftType;
+            if (leftType != rightType &&
+                PowerShellClrTypeSemantics.IsIntegral(leftNumericType) &&
+                PowerShellClrTypeSemantics.IsIntegral(rightType) &&
+                PowerShellClrTypeSemantics.CanAssign(leftNumericType, rightType))
+            {
+                right = new PowerShellBoundConversionExpression(
+                    right.Span,
+                    new PowerShellTypeFact(
+                        leftType,
+                        PowerShellTypeFactProvenance.Inferred,
+                        "PowerShell comparison converts the right integral operand to the left operand's static integral type using one exact CLR-safe widening conversion, lifted for nullable equality."),
+                    right);
+                rightType = leftType;
+            }
             if (leftType != rightType && !liftedEquality && left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null)
                 return Reject(diagnostics, span, "PSB2210", "Comparison operands must have the same static CLR type on the conservative compilation path.");
-            var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
+            var equalityType = Nullable.GetUnderlyingType(leftType) is { } nullableLeftType &&
+                               (PowerShellClrTypeSemantics.IsIntegral(nullableLeftType) || nullableLeftType == typeof(decimal))
+                ? nullableLeftType
+                : leftType;
             if (equality && leftType == rightType && leftType != typeof(string) &&
                 left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null &&
-                !PowerShellCSharpOperatorPolicy.SupportsEquality(leftType))
+                !PowerShellCSharpOperatorPolicy.SupportsEquality(equalityType))
                 return Reject(diagnostics, span, "PSB2216", $"Equality comparison for CLR type '{leftType.FullName}' has no supported static CLR equality operator.");
             if (relational && leftType == typeof(string) && rightType == typeof(string))
                 return Reject(diagnostics, span, "PSB2211", "PowerShell string relational comparison uses culture-aware runtime semantics and is not supported by the typed compiler.");
-            if (relational && !(PowerShellClrTypeSemantics.IsNumeric(leftType) && PowerShellClrTypeSemantics.IsNumeric(rightType)) && !(leftType == typeof(char) && rightType == typeof(char)))
+            if (relational &&
+                !(PowerShellClrTypeSemantics.IsNumeric(leftType) && PowerShellClrTypeSemantics.IsNumeric(rightType)) &&
+                !(leftType == typeof(char) && rightType == typeof(char)))
                 return Reject(diagnostics, span, "PSB2212", $"Relational comparison for CLR type '{leftType.FullName}' is not supported by the conservative compiler.");
             var bound = operation switch
             {
