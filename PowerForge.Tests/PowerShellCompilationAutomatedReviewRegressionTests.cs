@@ -111,6 +111,63 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         Assert.Equal((0, typeof(string[]).FullName, string.Empty), Normalize(run));
     }
 
+    [Theory]
+    [InlineData("[Console]::OutputEncoding = [Text.Encoding]::GetEncoding(65001)", "0|")]
+    [InlineData("return 7", "1|7")]
+    public void Build_BinaryModulePreservesAdvisoryVoidOutputType(string body, string expected)
+    {
+        using var fixture = Fixture.Create(
+            $"function Invoke-DeclaredVoid {{ [OutputType([void])] param() {body} }}; Export-ModuleMember -Function Invoke-DeclaredVoid",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.DeclaredVoidOutput", "CompiledPowerShell", "net8.0");
+        var method = Assert.Single(typed.Methods);
+        Assert.Equal(typeof(void).FullName, method.DeclaredOutputType);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DeclaredVoidOutput",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{path}' -Force; " +
+            "$command = Get-Command Invoke-DeclaredVoid; " +
+            "$values = @(Invoke-DeclaredVoid); " +
+            "$text = @($command.OutputType[0].Type.FullName; [string] $values.Count; $values -join ',') -join '|'; " +
+            "[Console]::Write($text)");
+
+        Assert.Equal((0, "System.Void|" + expected, string.Empty), Normalize(run));
+    }
+
+    [Fact]
+    public void Build_LocalCallerInfersOutputBehindAdvisoryVoidMetadata()
+    {
+        using var fixture = Fixture.Create(
+            "function Get-DeclaredVoid { [OutputType([void])] param() return 7 }; " +
+            "function Get-ConsumedValue { [int] $Value = Get-DeclaredVoid; return $Value }; " +
+            "Export-ModuleMember -Function Get-DeclaredVoid, Get-ConsumedValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.DeclaredVoidLocalCall",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{path}' -Force; " +
+            "$metadata = (Get-Command Get-DeclaredVoid).OutputType[0].Type.FullName; " +
+            "[Console]::Write(\"$metadata|$(Get-ConsumedValue)\")");
+
+        Assert.Equal((0, "System.Void|7", string.Empty), Normalize(run));
+    }
+
     [Fact]
     public void Build_BinaryModuleAvoidsAuthoredTemporaryIdentifierCollisions()
     {

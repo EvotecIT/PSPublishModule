@@ -211,127 +211,6 @@ internal sealed partial class PowerShellTypedLowerer
         return elementTypes.Length == 1 ? elementTypes[0] : typeof(object);
     }
 
-    private static bool ContainsBoundParameterPresence(PowerShellBoundBlock block)
-        => block.Statements.Any(StatementContainsBoundParameterPresence);
-
-    private static bool StatementContainsBoundParameterPresence(PowerShellBoundStatement statement)
-        => statement switch
-        {
-            PowerShellBoundAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Value),
-            PowerShellBoundIndexAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Target) || ExpressionContainsBoundParameterPresence(assignment.Index) || ExpressionContainsBoundParameterPresence(assignment.Value),
-            PowerShellBoundClrMemberAssignmentStatement assignment => ExpressionContainsBoundParameterPresence(assignment.Receiver) || ExpressionContainsBoundParameterPresence(assignment.Value),
-            PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionContainsBoundParameterPresence(returned.Expression),
-            PowerShellBoundExpressionStatement expression => ExpressionContainsBoundParameterPresence(expression.Expression),
-            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Condition) || ContainsBoundParameterPresence(clause.Body)) || conditional.ElseBlock is not null && ContainsBoundParameterPresence(conditional.ElseBlock),
-            PowerShellBoundWhileStatement loop => ExpressionContainsBoundParameterPresence(loop.Condition) || ContainsBoundParameterPresence(loop.Body),
-            PowerShellBoundForStatement loop => (loop.Initializer is not null && ExpressionContainsBoundParameterPresence(loop.Initializer)) || (loop.Condition is not null && ExpressionContainsBoundParameterPresence(loop.Condition)) || (loop.Iterator is not null && ExpressionContainsBoundParameterPresence(loop.Iterator)) || ContainsBoundParameterPresence(loop.Body),
-            PowerShellBoundForEachStatement loop =>
-                ExpressionContainsBoundParameterPresence(loop.Collection) ||
-                (loop.NullCollectionElement is not null && ExpressionContainsBoundParameterPresence(loop.NullCollectionElement)) ||
-                ContainsBoundParameterPresence(loop.Body),
-            PowerShellBoundSwitchStatement switchStatement => ExpressionContainsBoundParameterPresence(switchStatement.Value) || switchStatement.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Value) || ContainsBoundParameterPresence(clause.Body)) || switchStatement.DefaultBlock is not null && ContainsBoundParameterPresence(switchStatement.DefaultBlock),
-            PowerShellBoundThrowStatement thrown => thrown.Expression is not null && ExpressionContainsBoundParameterPresence(thrown.Expression),
-            PowerShellBoundTryStatement tryStatement => ContainsBoundParameterPresence(tryStatement.Body) || tryStatement.Catches.Any(clause => ContainsBoundParameterPresence(clause.Body)) || tryStatement.FinallyBlock is not null && ContainsBoundParameterPresence(tryStatement.FinallyBlock),
-            _ => false
-        };
-
-    private static bool ExpressionContainsBoundParameterPresence(PowerShellBoundExpression expression)
-        => expression switch
-        {
-            PowerShellBoundParameterPresenceExpression => true,
-            PowerShellBoundConversionExpression conversion => ExpressionContainsBoundParameterPresence(conversion.Operand),
-            PowerShellBoundBinaryExpression binary => ExpressionContainsBoundParameterPresence(binary.Left) || ExpressionContainsBoundParameterPresence(binary.Right),
-            PowerShellBoundUnaryExpression unary => ExpressionContainsBoundParameterPresence(unary.Operand),
-            PowerShellBoundTypeTestExpression typeTest => ExpressionContainsBoundParameterPresence(typeTest.Operand),
-            PowerShellBoundRegexExpression regex => ExpressionContainsBoundParameterPresence(regex.Input) || ExpressionContainsBoundParameterPresence(regex.Pattern) || regex.Replacement is not null && ExpressionContainsBoundParameterPresence(regex.Replacement),
-            PowerShellBoundWildcardExpression wildcard => ExpressionContainsBoundParameterPresence(wildcard.Input) || ExpressionContainsBoundParameterPresence(wildcard.Pattern),
-            PowerShellBoundMembershipExpression membership => ExpressionContainsBoundParameterPresence(membership.Left) || ExpressionContainsBoundParameterPresence(membership.Right),
-            PowerShellBoundStringSplitExpression split => ExpressionContainsBoundParameterPresence(split.Input) || ExpressionContainsBoundParameterPresence(split.Pattern),
-            PowerShellBoundStringJoinExpression join => ExpressionContainsBoundParameterPresence(join.Values) || ExpressionContainsBoundParameterPresence(join.Separator),
-            PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Any(part => part.Expression is not null && ExpressionContainsBoundParameterPresence(part.Expression)),
-            PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionContainsBoundParameterPresence(mutation.Value),
-            PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionContainsBoundParameterPresence),
-            PowerShellBoundArrayConcatenationExpression concatenation => ExpressionContainsBoundParameterPresence(concatenation.Left) || ExpressionContainsBoundParameterPresence(concatenation.Right),
-            PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry => ExpressionContainsBoundParameterPresence(entry.Key) || ExpressionContainsBoundParameterPresence(entry.Value)),
-            PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionContainsBoundParameterPresence(property.Value)),
-            PowerShellBoundIndexExpression index => ExpressionContainsBoundParameterPresence(index.Target) || ExpressionContainsBoundParameterPresence(index.Index),
-            PowerShellBoundClrMemberExpression member => member.Receiver is not null && ExpressionContainsBoundParameterPresence(member.Receiver),
-            PowerShellBoundClrInvocationExpression invocation => invocation.Receiver is not null && ExpressionContainsBoundParameterPresence(invocation.Receiver) || invocation.Arguments.Any(ExpressionContainsBoundParameterPresence),
-            PowerShellBoundInvocationExpression invocation => invocation.Arguments.Any(ExpressionContainsBoundParameterPresence),
-            _ => false
-        };
-
-    private static bool RequiresRuntimeStateHostBinding(PowerShellBoundBlock block)
-        => block.Statements.Any(StatementRequiresRuntimeStateHostBinding);
-
-    private static bool StatementRequiresRuntimeStateHostBinding(PowerShellBoundStatement statement)
-        => statement switch
-        {
-            PowerShellBoundAssignmentStatement assignment => ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
-            PowerShellBoundIndexAssignmentStatement assignment =>
-                ExpressionRequiresRuntimeStateHostBinding(assignment.Target) ||
-                ExpressionRequiresRuntimeStateHostBinding(assignment.Index) ||
-                ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
-            PowerShellBoundClrMemberAssignmentStatement assignment =>
-                ExpressionRequiresRuntimeStateHostBinding(assignment.Receiver) ||
-                ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
-            PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionRequiresRuntimeStateHostBinding(returned.Expression),
-            PowerShellBoundExpressionStatement expression => ExpressionRequiresRuntimeStateHostBinding(expression.Expression),
-            PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause =>
-                    ExpressionRequiresRuntimeStateHostBinding(clause.Condition) || RequiresRuntimeStateHostBinding(clause.Body)) ||
-                (conditional.ElseBlock is not null && RequiresRuntimeStateHostBinding(conditional.ElseBlock)),
-            PowerShellBoundWhileStatement loop => ExpressionRequiresRuntimeStateHostBinding(loop.Condition) || RequiresRuntimeStateHostBinding(loop.Body),
-            PowerShellBoundForStatement loop =>
-                (loop.Initializer is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Initializer)) ||
-                (loop.Condition is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Condition)) ||
-                (loop.Iterator is not null && ExpressionRequiresRuntimeStateHostBinding(loop.Iterator)) ||
-                RequiresRuntimeStateHostBinding(loop.Body),
-            PowerShellBoundForEachStatement loop =>
-                ExpressionRequiresRuntimeStateHostBinding(loop.Collection) ||
-                (loop.NullCollectionElement is not null && ExpressionRequiresRuntimeStateHostBinding(loop.NullCollectionElement)) ||
-                RequiresRuntimeStateHostBinding(loop.Body),
-            PowerShellBoundSwitchStatement switchStatement =>
-                ExpressionRequiresRuntimeStateHostBinding(switchStatement.Value) ||
-                switchStatement.Clauses.Any(clause => ExpressionRequiresRuntimeStateHostBinding(clause.Value) || RequiresRuntimeStateHostBinding(clause.Body)) ||
-                (switchStatement.DefaultBlock is not null && RequiresRuntimeStateHostBinding(switchStatement.DefaultBlock)),
-            PowerShellBoundThrowStatement thrown => thrown.Expression is not null && ExpressionRequiresRuntimeStateHostBinding(thrown.Expression),
-            PowerShellBoundTryStatement tryStatement =>
-                RequiresRuntimeStateHostBinding(tryStatement.Body) ||
-                tryStatement.Catches.Any(clause => RequiresRuntimeStateHostBinding(clause.Body)) ||
-                (tryStatement.FinallyBlock is not null && RequiresRuntimeStateHostBinding(tryStatement.FinallyBlock)),
-            _ => false
-        };
-
-    private static bool ExpressionRequiresRuntimeStateHostBinding(PowerShellBoundExpression expression)
-        => expression switch
-        {
-            PowerShellBoundRuntimeStateExpression runtime => runtime.RequiresHostBinding,
-            PowerShellBoundCommandAvailabilityExpression discovery => ExpressionRequiresRuntimeStateHostBinding(discovery.Name),
-            PowerShellBoundConversionExpression conversion => ExpressionRequiresRuntimeStateHostBinding(conversion.Operand),
-            PowerShellBoundBinaryExpression binary => ExpressionRequiresRuntimeStateHostBinding(binary.Left) || ExpressionRequiresRuntimeStateHostBinding(binary.Right),
-            PowerShellBoundUnaryExpression unary => ExpressionRequiresRuntimeStateHostBinding(unary.Operand),
-            PowerShellBoundTypeTestExpression typeTest => ExpressionRequiresRuntimeStateHostBinding(typeTest.Operand),
-            PowerShellBoundRegexExpression regex =>
-                ExpressionRequiresRuntimeStateHostBinding(regex.Input) ||
-                ExpressionRequiresRuntimeStateHostBinding(regex.Pattern) ||
-                (regex.Replacement is not null && ExpressionRequiresRuntimeStateHostBinding(regex.Replacement)),
-            PowerShellBoundWildcardExpression wildcard => ExpressionRequiresRuntimeStateHostBinding(wildcard.Input) || ExpressionRequiresRuntimeStateHostBinding(wildcard.Pattern),
-            PowerShellBoundMembershipExpression membership => ExpressionRequiresRuntimeStateHostBinding(membership.Left) || ExpressionRequiresRuntimeStateHostBinding(membership.Right),
-            PowerShellBoundMutationExpression mutation => mutation.Value is not null && ExpressionRequiresRuntimeStateHostBinding(mutation.Value),
-            PowerShellBoundArrayExpression array => array.Elements.Any(ExpressionRequiresRuntimeStateHostBinding),
-            PowerShellBoundArrayConcatenationExpression concatenation => ExpressionRequiresRuntimeStateHostBinding(concatenation.Left) || ExpressionRequiresRuntimeStateHostBinding(concatenation.Right),
-            PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.Any(entry =>
-                ExpressionRequiresRuntimeStateHostBinding(entry.Key) || ExpressionRequiresRuntimeStateHostBinding(entry.Value)),
-            PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Any(property => ExpressionRequiresRuntimeStateHostBinding(property.Value)),
-            PowerShellBoundIndexExpression index => ExpressionRequiresRuntimeStateHostBinding(index.Target) || ExpressionRequiresRuntimeStateHostBinding(index.Index),
-            PowerShellBoundClrMemberExpression member => member.Receiver is not null && ExpressionRequiresRuntimeStateHostBinding(member.Receiver),
-            PowerShellBoundClrInvocationExpression invocation =>
-                (invocation.Receiver is not null && ExpressionRequiresRuntimeStateHostBinding(invocation.Receiver)) ||
-                invocation.Arguments.Any(ExpressionRequiresRuntimeStateHostBinding),
-            PowerShellBoundInvocationExpression invocation => invocation.Arguments.Any(ExpressionRequiresRuntimeStateHostBinding),
-            _ => false
-        };
-
     private static IEnumerable<(string Key, int Offset)> EnumerateNestedAssignments(PowerShellBoundBlock block)
     {
         foreach (var statement in block.Statements)
@@ -463,7 +342,7 @@ internal sealed partial class PowerShellTypedLowerer
                 assignment.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement assignment => new PowerShellLoweredClrMemberAssignmentStatement(
                 assignment.Span,
-                LowerExpression(assignment.Receiver, functions, names, targetCapabilities),
+                assignment.Receiver is null ? null : LowerExpression(assignment.Receiver, functions, names, targetCapabilities),
                 assignment.DeclaringType,
                 assignment.MemberName,
                 assignment.ReceiverBehavior,

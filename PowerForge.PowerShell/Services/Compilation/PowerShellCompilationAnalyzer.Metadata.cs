@@ -22,8 +22,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
                    attribute.PositionalArguments[0] is TypeExpressionAst outputType &&
                    outputType.TypeName.GetReflectionType() is { } declaredOutputType &&
-                   declaredOutputType != typeof(void) &&
-                   PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredOutputType, targetFramework, capabilities);
+                   (declaredOutputType == typeof(void) ||
+                    PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredOutputType, targetFramework, capabilities));
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

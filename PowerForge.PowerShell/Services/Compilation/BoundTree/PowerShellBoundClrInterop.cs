@@ -116,12 +116,15 @@ internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBo
 {
     internal PowerShellBoundClrMemberAssignmentStatement(
         SourceSpan span,
-        PowerShellBoundExpression receiver,
+        PowerShellBoundExpression? receiver,
         Type declaringType,
         string memberName,
         PowerShellClrReceiverBehavior receiverBehavior,
         PowerShellBoundExpression value)
-        : base(span, PowerShellSemanticEffect.Mutation | receiver.Effects | value.Effects, receiver.Capabilities | value.Capabilities)
+        : base(
+            span,
+            PowerShellSemanticEffect.Mutation | (receiver?.Effects ?? PowerShellSemanticEffect.None) | value.Effects,
+            (receiver?.Capabilities ?? PowerShellRequiredCapability.None) | value.Capabilities)
     {
         Receiver = receiver;
         DeclaringType = declaringType;
@@ -130,7 +133,7 @@ internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBo
         Value = value;
     }
 
-    internal PowerShellBoundExpression Receiver { get; }
+    internal PowerShellBoundExpression? Receiver { get; }
     internal Type DeclaringType { get; }
     internal string MemberName { get; }
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }

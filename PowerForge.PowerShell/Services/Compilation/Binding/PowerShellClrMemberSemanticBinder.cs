@@ -19,20 +19,21 @@ internal static class PowerShellClrMemberSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        if (syntax.Operator.ToString() != "Equals" || memberSyntax.Expression is not VariableExpressionAst)
+        if (syntax.Operator.ToString() != "Equals" ||
+            memberSyntax.Expression is not (VariableExpressionAst or TypeExpressionAst))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2614", "Typed CLR member mutation requires direct local-variable assignment with simple '='; static members and non-local receivers remain on the PowerShell runtime path.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2614", "Typed CLR member mutation requires a direct local-variable or static CLR member assignment with simple '='; other receivers remain on the PowerShell runtime path.", span));
             return null;
         }
-        if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target) || target.IsStatic)
+        if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target))
             return null;
         if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
-        if (target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934", "The bounded runtime-free Get-Help metadata view is immutable.", span));
             return null;
         }
-        if (target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
+        if (!target.IsStatic && target.Type == typeof(PSObject) && target.Receiver!.Type.TryGetKnownProperty(name, out var knownProperty))
         {
             var propertyValue = bindExpression(syntax.Right, knownProperty.ClrType == typeof(object) ? null : knownProperty.ClrType);
             if (propertyValue is null ||
@@ -49,20 +50,22 @@ internal static class PowerShellClrMemberSemanticBinder
                 PowerShellClrReceiverBehavior.PowerShellAdapter,
                 propertyValue);
         }
-        if (target.Type == typeof(PSObject))
+        if (!target.IsStatic && target.Type == typeof(PSObject))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2612", "PSCustomObject mutation is compiled only for a statically known note-property shape; other members require preservation of adapted-object identity.", span));
             return null;
         }
         var receiverBehavior = PowerShellClrReceiverBehavior.None;
-        if (!target.Type.IsValueType && !target.IsKnownNonNull && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
+        if (!target.IsStatic && !target.Type.IsValueType && !target.IsKnownNonNull && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
             receiverBehavior = PowerShellClrReceiverBehavior.PowerShellRuntimeException;
-        else if (!target.Type.IsValueType && !target.IsKnownNonNull)
+        else if (!target.IsStatic && !target.Type.IsValueType && !target.IsKnownNonNull)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2615", "CLR member mutation on a potentially null receiver requires PowerShell runtime-error identity.", span));
             return null;
         }
-        var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
+        var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
+                    (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
+        var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags)
             .Where(member => IsSupportedMember(member, targetFramework))
             .Where(static member => member switch
             {
@@ -71,7 +74,7 @@ internal static class PowerShellClrMemberSemanticBinder
                 _ => false
             })
             .ToArray();
-        if (members.Length == 0 &&
+        if (!target.IsStatic && members.Length == 0 &&
             typeof(System.Collections.IDictionary).IsAssignableFrom(target.Type) &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))
         {
@@ -94,7 +97,7 @@ internal static class PowerShellClrMemberSemanticBinder
         }
         if (members[0] is PropertyInfo && PowerShellRuntimeExceptionCatchPolicy.Contains(memberSyntax))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2617", $"CLR property assignment '{target.Type.FullName}.{members[0].Name}' inside a RuntimeException catch cannot preserve PowerShell error wrapping.", span));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2617", $"CLR property assignment '{target.Type.FullName}.{members[0].Name}' observed by a RuntimeException catch cannot preserve PowerShell error wrapping.", span));
             return null;
         }
         var memberType = members[0] is PropertyInfo property ? property.PropertyType : ((FieldInfo)members[0]).FieldType;
@@ -104,7 +107,7 @@ internal static class PowerShellClrMemberSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2618", $"Member assignment value is not assignable to '{memberType.FullName}'.", value?.Span ?? span));
             return null;
         }
-        return new PowerShellBoundClrMemberAssignmentStatement(span, target.Receiver!, target.Type, members[0].Name, receiverBehavior, value);
+        return new PowerShellBoundClrMemberAssignmentStatement(span, target.Receiver, target.Type, members[0].Name, receiverBehavior, value);
     }
 
     internal static PowerShellBoundExpression? BindMember(

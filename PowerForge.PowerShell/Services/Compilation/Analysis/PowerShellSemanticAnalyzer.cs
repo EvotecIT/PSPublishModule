@@ -140,8 +140,16 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         PowerShellCompilationFeatureIds.FunctionGraph,
                         $"Function '{function.Symbol.Name}' participates in a mutually recursive local-call cycle, which is not supported by the typed ABI."));
                 }
+                var isRecursive = IsRecursive(function.Symbol, program.CallGraph);
+                if (isRecursive && (function.DeclaredOutputType is null || function.DeclaredOutputType == typeof(void)))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.FunctionGraph,
+                        $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract; OutputType(void) is advisory metadata, not a value contract."));
+                }
                 if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
-                    return function.WithAnalysis(disposition: IsRecursive(function.Symbol, program.CallGraph)
+                    return function.WithAnalysis(disposition: isRecursive
                         ? new PowerShellExecutionDisposition(
                             PowerShellExecutionDispositionKind.Fallback,
                             PowerShellCompilationFeatureIds.FunctionGraph,
@@ -453,7 +461,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
         else if (statement is PowerShellBoundClrMemberAssignmentStatement memberAssignment)
         {
-            yield return memberAssignment.Receiver;
+            if (memberAssignment.Receiver is not null) yield return memberAssignment.Receiver;
             yield return memberAssignment.Value;
         }
         else if (statement is PowerShellBoundIfStatement conditional)

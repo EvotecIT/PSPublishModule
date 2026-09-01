@@ -26,6 +26,7 @@ internal static class PowerShellLoweredCommandProviderCollector
                     foreach (var provider in Enumerate(assignment.Value)) yield return provider;
                     break;
                 case PowerShellLoweredClrMemberAssignmentStatement assignment:
+                    if (assignment.Receiver is not null)
                     foreach (var provider in Enumerate(assignment.Receiver)) yield return provider;
                     foreach (var provider in Enumerate(assignment.Value)) yield return provider;
                     break;

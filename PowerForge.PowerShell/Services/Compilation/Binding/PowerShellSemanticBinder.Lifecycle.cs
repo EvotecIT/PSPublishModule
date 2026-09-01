@@ -54,8 +54,9 @@ internal sealed partial class PowerShellSemanticBinder
             collectionType,
             new PowerShellCompilationParameter(collectionName, arrayType.FullName ?? arrayType.Name, hasDefaultValue: false));
 
+        var semanticOutputType = declaredOutputType == typeof(void) ? null : declaredOutputType;
         var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
-        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, declaredOutputType, targetFramework, capabilities);
+        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, semanticOutputType, targetFramework, capabilities);
         var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
             return null;
@@ -72,7 +73,7 @@ internal sealed partial class PowerShellSemanticBinder
         var returnsCollection = processOutputs.Length > 0;
         Type? outputElementType = null;
         if (returnsCollection != signatureReturnsCollection ||
-            returnsCollection && !TryGetLifecycleOutputElementType(processOutputs, end, declaredOutputType, out outputElementType))
+            returnsCollection && !TryGetLifecycleOutputElementType(processOutputs, end, semanticOutputType, out outputElementType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2928",

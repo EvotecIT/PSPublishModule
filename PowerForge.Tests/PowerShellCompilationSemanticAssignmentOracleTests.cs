@@ -6,6 +6,34 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [Theory]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void RuntimeFreeStaticMemberAssignmentExecutesAcrossCoreTargets(string targetFramework)
+    {
+        const string caseId = "PowerForge.Semantic/assignment-target";
+        using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(caseId));
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, targetFramework),
+            "StaticAssignmentTarget" + targetFramework.Replace(".", string.Empty, StringComparison.Ordinal),
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework,
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var observation = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver().Observe(
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            build);
+        Assert.Equal("0", Assert.Single(observation.Success).Value);
+    }
+
+    [Theory]
     [InlineData("net472")]
     [InlineData("net8.0")]
     [InlineData("net10.0")]

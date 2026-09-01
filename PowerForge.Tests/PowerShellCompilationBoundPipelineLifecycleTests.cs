@@ -165,6 +165,29 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void RuntimeFreePipelineLifecycleInfersOutputBehindAdvisoryVoidMetadata()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Select-Value { [CmdletBinding()] [OutputType([void])] param([Parameter(ValueFromPipeline)][int] $Value) begin { [int] $Final = 10 } process { $Value } end { $Final } } " +
+            "function Invoke-Select { param([int[]] $Values) $Values | Select-Value }",
+            TestPath("pipeline-lifecycle-advisory-void-output.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var lifecycle = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Select-Value");
+        Assert.Equal(typeof(void), lifecycle.DeclaredOutputType);
+        Assert.Equal(typeof(int[]), lifecycle.ReturnType.ClrType);
+        var caller = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Invoke-Select");
+        var invocation = Assert.IsType<PowerShellBoundInvocationExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(caller.Body.Statements)).Expression);
+        Assert.Equal(typeof(int[]), invocation.Type.ClrType);
+    }
+
+    [Fact]
     public void RuntimeFreePipelineLifecycleKeepsOutputFreeProcessInvocationOnScalarAbi()
     {
         var document = PowerShellSourceParser.Parse(

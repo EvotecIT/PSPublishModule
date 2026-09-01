@@ -500,7 +500,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             return false;
         if (assignment.Left is MemberExpressionAst
             {
-                Expression: VariableExpressionAst,
+                Expression: VariableExpressionAst or TypeExpressionAst,
                 Member: StringConstantExpressionAst
             })
             return true;

@@ -66,7 +66,7 @@ internal sealed class PowerShellLoweredClrInvocationExpression : PowerShellLower
 
 internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredClrMemberAssignmentStatement(SourceSpan span, PowerShellLoweredExpression receiver, Type declaringType, string memberName, PowerShellClrReceiverBehavior receiverBehavior, PowerShellLoweredExpression value)
+    internal PowerShellLoweredClrMemberAssignmentStatement(SourceSpan span, PowerShellLoweredExpression? receiver, Type declaringType, string memberName, PowerShellClrReceiverBehavior receiverBehavior, PowerShellLoweredExpression value)
         : base(span)
     {
         Receiver = receiver;
@@ -76,7 +76,7 @@ internal sealed class PowerShellLoweredClrMemberAssignmentStatement : PowerShell
         Value = value;
     }
 
-    internal PowerShellLoweredExpression Receiver { get; }
+    internal PowerShellLoweredExpression? Receiver { get; }
     internal Type DeclaringType { get; }
     internal string MemberName { get; }
     internal PowerShellClrReceiverBehavior ReceiverBehavior { get; }

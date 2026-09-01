@@ -108,6 +108,25 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             diagnostic.Message.Contains("recursive local-call cycle", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Transpile_AdvisoryVoidOutputTypeDoesNotSeedRecursiveValueContract()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Countdown { [OutputType([void])] param([long] $Number) " +
+            "if ($Number -le [long] 0) { return $Number }; $Number -= [long] 1; return Get-Countdown -Number $Number }",
+            ".psm1");
+
+        var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.AdvisoryVoidRecursion",
+            "CompiledPowerShell",
+            "net10.0");
+
+        Assert.Empty(result.Methods);
+        Assert.Contains(result.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("without a declared return contract", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Theory]
     [InlineData("net8.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]

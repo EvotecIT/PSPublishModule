@@ -124,7 +124,12 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(
                 index.Span, OptimizeExpression(index.Target), OptimizeExpression(index.Index), OptimizeExpression(index.Value), index.Kind, index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement member => new PowerShellBoundClrMemberAssignmentStatement(
-                member.Span, OptimizeExpression(member.Receiver), member.DeclaringType, member.MemberName, member.ReceiverBehavior, OptimizeExpression(member.Value)),
+                member.Span,
+                member.Receiver is null ? null : OptimizeExpression(member.Receiver),
+                member.DeclaringType,
+                member.MemberName,
+                member.ReceiverBehavior,
+                OptimizeExpression(member.Value)),
             _ => statement
         };
 

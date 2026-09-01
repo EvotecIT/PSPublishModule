@@ -16,7 +16,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 CountHostedRegionSites(assignment.Index) +
                 CountHostedRegionSites(assignment.Value),
             PowerShellLoweredClrMemberAssignmentStatement assignment =>
-                CountHostedRegionSites(assignment.Receiver) + CountHostedRegionSites(assignment.Value),
+                (assignment.Receiver is null ? 0 : CountHostedRegionSites(assignment.Receiver)) + CountHostedRegionSites(assignment.Value),
             PowerShellLoweredReturnStatement { Expression: not null } returned => CountHostedRegionSites(returned.Expression),
             PowerShellLoweredExpressionStatement expression => CountHostedRegionSites(expression.Expression),
             PowerShellLoweredStreamWriteStatement stream => CountHostedRegionSites(stream.Message),
@@ -102,7 +102,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 ContainsCommandRegionLocalInvocation(assignment.Index) ||
                 ContainsCommandRegionLocalInvocation(assignment.Value),
             PowerShellLoweredClrMemberAssignmentStatement assignment =>
-                ContainsCommandRegionLocalInvocation(assignment.Receiver) || ContainsCommandRegionLocalInvocation(assignment.Value),
+                (assignment.Receiver is not null && ContainsCommandRegionLocalInvocation(assignment.Receiver)) ||
+                ContainsCommandRegionLocalInvocation(assignment.Value),
             PowerShellLoweredReturnStatement { Expression: not null } returned => ContainsCommandRegionLocalInvocation(returned.Expression),
             PowerShellLoweredExpressionStatement expression => ContainsCommandRegionLocalInvocation(expression.Expression),
             PowerShellLoweredStreamWriteStatement stream => ContainsCommandRegionLocalInvocation(stream.Message),

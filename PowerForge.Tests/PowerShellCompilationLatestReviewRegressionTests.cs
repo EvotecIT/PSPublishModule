@@ -160,7 +160,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Analyze_AllowsTypedArrayMutationAndRejectsStaticMemberMutation()
+    public void Analyze_AllowsTypedArrayAndExactStaticMemberMutation()
     {
         using var fixture = ArtifactFixture.Create(
             "function Set-Indexed { param([int[]] $Values) $Values[0] = 9; return $Values[0] } " +
@@ -171,10 +171,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         var units = Assert.Single(plan.Files).Units;
         Assert.Equal(2, units.Length);
         Assert.True(units.Single(unit => unit.Name == "Set-Indexed").IsCompilable);
-        var unsafeMember = units.Single(unit => unit.Name == "Set-Member");
-        Assert.False(unsafeMember.IsCompilable);
-        Assert.Contains(unsafeMember.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("direct local-variable assignment", StringComparison.OrdinalIgnoreCase));
+        Assert.True(units.Single(unit => unit.Name == "Set-Member").IsCompilable);
     }
 
     [Fact]

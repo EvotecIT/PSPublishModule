@@ -502,6 +502,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
     {
+        if (assignment.Receiver is null)
+            return $"{PowerShellCSharpSymbolRenderer.TypeName(assignment.DeclaringType)}.{assignment.MemberName} = {EmitExpression(assignment.Value)}";
         var receiver = EmitExpression(assignment.Receiver);
         if (assignment.ReceiverBehavior == PowerShellClrReceiverBehavior.PowerShellAdapterAddNoteProperty)
         {

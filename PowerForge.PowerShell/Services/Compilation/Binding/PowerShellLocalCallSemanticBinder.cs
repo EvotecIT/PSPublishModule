@@ -86,6 +86,7 @@ internal static class PowerShellLocalCallSemanticBinder
             out var declaredReturnType,
             out _,
             out _);
+        if (declaredReturnType == typeof(void)) declaredReturnType = null;
         declaredReturnType ??= InferReturnType(function, parameters);
         var pipelineLifecycleParameterIndex = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(
             function.Body,

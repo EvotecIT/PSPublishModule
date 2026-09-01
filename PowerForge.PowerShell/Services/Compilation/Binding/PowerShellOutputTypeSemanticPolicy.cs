@@ -28,7 +28,7 @@ internal static class PowerShellOutputTypeSemanticPolicy
             attributes[0].PositionalArguments.Count != 1 ||
             attributes[0].PositionalArguments[0] is not TypeExpressionAst typeExpression ||
             typeExpression.TypeName.GetReflectionType() is not { } declared ||
-            declared == typeof(void) ||
+            declared != typeof(void) &&
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, targetFramework, capabilities))
         {
             errorNode = attributes[0];

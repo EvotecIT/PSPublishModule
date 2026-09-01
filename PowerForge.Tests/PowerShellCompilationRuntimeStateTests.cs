@@ -537,6 +537,55 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
+    public void Build_InterpolatedRuntimeStatePropagatesThroughLocalCalls()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-PreferenceText { [CmdletBinding(SupportsShouldProcess = $true)] param() return \"whatif=$WhatIfPreference\" }; " +
+            "function Invoke-PreferenceText { [CmdletBinding(SupportsShouldProcess = $true)] param() return Get-PreferenceText }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.InterpolatedRuntimeState", "CompiledPowerShell", "net8.0");
+
+        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        Assert.Equal(2, typed.Methods.Length);
+        Assert.All(typed.Methods, static method => Assert.True(method.RequiresPowerShellRuntimeState));
+        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.InterpolatedRuntimeState",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; " +
+            "Get-PreferenceText -WhatIf; Invoke-PreferenceText -WhatIf");
+        Assert.Equal(
+            new[] { "whatif=True", "whatif=True" },
+            compiled.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal((0, string.Empty), (compiled.ExitCode, compiled.StandardError.Trim()));
+    }
+
+    [Theory]
+    [InlineData("return ([string] $WhatIfPreference) -split 'r'")]
+    [InlineData("return ([string[]] @([string] $WhatIfPreference)) -join ','")]
+    public void Transpile_StringOperatorsCarryNestedRuntimeStateRequirement(string body)
+    {
+        using var fixture = ArtifactFixture.Create(
+            $"function Get-PreferenceText {{ [CmdletBinding(SupportsShouldProcess = $true)] param() {body} }}",
+            ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.StringRuntimeState", "CompiledPowerShell", "net8.0");
+
+        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
+        Assert.True(Assert.Single(typed.Methods).RequiresPowerShellRuntimeState);
+        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Analyze_StrictExecutableKeepsPSCmdletInteractionOnFallback()
     {
         using var fixture = ArtifactFixture.Create(

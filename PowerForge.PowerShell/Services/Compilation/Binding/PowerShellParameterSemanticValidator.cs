@@ -96,8 +96,9 @@ internal static class PowerShellParameterSemanticValidator
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "OutputType"))
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
                    attribute.PositionalArguments[0] is TypeExpressionAst outputType &&
-                   outputType.TypeName.GetReflectionType() is { } declared && declared != typeof(void) &&
-                   PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, targetFramework, capabilities);
+                   outputType.TypeName.GetReflectionType() is { } declared &&
+                   (declared == typeof(void) ||
+                    PowerShellCompilationParameterTypePolicy.CanUseInMethod(declared, targetFramework, capabilities));
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||
