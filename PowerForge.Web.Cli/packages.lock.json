@@ -22,8 +22,8 @@
       },
       "Acornima": {
         "type": "Transitive",
-        "resolved": "1.6.2",
-        "contentHash": "laakpDHzMwHr5C8+q5RlRf0XJJshUvghNeo4xDerICrYR3iEuGvwfpauCmXuU3RE437XDaQO5ZxieWDpADuD+w=="
+        "resolved": "1.7.0",
+        "contentHash": "a2I4O4qkuAdB0oSaGz6/k0n/bXxMbGcLBra5dNTTVSLmTwM7uORA8ebpOrNMmDfFWOMwvuaRL6gPprRV4HTV0w=="
       },
       "AngleSharp": {
         "type": "Transitive",
@@ -66,8 +66,8 @@
       },
       "ChartForgeX": {
         "type": "Transitive",
-        "resolved": "1.4.0",
-        "contentHash": "a0YeD+wSLYJN5yu5+qCbOnpkLMcTL+PpFLLYU1hFJQ/5e/oCxyYpii29hPETkVCQKmcj9Bj1xNSV+cw54hQTdQ=="
+        "resolved": "1.6.0",
+        "contentHash": "svqljzuw1NkTNNc0DoNFi6whjc9MYRmaVzh0HBI73yZGWh1KofaAE+gtXcsje2cQAWdJMVHnGv1mirccUR8YbQ=="
       },
       "DBAClientX.Core": {
         "type": "Transitive",
@@ -107,30 +107,30 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "3.0.0",
-        "contentHash": "3r0SvTxQOTlAg62Ckc+4vUdQ0MttCJpqbvubMVTW/yPOODmLpYb1ib574CJyPWbLSh6fCL9OrfbDXaRGZ5whqg==",
+        "resolved": "3.0.1",
+        "contentHash": "EQf3rk3EaTH7afzdJkWF1i0oSx6spniWmxz74C3F0+EcCQ7ZndetWZ34dxz0zLcgFWS+bkkoR+NUWP2Iut2HEA==",
         "dependencies": {
           "AngleSharp": "1.7.1",
           "AngleSharp.Css": "1.0.1",
           "AngleSharp.Diffing": "1.1.1",
           "AngleSharp.Io": "1.1.0",
           "AngleSharp.Js": "1.0.1",
-          "ChartForgeX": "1.4.0",
+          "ChartForgeX": "1.6.0",
           "HtmlAgilityPack": "1.12.4",
-          "Jint": "4.15.3",
-          "Microsoft.Playwright": "1.61.0",
+          "Jint": "4.16.0",
+          "Microsoft.Playwright": "1.62.0",
           "NUglify": "1.22.3",
-          "OfficeIMO.Html": "3.2.0",
-          "OfficeIMO.Markdown.Html": "3.2.0",
+          "OfficeIMO.Html": "3.2.2",
+          "OfficeIMO.Markdown.Html": "3.2.2",
           "PreMailer.Net": "2.7.3"
         }
       },
       "Jint": {
         "type": "Transitive",
-        "resolved": "4.15.3",
-        "contentHash": "xP7REb8EajnVlXvI0VdQx2PD/ddLZBjkR/vzQW9GYwm+GzvD181MgWqJvcTtV0xHViyRngHxSiDu1WGdkoluNA==",
+        "resolved": "4.16.0",
+        "contentHash": "YHofgoVtjWzqmG2GsGsp6eYMmcBfGgJOcH+Ki2UdZXNsYgKGnWrK2hSqRSPG/6HqeiipT5YPhzEH+bwxFO+YAQ==",
         "dependencies": {
-          "Acornima": "1.6.2"
+          "Acornima": "1.7.0"
         }
       },
       "Magick.NET-Q8-AnyCPU": {
@@ -171,8 +171,8 @@
       },
       "Microsoft.Playwright": {
         "type": "Transitive",
-        "resolved": "1.61.0",
-        "contentHash": "VM149rQ2Pu+3xAzrO2gvh2WRgrWNbIl0jL9LG2oMC9xKUVYDnUrsh+E/5S+NQToVV4S+yhZ3NHsa6kf1PdHeag==",
+        "resolved": "1.62.0",
+        "contentHash": "cos6dmHPcMpS6bXw2WEgoXb8KXwMhs3c5L0P/cUf2rdUpjVA3g3u+KiSpVp2VCzsXymRpy2tFHqm+Wnz7s5VhQ==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
           "System.ComponentModel.Annotations": "5.0.0"
@@ -228,12 +228,12 @@
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "LlHGb2cJJ/1AIAPAGHNFkMcZgeVw6DG8ILOdwHugnLib9gGuBQ3VTUi9ylVJ3cjyNkBjXQBn4M2qC5lNYdZrGg==",
+        "resolved": "3.2.2",
+        "contentHash": "Bx5CBZqGDXlnOWUwIpSnvtn3ZcOBSF0Vu9gWTE2BaNoGWY4/KpKr/4ludhB7FRM1lD/OVNYZXoFzdZug4NyryA==",
         "dependencies": {
-          "AngleSharp": "1.5.2",
-          "AngleSharp.Css": "1.0.0-beta.216",
-          "OfficeIMO.Core": "3.2.0"
+          "AngleSharp": "1.7.1",
+          "AngleSharp.Css": "1.0.1",
+          "OfficeIMO.Core": "3.2.2"
         }
       },
       "OfficeIMO.Markdown": {
@@ -246,11 +246,11 @@
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.2.0",
-        "contentHash": "3eqYPKo2+bStLGZk7vFpeU5gDM7CE4ceuBjXv6CrMfsa6Up9UeK5wJLAeuT/fj4IS8VXbPv0aUTiFYbeXsSK4A==",
+        "resolved": "3.2.2",
+        "contentHash": "zWh9vLgvQBoZXeJyoCR50fKwCnEpPYo2iaR5NekF4zkt7xVf/4m1yH+ucIGUdwHpCWAy3H4M3D2gLo9pF05oqw==",
         "dependencies": {
-          "OfficeIMO.Html": "3.2.0",
-          "OfficeIMO.Markdown": "3.2.0"
+          "OfficeIMO.Html": "3.2.2",
+          "OfficeIMO.Markdown": "3.2.2"
         }
       },
       "PreMailer.Net": {
@@ -365,10 +365,10 @@
         "type": "Project",
         "dependencies": {
           "Google.Apis.Auth": "[1.76.0, )",
-          "HtmlTinkerX": "[3.0.0, )",
+          "HtmlTinkerX": "[3.0.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "OfficeIMO.Markdown": "[3.2.6, )",
-          "PowerForge": "[3.0.126, )",
+          "PowerForge": "[3.0.128, )",
           "Scriban": "[7.2.6, )",
           "YamlDotNet": "[18.1.0, )"
         }
