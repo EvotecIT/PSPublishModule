@@ -13,6 +13,37 @@ function Assert-LastExitCode {
     }
 }
 
+function Invoke-GitWithRetry {
+    param(
+        [Parameter(Mandatory)][string] $Operation,
+        [Parameter(Mandatory)][string[]] $Arguments,
+        [string] $ResetPath,
+        [ValidateRange(1, 5)][int] $MaxAttempts = 3,
+        [ValidateRange(0, 60)][int] $RetryDelaySeconds = 5
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if (-not [string]::IsNullOrWhiteSpace($ResetPath) -and (Test-Path -LiteralPath $ResetPath)) {
+            Remove-Item -LiteralPath $ResetPath -Recurse -Force
+        }
+
+        & git @Arguments
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            return
+        }
+        if ($attempt -lt $MaxAttempts) {
+            Write-Warning "$Operation failed with exit code $exitCode; retrying ($attempt/$MaxAttempts)."
+            Start-Sleep -Seconds ($attempt * $RetryDelaySeconds)
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ResetPath) -and (Test-Path -LiteralPath $ResetPath)) {
+        Remove-Item -LiteralPath $ResetPath -Recurse -Force
+    }
+    throw "$Operation failed after $MaxAttempts attempts with exit code $exitCode."
+}
+
 function Write-ActionOutput {
     param(
         [Parameter(Mandatory)][string] $Name,
@@ -275,8 +306,15 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         }
     $hashLines | Set-Content -LiteralPath (Join-Path $captureRoot 'SHA256SUMS.txt') -Encoding utf8NoBOM
 
-    git clone --single-branch --branch $backupBranch "git@github.com-powerforge-backup:${backupRepository}.git" $backupCheckout
-    Assert-LastExitCode 'Cloning the private backup repository'
+    Invoke-GitWithRetry -Operation 'Cloning the private backup repository' -ResetPath $backupCheckout -Arguments @(
+        'clone',
+        '--depth', '1',
+        '--no-tags',
+        '--single-branch',
+        '--branch', $backupBranch,
+        "git@github.com-powerforge-backup:${backupRepository}.git",
+        $backupCheckout
+    )
 
     $checkout = [IO.Path]::GetFullPath($backupCheckout).TrimEnd([IO.Path]::DirectorySeparatorChar)
     $targetRoot = [IO.Path]::GetFullPath((Join-Path $checkout $backupPath))
@@ -308,8 +346,13 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     $published = $false
     $publishedCommit = $null
     for ($attempt = 1; $attempt -le 3; $attempt++) {
-        git -C $checkout fetch origin $backupBranch
-        Assert-LastExitCode 'Fetching the backup branch'
+        Invoke-GitWithRetry -Operation 'Fetching the backup branch' -Arguments @(
+            '-C', $checkout,
+            'fetch',
+            '--no-tags',
+            'origin',
+            "+refs/heads/${backupBranch}:refs/remotes/origin/${backupBranch}"
+        )
         git -C $checkout rebase "origin/$backupBranch"
         if ($LASTEXITCODE -ne 0) {
             git -C $checkout rebase --abort 2>$null

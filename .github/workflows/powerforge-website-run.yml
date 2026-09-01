@@ -428,8 +428,8 @@ jobs:
         with:
           name: ${{ inputs.report_artifact_name }}
           path: |
-            ./${{ inputs.website_root }}/_reports/**
-            ./${{ inputs.website_root }}/_site/_reports/**
+            ${{ inputs.website_root == '.' && '_reports/**' || format('{0}/_reports/**', inputs.website_root) }}
+            ${{ inputs.website_root == '.' && '_site/_reports/**' || format('{0}/_site/_reports/**', inputs.website_root) }}
           if-no-files-found: ignore
 
       - name: Cleanup transient tool caches before site artifact

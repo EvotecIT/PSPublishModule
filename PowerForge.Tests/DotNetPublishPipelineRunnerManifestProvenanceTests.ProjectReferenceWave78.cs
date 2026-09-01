@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
+using NuGet.Packaging;
 using PowerForge;
 using Xunit;
 
@@ -232,11 +233,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 var archivesByPackageKey = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
                     catalogType.GetField("_archivePathsByPackageKey", BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(catalog));
-                var sdkManagedArchives = Assert.IsAssignableFrom<IReadOnlyCollection<string>>(
-                    catalogType.GetField("_sdkManagedArchivePaths", BindingFlags.Instance | BindingFlags.NonPublic)!
-                        .GetValue(catalog));
                 Assert.Empty(archivesByPackageKey);
-                Assert.Empty(sdkManagedArchives);
             }
             finally
             {
@@ -250,30 +247,87 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void SdkManagedPackageKey_RequiresMatchingCommittedLockHash()
+    public void VerifiedPackageCatalog_IgnoresPresentAssetsOnlyAutoReferencedArchive()
     {
-        Type runnerType = typeof(DotNetPublishPipelineRunner);
-        MethodInfo add = runnerType.GetMethod(
-            "AddSdkManagedPackageKey",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-        var sdkManaged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        const string packageKey = "Microsoft.NETCore.App.Runtime.win-x64|10.0.0";
-        const string contentHash = "sha512-committed";
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            const string packageId = "Runtime.Pack";
+            const string packageVersion = "1.0.0";
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(root, "src")).FullName;
+            string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
+            string packageDirectory = Directory.CreateDirectory(Path.Combine(
+                packageRoot,
+                packageId.ToLowerInvariant(),
+                packageVersion)).FullName;
+            string packagePath = Path.Combine(
+                packageDirectory,
+                packageId + "." + packageVersion + ".nupkg");
+            WriteTestPackage(packagePath, "assets-only");
+            string contentHash;
+            using (FileStream stream = File.OpenRead(packagePath))
+            using (var reader = new PackageArchiveReader(stream, leaveStreamOpen: false))
+                contentHash = reader.GetContentHash(CancellationToken.None);
 
-        add.Invoke(null, [packageKey, contentHash, new Dictionary<string, string>(), sdkManaged]);
-        Assert.Empty(sdkManaged);
-
-        add.Invoke(
-            null,
-            [
-                packageKey,
-                contentHash,
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+            File.WriteAllText(projectPath, "<Project />");
+            string objDirectory = Directory.CreateDirectory(Path.Combine(projectDirectory, "obj")).FullName;
+            File.WriteAllText(
+                Path.Combine(objDirectory, "project.assets.json"),
+                $$"""
                 {
-                    [packageKey] = contentHash
-                },
-                sdkManaged
-            ]);
-        Assert.Contains(packageKey, sdkManaged);
+                  "project": {
+                    "frameworks": {
+                      "net8.0": {
+                        "dependencies": {
+                          "{{packageId}}": { "autoReferenced": true }
+                        }
+                      }
+                    }
+                  },
+                  "libraries": {
+                    "{{packageId}}/{{packageVersion}}": {
+                      "type": "package",
+                      "sha512": "{{contentHash}}"
+                    }
+                  }
+                }
+                """);
+            using JsonDocument propertiesDocument = JsonDocument.Parse("{}");
+            Type runnerType = typeof(DotNetPublishPipelineRunner);
+            Type catalogType = runnerType.GetNestedType(
+                "VerifiedPackageInputCatalog",
+                BindingFlags.NonPublic)!;
+            Type cacheType = runnerType.GetNestedType(
+                "VerifiedPackageArchiveCache",
+                BindingFlags.NonPublic)!;
+            object cache = Activator.CreateInstance(cacheType, nonPublic: true)!;
+            try
+            {
+                MethodInfo create = catalogType.GetMethod(
+                    "TryCreate",
+                    BindingFlags.Static | BindingFlags.NonPublic)!;
+                object?[] arguments =
+                    [projectPath, propertiesDocument.RootElement, new[] { packageRoot }, cache, null];
+
+                Assert.True((bool)create.Invoke(null, arguments)!);
+                Assert.NotNull(arguments[4]);
+                object catalog = arguments[4]!;
+                var archivesByPackageKey = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+                    catalogType.GetField(
+                            "_archivePathsByPackageKey",
+                            BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .GetValue(catalog));
+                Assert.Empty(archivesByPackageKey);
+            }
+            finally
+            {
+                (cache as IDisposable)?.Dispose();
+            }
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
     }
 }

@@ -45,7 +45,8 @@ public sealed class GitHubWebsiteLinuxDeployWorkflowTests
 
         Assert.Contains("source_ref:", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
-        Assert.Equal(2, deployWorkflow.Split("source_ref: ${{ inputs.source_ref }}", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, deployWorkflow.Split("source_ref: ${{ inputs.source_ref }}", StringSplitOptions.None).Length - 1);
+        Assert.Contains("source_ref: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("source-sha: ${{ needs.build.outputs.source_sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("source-sha: ${{ github.event.pull_request.head.sha || github.sha }}", deployWorkflow, StringComparison.Ordinal);
         Assert.Contains("--result-path", runWorkflow, StringComparison.Ordinal);

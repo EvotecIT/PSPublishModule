@@ -21,16 +21,17 @@ public static partial class WebSiteBuilder
         var entries = items
             .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
             .Where(item => ItemRendersHtml(spec, item))
-            .OrderBy(static item => NormalizeRouteForMatch(item.OutputPath), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static item => item.SourcePath, StringComparer.OrdinalIgnoreCase)
-            .Select(item => new WebSitemapEntry
+            .Select(item => new { Item = item, Path = ResolveSitemapEntryPath(spec, item) })
+            .OrderBy(static entry => NormalizeRouteForMatch(entry.Path), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static entry => entry.Item.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new WebSitemapEntry
             {
-                Path = item.OutputPath,
-                Title = item.Title,
-                Description = item.Description,
-                Section = item.Collection,
-                LastModified = FormatSitemapLastModified(item.LastModifiedUtc),
-                NoIndex = ItemDeclaresNoIndex(spec, item, outputRoot)
+                Path = entry.Path,
+                Title = entry.Item.Title,
+                Description = entry.Item.Description,
+                Section = entry.Item.Collection,
+                LastModified = FormatSitemapLastModified(entry.Item.LastModifiedUtc),
+                NoIndex = ItemDeclaresNoIndex(spec, entry.Item, outputRoot)
             })
             .ToArray();
 
@@ -60,11 +61,26 @@ public static partial class WebSiteBuilder
     private static bool ItemRendersHtml(SiteSpec spec, ContentItem item)
     {
         var formats = ResolveOutputFormats(spec, item);
-        return formats.Any(static format =>
-            format is not null &&
-            (string.Equals(format.Name, "html", StringComparison.OrdinalIgnoreCase) ||
-             string.IsNullOrWhiteSpace(format.Suffix) ||
-             string.Equals(format.Suffix, "html", StringComparison.OrdinalIgnoreCase)));
+        return formats.Any(RendersHtmlPage);
+    }
+
+    private static string ResolveSitemapEntryPath(SiteSpec spec, ContentItem item)
+    {
+        var htmlFormats = ResolveOutputFormats(spec, item)
+            .Where(RendersHtmlPage)
+            .ToArray();
+        var primary = htmlFormats.FirstOrDefault(static format =>
+                          string.IsNullOrWhiteSpace(format.Suffix) ||
+                          format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+                      ?? htmlFormats[0];
+        var normalizedBaseRoute = NormalizeRouteForMatch(item.OutputPath);
+        if ((string.IsNullOrWhiteSpace(primary.Suffix) || primary.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)) &&
+            normalizedBaseRoute.Trim('/').Equals("404", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/404.html";
+        }
+
+        return ResolveOutputRoute(item.OutputPath, primary);
     }
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
@@ -92,14 +108,8 @@ public static partial class WebSiteBuilder
 
         foreach (var format in ResolveOutputFormats(spec, item))
         {
-            if (format is null ||
-                (!string.Equals(format.Name, "html", StringComparison.OrdinalIgnoreCase) &&
-                 !string.IsNullOrWhiteSpace(format.Suffix) &&
-                 !string.Equals(format.Suffix, "html", StringComparison.OrdinalIgnoreCase) &&
-                 !string.Equals(format.Suffix, "htm", StringComparison.OrdinalIgnoreCase)))
-            {
+            if (!RendersHtmlPage(format))
                 continue;
-            }
 
             var route = ResolveOutputRoute(item.OutputPath, format);
             var path = ResolveRenderedHtmlPath(outputRoot, route, format);
@@ -118,12 +128,23 @@ public static partial class WebSiteBuilder
     {
         var normalizedRoute = NormalizeRouteForMatch(route).Trim('/');
         var fileName = ResolveOutputFileName(format);
-        var relative = string.IsNullOrWhiteSpace(normalizedRoute)
-            ? fileName
-            : normalizedRoute.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-              normalizedRoute.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)
-                ? normalizedRoute
-                : Path.Combine(normalizedRoute.Replace('/', Path.DirectorySeparatorChar), fileName);
+        string relative;
+        if (normalizedRoute.Equals("404", StringComparison.OrdinalIgnoreCase) &&
+            fileName.Equals("index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            relative = "404.html";
+        }
+        else if (string.IsNullOrWhiteSpace(normalizedRoute))
+        {
+            relative = fileName;
+        }
+        else
+        {
+            var normalizedFileRoute = normalizedRoute.Replace('/', Path.DirectorySeparatorChar);
+            relative = Path.GetFileName(normalizedFileRoute).Equals(fileName, StringComparison.OrdinalIgnoreCase)
+                ? normalizedFileRoute
+                : Path.Combine(normalizedFileRoute, fileName);
+        }
 
         return Path.GetFullPath(Path.Combine(outputRoot, relative));
     }

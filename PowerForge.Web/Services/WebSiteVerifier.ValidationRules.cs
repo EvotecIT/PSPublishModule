@@ -514,57 +514,91 @@ public static partial class WebSiteVerifier
         FrontMatter? matter,
         string language,
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
         HashSet<string> usedTaxonomyNames)
     {
-        if (matter is null)
-            return;
-
         var normalizedLanguage = NormalizeLanguageToken(language);
         if (string.IsNullOrWhiteSpace(normalizedLanguage))
             normalizedLanguage = "en";
 
-        if (matter.Tags is { Length: > 0 })
-        {
-            usedTaxonomyNames.Add("tags");
+        RecordTaxonomyValues(
+            ResolveTaxonomyValues(taxonomies, matter),
+            normalizedLanguage,
+            taxonomyTermsByLanguage,
+            taxonomyTermCountsByLanguage,
+            usedTaxonomyNames);
+    }
 
-            foreach (var value in matter.Tags)
+    private static IReadOnlyDictionary<string, string[]> ResolveTaxonomyValues(
+        TaxonomySpec[]? taxonomies,
+        FrontMatter? matter)
+    {
+        var resolved = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (matter is null)
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        var item = new ContentItem
+        {
+            Tags = matter.Tags ?? Array.Empty<string>(),
+            Categories = matter.Categories ?? Array.Empty<string>(),
+            Meta = matter.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        };
+
+        static void AddValues(
+            Dictionary<string, HashSet<string>> target,
+            string name,
+            IEnumerable<string>? values)
+        {
+            if (string.IsNullOrWhiteSpace(name) || values is null)
+                return;
+
+            foreach (var value in values.Where(static value => !string.IsNullOrWhiteSpace(value)))
             {
-                if (!string.IsNullOrWhiteSpace(value))
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "tags", normalizedLanguage, value.Trim());
+                if (!target.TryGetValue(name, out var terms))
+                {
+                    terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    target[name] = terms;
+                }
+                terms.Add(value.Trim());
             }
         }
 
-        if (matter.Meta is not null)
-        {
-            if (matter.Meta.TryGetValue("categories", out var categoriesValue) &&
-                TryGetMetaValues(categoriesValue, out var categories))
-            {
-                usedTaxonomyNames.Add("categories");
-                foreach (var value in categories)
-                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "categories", normalizedLanguage, value);
-            }
-        }
+        AddValues(resolved, "tags", matter.Tags);
+        AddValues(resolved, "categories", matter.Categories);
+        AddValues(resolved, "categories", WebSiteBuilder.GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }));
 
         foreach (var taxonomy in taxonomies ?? Array.Empty<TaxonomySpec>())
         {
             if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || matter.Meta is null)
                 continue;
 
-            if (!matter.Meta.TryGetValue(taxonomy.Name, out var metaValue))
-                continue;
+            AddValues(resolved, taxonomy.Name, WebSiteBuilder.GetTaxonomyValues(item, taxonomy));
+        }
 
-            if (!TryGetMetaValues(metaValue, out var values))
-                continue;
+        return resolved.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+    }
 
-            usedTaxonomyNames.Add(taxonomy.Name);
-
-            foreach (var value in values)
-                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomy.Name, normalizedLanguage, value);
+    private static void RecordTaxonomyValues(
+        IReadOnlyDictionary<string, string[]> taxonomyValues,
+        string language,
+        Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
+        HashSet<string> usedTaxonomyNames)
+    {
+        foreach (var pair in taxonomyValues)
+        {
+            usedTaxonomyNames.Add(pair.Key);
+            foreach (var value in pair.Value)
+                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomyTermCountsByLanguage, pair.Key, language, value);
         }
     }
 
     private static void RecordTaxonomyTerm(
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        Dictionary<string, Dictionary<string, Dictionary<string, int>>> taxonomyTermCountsByLanguage,
         string taxonomyName,
         string language,
         string term)
@@ -585,44 +619,27 @@ public static partial class WebSiteVerifier
         }
 
         terms.Add(term);
-    }
 
-    private static bool TryGetMetaValues(object? value, out string[] values)
-    {
-        values = Array.Empty<string>();
-        if (value is null)
-            return false;
-
-        if (value is string text && !string.IsNullOrWhiteSpace(text))
+        if (!taxonomyTermCountsByLanguage.TryGetValue(taxonomyName, out var countsByLanguage))
         {
-            values = text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .ToArray();
-            return values.Length > 0;
+            countsByLanguage = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+            taxonomyTermCountsByLanguage[taxonomyName] = countsByLanguage;
         }
 
-        if (value is IEnumerable<object?> list)
+        if (!countsByLanguage.TryGetValue(language, out var counts))
         {
-            values = list
-                .Select(item => item?.ToString() ?? string.Empty)
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Select(item => item.Trim())
-                .ToArray();
-            return values.Length > 0;
+            counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            countsByLanguage[language] = counts;
         }
 
-        var scalar = value.ToString();
-        if (string.IsNullOrWhiteSpace(scalar))
-            return false;
-
-        values = new[] { scalar.Trim() };
-        return true;
+        counts[term] = counts.TryGetValue(term, out var count) ? count + 1 : 1;
     }
 
     private static void AddSyntheticTaxonomyRoutes(
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         Dictionary<string, string> routes,
+        Dictionary<string, List<CollectionRoute>> collectionRoutes,
         Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
         List<string> warnings)
     {
@@ -639,6 +656,11 @@ public static partial class WebSiteVerifier
                 : new[] { localization.DefaultLanguage };
             foreach (var language in languages)
             {
+                if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
+                    !termsByLanguage.TryGetValue(language, out var terms) ||
+                    terms.Count == 0)
+                    continue;
+
                 var listRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
                 listRoute = ApplyLanguagePrefixToRoute(spec, localization, listRoute, language);
                 if (routes.TryGetValue(listRoute, out var existingListRoute))
@@ -651,27 +673,53 @@ public static partial class WebSiteVerifier
                     routes[listRoute] = $"[taxonomy:{taxonomy.Name}:{language}]";
                 }
 
-                if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
-                    !termsByLanguage.TryGetValue(language, out var terms) ||
-                    terms.Count == 0)
-                    continue;
+                if (!collectionRoutes.TryGetValue(taxonomy.Name, out var taxonomyRoutes))
+                {
+                    taxonomyRoutes = new List<CollectionRoute>();
+                    collectionRoutes[taxonomy.Name] = taxonomyRoutes;
+                }
+                if (!taxonomyRoutes.Any(route => route.Kind == PageKind.Taxonomy && route.Route.Equals(listRoute, StringComparison.OrdinalIgnoreCase)))
+                {
+                    taxonomyRoutes.Add(new CollectionRoute(
+                        taxonomy.Name,
+                        listRoute,
+                        $"[taxonomy:{taxonomy.Name}:{language}]",
+                        false,
+                        language,
+                        string.Empty,
+                        PageKind.Taxonomy,
+                        taxonomy.Outputs ?? Array.Empty<string>()));
+                }
 
                 foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
                 {
                     var slug = Slugify(term);
-                    if (string.IsNullOrWhiteSpace(slug))
-                        continue;
-
                     var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
                     termRoute = ApplyLanguagePrefixToRoute(spec, localization, termRoute, language);
                     if (routes.TryGetValue(termRoute, out var existingTermRoute))
                     {
                         if (!existingTermRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
                             warnings.Add($"Taxonomy term route '{termRoute}' overlaps content route '{existingTermRoute}'.");
-                        continue;
+                    }
+                    else
+                    {
+                        routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
                     }
 
-                    routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
+                    if (!taxonomyRoutes.Any(route => route.Kind == PageKind.Term &&
+                                                     route.Route.Equals(termRoute, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        taxonomyRoutes.Add(new CollectionRoute(
+                            taxonomy.Name,
+                            termRoute,
+                            $"[taxonomy:{taxonomy.Name}:{language}:{term}]",
+                            false,
+                            language,
+                            string.Empty,
+                            PageKind.Term,
+                            taxonomy.Outputs ?? Array.Empty<string>(),
+                            term));
+                    }
                 }
             }
         }
@@ -759,6 +807,7 @@ public static partial class WebSiteVerifier
         var entries = collectionRoutes.Values
             .SelectMany(static routes => routes)
             .Where(static route => !route.Draft)
+            .Where(static route => !route.IsGeneratedFallback)
             .Where(static route => !string.IsNullOrWhiteSpace(route.TranslationKey))
             .Select(route => new
             {
@@ -858,6 +907,8 @@ public static partial class WebSiteVerifier
         public bool Enabled { get; init; }
         public bool DetectFromPath { get; init; }
         public bool PrefixDefaultLanguage { get; init; }
+        public bool FallbackToDefaultLanguage { get; init; }
+        public bool MaterializeFallbackPages { get; init; }
         public string DefaultLanguage { get; init; } = "en";
         public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
         public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
@@ -875,5 +926,19 @@ public static partial class WebSiteVerifier
 
     private sealed record ReleasePlacementReference(string Placement, string? PlacementsRoot);
 
-    private sealed record CollectionRoute(string Collection, string Route, string File, bool Draft, string Language, string TranslationKey);
+    private sealed record CollectionRoute(
+        string Collection,
+        string Route,
+        string File,
+        bool Draft,
+        string Language,
+        string TranslationKey,
+        PageKind Kind,
+        string[] Outputs,
+        string? TaxonomyTerm = null,
+        PageResource[]? Resources = null,
+        IReadOnlyDictionary<string, string[]>? TaxonomyValues = null,
+        string? ProjectSlug = null,
+        ContentItem? SocialCardItem = null,
+        bool IsGeneratedFallback = false);
 }

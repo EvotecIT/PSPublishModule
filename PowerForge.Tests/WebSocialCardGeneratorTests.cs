@@ -220,6 +220,9 @@ public class WebSocialCardGeneratorTests
     [Fact]
     public void RenderPng_AlignsPrimaryTextInkLeftEdges()
     {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable())
+            return;
+
         var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -270,6 +273,9 @@ public class WebSocialCardGeneratorTests
     [Fact]
     public void RenderPng_BalancesPrimaryTextVerticalRhythm()
     {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable())
+            return;
+
         var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -320,6 +326,9 @@ public class WebSocialCardGeneratorTests
     [Fact]
     public void RenderPng_KeepsWrappedBlogTitleAndDescriptionSeparated()
     {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable())
+            return;
+
         var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
             ["socialCard"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)

@@ -35,16 +35,25 @@ internal static class AppleMacAppBundleReplacement
         return warnings.Count == 0 ? null : string.Join(" ", warnings);
     }
 
-    internal static string? Replace(string stage, string destination, string backup)
+    internal static string? Replace(
+        string stage,
+        string destination,
+        string backup,
+        Action validateStage)
     {
+        if (validateStage is null)
+            throw new ArgumentNullException(nameof(validateStage));
+
         if (!Directory.Exists(destination))
         {
+            validateStage();
             Directory.Move(stage, destination);
             return null;
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
+            validateStage();
             if (RenameAtxNp(AtCurrentWorkingDirectory, stage, AtCurrentWorkingDirectory, destination, RenameSwap) != 0)
             {
                 var error = Marshal.GetLastWin32Error();
@@ -56,6 +65,7 @@ internal static class AppleMacAppBundleReplacement
         Directory.Move(destination, backup);
         try
         {
+            validateStage();
             Directory.Move(stage, destination);
         }
         catch

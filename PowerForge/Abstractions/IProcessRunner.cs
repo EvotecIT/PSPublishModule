@@ -9,6 +9,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class ProcessRunRequest
 {
+    private int _preStartBoundaryInvoked;
+    private Action? _preStartBoundary;
     private int _startBoundaryInvoked;
     private Action? _startBoundary;
     private int _startedProcessBoundaryInvoked;
@@ -206,6 +208,17 @@ public sealed class ProcessRunRequest
     internal void SetCompletionBoundary(Action<ProcessRunResult> completionBoundary)
         => _completionBoundary = completionBoundary ?? throw new ArgumentNullException(nameof(completionBoundary));
 
+    internal void SetPreStartBoundary(Action preStartBoundary)
+        => _preStartBoundary = preStartBoundary ?? throw new ArgumentNullException(nameof(preStartBoundary));
+
+    /// <summary>
+    /// Runs the pre-start validation before delegating to a potentially older
+    /// custom process runner without consuming the runner's true start-boundary
+    /// invocation.
+    /// </summary>
+    internal void ValidatePreStartBoundaryForCompatibility()
+        => _preStartBoundary?.Invoke();
+
     internal void SetStartBoundary(Action startBoundary)
         => _startBoundary = startBoundary ?? throw new ArgumentNullException(nameof(startBoundary));
 
@@ -224,6 +237,21 @@ public sealed class ProcessRunRequest
         if (_startedProcessBoundary is null || Interlocked.Exchange(ref _startedProcessBoundaryInvoked, 1) != 0)
             return;
         _startedProcessBoundary(processId);
+    }
+
+    /// <summary>
+    /// Runs a final fail-closed validation immediately before process creation.
+    /// Custom <see cref="IProcessRunner"/> implementations must invoke this method
+    /// before starting or simulating the external process. The callback runs at most once.
+    /// </summary>
+    public void InvokePreStartBoundary()
+    {
+        if (_preStartBoundary is null ||
+            Interlocked.Exchange(ref _preStartBoundaryInvoked, 1) != 0)
+        {
+            return;
+        }
+        _preStartBoundary();
     }
 
     /// <summary>
@@ -346,9 +374,11 @@ public interface IProcessRunner
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Structured process execution result.</returns>
     /// <remarks>
-    /// Implementations must call <see cref="ProcessRunRequest.InvokeStartedProcessBoundary"/> and then
-    /// <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately after the process starts successfully.
-    /// They must also call
+    /// Implementations must call <see cref="ProcessRunRequest.InvokePreStartBoundary"/>
+    /// immediately before process creation, then call <see cref="ProcessRunRequest.InvokeStartedProcessBoundary"/>
+    /// with the operating-system process identifier and
+    /// <see cref="ProcessRunRequest.InvokeStartBoundary"/> immediately after the process starts
+    /// successfully. They must also call
     /// <see cref="ProcessRunRequest.InvokeCompletionBoundary"/> immediately
     /// after the process exits and the final result is constructed, before returning from this method
     /// or performing any post-exit mutation of producer outputs.
@@ -377,6 +407,7 @@ public sealed class ProcessRunner : IProcessRunner
             StartInfo = BuildStartInfo(request)
         };
 
+        request.InvokePreStartBoundary();
         var stopwatch = Stopwatch.StartNew();
         var started = false;
         try

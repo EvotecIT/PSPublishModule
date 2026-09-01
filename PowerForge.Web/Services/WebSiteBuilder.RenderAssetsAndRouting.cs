@@ -1480,7 +1480,7 @@ public static partial class WebSiteBuilder
         return route + query;
     }
 
-    private static string Slugify(string input)
+    internal static string Slugify(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return string.Empty;
         var lower = input.Trim().ToLowerInvariant();

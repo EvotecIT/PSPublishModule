@@ -4,11 +4,11 @@
     "net10.0": {
       "DBAClientX.SQLite": {
         "type": "Direct",
-        "requested": "[0.15.0, )",
-        "resolved": "0.15.0",
-        "contentHash": "s97XhgF8sczbnhHkFZ11bLlGzZHd+MmKc2xmdDOJUCS4tNJdiopunRYJG5qURKvrM3r/cZCUNw9p90yyHCb4uQ==",
+        "requested": "[1.0.8, )",
+        "resolved": "1.0.8",
+        "contentHash": "JnV3wk12rGVLTYiPYiL3SuKcRYvrCqCn14+usCZdniScWlQAnf7dMX022IWBXymmKApP8Nj8+/1g1yctptVLJg==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.1",
+          "DBAClientX.Core": "1.0.8",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -71,8 +71,8 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "uyAREPsJoJCu3G32HHCW81myiIbqxaxBKSCBinZ1MBArFDKod+gRS7Hw1VnYD1yGOooQ47LMKKBnKpKDekGYuw=="
+        "resolved": "1.0.8",
+        "contentHash": "Od9B70xSvPq7y0n0v0bcWv6uJiwnnslan07touL6C5JBWSN3bBA7FYRcZ8jzuDds/LMkarCH77aSHVTUmOOWxQ=="
       },
       "Google.Apis": {
         "type": "Transitive",
@@ -223,8 +223,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.2.4",
-        "contentHash": "cjEnE6gcAn2MUBRrmIiY7lSpYihE52LbullgSrvW2UCLAoonf8Nf/d4+Ak/A7zGF5ZjgSU0KQN/201VsASG0uA=="
+        "resolved": "3.2.6",
+        "contentHash": "o5Pfg+2QoB3sGDQUZXxm4oNfbsZcTcGhe4gKM8QPtCL6Q7n1xcT6q+cmEPnU6yHX5hobgo9bhrAKhRx+Sffbnw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -238,10 +238,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.2.4",
-        "contentHash": "sWloOmypECWCyLd83P0Au4uspdY0cweH/4v1yU88XA27cTGZ4DpbHmHIpEEpoH++7RwbqfXfctWJS4ItykTYmg==",
+        "resolved": "3.2.6",
+        "contentHash": "8nWr3g/z6J9fgm/259s/Fp33uyjGs6lRwN08UIV9LFcZkoLuQ5UNwxEItS2xXj5eOR56tXr5TbmT9XtI/A3o1Q==",
         "dependencies": {
-          "OfficeIMO.Core": "3.2.4"
+          "OfficeIMO.Core": "3.2.6"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -367,8 +367,8 @@
           "Google.Apis.Auth": "[1.76.0, )",
           "HtmlTinkerX": "[3.0.0, )",
           "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
-          "OfficeIMO.Markdown": "[3.2.4, )",
-          "PowerForge": "[3.0.126, )",
+          "OfficeIMO.Markdown": "[3.2.6, )",
+          "PowerForge": "[3.0.128, )",
           "Scriban": "[7.2.6, )",
           "YamlDotNet": "[18.1.0, )"
         }

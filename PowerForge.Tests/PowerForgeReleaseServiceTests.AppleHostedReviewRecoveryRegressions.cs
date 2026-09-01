@@ -5,7 +5,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_ConfiguredAppleUploadOnly_ResumesAfterAttestedArchiveWasRemoved()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -31,7 +31,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Upload,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                     });
             Assert.True(seeded.Success, seeded.ErrorMessage);
             var archivePath = Assert.Single(seeded.AppleAppPlan!.Apps).ArchivePath;
@@ -49,7 +49,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Configured,
-                        AppleSourceCommit = sourceCommit,
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                         AppleAdoptExistingBuild = true,
                         AppleActionConfirmed = true
                     });
@@ -66,7 +66,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleUploadExisting_RejectsAttestationForDifferentCheckpointArchive()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -92,7 +92,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Upload,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                     });
             Assert.True(seeded.Success, seeded.ErrorMessage);
             var archivePath = Assert.Single(seeded.AppleAppPlan!.Apps).ArchivePath;
@@ -110,7 +110,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
-                        AppleSourceCommit = sourceCommit,
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                         AppleExpectedArchiveSha256ByTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["CasaRay iOS"] = expectedArchiveSha256
@@ -244,7 +244,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = action,
-                        AppleSourceCommit = "0123456789abcdef0123456789abcdef01234567"
+                        AppleSourceCommit = EnsureTestSourceCommit(root)
                     });
 
             Assert.True(result.Success, result.ErrorMessage);
@@ -463,7 +463,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_DirectNotarizationCrash_PersistsAcceptedSubmissionBeforeLocalPostProcessing()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -510,7 +510,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Upload,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                     });
 
             Assert.False(result.Success);
@@ -537,7 +537,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Cleanup,
                     AppleActionConfirmed = true,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.True(cleanup.Success, cleanup.ErrorMessage);
@@ -555,7 +555,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_DirectNotarizationCrash_PersistsExactPostStapleCheckpoint()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -609,7 +609,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Upload,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                     });
 
             Assert.False(result.Success);
@@ -635,7 +635,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_DirectExport_UsesPrivateInputAndPublishesVerifiedArtifactBeforeNotarization()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -688,7 +688,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
                         AppleAction = PowerForgeAppleReleaseAction.Upload,
-                        AppleSourceCommit = sourceCommit
+                        AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                     });
 
             Assert.True(result.Success, result.ErrorMessage);

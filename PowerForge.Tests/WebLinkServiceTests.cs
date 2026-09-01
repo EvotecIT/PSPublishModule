@@ -1568,6 +1568,164 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void Load_MergesOrderedShortlinkSourcesAndTracksEachPathOnce()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-shortlink-sources-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var primaryPath = Path.Combine(root, "shortlinks.json");
+            var overlayPath = Path.Combine(root, "managed-shortlinks.json");
+            var missingPath = Path.Combine(root, "missing-shortlinks.json");
+            File.WriteAllText(primaryPath,
+                """
+                [
+                  {
+                    "slug": "docs",
+                    "host": "evo.yt",
+                    "targetUrl": "https://evotec.xyz/docs/",
+                    "owner": "evotec",
+                    "allowExternal": true
+                  }
+                ]
+                """);
+            File.WriteAllText(overlayPath,
+                """
+                {
+                  "shortlinks": [
+                    {
+                      "slug": "release",
+                      "host": "evo.yt",
+                      "targetUrl": "https://evotec.xyz/releases/",
+                      "owner": "release-service",
+                      "allowExternal": true
+                    }
+                  ]
+                }
+                """);
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = primaryPath,
+                ShortlinkPaths = new[] { overlayPath, primaryPath, missingPath }
+            });
+
+            Assert.Equal(new[] { "docs", "release" }, dataSet.Shortlinks.Select(static link => link.Slug));
+            Assert.Equal(new[] { Path.GetFullPath(primaryPath), Path.GetFullPath(overlayPath) }, dataSet.UsedSources);
+            Assert.Equal(Path.GetFullPath(missingPath), Assert.Single(dataSet.MissingSources));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Load_PreservesCaseDistinctOverlayFilesOnCaseSensitivePlatforms()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-case-sensitive-overlays-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "upper", "host": "evo.yt", "targetUrl": "https://example.test/upper", "owner": "test", "allowExternal": true }]
+                """);
+            File.WriteAllText(lowerPath,
+                """
+                [{ "slug": "lower", "host": "evo.yt", "targetUrl": "https://example.test/lower", "owner": "test", "allowExternal": true }]
+                """);
+            if (string.Equals(File.ReadAllText(upperPath), File.ReadAllText(lowerPath), StringComparison.Ordinal))
+                return;
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinkPaths = new[] { upperPath, lowerPath }
+            });
+
+            Assert.Equal(new[] { "upper", "lower" }, dataSet.Shortlinks.Select(static link => link.Slug));
+            Assert.Equal(new[] { Path.GetFullPath(upperPath), Path.GetFullPath(lowerPath) }, dataSet.UsedSources);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Load_DeduplicatesCaseAliasesOnCaseInsensitiveVolumes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-case-insensitive-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var upperPath = Path.Combine(root, "Managed.json");
+            var lowerPath = Path.Combine(root, "managed.json");
+            File.WriteAllText(upperPath,
+                """
+                [{ "slug": "single", "host": "evo.yt", "targetUrl": "https://example.test/single", "owner": "test", "allowExternal": true }]
+                """);
+            if (!File.Exists(lowerPath))
+                return;
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = upperPath,
+                ShortlinkPaths = new[] { lowerPath }
+            });
+
+            Assert.Equal("single", Assert.Single(dataSet.Shortlinks).Slug);
+            Assert.Equal(Path.GetFullPath(upperPath), Assert.Single(dataSet.UsedSources));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Load_ValidatesConflictsAcrossPrimaryAndAdditionalShortlinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-shortlink-conflict-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var primaryPath = Path.Combine(root, "shortlinks.json");
+            var overlayPath = Path.Combine(root, "managed-shortlinks.json");
+            File.WriteAllText(primaryPath,
+                """
+                [{ "slug": "docs", "host": "evo.yt", "targetUrl": "https://evotec.xyz/docs/", "owner": "evotec", "allowExternal": true }]
+                """);
+            File.WriteAllText(overlayPath,
+                """
+                [{ "slug": "docs", "host": "evo.yt", "targetUrl": "https://evotec.xyz/other/", "owner": "managed", "allowExternal": true }]
+                """);
+
+            var dataSet = WebLinkService.Load(new WebLinkLoadOptions
+            {
+                ShortlinksPath = primaryPath,
+                ShortlinkPaths = new[] { overlayPath }
+            });
+            var result = WebLinkService.Validate(dataSet);
+
+            Assert.Equal(Path.GetFullPath(primaryPath), dataSet.Shortlinks[0].OriginPath);
+            Assert.Equal(Path.GetFullPath(overlayPath), dataSet.Shortlinks[1].OriginPath);
+            Assert.False(result.Success);
+            Assert.Single(result.Issues, static issue => issue.Code == "PFLINK.SHORTLINK.DUPLICATE");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Load_ReadsWrappedRedirectsCaseInsensitively()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-load-wrapper-case-" + Guid.NewGuid().ToString("N"));

@@ -65,6 +65,7 @@ internal static partial class WebPipelineRunner
         "statsPath", "stats-path",
         "sources", "sourcePaths", "source-paths", "redirectCsvPaths", "redirect-csv-paths",
         "redirects", "redirectsPath", "redirects-path", "shortlinks", "shortlinksPath", "shortlinks-path",
+        "shortlinkSources", "shortlink-sources", "shortlinkOverlays", "shortlink-overlays",
         "csvSources", "csv-sources", "apacheOut", "apache-out",
         "csproj", "csprojFiles", "csproj-files", "psd1", "psd1Files", "psd1-files",
         "markdownOut", "markdown-out", "markdownOutput", "markdown-output",

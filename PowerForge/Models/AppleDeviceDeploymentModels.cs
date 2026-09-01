@@ -58,7 +58,9 @@ public class AppleAppBuildRequest
     /// <summary>Xcode scheme to build.</summary>
     public string Scheme { get; set; } = string.Empty;
 
-    /// <summary>Built product name. Defaults to Scheme.</summary>
+    /// <summary>
+    /// Built product bundle name without a path. Defaults to Scheme.
+    /// </summary>
     public string? ProductName { get; set; }
 
     /// <summary>Build configuration, typically Debug for local device deployment.</summary>
@@ -82,13 +84,22 @@ public class AppleAppBuildRequest
     /// <summary>DerivedData path. When omitted, a unique temporary path is generated.</summary>
     public string? DerivedDataPath { get; set; }
 
-    /// <summary>Expected app path. When omitted, DerivedData, Configuration, Platform, and ProductName are used.</summary>
+    /// <summary>
+    /// Expected app path for standalone builds. Exact-source deployment rejects
+    /// this override and binds a private xcodebuild product directory instead.
+    /// </summary>
     public string? AppPath { get; set; }
 
-    /// <summary>xcodebuild executable name or path.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Exact-source local builds accept
+    /// only xcodebuild or /usr/bin/xcodebuild and execute /usr/bin/xcodebuild.
+    /// </summary>
     public string XcodeBuildExecutable { get; set; } = "xcodebuild";
 
-    /// <summary>xcrun executable name or path, used only when resolving a device by name.</summary>
+    /// <summary>
+    /// xcrun executable name or path. Exact-source deployment accepts only
+    /// xcrun or /usr/bin/xcrun; standalone device operations remain configurable.
+    /// </summary>
     public string XcrunExecutable { get; set; } = "xcrun";
 
     /// <summary>Allows Xcode to create or update signing assets during build.</summary>
@@ -103,10 +114,17 @@ public class AppleAppBuildRequest
     /// <summary>Mirror directory used when UseBuildMirror is enabled.</summary>
     public string? BuildMirrorPath { get; set; }
 
-    /// <summary>rsync executable name or path used for build mirroring.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Exact-source mirroring accepts
+    /// only rsync or /usr/bin/rsync and executes /usr/bin/rsync.
+    /// </summary>
     public string RsyncExecutable { get; set; } = "rsync";
 
-    /// <summary>Additional structured arguments appended to the xcodebuild build command.</summary>
+    /// <summary>
+    /// Reserved for source-compatible callers. Local exact-source deployment
+    /// rejects non-empty values because arbitrary xcodebuild arguments can add
+    /// inputs that are absent from tracked Xcode metadata.
+    /// </summary>
     public string[] AdditionalArguments { get; set; } = Array.Empty<string>();
 
     /// <summary>Maximum build runtime.</summary>
@@ -118,7 +136,10 @@ public class AppleAppBuildRequest
 /// </summary>
 public sealed class AppleAppBuildResult
 {
-    /// <summary>Resolved app path.</summary>
+    /// <summary>
+    /// Resolved app path. Successful deployment results retain this product in
+    /// content-addressed DerivedData after their private install input is cleaned.
+    /// </summary>
     public string AppPath { get; set; } = string.Empty;
 
     /// <summary>Resolved xcodebuild destination.</summary>
@@ -129,6 +150,9 @@ public sealed class AppleAppBuildResult
 
     /// <summary>Mirror path used for the build, if any.</summary>
     public string? BuildMirrorPath { get; set; }
+
+    /// <summary>Source revision PowerForge bound to the Xcode build.</summary>
+    public string SourceRevision { get; set; } = string.Empty;
 
     /// <summary>Build process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);

@@ -318,23 +318,38 @@ public static partial class WebSiteBuilder
 
     private static void CopyThemeAssets(SiteSpec spec, string rootPath, string outputRoot)
     {
+        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
+        foreach (var mapping in ResolveThemeAssetMappings(spec, rootPath))
+        {
+            var destination = Path.GetFullPath(Path.Combine(outputRoot, mapping.DestinationRelativePath));
+            if (!IsPathWithinRoot(normalizedOutputRoot, destination))
+            {
+                Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
+                continue;
+            }
+            CopyDirectory(mapping.SourceRoot, destination);
+        }
+    }
+
+    internal static IReadOnlyList<(string SourceRoot, string DestinationRelativePath)> ResolveThemeAssetMappings(
+        SiteSpec spec,
+        string rootPath)
+    {
         if (string.IsNullOrWhiteSpace(spec.DefaultTheme))
-            return;
+            return Array.Empty<(string, string)>();
 
         var themeRoot = ResolveThemeRoot(spec, rootPath);
         if (string.IsNullOrWhiteSpace(themeRoot) || !Directory.Exists(themeRoot))
-            return;
+            return Array.Empty<(string, string)>();
 
         var loader = new ThemeLoader();
         var manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, rootPath));
         if (manifest is null)
-            return;
+            return Array.Empty<(string, string)>();
 
         var outputThemesFolder = ResolveThemesFolder(spec);
-        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
-
-        var chain = BuildThemeChain(themeRoot, manifest);
-        foreach (var entry in chain)
+        var mappings = new List<(string, string)>();
+        foreach (var entry in BuildThemeChain(themeRoot, manifest))
         {
             var assetsDir = entry.Manifest.AssetsPath ?? "assets";
             if (string.IsNullOrWhiteSpace(assetsDir))
@@ -355,14 +370,17 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(entryThemeName))
                 entryThemeName = spec.DefaultTheme ?? "theme";
 
-            var destination = Path.GetFullPath(Path.Combine(outputRoot, outputThemesFolder, entryThemeName, assetsDir));
-            if (!IsPathWithinRoot(normalizedOutputRoot, destination))
+            var destination = Path.Combine(outputThemesFolder, entryThemeName, assetsDir);
+            if (!TryNormalizeRelativeOutputPath(destination, out var normalizedDestination))
             {
                 Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
                 continue;
             }
-            CopyDirectory(source, destination);
+
+            mappings.Add((source, normalizedDestination));
         }
+
+        return mappings;
     }
 
     private static void CopyDirectory(string source, string destination)
@@ -386,7 +404,7 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static void RejectLinkedAsset(FileSystemInfo entry)
+    internal static void RejectLinkedAsset(FileSystemInfo entry)
     {
         if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
         {
@@ -402,8 +420,6 @@ public static partial class WebSiteBuilder
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return;
 
-        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
-
         foreach (var asset in spec.StaticAssets)
         {
             if (string.IsNullOrWhiteSpace(asset.Source))
@@ -416,44 +432,60 @@ public static partial class WebSiteBuilder
             if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
                 continue;
 
-            var destination = (asset.Destination ?? string.Empty).TrimStart('/', '\\');
+            if (!TryResolveStaticAssetTargetPath(outputRoot, sourcePath, asset.Destination, out var targetPath))
+            {
+                Trace.TraceWarning($"Skipping static asset copy outside output root: {asset.Source} -> {asset.Destination}");
+                continue;
+            }
+
             if (File.Exists(sourcePath))
             {
                 RejectLinkedAsset(new FileInfo(sourcePath));
-                var destPath = string.IsNullOrWhiteSpace(destination)
-                    ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
-                    : (Path.HasExtension(destination)
-                        ? Path.Combine(outputRoot, destination)
-                        : Path.Combine(outputRoot, destination, Path.GetFileName(sourcePath)));
-                destPath = Path.GetFullPath(destPath);
-                if (!IsPathWithinRoot(normalizedOutputRoot, destPath))
-                {
-                    Trace.TraceWarning($"Skipping static asset file copy outside output root: {asset.Source} -> {asset.Destination}");
-                    continue;
-                }
-
-                var destDir = Path.GetDirectoryName(destPath);
+                var destDir = Path.GetDirectoryName(targetPath);
                 if (!string.IsNullOrWhiteSpace(destDir))
                     Directory.CreateDirectory(destDir);
 
-                CopyFileIfChanged(sourcePath, destPath);
+                CopyFileIfChanged(sourcePath, targetPath);
                 continue;
             }
 
-            var targetRoot = string.IsNullOrWhiteSpace(destination)
-                ? outputRoot
-                : Path.Combine(outputRoot, destination);
-            targetRoot = Path.GetFullPath(targetRoot);
-            if (!IsPathWithinRoot(normalizedOutputRoot, targetRoot))
-            {
-                Trace.TraceWarning($"Skipping static asset directory copy outside output root: {asset.Source} -> {asset.Destination}");
-                continue;
-            }
-            CopyDirectory(sourcePath, targetRoot);
+            CopyDirectory(sourcePath, targetPath);
         }
     }
 
-    private static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
+    internal static bool TryResolveStaticAssetTargetPath(
+        string outputRoot,
+        string sourcePath,
+        string? configuredDestination,
+        out string targetPath)
+    {
+        targetPath = string.Empty;
+        if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+            return false;
+
+        var destination = (configuredDestination ?? string.Empty)
+            .TrimStart('/', '\\')
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
+        var candidate = File.Exists(sourcePath)
+            ? string.IsNullOrWhiteSpace(destination)
+                ? Path.Combine(outputRoot, Path.GetFileName(sourcePath))
+                : Path.HasExtension(destination)
+                    ? Path.Combine(outputRoot, destination)
+                    : Path.Combine(outputRoot, destination, Path.GetFileName(sourcePath))
+            : string.IsNullOrWhiteSpace(destination)
+                ? outputRoot
+                : Path.Combine(outputRoot, destination);
+
+        candidate = Path.GetFullPath(candidate);
+        if (!IsPathWithinRoot(NormalizeRootPathForSink(outputRoot), candidate))
+            return false;
+
+        targetPath = candidate;
+        return true;
+    }
+
+    internal static bool HasExplicitConventionalStaticMapping(SiteSpec spec, string rootPath)
     {
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return false;
@@ -598,6 +630,28 @@ public static partial class WebSiteBuilder
             return true;
 
         return full.StartsWith(root + Path.DirectorySeparatorChar, comparison);
+    }
+
+    internal static bool TryNormalizeRelativeOutputPath(string relativePath, out string normalizedPath)
+    {
+        normalizedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+            return false;
+
+        try
+        {
+            var projectionRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "powerforge-output-projection"));
+            var candidate = Path.GetFullPath(Path.Combine(projectionRoot, relativePath));
+            if (!IsPathWithinRoot(NormalizeRootPathForSink(projectionRoot), candidate))
+                return false;
+
+            normalizedPath = Path.GetRelativePath(projectionRoot, candidate);
+            return !string.IsNullOrWhiteSpace(normalizedPath) && normalizedPath != ".";
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
 }

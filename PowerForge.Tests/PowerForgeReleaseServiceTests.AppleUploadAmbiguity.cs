@@ -11,7 +11,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool throwFromUploader,
         bool pinSource)
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -48,7 +48,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = pinSource ? sourceCommit : null,
+                    AppleSourceCommit = pinSource ? (sourceCommit ??= EnsureTestSourceCommit(root)) : null,
                     AppleWaitForProcessing = false
                 });
 
@@ -70,7 +70,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = pinSource ? sourceCommit : null,
+                    AppleSourceCommit = pinSource ? (sourceCommit ??= EnsureTestSourceCommit(root)) : null,
                     AppleWaitForProcessing = false
                 });
 
@@ -88,7 +88,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleUpload_does_not_checkpoint_ambiguity_before_remote_mutation_starts()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -107,7 +107,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleWaitForProcessing = false
                 });
 
@@ -129,7 +129,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleWaitForProcessing = false
                 });
 
@@ -145,7 +145,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleUpload_blocks_reupload_when_success_attestation_has_no_delivery_id()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -166,7 +166,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.Upload,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleWaitForProcessing = false
                 });
             Assert.False(seeded.Success);
@@ -193,7 +193,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     AppleAction = PowerForgeAppleReleaseAction.UploadExisting,
-                    AppleSourceCommit = sourceCommit,
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root),
                     AppleWaitForProcessing = false,
                     AppleAdoptExistingBuild = true,
                     AppleActionConfirmed = true

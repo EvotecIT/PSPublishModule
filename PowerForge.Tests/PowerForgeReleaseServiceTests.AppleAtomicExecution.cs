@@ -5,7 +5,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Fact]
     public void Execute_AppleCheckpoint_writes_publish_shaped_plan_after_archive()
     {
-        const string sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        string? sourceCommit = null;
         var root = CreateSandbox();
         try
         {
@@ -17,10 +17,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.Upload = true;
             spec.AppleApps.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            AppleAppArchiveRequest? archiveRequest = null;
             var result = CreateAppleAutomationService(
                     _ => throw new InvalidOperationException("Archive checkpoint must not query App Store Connect."),
                     archiveAppleApp: request =>
                     {
+                        archiveRequest = request;
                         var archive = Directory.CreateDirectory(request.ArchivePath!);
                         File.WriteAllText(Path.Combine(archive.FullName, "payload"), "signed archive");
                         return CreateSuccessfulArchive(request);
@@ -29,10 +31,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = Path.Combine(root, "powerforge.release.json"),
                     CheckpointAppleApps = true,
-                    AppleSourceCommit = sourceCommit
+                    AppleSourceCommit = sourceCommit ??= EnsureTestSourceCommit(root)
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
+            Assert.Contains(
+                $"POWERFORGE_SOURCE_REVISION={sourceCommit}",
+                Assert.IsType<AppleAppArchiveRequest>(archiveRequest)
+                    .AdditionalArguments);
             Assert.False(result.AppleAppPlan!.Archive);
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
             Assert.True(receipt.PlanOnly);

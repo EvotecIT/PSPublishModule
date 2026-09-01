@@ -876,11 +876,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                if (!VerifiedPackageInputCatalog.TryCreate(
+                if (!VerifiedPackageInputCatalog.TryCreateForEvaluation(
                         request.ProjectPath,
                         properties,
                         packageRoots,
                         verifiedPackageArchives,
+                        request.ReadEffectiveGlobalProperties(),
+                        request.EnvironmentVariables,
                         out verifiedPackages))
                 {
                     return false;

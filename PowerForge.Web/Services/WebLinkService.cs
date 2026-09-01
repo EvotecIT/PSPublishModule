@@ -29,7 +29,16 @@ public static partial class WebLinkService
         var missingSources = new List<string>();
 
         LoadRedirectJson(options.RedirectsPath, redirects, usedSources, missingSources);
-        LoadShortlinkJson(options.ShortlinksPath, shortlinks, usedSources, missingSources);
+        var seenShortlinkSources = new List<string>();
+        foreach (var shortlinkPath in new[] { options.ShortlinksPath }.Concat(options.ShortlinkPaths ?? Array.Empty<string>()))
+        {
+            if (string.IsNullOrWhiteSpace(shortlinkPath))
+                continue;
+
+            var resolved = Path.GetFullPath(shortlinkPath);
+            if (AddFileSystemPathOnce(seenShortlinkSources, resolved))
+                LoadShortlinkJson(resolved, shortlinks, usedSources, missingSources);
+        }
 
         foreach (var csvPath in options.RedirectCsvPaths ?? Array.Empty<string>())
         {
@@ -51,11 +60,33 @@ public static partial class WebLinkService
         {
             Redirects = redirects.ToArray(),
             Shortlinks = shortlinks.ToArray(),
-            UsedSources = usedSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            MissingSources = missingSources.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            UsedSources = DistinctFileSystemPaths(usedSources),
+            MissingSources = DistinctFileSystemPaths(missingSources),
             Hosts = NormalizeHostMap(options.Hosts),
             LanguageRootHosts = NormalizeLanguageRootHosts(options.LanguageRootHosts)
         };
+    }
+
+    private static string[] DistinctFileSystemPaths(IEnumerable<string> paths)
+    {
+        var distinct = new List<string>();
+        foreach (var path in paths)
+            AddFileSystemPathOnce(distinct, path);
+        return distinct.ToArray();
+    }
+
+    private static bool AddFileSystemPathOnce(List<string> paths, string candidate)
+    {
+        foreach (var existing in paths)
+        {
+            if (string.Equals(existing, candidate, StringComparison.Ordinal))
+                return false;
+            if (string.Equals(existing, candidate, StringComparison.OrdinalIgnoreCase) &&
+                FrameworkCompatibility.GetPathStringComparisonForPath(existing) == StringComparison.OrdinalIgnoreCase)
+                return false;
+        }
+        paths.Add(candidate);
+        return true;
     }
 
     /// <summary>Validates redirect and shortlink rules for duplicates, unsafe targets, loops, and hygiene issues.</summary>

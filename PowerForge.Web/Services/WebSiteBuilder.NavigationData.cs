@@ -18,18 +18,24 @@ public static partial class WebSiteBuilder
 
     private static void WriteSiteNavData(SiteSpec spec, string outputRoot, MenuSpec[] menuSpecs)
     {
+        var outputPath = Path.Combine(outputRoot, ResolveSiteNavRelativePath(spec));
+        var dataDir = Path.GetDirectoryName(outputPath);
+        if (string.IsNullOrWhiteSpace(dataDir)) return;
+        Directory.CreateDirectory(dataDir);
+        var json = BuildSiteNavJson(spec, menuSpecs);
+        WriteAllTextIfChanged(outputPath, json);
+    }
+
+    internal static string ResolveSiteNavRelativePath(SiteSpec spec)
+    {
         var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
         var relativeRoot = Path.IsPathRooted(dataRoot)
             ? "data"
             : dataRoot.TrimStart('/', '\\');
-        var dataDir = Path.Combine(outputRoot, relativeRoot);
-        if (string.IsNullOrWhiteSpace(dataDir))
-            return;
-
-        var outputPath = Path.Combine(dataDir, "site-nav.json");
-        Directory.CreateDirectory(dataDir);
-        var json = BuildSiteNavJson(spec, menuSpecs);
-        WriteAllTextIfChanged(outputPath, json);
+        var candidate = Path.Combine(relativeRoot, "site-nav.json");
+        return TryNormalizeRelativeOutputPath(candidate, out var normalized)
+            ? normalized
+            : Path.Combine("data", "site-nav.json");
     }
 
     private static string BuildSiteNavJson(SiteSpec spec, MenuSpec[] menuSpecs)

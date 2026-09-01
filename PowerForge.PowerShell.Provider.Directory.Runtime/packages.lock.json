@@ -96,7 +96,7 @@
       "powerforge.powershell.providersdk": {
         "type": "Project",
         "dependencies": {
-          "PowerForge": "[3.0.126, )"
+          "PowerForge": "[3.0.128, )"
         }
       }
     }

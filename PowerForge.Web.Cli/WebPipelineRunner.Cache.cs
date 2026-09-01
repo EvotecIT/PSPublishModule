@@ -160,8 +160,8 @@ internal static partial class WebPipelineRunner
             parts.Add($"salt:{salt}");
         parts.Add(step.GetRawText());
         var paths = EnumerateFingerprintPaths(baseDir, step)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+            .Distinct(WebCliHelpers.FileSystemPathComparer)
+            .OrderBy(path => path, WebCliHelpers.FileSystemPathComparer);
 
         foreach (var path in paths)
         {
@@ -241,6 +241,15 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        var task = GetString(step, "task") ?? string.Empty;
+        if (IsLinkReadTask(task))
+        {
+            foreach (var path in GetLinkFingerprintPaths(step, baseDir))
+            {
+                yield return path;
+            }
+        }
+
         if (string.Equals(GetString(step, "task"), "audit", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
         {
@@ -274,6 +283,37 @@ internal static partial class WebPipelineRunner
                 continue;
             foreach (var input in WebLlmsGenerator.DiscoverMsBuildMetadataInputs(resolvedProject))
                 yield return input;
+        }
+    }
+
+    private static bool IsLinkReadTask(string task)
+    {
+        return task.Equals("links-validate", StringComparison.OrdinalIgnoreCase) ||
+               task.Equals("link-validate", StringComparison.OrdinalIgnoreCase) ||
+               task.Equals("links", StringComparison.OrdinalIgnoreCase) ||
+               task.Equals("links-export-apache", StringComparison.OrdinalIgnoreCase) ||
+               task.Equals("link-export-apache", StringComparison.OrdinalIgnoreCase) ||
+               task.Equals("links-export", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] GetLinkFingerprintPaths(JsonElement step, string baseDir)
+    {
+        try
+        {
+            var linkOptions = BuildLinkLoadOptions(step, baseDir);
+            return new[] { linkOptions.RedirectsPath, linkOptions.ShortlinksPath }
+                .Concat(linkOptions.ShortlinkPaths)
+                .Concat(linkOptions.RedirectCsvPaths)
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(static path => Path.GetFullPath(path!))
+                .Distinct(WebCliHelpers.FileSystemPathComparer)
+                .ToArray();
+        }
+        catch
+        {
+            // Fingerprint discovery is best-effort. The task execution path owns
+            // configuration errors and reports them as a failed pipeline result.
+            return Array.Empty<string>();
         }
     }
 
@@ -1002,6 +1042,7 @@ internal static partial class WebPipelineRunner
             case "link-export-apache":
             case "links-export":
             {
+                var configuredApacheOut = GetConfiguredLinkOutputPath(step, baseDir, static links => links.ApacheOut);
                 var outputs = new List<string>();
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "out") ??
@@ -1010,6 +1051,7 @@ internal static partial class WebPipelineRunner
                     GetString(step, "output-path") ??
                     GetString(step, "apacheOut") ??
                     GetString(step, "apache-out") ??
+                    configuredApacheOut ??
                     "./deploy/apache/link-service-redirects.conf"));
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
@@ -1027,6 +1069,7 @@ internal static partial class WebPipelineRunner
             case "links-import-pretty-links":
             case "links-import":
             {
+                var configuredShortlinks = GetConfiguredLinkOutputPath(step, baseDir, static links => links.Shortlinks);
                 var outputs = new List<string>();
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "out") ??
@@ -1035,7 +1078,8 @@ internal static partial class WebPipelineRunner
                     GetString(step, "output-path") ??
                     GetString(step, "shortlinks") ??
                     GetString(step, "shortlinksPath") ??
-                    GetString(step, "shortlinks-path")));
+                    GetString(step, "shortlinks-path") ??
+                    configuredShortlinks));
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
                     GetString(step, "summary-path")));
@@ -1071,6 +1115,7 @@ internal static partial class WebPipelineRunner
             case "link-promote-404":
             case "links-promote":
             {
+                var configuredRedirects = GetConfiguredLinkOutputPath(step, baseDir, static links => links.Redirects);
                 var outputs = new List<string>();
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "out") ??
@@ -1079,7 +1124,8 @@ internal static partial class WebPipelineRunner
                     GetString(step, "output-path") ??
                     GetString(step, "redirects") ??
                     GetString(step, "redirectsPath") ??
-                    GetString(step, "redirects-path")));
+                    GetString(step, "redirects-path") ??
+                    configuredRedirects));
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "summaryPath") ??
                     GetString(step, "summary-path")));
@@ -1226,6 +1272,26 @@ internal static partial class WebPipelineRunner
             }
             default:
                 return Array.Empty<string>();
+        }
+    }
+
+    private static string? GetConfiguredLinkOutputPath(
+        JsonElement step,
+        string baseDir,
+        Func<LinkServiceSpec, string?> selectPath)
+    {
+        try
+        {
+            var loaded = LoadLinksSpec(step, baseDir);
+            if (loaded.Spec is null)
+                return null;
+            return ResolvePath(loaded.BaseDir ?? baseDir, selectPath(loaded.Spec));
+        }
+        catch
+        {
+            // Expected-output discovery must not bypass the task's normal
+            // failure result for a missing or malformed links configuration.
+            return null;
         }
     }
 

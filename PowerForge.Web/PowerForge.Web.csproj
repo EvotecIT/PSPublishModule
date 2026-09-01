@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>3.0.126</VersionPrefix>
+    <VersionPrefix>3.0.128</VersionPrefix>
     <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
     <Description>PowerForge.Web static-site engine and reusable website build components.</Description>
@@ -32,7 +32,7 @@
     <PackageReference Include="Google.Apis.Auth" Version="1.76.0" />
     <PackageReference Include="HtmlTinkerX" Version="3.0.0" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.4" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.2.6" />
     <PackageReference Include="Scriban" Version="7.2.6" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>

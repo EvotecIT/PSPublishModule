@@ -26,7 +26,7 @@ internal static partial class WebPipelineRunner
                 ExecuteNavExport(step, baseDir, stepResult);
                 break;
             case "verify":
-                ExecuteVerify(step, baseDir, fast, effectiveMode, stepResult);
+                ExecuteVerify(step, baseDir, fast, effectiveMode, lastBuildOutPath, stepResult);
                 break;
             case "markdown-fix":
                 ExecuteMarkdownFix(step, baseDir, stepResult);

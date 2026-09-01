@@ -1,0 +1,234 @@
+namespace PowerForge;
+
+/// <summary>
+/// Copies one xcodebuild product into a private deployment input and revalidates
+/// its complete content and physical identity after the local installer reads it.
+/// </summary>
+internal sealed class AppleBuiltAppSnapshot : IDisposable
+{
+    private readonly AppleArchiveUploadSnapshot _snapshot;
+    private readonly string _expectedSha256;
+    private bool _disposed;
+
+    private AppleBuiltAppSnapshot(
+        AppleArchiveUploadSnapshot snapshot,
+        string expectedSha256)
+    {
+        _snapshot = snapshot;
+        _expectedSha256 = expectedSha256;
+    }
+
+    internal string AppPath => _snapshot.ArchivePath;
+
+    internal static AppleBuiltAppSnapshot Create(
+        string appPath,
+        string? expectedProductDirectory = null)
+    {
+        var productPath = Path.GetFullPath(appPath);
+        if (!Directory.Exists(productPath))
+        {
+            throw new DirectoryNotFoundException(
+                $"xcodebuild completed but the built app product was not found: {productPath}");
+        }
+
+        ValidateProductRoot(productPath, expectedProductDirectory);
+        var sourceIdentity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            productPath,
+            "xcodebuild app product");
+        ValidateProductRoot(productPath, expectedProductDirectory);
+        var expectedSha256 = sourceIdentity.Sha256;
+        AppleArchiveUploadSnapshot? snapshot = null;
+        try
+        {
+            // The process-completion callback privately snapshots the exact
+            // product before any deploy consumer is allowed to read it. A
+            // concurrent source mutation either changes the copied bytes and
+            // fails the expected hash or is irrelevant because installation
+            // consumes only this private copy.
+            ValidateProductRoot(productPath, expectedProductDirectory);
+            snapshot = AppleArchiveUploadSnapshot.Create(productPath, expectedSha256);
+            ValidateProductRoot(productPath, expectedProductDirectory);
+            var sourceAfterCopy = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+                productPath,
+                "xcodebuild app product");
+            ValidateProductRoot(productPath, expectedProductDirectory);
+            if (!sourceIdentity.Equals(sourceAfterCopy))
+            {
+                throw new InvalidOperationException(
+                    "The xcodebuild app product changed while PowerForge was creating its private deployment snapshot. " +
+                    "Discard the deployment and rebuild the app.");
+            }
+            return new AppleBuiltAppSnapshot(snapshot, expectedSha256);
+        }
+        catch
+        {
+            snapshot?.Dispose();
+            throw;
+        }
+    }
+
+    private static void ValidateProductRoot(
+        string productPath,
+        string? expectedProductDirectory)
+    {
+        var attributes = File.GetAttributes(productPath);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException(
+                $"The xcodebuild app product must not be a symbolic link or reparse point: {productPath}");
+        }
+        if (string.IsNullOrWhiteSpace(expectedProductDirectory))
+            return;
+
+        var physicalProductPath = AppleReleaseArtifactService.ResolvePhysicalPath(productPath);
+        var physicalProductDirectory = AppleReleaseArtifactService.ResolvePhysicalPath(
+                expectedProductDirectory!)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(
+            physicalProductDirectory);
+        if (!physicalProductPath.StartsWith(
+                physicalProductDirectory + Path.DirectorySeparatorChar,
+                comparison))
+        {
+            throw new InvalidOperationException(
+                $"The xcodebuild app product must remain physically inside the private product directory '{physicalProductDirectory}': {physicalProductPath}");
+        }
+    }
+
+    internal void ValidateUnchanged()
+    {
+        try
+        {
+            _snapshot.ValidateUnchanged(_expectedSha256);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException(
+                "The private built Apple app snapshot changed while the local installer was consuming it. " +
+                "Discard the deployment and rebuild the app.",
+                exception);
+        }
+    }
+
+    internal AppleBuiltAppCopySnapshot CaptureVerifiedCopy(
+        string copiedAppPath,
+        string description)
+    {
+        var identity = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            copiedAppPath,
+            description);
+        if (!identity.Sha256.Equals(_expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The {description} does not match the provenance-bound built app. " +
+                "Discard the deployment and rebuild the app.");
+        }
+        return new AppleBuiltAppCopySnapshot(
+            copiedAppPath,
+            description,
+            identity);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        _snapshot.Dispose();
+    }
+}
+
+/// <summary>
+/// Binds an installer-owned app copy to the exact content and physical identity
+/// captured after the copy completed.
+/// </summary>
+internal sealed class AppleBuiltAppCopySnapshot
+{
+    private readonly string _appPath;
+    private readonly string _description;
+    private readonly AppleArchiveUploadSnapshot.SnapshotIdentity _identity;
+
+    internal AppleBuiltAppCopySnapshot(
+        string appPath,
+        string description,
+        AppleArchiveUploadSnapshot.SnapshotIdentity identity)
+    {
+        _appPath = Path.GetFullPath(appPath);
+        _description = description;
+        _identity = identity;
+    }
+
+    internal void ValidateUnchanged()
+    {
+        var current = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
+            _appPath,
+            _description);
+        if (!_identity.Equals(current))
+        {
+            throw new InvalidOperationException(
+                $"The {_description} changed before atomic installation. " +
+                "The existing app was preserved; discard the deployment and rebuild the app.");
+        }
+    }
+}
+
+/// <summary>
+/// Carries a build result together with its optional product-integrity lease.
+/// </summary>
+internal sealed class AppleAppBuildOperation : IDisposable
+{
+    private readonly AppleStableDirectoryIdentity? _ownedBuildOutputDirectory;
+    private readonly AppleStableDirectoryIdentity? _ownedDerivedDataDirectory;
+    private readonly AppleStableDirectoryIdentity? _derivedDataDirectory;
+
+    internal AppleAppBuildOperation(
+        AppleAppBuildResult result,
+        AppleBuiltAppSnapshot? productSnapshot,
+        AppleStableDirectoryIdentity? derivedDataDirectory,
+        AppleStableDirectoryIdentity? ownedDerivedDataDirectory,
+        AppleStableDirectoryIdentity? ownedBuildOutputDirectory = null)
+    {
+        Result = result;
+        ProductSnapshot = productSnapshot;
+        _derivedDataDirectory = derivedDataDirectory;
+        _ownedDerivedDataDirectory = ownedDerivedDataDirectory;
+        _ownedBuildOutputDirectory = ownedBuildOutputDirectory;
+    }
+
+    internal AppleAppBuildResult Result { get; }
+
+    internal AppleBuiltAppSnapshot? ProductSnapshot { get; }
+
+    /// <summary>
+    /// Materializes the provenance-bound product into a durable DerivedData
+    /// location before the private deployment input is released.
+    /// </summary>
+    internal string PreserveResultProduct()
+    {
+        if (!Result.Succeeded || ProductSnapshot is null)
+            return Result.AppPath;
+        if (_derivedDataDirectory is null)
+        {
+            throw new InvalidOperationException(
+                "A successful Apple deployment build did not retain its validated DerivedData identity.");
+        }
+
+        Result.AppPath = AppleBuiltAppResultStore.Preserve(
+            ProductSnapshot,
+            _derivedDataDirectory);
+        return Result.AppPath;
+    }
+
+    public void Dispose()
+    {
+        ProductSnapshot?.Dispose();
+        if (_ownedBuildOutputDirectory is not null)
+        {
+            try { _ownedBuildOutputDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
+        }
+        if (_ownedDerivedDataDirectory is not null)
+        {
+            try { _ownedDerivedDataDirectory.DeleteOwnedDirectoryIfUnchanged(); } catch { /* best effort private cleanup */ }
+        }
+    }
+}

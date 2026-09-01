@@ -12,6 +12,7 @@ namespace PowerForge.Web.Cli;
 internal static partial class WebCliHelpers
 {
     private const int ErrorSchemaVersion = 1;
+    internal static StringComparer FileSystemPathComparer { get; } = StringComparer.Ordinal;
 
     internal static void PrintUsage()
     {
@@ -45,7 +46,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web fleet report --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--output json]");
         Console.WriteLine("  powerforge-web fleet prune --config <search-providers.json> --database <search.db> [--as-of <ISO-8601-with-offset>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
-        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
+        Console.WriteLine("  powerforge-web verify --config <site.json> [--site-root <_site>] [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--forbidden-route <path[,path]>] [--nav-required-link <path[,path]>]");
@@ -141,8 +142,8 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
         Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
-        Console.WriteLine("  powerforge-web links validate --config <site.json> [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
-        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--out <file>] [--include-404] [--output json]");
+        Console.WriteLine("  powerforge-web links validate --config <site.json> [--shortlink-source <file>] [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
+        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--shortlink-source <file>] [--out <file>] [--include-404] [--output json]");
         Console.WriteLine("  powerforge-web links import-wordpress --source <pretty-links.csv> --config <site.json> [--out <shortlinks.json>] [--owner <name>] [--tag <tag>] [--output json]");
         Console.WriteLine("  powerforge-web links report-404 --site-root <dir> [--source <access.log|observations.csv>] [--out <report.json>] [--review-csv <file>] [--output json]");
         Console.WriteLine("  powerforge-web links promote-404 --source <404-suggestions.json> --config <site.json> [--out <redirects.json>] [--review-csv <file>] [--enable] [--output json]");
