@@ -176,11 +176,12 @@ internal sealed partial class PowerShellSemanticBinder
             arrayType,
             targetFramework,
             capabilities);
-        if (input is not PowerShellBoundArrayExpression || input.Type.ClrType != arrayType)
+        if (input is not PowerShellBoundArrayExpression and not PowerShellBoundVariableExpression ||
+            input.Type.ClrType != arrayType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2922",
-                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' requires one compiler-allocated '{arrayType.FullName}' input expression.",
+                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' requires one statically typed '{arrayType.FullName}' array expression or variable; null arrays enumerate as empty.",
                 PowerShellSourceParser.GetSpan(document, pipeline.Extent)));
             return null;
         }

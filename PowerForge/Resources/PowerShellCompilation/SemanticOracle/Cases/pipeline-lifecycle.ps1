@@ -5,4 +5,8 @@ function Measure-Total {
     process { $Total += $Value }
     end { $Total }
 }
-40, 2 | Measure-Total
+function Invoke-Measure {
+    param([int[]] $Values)
+    $Values | Measure-Total
+}
+Invoke-Measure -Values @(40, 2)

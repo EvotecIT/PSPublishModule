@@ -159,6 +159,36 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [Theory]
     [InlineData("net8.0")]
     [InlineData("net10.0")]
+    public void RuntimeFreePipelineLifecycleParameterInputTreatsNullAsEmpty(string targetFramework)
+    {
+        var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/pipeline-lifecycle");
+        using var fixture = OracleFixture.Create(PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, targetFramework),
+            "PipelineLifecycleParameter" + targetFramework.Replace(".", string.Empty, StringComparison.Ordinal),
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework,
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var typedAssembly = Assert.Single(build.Manifest.Files, static file => file.Role == "GeneratedAssembly");
+        var assembly = System.Reflection.Assembly.LoadFrom(typedAssembly.Path);
+        var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
+            .Single(static candidate => candidate.Name == "Invoke_Measure");
+        Assert.Equal(42, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
+        Assert.Equal(0, method.Invoke(null, new object?[] { null }));
+    }
+
+    [Theory]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
     public void RuntimeFreeCommentHelpExecutesAcrossTargets(string targetFramework)
     {
         var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get("PowerForge.Semantic/comment-based-help");
