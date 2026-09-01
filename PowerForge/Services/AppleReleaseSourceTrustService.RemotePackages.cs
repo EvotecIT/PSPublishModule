@@ -173,18 +173,28 @@ internal sealed partial class AppleReleaseSourceTrustService
             ? Path.GetFullPath(origin)
             : Path.GetFullPath(Path.Combine(checkoutPath, origin));
         var repositories = Path.Combine(sourcePackagesRoot, "repositories");
-        var directMirror = Directory.Exists(repositories) &&
-                           Directory.Exists(resolvedOrigin) &&
-                           GetPathComparer().Equals(Path.GetDirectoryName(resolvedOrigin), repositories);
-        if (!directMirror)
+        if (!Directory.Exists(repositories) || !Directory.Exists(resolvedOrigin))
             return origin;
 
-        ValidateXcodeRepositoryMirrorMetadata(repositories, resolvedOrigin);
-        var canonicalOrigin = RunGitAllowFailure(resolvedOrigin, "remote", "get-url", "origin");
+        // Xcode can record the checkout origin through an existing path alias
+        // such as macOS's /var -> /private/var mapping. Compare the physical
+        // directories before deciding whether this is the owned repository
+        // mirror, then validate and inspect only that physical mirror.
+        var physicalRepositories = AppleReleaseArtifactService.ResolvePhysicalPath(repositories);
+        var physicalOrigin = AppleReleaseArtifactService.ResolvePhysicalPath(resolvedOrigin);
+        if (!GetPathComparer().Equals(
+                Path.GetDirectoryName(physicalOrigin),
+                physicalRepositories))
+        {
+            return origin;
+        }
+
+        ValidateXcodeRepositoryMirrorMetadata(physicalRepositories, physicalOrigin);
+        var canonicalOrigin = RunGitAllowFailure(physicalOrigin, "remote", "get-url", "origin");
         if (!canonicalOrigin.Succeeded || string.IsNullOrWhiteSpace(canonicalOrigin.StdOut))
         {
             throw new InvalidOperationException(
-                $"Xcode materialized Swift package repository mirror has no approved origin: {resolvedOrigin}");
+                $"Xcode materialized Swift package repository mirror has no approved origin: {physicalOrigin}");
         }
 
         return canonicalOrigin.StdOut.Trim();

@@ -4,12 +4,10 @@ internal static class AppleDeploymentTestFixture
 {
     internal static void MaterializeConfiguredBuildProduct(ProcessRunRequest request)
     {
-        var outputSetting = request.Arguments.FirstOrDefault(argument =>
-            argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal));
-        if (outputSetting is null)
+        var outputRoot = TryResolveConfiguredBuildProductDirectory(request);
+        if (outputRoot is null)
             return;
 
-        var outputRoot = outputSetting.Substring("CONFIGURATION_BUILD_DIR=".Length);
         Directory.CreateDirectory(outputRoot);
         if (Directory.EnumerateDirectories(outputRoot, "*.app", SearchOption.TopDirectoryOnly).Any())
             return;
@@ -42,6 +40,49 @@ internal static class AppleDeploymentTestFixture
             : "AppleApp";
         var app = Directory.CreateDirectory(Path.Combine(outputRoot, scheme + ".app"));
         File.WriteAllText(Path.Combine(app.FullName, "payload"), "test product");
+    }
+
+    internal static string? TryResolvePrivateProductRoot(ProcessRunRequest request)
+    {
+        var outputSetting = request.Arguments.FirstOrDefault(argument =>
+            argument.StartsWith("SYMROOT=", StringComparison.Ordinal));
+        return outputSetting?.Substring("SYMROOT=".Length);
+    }
+
+    internal static string? TryResolveConfiguredBuildProductDirectory(
+        ProcessRunRequest request)
+    {
+        var productRoot = TryResolvePrivateProductRoot(request);
+        if (productRoot is null)
+            return null;
+
+        var arguments = request.Arguments.ToArray();
+        var configurationIndex = Array.IndexOf(arguments, "-configuration");
+        var configuration = configurationIndex >= 0 &&
+                            configurationIndex + 1 < arguments.Length
+            ? arguments[configurationIndex + 1]
+            : "Debug";
+        var destinationIndex = Array.IndexOf(arguments, "-destination");
+        var destination = destinationIndex >= 0 &&
+                          destinationIndex + 1 < arguments.Length
+            ? arguments[destinationIndex + 1]
+            : string.Empty;
+        var productDirectory = destination.Contains(
+                "platform=macOS",
+                StringComparison.OrdinalIgnoreCase)
+            ? destination.Contains(
+                    "variant=Mac Catalyst",
+                    StringComparison.OrdinalIgnoreCase)
+                ? configuration + "-maccatalyst"
+                : configuration
+            : destination.Contains("watchOS", StringComparison.OrdinalIgnoreCase)
+                ? configuration + "-watchos"
+                : destination.Contains("tvOS", StringComparison.OrdinalIgnoreCase)
+                    ? configuration + "-appletvos"
+                    : destination.Contains("visionOS", StringComparison.OrdinalIgnoreCase)
+                        ? configuration + "-xros"
+                        : configuration + "-iphoneos";
+        return Path.Combine(productRoot, productDirectory);
     }
 
     internal static void WriteSharedSchemes(

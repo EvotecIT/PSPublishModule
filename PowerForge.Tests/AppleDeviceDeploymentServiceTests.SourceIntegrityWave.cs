@@ -666,11 +666,9 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            var productRoot = request.Arguments.Single(argument =>
-                    argument.StartsWith(
-                        "CONFIGURATION_BUILD_DIR=",
-                        StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            var productRoot = AppleDeploymentTestFixture
+                .TryResolvePrivateProductRoot(request)
+                ?? throw new InvalidOperationException("Private product root was not configured.");
             ProductRoot = productRoot;
             Directory.Delete(productRoot, recursive: true);
             Directory.CreateSymbolicLink(productRoot, _redirectRoot);

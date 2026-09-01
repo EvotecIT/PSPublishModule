@@ -68,11 +68,10 @@ public sealed partial class AppleMacAppDeploymentServiceTests
                 result.Build.AppPath,
                 StringComparison.Ordinal);
             Assert.Equal(result.Build.AppPath, result.Install!.SourceAppPath);
-            var privateProductRoot = runner.Requests.Single(request =>
-                    request.FileName == "/usr/bin/xcodebuild")
-                .Arguments.Single(argument =>
-                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            var privateProductRoot = AppleDeploymentTestFixture
+                .TryResolvePrivateProductRoot(runner.Requests.Single(request =>
+                    request.FileName == "/usr/bin/xcodebuild"));
+            Assert.NotNull(privateProductRoot);
             Assert.False(Directory.Exists(privateProductRoot));
             Assert.Equal("new", File.ReadAllText(Path.Combine(installRoot.FullName, "CasaRay.app", "version.txt")));
             Assert.DoesNotContain(Directory.EnumerateDirectories(installRoot.FullName), path => path.Contains("powerforge-backup", StringComparison.Ordinal));
@@ -401,11 +400,9 @@ public sealed partial class AppleMacAppDeploymentServiceTests
         string version)
     {
         AppleDeploymentTestFixture.MaterializeConfiguredBuildProduct(request);
-        var productRoot = request.Arguments.Single(argument =>
-                argument.StartsWith(
-                    "CONFIGURATION_BUILD_DIR=",
-                    StringComparison.Ordinal))
-            .Substring("CONFIGURATION_BUILD_DIR=".Length);
+        var productRoot = AppleDeploymentTestFixture
+            .TryResolveConfiguredBuildProductDirectory(request)
+            ?? throw new InvalidOperationException("Private build product directory was not configured.");
         File.WriteAllText(
             Path.Combine(productRoot, "CasaRay.app", "version.txt"),
             version);

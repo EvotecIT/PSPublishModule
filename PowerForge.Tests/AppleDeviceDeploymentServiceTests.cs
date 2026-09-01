@@ -40,6 +40,27 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
     }
 
     [Fact]
+    public async Task GetDevicesAsync_matches_normal_spaces_to_a_nonbreaking_space_device_name()
+    {
+        var output = """
+Name                       Hostname                                 Identifier                             State                Model
+------------------------   --------------------------------------   ------------------------------------   ------------------   -------------------------------
+Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A80-5701-A87E-516D71556A19   available (paired)   Apple Watch Ultra 3 (Watch7,12)
+""";
+        var runner = new CapturingProcessRunner(_ => Success(output));
+        var service = new AppleDeviceDeploymentService(runner);
+
+        var devices = await service.GetDevicesAsync(new AppleDeviceListRequest
+        {
+            XcrunExecutable = "xcrun-test",
+            Device = "Apple Watch (Przemyslaw)"
+        });
+
+        var device = Assert.Single(devices);
+        Assert.Equal("CF0D62D9-4A80-5701-A87E-516D71556A19", device.Identifier);
+    }
+
+    [Fact]
     public async Task GetDevicesAsync_throws_when_devicectl_fails()
     {
         var runner = new CapturingProcessRunner(_ => new ProcessRunResult(
@@ -106,9 +127,106 @@ OldPhone   OldPhone.coredevice.local   11111111-1111-1111-1111-111111111111   un
                 "-derivedDataPath",
                 result.DerivedDataPath,
                 "-allowProvisioningUpdates",
+                "-allowProvisioningDeviceRegistration",
                 "build",
                 $"POWERFORGE_SOURCE_REVISION={revision}"
             }, request.Arguments);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_passes_api_key_authentication_for_device_provisioning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var derived = ExternalOutputPath(root, "DerivedData");
+            var keyPath = ExternalOutputPath(root, "AuthKey_TEST.p8");
+            Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+            await File.WriteAllTextAsync(keyPath, "private-key");
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+            InitializeGitRepository(root.FullName);
+
+            var result = await new AppleDeviceDeploymentService(runner).BuildAsync(
+                new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "CasaRay",
+                    DeviceIdentifier = "device-1",
+                    DerivedDataPath = derived,
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                    AppStoreConnectApiKeyPath = keyPath,
+                    AppStoreConnectApiKeyId = "TESTKEY123",
+                    AppStoreConnectApiIssuerId = "issuer-id"
+                });
+
+            Assert.True(result.Succeeded);
+            var arguments = Assert.Single(runner.Requests).Arguments;
+            Assert.Contains("-allowProvisioningUpdates", arguments);
+            Assert.Contains("-allowProvisioningDeviceRegistration", arguments);
+            Assert.Contains("-authenticationKeyPath", arguments);
+            Assert.Contains(keyPath, arguments);
+            Assert.Contains("-authenticationKeyID", arguments);
+            Assert.Contains("TESTKEY123", arguments);
+            Assert.Contains("-authenticationKeyIssuerID", arguments);
+            Assert.Contains("issuer-id", arguments);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_api_key_authentication_without_provisioning_updates()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var keyPath = ExternalOutputPath(root, "AuthKey_TEST.p8");
+            Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+            await File.WriteAllTextAsync(keyPath, "private-key");
+            InitializeGitRepository(root.FullName);
+
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                new AppleDeviceDeploymentService(
+                    new CapturingProcessRunner(_ => Success("unexpected"))).BuildAsync(
+                    new AppleAppBuildRequest
+                    {
+                        ProjectPath = project.FullName,
+                        Scheme = "CasaRay",
+                        DeviceIdentifier = "device-1",
+                        DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                        XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                        AllowProvisioningUpdates = false,
+                        AppStoreConnectApiKeyPath = keyPath,
+                        AppStoreConnectApiKeyId = "TESTKEY123",
+                        AppStoreConnectApiIssuerId = "issuer-id"
+                    }));
         }
         finally
         {
@@ -1178,9 +1296,14 @@ App installed:
                 runner.Requests[0],
                 "-derivedDataPath");
             Assert.False(Directory.Exists(privateDerivedDataRoot));
-            var privateProductRoot = runner.Requests[0].Arguments.Single(argument =>
-                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            Assert.DoesNotContain(
+                runner.Requests[0].Arguments,
+                argument => argument.StartsWith(
+                    "CONFIGURATION_BUILD_DIR=",
+                    StringComparison.Ordinal));
+            var privateProductRoot = AppleDeploymentTestFixture
+                .TryResolvePrivateProductRoot(runner.Requests[0]);
+            Assert.NotNull(privateProductRoot);
             Assert.False(Directory.Exists(privateProductRoot));
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }
@@ -1230,6 +1353,9 @@ App installed:
                 runner.Requests[1].Arguments.Take(6));
             Assert.EndsWith("Tactra.app", runner.Requests[1].Arguments[6], StringComparison.Ordinal);
             Assert.NotEqual(app.FullName, runner.Requests[1].Arguments[6]);
+            Assert.Contains(
+                "-allowProvisioningDeviceRegistration",
+                runner.Requests[0].Arguments);
             Assert.Equal(new[] { "devicectl", "device", "process", "launch", "--device", "device-1", "com.evotecit.tactra" }, runner.Requests[2].Arguments);
         }
         finally

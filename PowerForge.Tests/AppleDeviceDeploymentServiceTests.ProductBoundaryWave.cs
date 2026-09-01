@@ -180,11 +180,10 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             Requests.Add(request);
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
-            var productRoot = request.Arguments.Single(argument =>
-                    argument.StartsWith(
-                        "CONFIGURATION_BUILD_DIR=",
-                        StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            var productRoot = AppleDeploymentTestFixture
+                .TryResolveConfiguredBuildProductDirectory(request)
+                ?? throw new InvalidOperationException("Private build product directory was not configured.");
+            Directory.CreateDirectory(productRoot);
             Directory.CreateSymbolicLink(
                 Path.Combine(productRoot, "CasaRay.app"),
                 _redirectedApp);
