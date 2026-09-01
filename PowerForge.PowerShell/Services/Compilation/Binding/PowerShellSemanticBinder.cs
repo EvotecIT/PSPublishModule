@@ -80,6 +80,7 @@ internal sealed partial class PowerShellSemanticBinder
                 symbols,
                 parameters,
                 pipelineParameter,
+                functions[function.Name].PipelineLifecycleReturnsCollection,
                 functionDiagnosticStart);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -264,7 +265,9 @@ internal sealed partial class PowerShellSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         bool isTerminal,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        bool allowNonTerminalSuccessOutput = false,
+        Type? nonTerminalSuccessOutputType = null)
     {
         if (statement is AssignmentStatementAst assignment)
         {
@@ -569,6 +572,11 @@ internal sealed partial class PowerShellSemanticBinder
             if (invocation is null) return null;
             if (!isTerminal)
             {
+                if (allowNonTerminalSuccessOutput)
+                    return new PowerShellBoundExpressionStatement(
+                        PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent),
+                        invocation,
+                        emitsOutput: invocation.Type.ClrType != typeof(void));
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSB2924",
                     "Runtime-free lifecycle success output must be the terminal result of its enclosing typed function.",
@@ -582,10 +590,18 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is PipelineAst pipeline)
         {
-            var expression = BindExpression(document, pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+            var expression = BindExpression(
+                document,
+                pipeline,
+                symbols,
+                functions,
+                diagnostics,
+                allowNonTerminalSuccessOutput ? nonTerminalSuccessOutputType : null,
+                targetFramework,
+                capabilities);
             if (expression is null) return null;
             var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
-            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions)) return null;
+            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions) && !allowNonTerminalSuccessOutput) return null;
             if (isTerminal && IsLocalFunctionPipeline(pipeline, functions))
                 return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
             return expression is null

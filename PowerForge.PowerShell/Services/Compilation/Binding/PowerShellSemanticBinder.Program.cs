@@ -33,6 +33,17 @@ internal sealed partial class PowerShellSemanticBinder
             }
             if (!changed) break;
         }
+        foreach (var declaration in declarations)
+        {
+            if (!functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) ||
+                !signature.IsPipelineLifecycle)
+                continue;
+            if (PowerShellLocalCallSemanticBinder.HasPipelineLifecycleProcessOutput(
+                    declaration.Syntax,
+                    signature.Parameters,
+                    functionsByName))
+                signature.SetPipelineLifecycleReturnsCollection();
+        }
 
         var failedDiagnostics = new Dictionary<string, PowerShellSemanticDiagnostic[]>(StringComparer.OrdinalIgnoreCase);
         List<PowerShellBoundFunction> functions;

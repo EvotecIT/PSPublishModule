@@ -44,12 +44,18 @@ internal sealed class PowerShellLocalCallSignature
     internal PowerShellBoundHelpMetadata? Help { get; }
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
+    internal bool PipelineLifecycleReturnsCollection { get; private set; }
 
     internal bool RefineReturnType(Type type)
     {
         if (DeclaredReturnType is not null) return false;
         DeclaredReturnType = type;
         return true;
+    }
+
+    internal void SetPipelineLifecycleReturnsCollection()
+    {
+        if (IsPipelineLifecycle) PipelineLifecycleReturnsCollection = true;
     }
 }
 
@@ -133,6 +139,35 @@ internal static class PowerShellLocalCallSemanticBinder
             .Distinct()
             .ToArray() ?? Array.Empty<Type>();
         return output.Length == 1 ? output[0] : null;
+    }
+
+    internal static bool HasPipelineLifecycleProcessOutput(
+        FunctionDefinitionAst function,
+        IReadOnlyList<PowerShellLocalCallParameter> parameters,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+    {
+        if (function.Body.ProcessBlock is null) return false;
+        var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in function.Body.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+                     .OfType<AssignmentStatementAst>().OrderBy(static assignment => assignment.Extent.StartOffset))
+        {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not { } variable ||
+                knownTypes.ContainsKey(variable.VariablePath.UserPath))
+                continue;
+            var expression = Unwrap(assignment.Right);
+            var type = assignment.Left is ConvertExpressionAst typed && typed.StaticType != typeof(object)
+                ? typed.StaticType
+                : InferExpressionType(expression, knownTypes, functions);
+            if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
+        }
+        return function.Body.ProcessBlock.Statements
+            .OfType<PipelineAst>()
+            .Any(pipeline =>
+            {
+                var syntax = Unwrap(pipeline);
+                var type = InferExpressionType(syntax, knownTypes, functions);
+                return type is not null ? type != typeof(void) : syntax is BinaryExpressionAst;
+            });
     }
 
     private static Type? InferExpressionType(

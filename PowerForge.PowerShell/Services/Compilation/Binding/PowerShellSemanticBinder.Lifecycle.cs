@@ -27,6 +27,7 @@ internal sealed partial class PowerShellSemanticBinder
         Dictionary<string, PowerShellSemanticSymbolBinding> symbols,
         PowerShellBoundParameter[] sourceParameters,
         ParameterAst pipelineParameter,
+        bool signatureReturnsCollection,
         int functionDiagnosticStart)
     {
         var sourceParameter = sourceParameters.Single(parameter => parameter.Symbol.Name.Equals(
@@ -53,17 +54,30 @@ internal sealed partial class PowerShellSemanticBinder
             collectionType,
             new PowerShellCompilationParameter(collectionName, arrayType.FullName ?? arrayType.Name, hasDefaultValue: false));
 
-        var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, targetFramework, capabilities);
-        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, symbols, functions, diagnostics, terminalLast: false, targetFramework, capabilities);
-        var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, targetFramework, capabilities);
+        var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
+        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, declaredOutputType, targetFramework, capabilities);
+        var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
             return null;
-        if (ContainsSuccessOutput(begin) || ContainsSuccessOutput(process) || !HasOneDefiniteTerminalSuccessOutput(end))
+        if (ContainsSuccessOutput(begin) || !HasOneDefiniteTerminalSuccessOutput(end))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2925",
-                "Runtime-free pipeline lifecycle lowering requires output-free begin/process blocks and exactly one terminal end-block success output.",
+                "Runtime-free pipeline lifecycle lowering requires an output-free begin block and exactly one terminal end-block success output.",
                 PowerShellSourceParser.GetSpan(document, function.Body.Extent)));
+            return null;
+        }
+
+        var processOutputs = GetSuccessOutputs(process);
+        var returnsCollection = processOutputs.Length > 0;
+        Type? outputElementType = null;
+        if (returnsCollection != signatureReturnsCollection ||
+            returnsCollection && !TryGetLifecycleOutputElementType(processOutputs, end, declaredOutputType, out outputElementType))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2928",
+                "Runtime-free process output requires a statically inferred top-level homogeneous stable-scalar contract that matches the terminal end-block output type.",
+                PowerShellSourceParser.GetSpan(document, function.Body.ProcessBlock!.Extent)));
             return null;
         }
 
@@ -92,9 +106,82 @@ internal sealed partial class PowerShellSemanticBinder
             process,
             declareVariable: true,
             nullCollectionElement);
-        var body = new PowerShellBoundBlock(
-            PowerShellSourceParser.GetSpan(document, function.Body.Extent),
-            begin.Statements.Concat(new PowerShellBoundStatement[] { lifecycleLoop }).Concat(end.Statements).ToArray());
+        PowerShellBoundBlock body;
+        if (returnsCollection)
+        {
+            var outputType = outputElementType!;
+            var outputListType = typeof(List<>).MakeGenericType(outputType);
+            var outputArrayType = outputType.MakeArrayType();
+            var outputName = CreatePipelineOutputName(symbols, pipelineParameter.Extent.StartOffset);
+            var outputSymbol = new PowerShellSymbolId(
+                PowerShellSymbolKind.Local,
+                document.DocumentId,
+                outputName,
+                PowerShellSourceParser.GetSpan(document, function.Body.ProcessBlock!.Extent),
+                function.Name + "/compiler/pipeline-output");
+            var outputListFact = new PowerShellTypeFact(
+                outputListType,
+                PowerShellTypeFactProvenance.Inferred,
+                "The compiler materializes ordered lifecycle success output in one typed collector.");
+            locals = locals.Append(new PowerShellBoundLocal(outputSymbol, outputListFact))
+                .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
+                .ToArray();
+            var outputVariable = new PowerShellBoundVariableExpression(outputSymbol.Declaration, outputSymbol, outputListFact, PowerShellValueState.Known);
+            var createOutput = new PowerShellBoundAssignmentStatement(
+                outputSymbol.Declaration,
+                outputSymbol,
+                new PowerShellBoundClrInvocationExpression(
+                    outputSymbol.Declaration,
+                    outputListType,
+                    ".ctor",
+                    PowerShellClrInvocationKind.Constructor,
+                    receiver: null,
+                    PowerShellClrReceiverBehavior.None,
+                    Array.Empty<PowerShellBoundExpression>(),
+                    Type.EmptyTypes,
+                    outputListFact));
+            var collectedProcess = RewriteLifecycleOutputs(process, outputVariable, outputListType, outputType);
+            lifecycleLoop = new PowerShellBoundForEachStatement(
+                lifecycleLoop.Span,
+                lifecycleLoop.Variable,
+                lifecycleLoop.ElementType,
+                lifecycleLoop.Collection,
+                lifecycleLoop.ScalarString,
+                collectedProcess,
+                lifecycleLoop.DeclareVariable,
+                lifecycleLoop.NullCollectionElement);
+            var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType);
+            var outputArrayFact = new PowerShellTypeFact(
+                outputArrayType,
+                PowerShellTypeFactProvenance.Inferred,
+                "The lifecycle ABI returns the ordered success stream as a typed array.");
+            var returnOutput = new PowerShellBoundReturnStatement(
+                end.Span,
+                new PowerShellBoundClrInvocationExpression(
+                    end.Span,
+                    outputListType,
+                    nameof(List<int>.ToArray),
+                    PowerShellClrInvocationKind.InstanceMethod,
+                    outputVariable,
+                    PowerShellClrReceiverBehavior.None,
+                    Array.Empty<PowerShellBoundExpression>(),
+                    Type.EmptyTypes,
+                    outputArrayFact));
+            body = new PowerShellBoundBlock(
+                PowerShellSourceParser.GetSpan(document, function.Body.Extent),
+                new PowerShellBoundStatement[] { createOutput }
+                    .Concat(begin.Statements)
+                    .Concat(new PowerShellBoundStatement[] { lifecycleLoop })
+                    .Concat(collectedEnd.Statements)
+                    .Append(returnOutput)
+                    .ToArray());
+        }
+        else
+        {
+            body = new PowerShellBoundBlock(
+                PowerShellSourceParser.GetSpan(document, function.Body.Extent),
+                begin.Statements.Concat(new PowerShellBoundStatement[] { lifecycleLoop }).Concat(end.Statements).ToArray());
+        }
         var scopeSymbols = new[] { collectionSymbol }
             .Concat(locals.Select(static local => local.Symbol))
             .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
@@ -123,6 +210,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         bool terminalLast,
+        bool allowTopLevelSuccessOutput,
+        Type? successOutputType,
         string? targetFramework,
         PowerShellCompilationCapability capabilities)
     {
@@ -139,7 +228,9 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics,
                 terminalLast && index == block.Statements.Count - 1,
                 targetFramework,
-                capabilities);
+                capabilities,
+                allowTopLevelSuccessOutput,
+                successOutputType);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)
@@ -205,12 +296,17 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, targetCommand.Extent)));
             return null;
         }
-        var returnType = signature.DeclaredReturnType is null
+        var invocationReturnType = signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
+            ? signature.DeclaredReturnType.MakeArrayType()
+            : signature.DeclaredReturnType;
+        var returnType = invocationReturnType is null
             ? PowerShellTypeFact.Unknown
             : new PowerShellTypeFact(
-                signature.DeclaredReturnType,
+                invocationReturnType,
                 PowerShellTypeFactProvenance.Explicit,
-                $"Lifecycle function '{signature.Symbol.Name}' declares one end-block success-output type.");
+                signature.PipelineLifecycleReturnsCollection
+                    ? $"Lifecycle function '{signature.Symbol.Name}' materializes ordered process/end success output."
+                    : $"Lifecycle function '{signature.Symbol.Name}' declares one end-block success-output type.");
         return new PowerShellBoundInvocationExpression(
             PowerShellSourceParser.GetSpan(document, pipeline.Extent),
             signature.Symbol,
@@ -244,11 +340,91 @@ internal sealed partial class PowerShellSemanticBinder
                    .Count(statement => PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is not null) == 1;
     }
 
+    private static PowerShellBoundExpression[] GetSuccessOutputs(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block)
+            .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
+            .Where(static expression => expression is not null)
+            .Cast<PowerShellBoundExpression>()
+            .ToArray();
+
+    private static bool TryGetLifecycleOutputElementType(
+        PowerShellBoundExpression[] processOutputs,
+        PowerShellBoundBlock end,
+        Type? declaredOutputType,
+        out Type? outputElementType)
+    {
+        outputElementType = null;
+        var endOutput = GetSuccessOutputs(end);
+        if (endOutput.Length != 1) return false;
+        var types = processOutputs.Append(endOutput[0])
+            .Select(static expression => expression.Type.ClrType)
+            .Distinct()
+            .ToArray();
+        if (types.Length != 1 ||
+            types[0] == typeof(object) ||
+            types[0] == typeof(void) ||
+            types[0].IsArray ||
+            !PowerShellStableScalarTypePolicy.IsSupported(types[0]) ||
+            declaredOutputType is not null && declaredOutputType != types[0])
+            return false;
+        outputElementType = types[0];
+        return true;
+    }
+
+    private static PowerShellBoundBlock RewriteLifecycleOutputs(
+        PowerShellBoundBlock block,
+        PowerShellBoundExpression outputVariable,
+        Type outputListType,
+        Type outputElementType)
+        => new(
+            block.Span,
+            block.Statements.Select(statement => RewriteLifecycleOutput(
+                statement,
+                outputVariable,
+                outputListType,
+                outputElementType)).ToArray());
+
+    private static PowerShellBoundStatement RewriteLifecycleOutput(
+        PowerShellBoundStatement statement,
+        PowerShellBoundExpression outputVariable,
+        Type outputListType,
+        Type outputElementType)
+    {
+        var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
+        if (expression is null) return statement;
+        var add = new PowerShellBoundClrInvocationExpression(
+            statement.Span,
+            outputListType,
+            nameof(List<int>.Add),
+            PowerShellClrInvocationKind.InstanceMethod,
+            outputVariable,
+            PowerShellClrReceiverBehavior.None,
+            new[] { expression },
+            new[] { outputElementType },
+            new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "List.Add is output-free."));
+        return new PowerShellBoundExpressionStatement(statement.Span, add, emitsOutput: false);
+    }
+
     private static string CreatePipelineCollectionName(
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         int offset)
     {
         var root = "__pf_pipeline_input_" + offset.ToString(CultureInfo.InvariantCulture);
+        var candidate = root;
+        var used = symbols.Values
+            .Select(static binding => PowerShellCSharpSymbolRenderer.Identifier(binding.Symbol.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        var sequence = 0;
+        while (used.Contains(PowerShellCSharpSymbolRenderer.Identifier(candidate)))
+            candidate = root + "_" + (++sequence).ToString(CultureInfo.InvariantCulture);
+        return candidate;
+    }
+
+    private static string CreatePipelineOutputName(
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        int offset)
+    {
+        var root = "__pf_pipeline_output_" + offset.ToString(CultureInfo.InvariantCulture);
         var candidate = root;
         var used = symbols.Values
             .Select(static binding => PowerShellCSharpSymbolRenderer.Identifier(binding.Symbol.Name))

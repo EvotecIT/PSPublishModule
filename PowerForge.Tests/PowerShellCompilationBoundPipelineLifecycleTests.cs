@@ -115,13 +115,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Value");
     }
 
-    [Theory]
-    [InlineData("begin { Write-Value } process { } end { 42 }")]
-    [InlineData("begin { } process { Write-Value } end { 42 }")]
-    public void RuntimeFreePipelineLifecycleRejectsSuccessOutputBeforeEnd(string lifecycle)
+    [Fact]
+    public void RuntimeFreePipelineLifecycleRejectsBeginSuccessOutput()
     {
         var document = PowerShellSourceParser.Parse(
-            $"function Write-Value {{ 1 }} function Measure-Value {{ [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Value) {lifecycle} }} function Invoke-Measure {{ 42 | Measure-Value }}",
+            "function Write-Value { 1 } function Measure-Value { [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Value) begin { Write-Value } process { } end { 42 } } function Invoke-Measure { 42 | Measure-Value }",
             TestPath("pipeline-lifecycle-early-output.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -131,6 +129,145 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Value");
         Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2925");
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleMaterializesOrderedProcessAndEndOutput()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Select-Value { [CmdletBinding()] [OutputType([int])] param([Parameter(ValueFromPipeline)][int] $Value) begin { [int] $Final = 10 } process { $Value; $Value } end { $Final } } " +
+            "function Invoke-Select { param([int[]] $Values) $Values | Select-Value }",
+            TestPath("pipeline-lifecycle-process-output.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var lifecycle = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Select-Value");
+        Assert.Equal(typeof(int[]), lifecycle.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Collection, lifecycle.OutputCardinality);
+        Assert.Equal(typeof(int), lifecycle.DeclaredOutputType);
+        var caller = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Invoke-Select");
+        var invocation = Assert.IsType<PowerShellBoundInvocationExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(caller.Body.Statements)).Expression);
+        Assert.Equal(typeof(int[]), invocation.Type.ClrType);
+
+        var lifecycleSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Select_Value").Source;
+        Assert.Contains("public static int[] Select_Value(int[] __pf_pipeline_input_", lifecycleSource, StringComparison.Ordinal);
+        Assert.Contains("new global::System.Collections.Generic.List<int>()", lifecycleSource, StringComparison.Ordinal);
+        Assert.Equal(2, lifecycleSource.Split(".Add(Value)", StringSplitOptions.None).Length - 1);
+        Assert.Contains(".Add(Final)", lifecycleSource, StringComparison.Ordinal);
+        Assert.Contains(".ToArray();", lifecycleSource, StringComparison.Ordinal);
+        var callerSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_Select").Source;
+        Assert.Contains("return Select_Value(Values);", callerSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleKeepsOutputFreeProcessInvocationOnScalarAbi()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Measure-Values { [CmdletBinding()] [OutputType([int])] param([Parameter(ValueFromPipeline)][int] $Value) " +
+            "begin { [System.Collections.Generic.List[int]] $Items = [System.Collections.Generic.List[int]]::new() } " +
+            "process { $Items.Add($Value) } end { $Items.Count } } " +
+            "function Invoke-Measure { 1, 2 | Measure-Values }",
+            TestPath("pipeline-lifecycle-output-free-invocation.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var lifecycle = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Measure-Values");
+        Assert.Equal(typeof(int), lifecycle.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Scalar, lifecycle.OutputCardinality);
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(
+            Assert.Single(lifecycle.Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        var process = Assert.IsType<PowerShellBoundExpressionStatement>(Assert.Single(loop.Body.Statements));
+        Assert.False(process.EmitsOutput);
+        Assert.Equal(nameof(List<int>.Add), Assert.IsType<PowerShellBoundClrInvocationExpression>(process.Expression).MemberName);
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Values").Source;
+        Assert.DoesNotContain("__pf_pipeline_output_", source, StringComparison.Ordinal);
+        Assert.Contains(".Add(Value)", source, StringComparison.Ordinal);
+        var caller = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Invoke_Measure").Source;
+        Assert.Contains("return Measure_Values(new int[] { 1, 2 });", caller, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleKeepsOutputFreeProcessStreamOnScalarAbi()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Measure-Values { [CmdletBinding()] [OutputType([int])] param([Parameter(ValueFromPipeline)][int] $Value) " +
+            "begin { [int] $Total = 0 } process { Write-Warning 'seen'; $Total += $Value } end { $Total } } " +
+            "function Invoke-Measure { 1, 2 | Measure-Values }",
+            TestPath("pipeline-lifecycle-output-free-stream.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable | PowerShellCompilationCapability.PowerShellStreams);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var lifecycle = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Measure-Values");
+        Assert.Equal(typeof(int), lifecycle.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Scalar, lifecycle.OutputCardinality);
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(
+            Assert.Single(lifecycle.Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        Assert.IsType<PowerShellBoundStreamWriteStatement>(loop.Body.Statements[0]);
+        Assert.IsType<PowerShellBoundAssignmentStatement>(loop.Body.Statements[1]);
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Values").Source;
+        Assert.DoesNotContain("__pf_pipeline_output_", source, StringComparison.Ordinal);
+        Assert.Contains("__writeWarning(", source, StringComparison.Ordinal);
+        Assert.Contains("\"seen\"", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleMaterializesTypedBinaryProcessOutput()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Select-Value { [CmdletBinding()] [OutputType([double])] param([Parameter(ValueFromPipeline)][double] $Value) begin { } process { $Value + 1.0 } end { 10.0 } } " +
+            "function Invoke-Select { 1.0, 2.0 | Select-Value }",
+            TestPath("pipeline-lifecycle-binary-output.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var lifecycle = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Select-Value");
+        Assert.Equal(typeof(double[]), lifecycle.ReturnType.ClrType);
+        Assert.Equal(PowerShellOutputCardinality.Collection, lifecycle.OutputCardinality);
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(
+            Assert.Single(lifecycle.Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        var collected = Assert.IsType<PowerShellBoundClrInvocationExpression>(
+            Assert.IsType<PowerShellBoundExpressionStatement>(Assert.Single(loop.Body.Statements)).Expression);
+        var binary = Assert.IsType<PowerShellBoundBinaryExpression>(Assert.Single(collected.Arguments));
+        Assert.Equal(typeof(double), binary.Type.ClrType);
+        Assert.Equal(PowerShellBoundBinaryOperator.Add, binary.Operation);
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Select_Value").Source;
+        Assert.Equal(2, source.Split(".Add(", StringSplitOptions.None).Length - 1);
+        Assert.Contains(".ToArray();", source, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("process { 'text' }")]
+    [InlineData("process { 1, 2 }")]
+    public void RuntimeFreePipelineLifecycleRejectsNonHomogeneousOrCollectionProcessOutput(string processBlock)
+    {
+        var document = PowerShellSourceParser.Parse(
+            $"function Measure-Value {{ [CmdletBinding()] [OutputType([int])] param([Parameter(ValueFromPipeline)][int] $Value) begin {{ }} {processBlock} end {{ 42 }} }} function Invoke-Measure {{ 1, 2 | Measure-Value }}",
+            TestPath("pipeline-lifecycle-process-output-rejected.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Value");
+        Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2928");
     }
 
     [Theory]
@@ -208,5 +345,32 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         var lifecycleSource = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Measure_Value").Source;
         Assert.Contains($"Measure_Value(int[] {collisionName}_1)", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains($"int {collisionName} = 0;", lifecycleSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RuntimeFreePipelineLifecycleOutputCollectorCannotCollideWithAuthoredSymbols()
+    {
+        const string marker = "__PIPELINE_OUTPUT_COLLISION__";
+        var template = $"function Select-Value {{ [CmdletBinding()] [OutputType([int])] param([Parameter(ValueFromPipeline)][int] $Value) begin {{ [int] ${marker} = 10 }} process {{ $Value; $Value }} end {{ ${marker} }} }} function Invoke-Select {{ 1, 2 | Select-Value }}";
+        var templateDocument = PowerShellSourceParser.Parse(template, TestPath("pipeline-lifecycle-output-collision-template.ps1"));
+        var function = Assert.IsType<System.Management.Automation.Language.FunctionDefinitionAst>(Assert.Single(
+            templateDocument.SyntaxRoot.FindAll(static node => node is System.Management.Automation.Language.FunctionDefinitionAst, searchNestedScriptBlocks: false),
+            static node => ((System.Management.Automation.Language.FunctionDefinitionAst)node).Name == "Select-Value"));
+        var offset = Assert.Single(function.Body.ParamBlock!.Parameters).Extent.StartOffset;
+        var collisionName = "__pf_pipeline_output_" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var document = PowerShellSourceParser.Parse(
+            template.Replace(marker, collisionName, StringComparison.Ordinal),
+            TestPath("pipeline-lifecycle-output-collision.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Select_Value").Source;
+        Assert.Contains($"int {collisionName} = 10;", source, StringComparison.Ordinal);
+        Assert.Contains($"global::System.Collections.Generic.List<int> {collisionName}_1 =", source, StringComparison.Ordinal);
+        Assert.Contains(".ToArray();", source, StringComparison.Ordinal);
     }
 }

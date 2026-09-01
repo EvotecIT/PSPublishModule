@@ -5,7 +5,9 @@ namespace PowerForge;
 /// <summary>
 /// Defines the deliberately bounded, runtime-free begin/process/end lifecycle shape.
 /// The executable ABI receives the complete typed input collection so one generated
-/// method can run begin once, process once per record, and end once.
+/// method can run begin once, process once per record, and end once. A bounded process
+/// block may emit homogeneous top-level stable scalars; the compiler materializes those
+/// values and the terminal end value in authored order.
 /// </summary>
 internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
 {
