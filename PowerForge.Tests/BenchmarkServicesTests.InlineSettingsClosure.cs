@@ -56,14 +56,15 @@ try {
             Add-BenchmarkAxis Operation Run
             Add-BenchmarkAxis Engine Managed
             Add-BenchmarkEngine Managed {
-                Add-BenchmarkOperation Run { param($case, $run) $run.Value = 42 }
+                Add-BenchmarkOperation Run { param($case, $run) $run.Value = $Error.Count }
             }
             Add-BenchmarkValidation {
                 param($case, $run)
-                if ($run.Value -ne 42) { throw 'Operation result was not retained.' }
+                if ($run.Value -ne 0) { throw 'Optional alias discovery polluted the automatic error collection.' }
             }
         }
     }
+    $Error.Clear()
     (Invoke-BenchmarkSuite -Settings $settings -OutputRoot $outputRoot).Samples[0].Status.ToString()
 }
 finally {
