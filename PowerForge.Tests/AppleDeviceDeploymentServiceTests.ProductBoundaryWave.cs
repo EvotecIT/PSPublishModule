@@ -5,6 +5,55 @@ namespace PowerForge.Tests;
 public sealed partial class AppleDeviceDeploymentServiceTests
 {
     [Fact]
+    public async Task BuildForDeploymentAsync_overrides_a_project_product_directory_inside_the_private_platform_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                "CONFIGURATION_BUILD_DIR = $(SRCROOT)/CustomProducts;");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(_ => Success("ok"));
+
+            using var operation = await new AppleDeviceDeploymentService(runner)
+                .BuildForDeploymentAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    Scheme = "CasaRay",
+                    Platform = ApplePlatform.iOS,
+                    Destination = "platform=iOS,id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild"
+                });
+
+            Assert.True(operation.Result.Succeeded);
+            var request = Assert.Single(runner.Requests);
+            Assert.Contains(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)",
+                request.Arguments);
+            Assert.Contains(
+                Path.Combine("Debug-iphoneos", "CasaRay.app"),
+                operation.Result.AppPath,
+                StringComparison.Ordinal);
+            Assert.False(Directory.Exists(Path.Combine(
+                project.FullName,
+                "CustomProducts")));
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public async Task BuildAsync_preserves_a_standalone_app_path_outside_private_DerivedData()
     {
         var root = Directory.CreateDirectory(Path.Combine(
@@ -180,11 +229,10 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             Requests.Add(request);
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
-            var productRoot = request.Arguments.Single(argument =>
-                    argument.StartsWith(
-                        "CONFIGURATION_BUILD_DIR=",
-                        StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            var productRoot = AppleDeploymentTestFixture
+                .TryResolveConfiguredBuildProductDirectory(request)
+                ?? throw new InvalidOperationException("Private build product directory was not configured.");
+            Directory.CreateDirectory(productRoot);
             Directory.CreateSymbolicLink(
                 Path.Combine(productRoot, "CasaRay.app"),
                 _redirectedApp);

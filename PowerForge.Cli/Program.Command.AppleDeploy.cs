@@ -16,6 +16,9 @@ internal static partial class Program
     {
         var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
+        PowerForgeAppleReleaseOptions? appleForRedaction = null;
+        string? projectRootForRedaction = null;
+        AppleDeployAuthentication? authenticationForRedaction = null;
         if (argv.Any(static value => value.Equals("-h", StringComparison.OrdinalIgnoreCase) || value.Equals("--help", StringComparison.OrdinalIgnoreCase)))
         {
             if (outputJson)
@@ -45,6 +48,7 @@ internal static partial class Program
 
             var (release, fullConfigPath) = LoadPowerForgeReleaseSpecWithPath(configPath);
             var apple = release.AppleApps ?? throw new InvalidOperationException("Release config has no AppleApps section.");
+            appleForRedaction = apple;
             var local = apple.LocalDeployment;
             var requestedPlatform = ParseAppleDeployPlatform(TryGetOptionValue(argv, "--platform"), local.DefaultPlatform);
             var selectedTarget = SelectAppleDeployTarget(
@@ -57,6 +61,9 @@ internal static partial class Program
 
             var configDirectory = Path.GetDirectoryName(fullConfigPath) ?? Directory.GetCurrentDirectory();
             var projectRoot = ResolvePathFromBase(configDirectory, string.IsNullOrWhiteSpace(apple.ProjectRoot) ? "." : apple.ProjectRoot!);
+            projectRootForRedaction = projectRoot;
+            var authentication = ResolveAppleDeployAuthentication(apple, projectRoot);
+            authenticationForRedaction = authentication;
             var projectPath = ResolvePathFromBase(projectRoot, selectedTarget.ProjectPath);
             if (!Directory.Exists(projectPath) && !File.Exists(projectPath))
                 throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);
@@ -158,7 +165,15 @@ internal static partial class Program
             if (!planOnly)
             {
                 using var deploymentLock = AppleLocalDeploymentLock.Acquire(localRoot, $"build cache '{localRoot}'");
-                ExecuteAppleDeploy(cliResult, apple, selectedTarget, projectRoot, profile, device, deviceIdentifier);
+                ExecuteAppleDeploy(
+                    cliResult,
+                    apple,
+                    selectedTarget,
+                    projectRoot,
+                    profile,
+                    device,
+                    deviceIdentifier,
+                    authentication);
             }
             else
                 cliResult.Success = true;
@@ -167,7 +182,17 @@ internal static partial class Program
         }
         catch (Exception exception)
         {
-            return WriteReleaseError(outputJson, "apple-deploy", 1, exception.Message, logger);
+            return WriteReleaseError(
+                outputJson,
+                "apple-deploy",
+                1,
+                RedactReleaseCredentialText(
+                    exception.Message,
+                    CollectAppleDeployCredentialMetadata(
+                        appleForRedaction,
+                        authenticationForRedaction,
+                        projectRootForRedaction)),
+                logger);
         }
     }
 
@@ -178,7 +203,8 @@ internal static partial class Program
         string projectRoot,
         PowerForgeAppleLocalDeploymentProfile? profile,
         string? device,
-        string? deviceIdentifier)
+        string? deviceIdentifier,
+        AppleDeployAuthentication authentication)
     {
         var environment = profile is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
@@ -200,6 +226,9 @@ internal static partial class Program
                 DerivedDataPath = cliResult.DerivedDataPath,
                 XcodeBuildExecutable = apple.XcodeBuildExecutable,
                 AllowProvisioningUpdates = apple.AllowProvisioningUpdates,
+                AppStoreConnectApiKeyPath = authentication.KeyPath,
+                AppStoreConnectApiKeyId = authentication.KeyId,
+                AppStoreConnectApiIssuerId = authentication.IssuerId,
                 UseBuildMirror = cliResult.UseBuildMirror,
                 BuildRoot = projectRoot,
                 BuildMirrorPath = cliResult.BuildMirrorPath,
@@ -218,6 +247,7 @@ internal static partial class Program
             cliResult.Success = deployment.Succeeded;
             cliResult.Warning = deployment.Install?.Warning;
             cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
+                CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
                 deployment.Build.ProcessResult,
                 deployment.Install?.ProcessResult,
                 deployment.Launch?.ProcessResult);
@@ -243,6 +273,9 @@ internal static partial class Program
             DerivedDataPath = cliResult.DerivedDataPath,
             XcodeBuildExecutable = apple.XcodeBuildExecutable,
             AllowProvisioningUpdates = apple.AllowProvisioningUpdates,
+            AppStoreConnectApiKeyPath = authentication.KeyPath,
+            AppStoreConnectApiKeyId = authentication.KeyId,
+            AppStoreConnectApiIssuerId = authentication.IssuerId,
             UseBuildMirror = cliResult.UseBuildMirror,
             BuildRoot = projectRoot,
             BuildMirrorPath = cliResult.BuildMirrorPath
@@ -257,6 +290,7 @@ internal static partial class Program
         cliResult.DeviceLocked = deviceDeployment.Launch?.DeviceLocked ?? false;
         cliResult.Success = deviceDeployment.RequestedStagesSucceeded;
         cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
+            CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
             deviceDeployment.Build.ProcessResult,
             deviceDeployment.Install?.ProcessResult,
             deviceDeployment.Launch?.ProcessResult);
@@ -305,6 +339,102 @@ internal static partial class Program
             throw new InvalidOperationException($"Local deployment profile '{name}' is not configured exactly once.");
         return matches[0];
     }
+
+    private static AppleDeployAuthentication ResolveAppleDeployAuthentication(
+        PowerForgeAppleReleaseOptions apple,
+        string projectRoot)
+    {
+        var configuredCount =
+            (string.IsNullOrWhiteSpace(apple.AppStoreConnectApiKeyPath) ? 0 : 1) +
+            (string.IsNullOrWhiteSpace(apple.AppStoreConnectApiKeyId) ? 0 : 1) +
+            (string.IsNullOrWhiteSpace(apple.AppStoreConnectApiIssuerId) ? 0 : 1);
+        var useEnvironment = configuredCount == 0;
+        var configuredKeyPath = useEnvironment
+            ? FirstNonEmptyAppleDeploy(
+                Environment.GetEnvironmentVariable("APP_STORE_CONNECT_PRIVATE_KEY_PATH"),
+                Environment.GetEnvironmentVariable("ASC_PRIVATE_KEY_PATH"))
+            : apple.AppStoreConnectApiKeyPath;
+        var keyId = useEnvironment
+            ? FirstNonEmptyAppleDeploy(
+                Environment.GetEnvironmentVariable("APP_STORE_CONNECT_KEY_ID"),
+                Environment.GetEnvironmentVariable("ASC_KEY_ID"))
+            : apple.AppStoreConnectApiKeyId;
+        var issuerId = useEnvironment
+            ? FirstNonEmptyAppleDeploy(
+                Environment.GetEnvironmentVariable("APP_STORE_CONNECT_ISSUER_ID"),
+                Environment.GetEnvironmentVariable("ASC_ISSUER_ID"))
+            : apple.AppStoreConnectApiIssuerId;
+        string? keyPath = null;
+        try
+        {
+            keyPath = string.IsNullOrWhiteSpace(configuredKeyPath)
+                ? null
+                : ResolvePathFromBase(projectRoot, configuredKeyPath!);
+
+            AppleXcodeAuthentication.AddArguments(
+                keyPath,
+                keyId,
+                issuerId,
+                apple.AllowProvisioningUpdates,
+                new List<string>());
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                RedactReleaseCredentialText(
+                    exception.Message,
+                    new[] { configuredKeyPath, keyPath, keyId, issuerId }
+                        .Where(static value => !string.IsNullOrWhiteSpace(value))
+                        .Select(static value => value!.Trim())),
+                exception);
+        }
+        return new AppleDeployAuthentication(
+            keyPath,
+            string.IsNullOrWhiteSpace(keyId) ? null : keyId.Trim(),
+            string.IsNullOrWhiteSpace(issuerId) ? null : issuerId.Trim());
+    }
+
+    private static string[] CollectAppleDeployCredentialMetadata(
+        PowerForgeAppleReleaseOptions? apple,
+        AppleDeployAuthentication? authentication,
+        string? projectRoot)
+    {
+        var values = new List<string?>
+        {
+            apple?.AppStoreConnectApiKeyPath,
+            apple?.AppStoreConnectApiKeyId,
+            apple?.AppStoreConnectApiIssuerId,
+            authentication?.KeyPath,
+            authentication?.KeyId,
+            authentication?.IssuerId
+        };
+        values.AddRange(CollectReleaseCredentialMetadata(null, null));
+
+        if (!string.IsNullOrWhiteSpace(projectRoot) &&
+            !string.IsNullOrWhiteSpace(apple?.AppStoreConnectApiKeyPath))
+        {
+            try
+            {
+                values.Add(ResolvePathFromBase(
+                    projectRoot!,
+                    apple!.AppStoreConnectApiKeyPath!));
+            }
+            catch
+            {
+                // Error reporting must not repeat a malformed-path failure.
+            }
+        }
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(static value => value.Length)
+            .ToArray();
+    }
+
+    private static string? FirstNonEmptyAppleDeploy(params string?[] values)
+        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
 
     private static ApplePlatform ParseAppleDeployPlatform(string? value, ApplePlatform fallback)
     {
@@ -401,7 +531,9 @@ internal static partial class Program
     private static string FormatAppleDeployTargetSuffix(string? target)
         => string.IsNullOrWhiteSpace(target) ? string.Empty : $" and target '{target}'";
 
-    private static string? ResolveAppleDeployDiagnostic(params ProcessRunResult?[] stages)
+    private static string? ResolveAppleDeployDiagnostic(
+        IEnumerable<string> sensitiveValues,
+        params ProcessRunResult?[] stages)
     {
         var failed = stages.FirstOrDefault(static stage => stage is not null && !stage.Succeeded);
         if (failed is null)
@@ -409,7 +541,12 @@ internal static partial class Program
         var text = string.IsNullOrWhiteSpace(failed.StdErr) ? failed.StdOut : failed.StdErr;
         if (string.IsNullOrWhiteSpace(text))
             return $"{failed.Executable} exited with code {failed.ExitCode}.";
-        var compact = text.Trim();
+        var compact = RedactReleaseCredentialText(text, sensitiveValues).Trim();
         return compact.Length <= 2000 ? compact : compact[^2000..];
     }
+
+    private sealed record AppleDeployAuthentication(
+        string? KeyPath,
+        string? KeyId,
+        string? IssuerId);
 }

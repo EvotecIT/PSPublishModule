@@ -105,6 +105,15 @@ public class AppleAppBuildRequest
     /// <summary>Allows Xcode to create or update signing assets during build.</summary>
     public bool AllowProvisioningUpdates { get; set; } = true;
 
+    /// <summary>Path to an App Store Connect API private key used by xcodebuild provisioning authentication.</summary>
+    public string? AppStoreConnectApiKeyPath { get; set; }
+
+    /// <summary>App Store Connect API key identifier used by xcodebuild provisioning authentication.</summary>
+    public string? AppStoreConnectApiKeyId { get; set; }
+
+    /// <summary>App Store Connect API issuer identifier used by xcodebuild provisioning authentication.</summary>
+    public string? AppStoreConnectApiIssuerId { get; set; }
+
     /// <summary>Mirror the project root to a local folder before running xcodebuild.</summary>
     public bool UseBuildMirror { get; set; }
 

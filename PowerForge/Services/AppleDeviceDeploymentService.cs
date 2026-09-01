@@ -128,11 +128,15 @@ public sealed partial class AppleDeviceDeploymentService
                 "apple-local-products",
                 Guid.NewGuid().ToString("N"))
             : null;
-        string productDirectory = deploymentProductRoot ?? Path.Combine(
-            derivedDataPath,
-            "Build",
-            "Products",
-            GetProductDirectory(request));
+        string productDirectory = deploymentProductRoot is null
+            ? Path.Combine(
+                derivedDataPath,
+                "Build",
+                "Products",
+                GetProductDirectory(request))
+            : Path.Combine(
+                deploymentProductRoot,
+                GetProductDirectory(request));
         string appPath = deploymentProductRoot is null
             ? ResolveAppPath(request, derivedDataPath)
             : Path.Combine(productDirectory, ResolveProductName(request) + ".app");
@@ -347,7 +351,9 @@ public sealed partial class AppleDeviceDeploymentService
                 "private Apple product directory",
                 sourcePathComparison);
             deploymentProductRoot = deploymentProductDirectory.Path;
-            productDirectory = deploymentProductDirectory.Path;
+            productDirectory = Path.Combine(
+                deploymentProductDirectory.Path,
+                GetProductDirectory(request));
             appPath = Path.Combine(
                 productDirectory,
                 ResolveProductName(request) + ".app");
@@ -368,9 +374,31 @@ public sealed partial class AppleDeviceDeploymentService
         };
 
         if (request.AllowProvisioningUpdates)
+        {
             args.Add("-allowProvisioningUpdates");
+            var provisioningDeviceIdentifier = deviceIdentifier ??
+                                               TryParseDestinationDeviceIdentifier(destination);
+            if (!string.IsNullOrWhiteSpace(provisioningDeviceIdentifier))
+                args.Add("-allowProvisioningDeviceRegistration");
+        }
+        AppleXcodeAuthentication.AddArguments(
+            request.AppStoreConnectApiKeyPath,
+            request.AppStoreConnectApiKeyId,
+            request.AppStoreConnectApiIssuerId,
+            request.AllowProvisioningUpdates,
+            args);
         if (deploymentProductRoot is not null)
-            args.Add($"CONFIGURATION_BUILD_DIR={deploymentProductRoot}");
+        {
+            // SYMROOT keeps the exact-source product inside PowerForge's
+            // private boundary while preserving Xcode's configuration- and
+            // SDK-specific subdirectories. Override a project-level
+            // CONFIGURATION_BUILD_DIR with Xcode variables that remain
+            // target-specific so embedded iOS/watchOS products cannot collide
+            // or escape the private root.
+            args.Add($"SYMROOT={deploymentProductRoot}");
+            args.Add(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)");
+        }
 
         args.Add("build");
         args.AddRange(AppleBuildProvenance.AppendXcodeBuildSetting(
@@ -765,22 +793,45 @@ public sealed partial class AppleDeviceDeploymentService
     }
 
     private static bool MatchesDevice(AppleDeviceInfo device, string filter)
-        => string.Equals(device.Identifier, filter, StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(device.Name, filter, StringComparison.OrdinalIgnoreCase) ||
-           device.Model.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
+    {
+        if (string.Equals(device.Identifier, filter, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var normalizedFilter = NormalizeDeviceMatchText(filter);
+        return string.Equals(
+                   NormalizeDeviceMatchText(device.Name),
+                   normalizedFilter,
+                   StringComparison.OrdinalIgnoreCase) ||
+               NormalizeDeviceMatchText(device.Model).IndexOf(
+                   normalizedFilter,
+                   StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string NormalizeDeviceMatchText(string value)
+        => Regex.Replace(
+            value.Trim(),
+            @"\s+",
+            " ",
+            RegexOptions.CultureInvariant);
 
     private static string? TryParseDestinationDeviceIdentifier(string? destination)
     {
         if (string.IsNullOrWhiteSpace(destination))
             return null;
 
-        var trimmed = destination!.Trim();
         const string prefix = "id=";
-        if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return null;
+        foreach (var field in destination!.Split(','))
+        {
+            var trimmed = field.Trim();
+            if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
 
-        var value = trimmed.Substring(prefix.Length).Trim();
-        return string.IsNullOrWhiteSpace(value) ? null : value;
+            var value = trimmed.Substring(prefix.Length).Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
     }
 
     private static string? MatchValue(Regex regex, string output)
