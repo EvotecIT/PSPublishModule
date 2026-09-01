@@ -363,13 +363,31 @@ internal sealed partial class PowerShellSemanticBinder
                 if (condition is null) return null;
                 condition = BindConditionTruthiness(condition, capabilities, diagnostics);
                 if (condition is null) return null;
-                var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework, capabilities);
+                var body = BindBlock(
+                    document,
+                    clause.Item2,
+                    symbols,
+                    functions,
+                    diagnostics,
+                    targetFramework,
+                    capabilities,
+                    allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
+                    nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
                 if (body is null) return null;
                 clauses.Add(new PowerShellBoundConditionalClause(condition, body));
             }
             var elseBlock = ifStatement.ElseClause is null
                 ? null
-                : BindBlock(document, ifStatement.ElseClause, symbols, functions, diagnostics, targetFramework, capabilities);
+                : BindBlock(
+                    document,
+                    ifStatement.ElseClause,
+                    symbols,
+                    functions,
+                    diagnostics,
+                    targetFramework,
+                    capabilities,
+                    allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
+                    nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
             if (ifStatement.ElseClause is not null && elseBlock is null) return null;
             return new PowerShellBoundIfStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), clauses.ToArray(), elseBlock);
         }
@@ -622,7 +640,9 @@ internal sealed partial class PowerShellSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        bool terminalOutputReturns = false)
+        bool terminalOutputReturns = false,
+        bool allowNonTerminalSuccessOutput = false,
+        Type? nonTerminalSuccessOutputType = null)
     {
         var statements = new List<PowerShellBoundStatement>();
         for (var index = 0; index < syntax.Statements.Count; index++)
@@ -637,7 +657,9 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics,
                 isTerminal: terminalOutputReturns && index == syntax.Statements.Count - 1,
                 targetFramework,
-                capabilities);
+                capabilities,
+                allowNonTerminalSuccessOutput,
+                nonTerminalSuccessOutputType);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)

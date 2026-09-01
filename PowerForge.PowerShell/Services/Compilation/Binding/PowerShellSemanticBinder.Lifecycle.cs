@@ -76,7 +76,7 @@ internal sealed partial class PowerShellSemanticBinder
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2928",
-                "Runtime-free process output requires a statically inferred top-level homogeneous stable-scalar contract that matches the terminal end-block output type.",
+                "Runtime-free process output requires a statically inferred homogeneous stable-scalar contract that matches the terminal end-block output type.",
                 PowerShellSourceParser.GetSpan(document, function.Body.ProcessBlock!.Extent)));
             return null;
         }
@@ -390,6 +390,15 @@ internal sealed partial class PowerShellSemanticBinder
         Type outputListType,
         Type outputElementType)
     {
+        if (statement is PowerShellBoundIfStatement conditional)
+            return new PowerShellBoundIfStatement(
+                conditional.Span,
+                conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(
+                    clause.Condition,
+                    RewriteLifecycleOutputs(clause.Body, outputVariable, outputListType, outputElementType))).ToArray(),
+                conditional.ElseBlock is null
+                    ? null
+                    : RewriteLifecycleOutputs(conditional.ElseBlock, outputVariable, outputListType, outputElementType));
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
         if (expression is null) return statement;
         var add = new PowerShellBoundClrInvocationExpression(

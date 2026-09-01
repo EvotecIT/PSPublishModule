@@ -160,14 +160,33 @@ internal static class PowerShellLocalCallSemanticBinder
                 : InferExpressionType(expression, knownTypes, functions);
             if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
         }
-        return function.Body.ProcessBlock.Statements
-            .OfType<PipelineAst>()
+        return EnumeratePipelineLifecycleProcessOutputs(function.Body.ProcessBlock.Statements)
             .Any(pipeline =>
             {
                 var syntax = Unwrap(pipeline);
                 var type = InferExpressionType(syntax, knownTypes, functions);
                 return type is not null ? type != typeof(void) : syntax is BinaryExpressionAst;
             });
+    }
+
+    private static IEnumerable<PipelineAst> EnumeratePipelineLifecycleProcessOutputs(
+        IEnumerable<StatementAst> statements)
+    {
+        foreach (var statement in statements)
+        {
+            if (statement is PipelineAst pipeline)
+            {
+                yield return pipeline;
+                continue;
+            }
+            if (statement is not IfStatementAst conditional) continue;
+            foreach (var clause in conditional.Clauses)
+            foreach (var nested in EnumeratePipelineLifecycleProcessOutputs(clause.Item2.Statements))
+                yield return nested;
+            if (conditional.ElseClause is null) continue;
+            foreach (var nested in EnumeratePipelineLifecycleProcessOutputs(conditional.ElseClause.Statements))
+                yield return nested;
+        }
     }
 
     private static Type? InferExpressionType(
