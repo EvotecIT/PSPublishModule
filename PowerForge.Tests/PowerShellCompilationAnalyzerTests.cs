@@ -168,8 +168,22 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.False(plan.CanProceed);
     }
 
+    [Fact]
+    public void Analyze_AcceptsBoundedTypedArrayParameterEnumeration()
+    {
+        using var fixture = CompilationFixture.Create(
+            "function Get-Value { param([int[]] $Values) [int] $value = 0; $Values | ForEach-Object { $value = $_ }; return $value }");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(
+            new PowerShellCompilationSpec(fixture.ScriptPath, PowerShellCompilationMode.Strict));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.DoesNotContain(unit.Diagnostics, static diagnostic =>
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.PipelineEnumeration);
+    }
+
     [Theory]
-    [InlineData("param([int[]] $Values) [int] $value = 0; $Values | ForEach-Object { $value = $_ }; return $value")]
     [InlineData("40, 2 | ForEach-Object { $_ }; return 42")]
     [InlineData("40, 2 | ForEach-Object { return }; return 42")]
     public void Analyze_AttributesRejectedBoundedPipelineShapeToEnumerationOwner(string body)

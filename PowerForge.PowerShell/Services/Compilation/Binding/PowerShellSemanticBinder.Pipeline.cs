@@ -37,13 +37,13 @@ internal sealed partial class PowerShellSemanticBinder
             return true;
 
         var collectionType = input.Type.ClrType;
-        if (input is not PowerShellBoundArrayExpression ||
+        if (input is not PowerShellBoundArrayExpression and not PowerShellBoundVariableExpression ||
             !collectionType.IsArray ||
             collectionType.GetArrayRank() != 1)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2901",
-                "Runtime-free pipeline enumeration requires a statically allocated, one-dimensional typed array expression; nullable array variables remain hosted.",
+                "Runtime-free pipeline enumeration requires a statically typed, one-dimensional CLR array expression; null arrays enumerate as empty.",
                 input.Span));
             return true;
         }

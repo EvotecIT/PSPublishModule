@@ -148,11 +148,29 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.DoesNotContain("PowerShell", source, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RuntimeFreeForEachObjectEnumeratesNullableTypedArrayParameter()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-Total { param([int[]] $Values) [int] $total = 0; $Values | ForEach-Object { $total += $_ }; return $total }",
+            TestPath("pipeline-parameter-enumeration.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var loop = Assert.IsType<PowerShellBoundForEachStatement>(
+            Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
+        Assert.IsType<PowerShellBoundVariableExpression>(loop.Collection);
+        Assert.Equal(typeof(int[]), loop.Collection.Type.ClrType);
+        var source = Assert.Single(result.Emitted.Methods).Source;
+        Assert.Contains("Values ?? global::System.Array.Empty<int>()", source, StringComparison.Ordinal);
+        Assert.Contains("total = checked((int)(total + __pf_pipeline_item_", source, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("[int[]] $values = 40, 2; $values | ForEach-Object { $_ }")]
     [InlineData("[int[]] $values = 40, 2; $values | ForEach-Object { return }")]
     [InlineData("[int] $value = 42; $value | ForEach-Object { $value += $_ }")]
-    [InlineData("param([int[]] $values); $values | ForEach-Object { $value = $_ }")]
     [InlineData("[object[]] $values = 40, 2; $values | ForEach-Object { $value = $_ }")]
     public void RuntimeFreeForEachObjectRejectsUnownedOutputControlFlowAndScalarInput(string body)
     {

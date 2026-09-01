@@ -98,6 +98,37 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Theory]
+    [InlineData("net472")]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void RuntimeFreePipelineParameterEnumerationExecutesAcrossTargets(string targetFramework)
+    {
+        const string source = "function Get-PipelineTotal { param([int[]] $Values) " +
+                              "[int] $Total = 0; $Values | ForEach-Object { $Total += $_ }; return $Total }";
+        using var fixture = OracleFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, targetFramework),
+            "PipelineParameter" + targetFramework.Replace(".", string.Empty, StringComparison.Ordinal),
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework,
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var assembly = System.Reflection.Assembly.LoadFrom(build.ArtifactPath!);
+        var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
+            .Single(static candidate => candidate.Name == "Get_PipelineTotal");
+        Assert.Equal(42, method.Invoke(null, new object?[] { new[] { 40, 2 } }));
+        Assert.Equal(0, method.Invoke(null, new object?[] { null }));
+    }
+
+    [Theory]
     [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreePipelineLifecycleExecutesAcrossTargets(string targetFramework)
