@@ -73,13 +73,16 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
 
+        var baselineSymbols = CloneSymbols(symbols);
+        var pathSymbols = new List<IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>>();
         var clauses = new List<PowerShellBoundSwitchClause>();
         foreach (var clause in statement.Clauses)
         {
+            var clauseSymbols = CloneSymbols(baselineSymbols);
             var clauseValue = BindExpression(
                 document,
                 clause.Item1,
-                symbols,
+                clauseSymbols,
                 functions,
                 diagnostics,
                 valueType,
@@ -101,15 +104,25 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
             }
 
-            var body = BindBlock(document, clause.Item2, symbols, functions, diagnostics, targetFramework, capabilities);
+            var body = BindBlock(document, clause.Item2, clauseSymbols, functions, diagnostics, targetFramework, capabilities);
             if (body is null) return null;
             clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body));
+            pathSymbols.Add(clauseSymbols);
         }
 
-        var defaultBlock = statement.Default is null
-            ? null
-            : BindBlock(document, statement.Default, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement.Default is not null && defaultBlock is null) return null;
+        PowerShellBoundBlock? defaultBlock = null;
+        if (statement.Default is null)
+        {
+            pathSymbols.Add(baselineSymbols);
+        }
+        else
+        {
+            var defaultSymbols = CloneSymbols(baselineSymbols);
+            defaultBlock = BindBlock(document, statement.Default, defaultSymbols, functions, diagnostics, targetFramework, capabilities);
+            if (defaultBlock is null) return null;
+            pathSymbols.Add(defaultSymbols);
+        }
+        MergeSymbolValueStates(symbols, pathSymbols.ToArray());
         return new PowerShellBoundSwitchStatement(
             PowerShellSourceParser.GetSpan(document, statement.Extent),
             value,

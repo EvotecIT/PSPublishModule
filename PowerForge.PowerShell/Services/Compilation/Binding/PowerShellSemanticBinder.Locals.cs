@@ -16,7 +16,8 @@ internal sealed partial class PowerShellSemanticBinder
         var assignments = GetFunctionStatements(function.Body)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
-            .OrderBy(static assignment => assignment.Extent.StartOffset);
+            .OrderBy(static assignment => assignment.Extent.StartOffset)
+            .ToArray();
         foreach (var assignment in assignments)
         {
             if (excludedTailOffset.HasValue && assignment.Extent.StartOffset >= excludedTailOffset.Value) continue;
@@ -31,6 +32,9 @@ internal sealed partial class PowerShellSemanticBinder
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
             var type = ResolveAssignmentType(assignment, functions, capabilities);
+            if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
+                TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, out var inferred))
+                type = inferred;
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
             var local = new PowerShellBoundLocal(symbol, type);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
@@ -108,8 +112,56 @@ internal sealed partial class PowerShellSemanticBinder
             return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))
             return new PowerShellTypeFact(conversion.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment value has an authored conversion.");
+        if (expression is InvokeMemberExpressionAst
+            {
+                Static: true,
+                Expression: TypeExpressionAst constructedType,
+                Member: StringConstantExpressionAst { Value: var memberName }
+            } &&
+            memberName.Equals("new", StringComparison.OrdinalIgnoreCase) &&
+            constructedType.TypeName.GetReflectionType() is { } constructorType)
+            return new PowerShellTypeFact(constructorType, PowerShellTypeFactProvenance.Inferred, "The assignment invokes one statically named CLR constructor.");
         if (expression is ExpressionAst typedExpression && typedExpression.StaticType != typeof(object))
             return new PowerShellTypeFact(typedExpression.StaticType, PowerShellTypeFactProvenance.Inferred, "The first assignment provides a static CLR type.");
         return PowerShellTypeFact.Unknown;
     }
+
+    private static bool TryInferNullSeededReferenceType(
+        string name,
+        AssignmentStatementAst first,
+        IReadOnlyList<AssignmentStatementAst> assignments,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        PowerShellCompilationCapability capabilities,
+        out PowerShellTypeFact type)
+    {
+        type = PowerShellTypeFact.Unknown;
+        if (!IsNullAssignment(first)) return false;
+        Type? inferredType = null;
+        foreach (var assignment in assignments)
+        {
+            if (assignment.Extent.StartOffset <= first.Extent.StartOffset) continue;
+            var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
+            if (variable is null || !variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!assignment.Operator.ToString().Equals("Equals", StringComparison.Ordinal)) return false;
+            if (IsNullAssignment(assignment)) continue;
+            var candidate = ResolveAssignmentType(assignment, functions, capabilities);
+            if (candidate.Provenance == PowerShellTypeFactProvenance.Unknown ||
+                candidate.ClrType == typeof(object) ||
+                candidate.ClrType.IsValueType ||
+                inferredType is not null && inferredType != candidate.ClrType)
+                return false;
+            inferredType = candidate.ClrType;
+        }
+        if (inferredType is null) return false;
+        type = new PowerShellTypeFact(
+            inferredType,
+            PowerShellTypeFactProvenance.Inferred,
+            "A null-seeded local has one exact reference type across every later concrete assignment.");
+        return true;
+    }
+
+    private static bool IsNullAssignment(AssignmentStatementAst assignment)
+        => assignment.Operator.ToString().Equals("Equals", StringComparison.Ordinal) &&
+           UnwrapExpression(assignment.Right) is VariableExpressionAst variable &&
+           variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase);
 }

@@ -56,7 +56,10 @@ internal sealed partial class PowerShellSemanticBinder
 
         var semanticOutputType = declaredOutputType == typeof(void) ? null : declaredOutputType;
         var begin = BindLifecycleBlock(document, function.Body.BeginBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
-        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, symbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, semanticOutputType, targetFramework, capabilities);
+        var processBaselineSymbols = CloneSymbols(symbols);
+        var processSymbols = CloneSymbols(processBaselineSymbols);
+        var process = BindLifecycleBlock(document, function.Body.ProcessBlock!, processSymbols, functions, diagnostics, terminalLast: false, allowTopLevelSuccessOutput: true, semanticOutputType, targetFramework, capabilities);
+        MergeSymbolValueStates(symbols, processBaselineSymbols, processSymbols);
         var end = BindLifecycleBlock(document, function.Body.EndBlock!, symbols, functions, diagnostics, terminalLast: true, allowTopLevelSuccessOutput: false, successOutputType: null, targetFramework, capabilities);
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
             return null;

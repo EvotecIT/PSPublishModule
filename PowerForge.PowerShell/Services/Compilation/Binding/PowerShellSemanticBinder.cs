@@ -355,106 +355,13 @@ internal sealed partial class PowerShellSemanticBinder
                 : null;
         }
         if (statement is IfStatementAst ifStatement)
-        {
-            var clauses = new List<PowerShellBoundConditionalClause>();
-            foreach (var clause in ifStatement.Clauses)
-            {
-                var condition = BindExpression(document, clause.Item1, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
-                if (condition is null) return null;
-                condition = BindConditionTruthiness(condition, capabilities, diagnostics);
-                if (condition is null) return null;
-                var body = BindBlock(
-                    document,
-                    clause.Item2,
-                    symbols,
-                    functions,
-                    diagnostics,
-                    targetFramework,
-                    capabilities,
-                    allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
-                    nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
-                if (body is null) return null;
-                clauses.Add(new PowerShellBoundConditionalClause(condition, body));
-            }
-            var elseBlock = ifStatement.ElseClause is null
-                ? null
-                : BindBlock(
-                    document,
-                    ifStatement.ElseClause,
-                    symbols,
-                    functions,
-                    diagnostics,
-                    targetFramework,
-                    capabilities,
-                    allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
-                    nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
-            if (ifStatement.ElseClause is not null && elseBlock is null) return null;
-            return new PowerShellBoundIfStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), clauses.ToArray(), elseBlock);
-        }
+            return BindIfStatement(document, ifStatement, symbols, functions, diagnostics, targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
         if (statement is WhileStatementAst whileStatement)
-        {
-            var condition = BindExpression(document, whileStatement.Condition, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
-            if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
-            if (condition is null) return null;
-            var body = BindBlock(document, whileStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
-            return body is null ? null : new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), condition, body);
-        }
+            return BindWhileStatement(document, whileStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ForStatementAst forStatement)
-        {
-            var initializer = forStatement.Initializer is null
-                ? null
-                : BindExpression(document, forStatement.Initializer, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities) as PowerShellBoundMutationExpression;
-            if (forStatement.Initializer is not null && initializer is null) return null;
-            var condition = forStatement.Condition is null
-                ? null
-                : BindExpression(document, forStatement.Condition, symbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
-            if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
-            if (forStatement.Condition is not null && condition is null) return null;
-            var iterator = forStatement.Iterator is null
-                ? null
-                : BindExpression(document, forStatement.Iterator, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities) as PowerShellBoundMutationExpression;
-            if (forStatement.Iterator is not null && iterator is null) return null;
-            var body = BindBlock(document, forStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
-            return body is null ? null : new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
-        }
+            return BindForStatement(document, forStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ForEachStatementAst forEachStatement)
-        {
-            var variableSpan = PowerShellSourceParser.GetSpan(document, forEachStatement.Variable.Extent);
-            if (!symbols.TryGetValue(forEachStatement.Variable.VariablePath.UserPath, out var target))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${forEachStatement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));
-                return null;
-            }
-            var collection = BindExpression(document, forEachStatement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-            if (collection is null) return null;
-            var collectionType = collection.Type.ClrType;
-            var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
-            var systemArray = collectionType == typeof(Array) &&
-                              PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities);
-            var elementType = collectionType.IsArray && collectionType.GetArrayRank() == 1
-                ? collectionType.GetElementType()
-                : scalarString
-                    ? typeof(string)
-                    : systemArray ? typeof(object) : null;
-            if (elementType is null || elementType != target.Type.ClrType)
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    "PSB2303",
-                    "foreach collection enumeration requires a statically typed one-dimensional array, an explicitly typed scalar string, or a generated PowerShell host that preserves System.Array items as objects.",
-                    collection.Span));
-                return null;
-            }
-            var body = BindBlock(document, forEachStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
-            return body is null ? null : new PowerShellBoundForEachStatement(
-                PowerShellSourceParser.GetSpan(document, statement.Extent),
-                target.Symbol,
-                elementType,
-                collection,
-                scalarString,
-                body,
-                systemArray: systemArray);
-        }
+            return BindForEachStatement(document, forEachStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is SwitchStatementAst switchStatement)
             return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ThrowStatementAst throwStatement)
@@ -485,9 +392,12 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2309", "Typed finally blocks cannot alter enclosing return, break, or continue control flow.", PowerShellSourceParser.GetSpan(document, tryStatement.Finally.Extent)));
                 return null;
             }
-            var body = BindBlock(document, tryStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
+            var baselineSymbols = CloneSymbols(symbols);
+            var trySymbols = CloneSymbols(baselineSymbols);
+            var body = BindBlock(document, tryStatement.Body, trySymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
             if (body is null) return null;
             var catches = new List<PowerShellBoundCatchClause>();
+            var pathSymbols = new List<IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>> { trySymbols };
             foreach (var clause in tryStatement.CatchClauses)
             {
                 var types = new List<Type>();
@@ -504,9 +414,12 @@ internal sealed partial class PowerShellSemanticBinder
                     }
                     types.Add(type);
                 }
-                var catchBody = BindBlock(document, clause.Body, symbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
+                var catchSymbols = CloneSymbols(baselineSymbols);
+                ForgetTryMutationsOnCatchEntry(catchSymbols, tryStatement.Body);
+                var catchBody = BindBlock(document, clause.Body, catchSymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
                 if (catchBody is null) return null;
                 catches.Add(new PowerShellBoundCatchClause(types.ToArray(), catchBody));
+                pathSymbols.Add(catchSymbols);
             }
             var catchAll = catches.FindIndex(static clause => clause.ExceptionTypes.Length == 0);
             if (catchAll >= 0 && catchAll != catches.Count - 1)
@@ -524,10 +437,15 @@ internal sealed partial class PowerShellSemanticBinder
                     return null;
                 }
             }
-            var finallyBlock = tryStatement.Finally is null
-                ? null
-                : BindBlock(document, tryStatement.Finally, symbols, functions, diagnostics, targetFramework, capabilities);
-            if (tryStatement.Finally is not null && finallyBlock is null) return null;
+            var joinedSymbols = CloneSymbols(baselineSymbols);
+            MergeSymbolValueStates(joinedSymbols, pathSymbols.ToArray());
+            PowerShellBoundBlock? finallyBlock = null;
+            if (tryStatement.Finally is not null)
+            {
+                finallyBlock = BindBlock(document, tryStatement.Finally, joinedSymbols, functions, diagnostics, targetFramework, capabilities);
+                if (finallyBlock is null) return null;
+            }
+            MergeSymbolValueStates(symbols, joinedSymbols);
             return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock);
         }
         if (statement is BreakStatementAst { Label: null } breakStatement && PowerShellControlFlowBindingPolicy.HasBreakableAncestor(breakStatement))

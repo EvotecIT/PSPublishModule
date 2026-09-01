@@ -94,7 +94,20 @@ internal sealed partial class PowerShellSemanticBinder
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase):
                 return new PowerShellBoundLiteralExpression(span, false, LiteralType(typeof(bool), "$false is a Boolean literal."), PowerShellValueState.Known);
             case VariableExpressionAst variable when variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase):
-                return new PowerShellBoundLiteralExpression(span, null, LiteralType(typeof(object), "$null has no narrower CLR representation."), PowerShellValueState.Null);
+                var nullType = contextualType is not null &&
+                               !contextualType.IsValueType &&
+                               PowerShellCompilationParameterTypePolicy.CanUseInMethod(contextualType, targetFramework, capabilities)
+                    ? contextualType
+                    : typeof(object);
+                return new PowerShellBoundLiteralExpression(
+                    span,
+                    null,
+                    LiteralType(
+                        nullType,
+                        nullType == typeof(object)
+                            ? "$null has no narrower CLR representation."
+                            : "$null is represented by the exact contextual reference type."),
+                    PowerShellValueState.Null);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
                 return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type, symbol.ValueState);
             case VariableExpressionAst variable:

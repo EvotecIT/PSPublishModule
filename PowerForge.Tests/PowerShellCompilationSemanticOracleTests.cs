@@ -13,7 +13,7 @@ public sealed class PinnedSemanticHostFactAttribute : FactAttribute
                 Environment.GetEnvironmentVariable("POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS"),
                 "true",
                 StringComparison.OrdinalIgnoreCase))
-            Skip = "Set POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true and both exact pwsh paths to run the pinned 75-observation matrix.";
+            Skip = "Set POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true and both exact pwsh paths to run the pinned 78-observation matrix.";
     }
 }
 

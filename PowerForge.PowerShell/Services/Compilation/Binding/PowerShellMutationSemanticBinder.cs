@@ -30,6 +30,32 @@ internal sealed class PowerShellSemanticSymbolBinding
 
     internal void AddKnownProperty(string name, PowerShellTypeFact type)
         => Type = Type.WithKnownProperty(name, type);
+
+    internal PowerShellSemanticSymbolBinding Clone()
+    {
+        var clone = new PowerShellSemanticSymbolBinding(Symbol, Type);
+        clone.ValueState = ValueState;
+        return clone;
+    }
+
+    internal void ForgetValueState() => ValueState = PowerShellValueState.Unknown;
+
+    internal void MergeFlowState(IEnumerable<PowerShellSemanticSymbolBinding> paths)
+    {
+        var materialized = paths.ToArray();
+        if (Type.Provenance == PowerShellTypeFactProvenance.Unknown)
+        {
+            var concreteTypes = materialized
+                .Where(static path => path.Type.Provenance != PowerShellTypeFactProvenance.Unknown)
+                .Select(static path => path.Type)
+                .GroupBy(static type => type.ClrType)
+                .Take(2)
+                .ToArray();
+            if (concreteTypes.Length == 1) Type = concreteTypes[0].First();
+        }
+        var states = materialized.Select(static path => path.ValueState).Distinct().Take(2).ToArray();
+        ValueState = states.Length == 1 ? states[0] : PowerShellValueState.Unknown;
+    }
 }
 
 /// <summary>Owns local and parameter mutation semantics.</summary>

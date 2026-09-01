@@ -196,6 +196,14 @@ internal static class PowerShellClrMemberSemanticBinder
         var resultType = member is PropertyInfo property ? property.PropertyType : ((FieldInfo)member).FieldType;
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2604", $"CLR member '{target.Type.FullName}.{member.Name}' returns target-incompatible type '{resultType.FullName}'.", span);
+        if (!target.IsStatic && !target.IsKnownNonNull &&
+            member.Name.Equals("Length", StringComparison.OrdinalIgnoreCase) &&
+            !target.Type.IsArray && target.Type != typeof(string) && resultType != typeof(int))
+            return Reject(
+                diagnostics,
+                "PSB2605",
+                $"Potentially null CLR member '{target.Type.FullName}.{member.Name}' cannot preserve PowerShell's Int32 zero for null while returning '{resultType.FullName}' for a concrete receiver.",
+                span);
         var receiverBehavior = SelectReadBehavior(target, member.Name, resultType);
         var boundResultType = receiverBehavior == PowerShellClrReceiverBehavior.PropagateNull &&
                               resultType.IsValueType && Nullable.GetUnderlyingType(resultType) is null
@@ -398,7 +406,8 @@ internal static class PowerShellClrMemberSemanticBinder
         if (target.IsStatic || target.Type.IsValueType || target.IsKnownNonNull) return PowerShellClrReceiverBehavior.None;
         if (target.Type.IsArray) return PowerShellClrReceiverBehavior.NormalizeNullArrayLength;
         if (target.Type == typeof(string)) return PowerShellClrReceiverBehavior.NormalizeNullString;
-        if (memberName.Equals("Count", StringComparison.OrdinalIgnoreCase) && resultType == typeof(int))
+        if ((memberName.Equals("Count", StringComparison.OrdinalIgnoreCase) ||
+             memberName.Equals("Length", StringComparison.OrdinalIgnoreCase)) && resultType == typeof(int))
             return PowerShellClrReceiverBehavior.NormalizeNullCount;
         return PowerShellClrReceiverBehavior.PropagateNull;
     }
