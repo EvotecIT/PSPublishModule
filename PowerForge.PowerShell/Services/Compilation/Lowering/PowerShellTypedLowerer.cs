@@ -456,7 +456,8 @@ internal sealed partial class PowerShellTypedLowerer
             loop.DeclareVariable,
             loop.NullCollectionElement is null
                 ? null
-                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities));
+                : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
+            loop.SystemArray);
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

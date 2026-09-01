@@ -120,6 +120,8 @@ public static class PowerShellCompilationFeatureIds
         if (message.IndexOf("catch filter", StringComparison.OrdinalIgnoreCase) >= 0) return CatchFilter;
         if (message.IndexOf("pipeline enumeration", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineEnumeration;
         if (message.IndexOf("pipeline lifecycle", StringComparison.OrdinalIgnoreCase) >= 0) return PipelineLifecycle;
+        if (message.IndexOf("foreach collection enumeration", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("foreach variable", StringComparison.OrdinalIgnoreCase) >= 0) return ForSyntax("ForEachStatementAst");
         if (message.IndexOf("runtime-bearing using", StringComparison.OrdinalIgnoreCase) >= 0) return RuntimeUsing;
         if (message.IndexOf("#requires", StringComparison.OrdinalIgnoreCase) >= 0) return RequiresDirective;
         if (message.IndexOf("Filter '", StringComparison.OrdinalIgnoreCase) >= 0) return FilterFunction;

@@ -49,6 +49,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var prefix = new string(' ', indent * 4);
         var collection = EmitExpression(loop.Collection);
+        if (loop.SystemArray)
+        {
+            EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, sourceMap);
+            return;
+        }
         if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
         {
             EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, sourceMap);
@@ -64,6 +69,24 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(iterationVariable).Append(" in ").Append(enumerable).AppendLine(")");
         builder.Append(prefix).AppendLine("{");
         EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, sourceMap);
+        builder.Append(prefix).AppendLine("}");
+    }
+
+    private static void EmitSystemArrayForEach(
+        StringBuilder builder,
+        PowerShellLoweredForEachStatement loop,
+        string collection,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', indent * 4);
+        var iterationVariable = getTemporaryIdentifier("foreachItem");
+        builder.Append(prefix).Append("foreach (object? ").Append(iterationVariable)
+            .Append(" in (").Append(collection).Append(" ?? global::System.Array.Empty<object>()))")
+            .AppendLine();
+        builder.Append(prefix).AppendLine("{");
+        EmitForEachBody(builder, loop, iterationVariable + "!", indent, getTemporaryIdentifier, sourceMap);
         builder.Append(prefix).AppendLine("}");
     }
 

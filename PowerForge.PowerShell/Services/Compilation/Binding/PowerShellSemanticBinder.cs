@@ -430,16 +430,30 @@ internal sealed partial class PowerShellSemanticBinder
             if (collection is null) return null;
             var collectionType = collection.Type.ClrType;
             var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
+            var systemArray = collectionType == typeof(Array) &&
+                              PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities);
             var elementType = collectionType.IsArray && collectionType.GetArrayRank() == 1
                 ? collectionType.GetElementType()
-                : scalarString ? typeof(string) : null;
+                : scalarString
+                    ? typeof(string)
+                    : systemArray ? typeof(object) : null;
             if (elementType is null || elementType != target.Type.ClrType)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2303", "foreach requires a statically typed one-dimensional array or explicitly typed scalar string.", collection.Span));
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSB2303",
+                    "foreach collection enumeration requires a statically typed one-dimensional array, an explicitly typed scalar string, or a generated PowerShell host that preserves System.Array items as objects.",
+                    collection.Span));
                 return null;
             }
             var body = BindBlock(document, forEachStatement.Body, symbols, functions, diagnostics, targetFramework, capabilities);
-            return body is null ? null : new PowerShellBoundForEachStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), target.Symbol, elementType, collection, scalarString, body);
+            return body is null ? null : new PowerShellBoundForEachStatement(
+                PowerShellSourceParser.GetSpan(document, statement.Extent),
+                target.Symbol,
+                elementType,
+                collection,
+                scalarString,
+                body,
+                systemArray: systemArray);
         }
         if (statement is SwitchStatementAst switchStatement)
             return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities);

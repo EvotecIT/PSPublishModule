@@ -37,7 +37,9 @@ public sealed class PowerShellCompilationSemanticUpstreamMonitorTests
         Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, review.GetProperty("ProfileId").GetString());
         Assert.Equal("v7.6.5", review.GetProperty("PinnedTag").GetString());
         Assert.Equal("v7.6.6", review.GetProperty("ObservedTag").GetString());
-        Assert.Equal(24, review.GetProperty("AffectedCaseIds").GetArrayLength());
+        Assert.Equal(
+            PowerShellCompilationSemanticOracleCaseCatalog.Cases.Count,
+            review.GetProperty("AffectedCaseIds").GetArrayLength());
         Assert.Equal(pinHash, File.ReadAllBytes(fixture.PinPath));
     }
 

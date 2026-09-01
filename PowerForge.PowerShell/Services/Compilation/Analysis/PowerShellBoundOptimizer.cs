@@ -111,7 +111,8 @@ internal sealed class PowerShellBoundOptimizer
                 loop.ScalarString,
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
-                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement)),
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement),
+                loop.SystemArray),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression)),
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(

@@ -53,10 +53,19 @@ internal sealed partial class PowerShellSemanticBinder
             };
             var elementType = collectionType is { IsArray: true } && collectionType.GetArrayRank() == 1
                 ? collectionType.GetElementType()
-                : collectionType == typeof(string) ? typeof(string) : null;
+                : collectionType == typeof(string)
+                    ? typeof(string)
+                    : collectionType == typeof(Array) && PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities)
+                        ? typeof(object)
+                        : null;
             if (elementType is null) continue;
             var span = PowerShellSourceParser.GetSpan(document, loop.Variable.Extent);
-            var type = new PowerShellTypeFact(elementType, PowerShellTypeFactProvenance.Inferred, "The foreach collection provides one stable CLR element type.");
+            var type = new PowerShellTypeFact(
+                elementType,
+                PowerShellTypeFactProvenance.Inferred,
+                collectionType == typeof(Array)
+                    ? "The generated PowerShell host preserves System.Array elements as object-valued foreach items."
+                    : "The foreach collection provides one stable CLR element type.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(new PowerShellBoundLocal(symbol, type));

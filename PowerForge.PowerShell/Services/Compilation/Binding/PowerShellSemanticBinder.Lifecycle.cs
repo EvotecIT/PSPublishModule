@@ -150,7 +150,8 @@ internal sealed partial class PowerShellSemanticBinder
                 lifecycleLoop.ScalarString,
                 collectedProcess,
                 lifecycleLoop.DeclareVariable,
-                lifecycleLoop.NullCollectionElement);
+                lifecycleLoop.NullCollectionElement,
+                lifecycleLoop.SystemArray);
             var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType);
             var outputArrayFact = new PowerShellTypeFact(
                 outputArrayType,
