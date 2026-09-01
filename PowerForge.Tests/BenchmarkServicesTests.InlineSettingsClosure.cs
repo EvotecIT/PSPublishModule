@@ -35,4 +35,45 @@ Invoke-BenchmarkSuite -Settings $settings -Plan
         var item = Assert.IsType<PowerShellBenchmarkWorkItem>(Assert.Single(plan).BaseObject);
         Assert.Equal("FromClosure", item.Values["Probe"]);
     }
+
+    [Fact]
+    public void InvokeBenchmarkSuiteCommand_RunsInlineSettingsFromStrictCallerWithoutDslAliases()
+    {
+        var initialSessionState = InitialSessionState.CreateDefault();
+        initialSessionState.Commands.Add(new SessionStateCmdletEntry("Invoke-BenchmarkSuite", typeof(PSPublishModule.InvokeBenchmarkSuiteCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
+        runspace.Open();
+        ImportBenchmarkDslCommands(runspace);
+        using var ps = PowerShell.Create(runspace);
+        ps.AddScript("""
+Set-StrictMode -Version Latest
+$outputRoot = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-benchmark-strict-' + [Guid]::NewGuid().ToString('N'))
+try {
+    $settings = {
+        New-BenchmarkSuite 'strict-caller' {
+            Set-BenchmarkPolicy -Warmup 0 -Iterations 1
+            Add-BenchmarkCases { Add-BenchmarkCase Default @{} }
+            Add-BenchmarkAxis Operation Run
+            Add-BenchmarkAxis Engine Managed
+            Add-BenchmarkEngine Managed {
+                Add-BenchmarkOperation Run { param($case, $run) $run.Value = 42 }
+            }
+            Add-BenchmarkValidation {
+                param($case, $run)
+                if ($run.Value -ne 42) { throw 'Operation result was not retained.' }
+            }
+        }
+    }
+    (Invoke-BenchmarkSuite -Settings $settings -OutputRoot $outputRoot).Samples[0].Status.ToString()
+}
+finally {
+    if (Test-Path -LiteralPath $outputRoot) { Remove-Item -LiteralPath $outputRoot -Recurse -Force }
+}
+""");
+
+        var output = ps.Invoke();
+
+        Assert.Empty(ps.Streams.Error);
+        Assert.Equal("Succeeded", Assert.Single(output).BaseObject);
+    }
 }

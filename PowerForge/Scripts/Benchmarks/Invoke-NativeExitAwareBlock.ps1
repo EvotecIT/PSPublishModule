@@ -21,8 +21,10 @@ if ($null -eq $installNativeExitTracker) {
 $nativeExitTracker = $installNativeExitTracker.Invoke($null, @($ExecutionContext.SessionState))
 $benchmarkDslCommandAliasNames = [System.Collections.Generic.List[string]]::new()
 try {
-    if ($null -ne $PowerForgeBenchmarkDslCommandAliases) {
-        foreach ($entry in @($PowerForgeBenchmarkDslCommandAliases.GetEnumerator())) {
+    $dslCommandAliasesVariable = Get-Variable -Name PowerForgeBenchmarkDslCommandAliases -ErrorAction SilentlyContinue
+    $dslCommandAliases = if ($null -eq $dslCommandAliasesVariable) { $null } else { $dslCommandAliasesVariable.Value }
+    if ($null -ne $dslCommandAliases) {
+        foreach ($entry in @($dslCommandAliases.GetEnumerator())) {
             Set-Alias -Name $entry.Key -Value $entry.Value -Scope Local -Force
             $benchmarkDslCommandAliasNames.Add([string] $entry.Key)
         }
