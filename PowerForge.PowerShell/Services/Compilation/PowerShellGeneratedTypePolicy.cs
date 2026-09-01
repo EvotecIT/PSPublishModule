@@ -32,7 +32,9 @@ internal static class PowerShellGeneratedTypePolicy
         if (type.IsGenericType)
         {
             var definition = type.GetGenericTypeDefinition();
-            if (definition != typeof(Dictionary<,>) && definition != typeof(Nullable<>))
+            if (definition != typeof(Dictionary<,>) &&
+                definition != typeof(List<>) &&
+                definition != typeof(Nullable<>))
                 return false;
             return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
                    IsSupportedNonGeneric(definition, targetFramework);

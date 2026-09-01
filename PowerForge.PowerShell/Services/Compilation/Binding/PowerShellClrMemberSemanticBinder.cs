@@ -193,7 +193,7 @@ internal static class PowerShellClrMemberSemanticBinder
         var resultType = member is PropertyInfo property ? property.PropertyType : ((FieldInfo)member).FieldType;
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2604", $"CLR member '{target.Type.FullName}.{member.Name}' returns target-incompatible type '{resultType.FullName}'.", span);
-        var receiverBehavior = SelectReadBehavior(target);
+        var receiverBehavior = SelectReadBehavior(target, member.Name, resultType);
         var boundResultType = receiverBehavior == PowerShellClrReceiverBehavior.PropagateNull &&
                               resultType.IsValueType && Nullable.GetUnderlyingType(resultType) is null
             ? typeof(Nullable<>).MakeGenericType(resultType)
@@ -390,11 +390,13 @@ internal static class PowerShellClrMemberSemanticBinder
         return true;
     }
 
-    private static PowerShellClrReceiverBehavior SelectReadBehavior(Target target)
+    private static PowerShellClrReceiverBehavior SelectReadBehavior(Target target, string memberName, Type resultType)
     {
         if (target.IsStatic || target.Type.IsValueType || target.IsKnownNonNull) return PowerShellClrReceiverBehavior.None;
         if (target.Type.IsArray) return PowerShellClrReceiverBehavior.NormalizeNullArrayLength;
         if (target.Type == typeof(string)) return PowerShellClrReceiverBehavior.NormalizeNullString;
+        if (memberName.Equals("Count", StringComparison.OrdinalIgnoreCase) && resultType == typeof(int))
+            return PowerShellClrReceiverBehavior.NormalizeNullCount;
         return PowerShellClrReceiverBehavior.PropagateNull;
     }
 

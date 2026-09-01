@@ -7,8 +7,42 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [Theory]
+    [InlineData("net472")]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void RuntimeFreeComposedGenericListMembersExecuteAcrossTargets(string targetFramework)
+    {
+        const string source = "function Get-ItemCount { " +
+                              "$items = [System.Collections.Generic.List[string]]::new(); " +
+                              "$items.AddRange([string[]] ('alpha', 'beta')); " +
+                              "$copy = $items.ToArray(); " +
+                              "return $items.Count -eq 2 -and $copy.Length -eq 2 }";
+        using var fixture = OracleFixture.Create(source);
+        var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            Path.Combine(fixture.RootPath, targetFramework),
+            "GenericListMembers" + targetFramework.Replace(".", string.Empty, StringComparison.Ordinal),
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework,
+            SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+            SingleFile = false
+        });
+
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+        var assembly = System.Reflection.Assembly.LoadFrom(build.ArtifactPath!);
+        var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
+            .Single(static method => method.Name == "Get_ItemCount");
+        Assert.Equal(true, method.Invoke(null, null));
+    }
+
+    [Theory]
     [InlineData("PowerForge.Semantic/expandable-scalar", "value=42; flag=True")]
     [InlineData("PowerForge.Semantic/member-null-propagation", "True")]
+    [InlineData("PowerForge.Semantic/typed-generic-list-invocation", "True")]
     [InlineData("PowerForge.Semantic/try-terminal-output", "True")]
     public void SemanticExpansionCasesBuildAndExecuteWithoutPowerShellRuntime(string caseId, string expected)
     {
@@ -49,6 +83,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                  {
                      "PowerForge.Semantic/expandable-scalar",
                      "PowerForge.Semantic/member-null-propagation",
+                     "PowerForge.Semantic/typed-generic-list-invocation",
                      "PowerForge.Semantic/try-terminal-output"
                  })
         {

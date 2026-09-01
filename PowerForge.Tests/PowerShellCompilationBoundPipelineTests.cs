@@ -404,6 +404,28 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void ConstructedGenericListInvocationPropagatesPossibleMutationFromParameterReceiver()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Add-Item { param([System.Collections.Generic.List[string]] $Items) $Items.Add('alpha') } function Invoke-Root { param([System.Collections.Generic.List[string]] $Items) Add-Item -Items $Items }",
+            TestPath("generic-list-mutation.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapability.PowerShellObjects);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var add = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Add-Item");
+        var statement = Assert.IsType<PowerShellBoundExpressionStatement>(Assert.Single(add.Body.Statements));
+        var invocation = Assert.IsType<PowerShellBoundClrInvocationExpression>(statement.Expression);
+        Assert.True(invocation.Effects.HasFlag(PowerShellSemanticEffect.Mutation));
+        Assert.True(statement.Effects.HasFlag(PowerShellSemanticEffect.Mutation));
+        Assert.True(add.Effects.HasFlag(PowerShellSemanticEffect.Mutation));
+        Assert.True(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Invoke-Root").Effects.HasFlag(PowerShellSemanticEffect.Mutation));
+    }
+
+    [Fact]
     public void ConstructorInitializedLocalRefinesBeforeMemberMutation()
     {
         var document = PowerShellSourceParser.Parse(

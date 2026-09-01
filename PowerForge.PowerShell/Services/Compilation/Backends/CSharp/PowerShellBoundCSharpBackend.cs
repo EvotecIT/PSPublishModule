@@ -555,6 +555,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellClrReceiverBehavior.NormalizeNullString => $"({receiver} ?? string.Empty).{member.MemberName}",
             PowerShellClrReceiverBehavior.NormalizeNullArrayLength =>
                 $"({receiver} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(member.DeclaringType.GetElementType()!)}>()).{member.MemberName}",
+            PowerShellClrReceiverBehavior.NormalizeNullCount => $"(({receiver})?.{member.MemberName} ?? 0)",
             PowerShellClrReceiverBehavior.PropagateNull => $"({receiver})?.{member.MemberName}",
             PowerShellClrReceiverBehavior.DictionaryKeyLookup => EmitDictionaryKeyLookup(member, receiver, hasClrFallback: false),
             PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback => EmitDictionaryKeyLookup(member, receiver, hasClrFallback: true),

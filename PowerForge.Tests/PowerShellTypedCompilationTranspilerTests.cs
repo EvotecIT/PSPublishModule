@@ -214,16 +214,48 @@ public sealed class PowerShellTypedCompilationTranspilerTests
     }
 
     [Theory]
-    [InlineData("return [System.Collections.Generic.List[int]]::new()", "reference set")]
-    [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition", "reference set")]
-    public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body, string expectedMessage)
+    [InlineData("return [System.Management.Automation.PSVersionInfo]::PSEdition")]
+    [InlineData("return [System.Collections.Concurrent.ConcurrentDictionary[string,int]]::new()")]
+    public void Transpile_RejectsTypesUnavailableToGeneratedRuntimeIndependentProjects(string body)
     {
         using var fixture = TranspilerFixture.Create($"function Get-Value {{ {body} }}");
 
         var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
 
         Assert.Empty(result.Methods);
-        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains(expectedMessage, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Message.Contains("reference set", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("net472")]
+    [InlineData("net8.0")]
+    [InlineData("net10.0")]
+    public void Transpile_EmitsExactConstructedGenericListMembersAvailableToTarget(string targetFramework)
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Count { $items = [System.Collections.Generic.List[string]]::new(); $items.AddRange([string[]] ('alpha', 'beta')); $copy = $items.ToArray(); return $copy.Length }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath, targetFramework);
+
+        Assert.Empty(result.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.Single(result.Methods);
+        Assert.Contains("List<string> items = new global::System.Collections.Generic.List<string>();", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("(items).AddRange", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("string[] copy = (items).ToArray();", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("return (copy ?? global::System.Array.Empty<string>()).Length;", result.SourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Transpile_NormalizesNullCountForExplicitConstructedGenericListParameter()
+    {
+        using var fixture = TranspilerFixture.Create(
+            "function Get-Count { param([System.Collections.Generic.List[string]] $Items) return $Items.Count }");
+
+        var result = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath, "net10.0");
+
+        Assert.Empty(result.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        Assert.Single(result.Methods);
+        Assert.Contains("?.Count ?? 0", result.SourceCode, StringComparison.Ordinal);
     }
 
     [Fact]

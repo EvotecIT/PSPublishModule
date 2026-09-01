@@ -100,6 +100,8 @@ internal static class PowerShellGeneratedMemberPolicy
 
     private static string? CreateReflectionKey(MemberInfo member)
     {
+        var useStructuralSignature = member.DeclaringType?.IsConstructedGenericType == true;
+        member = NormalizeGenericDeclaringMember(member);
         var declaringType = member.DeclaringType?.FullName;
         if (string.IsNullOrWhiteSpace(declaringType))
             return null;
@@ -110,15 +112,15 @@ internal static class PowerShellGeneratedMemberPolicy
                 method is ConstructorInfo ? ".ctor" : method.Name,
                 method.IsStatic,
                 method is MethodInfo genericMethod ? genericMethod.GetGenericArguments().Length : 0,
-                method.GetParameters().Select(static parameter => GetReflectionTypeName(parameter.ParameterType)),
-                method is MethodInfo methodInfo ? GetReflectionTypeName(methodInfo.ReturnType) : typeof(void).FullName!),
+                method.GetParameters().Select(parameter => GetReflectionTypeName(parameter.ParameterType, useStructuralSignature)),
+                method is MethodInfo methodInfo ? GetReflectionTypeName(methodInfo.ReturnType, useStructuralSignature) : typeof(void).FullName!),
             PropertyInfo property => CreateSimpleKey(
                 declaringType!,
                 "P",
                 property.Name,
                 (property.GetMethod ?? property.SetMethod)?.IsStatic == true,
-                GetReflectionTypeName(property.PropertyType)),
-            FieldInfo field => CreateSimpleKey(declaringType!, "F", field.Name, field.IsStatic, GetReflectionTypeName(field.FieldType)),
+                GetReflectionTypeName(property.PropertyType, useStructuralSignature)),
+            FieldInfo field => CreateSimpleKey(declaringType!, "F", field.Name, field.IsStatic, GetReflectionTypeName(field.FieldType, useStructuralSignature)),
             _ => null
         };
     }
@@ -129,11 +131,43 @@ internal static class PowerShellGeneratedMemberPolicy
     private static string CreateSimpleKey(string type, string kind, string name, bool isStatic, string valueType)
         => type + "|" + kind + "|" + name + "|" + (isStatic ? "S" : "I") + "|" + valueType;
 
-    private static string GetReflectionTypeName(Type type)
+    private static string GetReflectionTypeName(Type type, bool structural)
     {
         if (type.IsByRef)
-            return GetReflectionTypeName(type.GetElementType()!) + "&";
+            return GetReflectionTypeName(type.GetElementType()!, structural) + "&";
+        if (type.IsGenericParameter)
+            return (type.DeclaringMethod is null ? "!" : "!!") + type.GenericParameterPosition;
+        if (!structural)
+            return type.FullName ?? type.Name;
+        if (type.IsPointer)
+            return GetReflectionTypeName(type.GetElementType()!, structural) + "*";
+        if (type.IsArray)
+            return GetReflectionTypeName(type.GetElementType()!, structural) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
+        if (type.IsConstructedGenericType)
+            return type.GetGenericTypeDefinition().FullName + "[" +
+                   string.Join(",", type.GetGenericArguments().Select(argument => GetReflectionTypeName(argument, structural))) + "]";
         return type.FullName ?? type.Name;
+    }
+
+    private static MemberInfo NormalizeGenericDeclaringMember(MemberInfo member)
+    {
+        var declaringType = member.DeclaringType;
+        if (declaringType is null || !declaringType.IsConstructedGenericType)
+            return member;
+
+        var definition = declaringType.GetGenericTypeDefinition();
+        try
+        {
+            return definition
+                       .GetMembers(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+                       .FirstOrDefault(candidate => candidate.MetadataToken == member.MetadataToken) ??
+                   member;
+        }
+        catch (InvalidOperationException)
+        {
+            // Metadata-less reflection members cannot be matched to a target-framework reference member.
+            return member;
+        }
     }
 
     private sealed class SignatureNameProvider : ISignatureTypeProvider<string, object?>

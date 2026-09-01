@@ -5,6 +5,7 @@ internal enum PowerShellClrReceiverBehavior
     None,
     NormalizeNullString,
     NormalizeNullArrayLength,
+    NormalizeNullCount,
     PropagateNull,
     DictionaryKeyLookup,
     DictionaryKeyLookupWithClrFallback,
@@ -94,7 +95,8 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
 
     private static PowerShellSemanticEffect GetDirectEffects(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Effects ?? PowerShellSemanticEffect.None) |
-           (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None);
+           (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None) |
+           (IsPotentiallyMutatingListInvocation(declaringType, receiver) ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None);
 
     private static PowerShellRequiredCapability GetDirectCapabilities(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Capabilities ?? PowerShellRequiredCapability.None) |
@@ -103,6 +105,11 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     private static bool IsProcessStart(Type declaringType, string memberName)
         => declaringType == typeof(System.Diagnostics.Process) &&
            memberName.Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal);
+
+    private static bool IsPotentiallyMutatingListInvocation(Type declaringType, PowerShellBoundExpression? receiver)
+        => receiver is not null &&
+           declaringType.IsConstructedGenericType &&
+           declaringType.GetGenericTypeDefinition() == typeof(List<>);
 }
 
 internal sealed class PowerShellBoundClrMemberAssignmentStatement : PowerShellBoundStatement
