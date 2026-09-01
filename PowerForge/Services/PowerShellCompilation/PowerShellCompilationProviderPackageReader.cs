@@ -422,7 +422,8 @@ public sealed partial class PowerShellCompilationProviderPackageReader
                              provider.Cardinality == PowerShellCompilationCommandCardinality.Collection;
             var cooperative = provider.Adapter.Cancellation is
                 PowerShellCompilationProviderCancellation.Cooperative or
-                PowerShellCompilationProviderCancellation.PostInitializationCooperative;
+                PowerShellCompilationProviderCancellation.PostInitializationCooperative or
+                PowerShellCompilationProviderCancellation.ProcessIsolated;
             if (matches.Count != 1 || !HasTransformSignature(reader, matches[0], collection, entryPoint.ResultType, cooperative))
                 throw new InvalidOperationException(
                     $"Provider '{provider.ProviderId}' entry point must be one public static non-generic " +

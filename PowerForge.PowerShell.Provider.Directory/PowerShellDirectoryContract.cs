@@ -88,7 +88,7 @@ public sealed class PowerShellDirectoryProviderContract
     public PowerShellDirectoryAuthentication[] Authentication { get; set; } = Array.Empty<PowerShellDirectoryAuthentication>();
     /// <summary>Whether a provider-created reusable session may be supplied at runtime.</summary>
     public bool AcceptsRuntimeSession { get; set; }
-    /// <summary>Whether cancellation is observed after the platform-owned initial bind has completed.</summary>
+    /// <summary>Whether the direct in-process adapter observes cancellation after the platform-owned initial bind has completed.</summary>
     public bool SupportsCancellationAfterInitialization { get; set; }
     /// <summary>Whether adapter-owned connections are deterministically released.</summary>
     public bool DeterministicCleanup { get; set; }

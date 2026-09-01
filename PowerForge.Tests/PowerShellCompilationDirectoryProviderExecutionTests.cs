@@ -39,7 +39,10 @@ public sealed class PowerShellCompilationDirectoryProviderExecutionTests
 
             Assert.Equal(7, resolution.Providers.Length);
             Assert.All(resolution.Providers, static provider =>
-                Assert.Equal(PowerShellCompilationProviderCancellation.PostInitializationCooperative, provider.Adapter.Cancellation));
+            {
+                Assert.Equal(PowerShellCompilationProviderCancellation.ProcessIsolated, provider.Adapter.Cancellation);
+                Assert.Equal(45, provider.Adapter.ProcessIsolationTimeoutSeconds);
+            });
             var locked = Assert.Single(resolution.Lock.Packages);
             Assert.Equal(PowerShellDirectoryRuntimeProviderPackage.PackageId, locked.PackageId);
             Assert.Equal(2, locked.Assemblies.Length);

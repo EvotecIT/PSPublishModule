@@ -72,6 +72,7 @@ internal static class PowerShellTypedExecutableCompiler
             .Units.Single(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
         descriptions.Add(entryDescription);
+        var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
                 .Select(static parameter => new PowerShellTypedExecutableParameter(parameter.ClrType, parameter.Contract))
@@ -79,8 +80,32 @@ internal static class PowerShellTypedExecutableCompiler
             entry.Emission,
             localMethods.ToArray(),
             descriptions.ToArray(),
+            reachableCommandProviders,
             semantic.Optimization.ToPublicModel(),
             PowerShellCompilationIrSnapshotBuilder.Create(semantic));
+    }
+
+    private static PowerShellCompilationCommandProviderContract[] CollectReachableCommandProviders(
+        PowerShellSemanticCompilationResult semantic,
+        PowerShellSymbolId entryPoint)
+    {
+        var reachable = new HashSet<string>(StringComparer.Ordinal) { entryPoint.StableKey };
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var edge in semantic.Analyzed.CallGraph)
+                if (reachable.Contains(edge.Caller.StableKey) && reachable.Add(edge.Callee.StableKey))
+                    changed = true;
+        } while (changed);
+
+        return semantic.Lowered.Functions
+            .Where(function => reachable.Contains(function.Symbol.StableKey))
+            .SelectMany(function => PowerShellLoweredCommandProviderCollector.Collect(function.Statements))
+            .GroupBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+            .Select(static group => group.First())
+            .OrderBy(static provider => provider.ProviderId, StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static void ValidateSourceClosure(string entryPoint, string[] requestedSources)
@@ -263,6 +288,7 @@ internal sealed class PowerShellTypedExecutableCompilation
         PowerShellCSharpMethodEmission entryPointMethod,
         PowerShellCSharpMethodEmission[] localMethods,
         PowerShellCompiledMethod[] methods,
+        PowerShellCompilationCommandProviderContract[] reachableCommandProviders,
         PowerShellCompilationOptimizationEvidence optimization,
         PowerShellCompilationIrSnapshotBundle irSnapshots)
     {
@@ -270,6 +296,7 @@ internal sealed class PowerShellTypedExecutableCompilation
         EntryPointMethod = entryPointMethod;
         LocalMethods = localMethods;
         Methods = methods;
+        ReachableCommandProviders = reachableCommandProviders;
         Optimization = optimization;
         IrSnapshots = irSnapshots;
     }
@@ -278,6 +305,7 @@ internal sealed class PowerShellTypedExecutableCompilation
     internal PowerShellCSharpMethodEmission EntryPointMethod { get; }
     internal PowerShellCSharpMethodEmission[] LocalMethods { get; }
     internal PowerShellCompiledMethod[] Methods { get; }
+    internal PowerShellCompilationCommandProviderContract[] ReachableCommandProviders { get; }
     internal PowerShellCompilationOptimizationEvidence Optimization { get; }
     internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
 }

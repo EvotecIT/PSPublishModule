@@ -33,6 +33,19 @@ public static class NoticeAdapter
 
     public static string ReadText(string path) => System.IO.File.ReadAllText(path);
 
+    public static string EchoWithCancellation(string value, System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return value;
+    }
+
+    public static string TouchWithCancellation(string path, System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        System.IO.File.WriteAllText(path, "touched");
+        return path;
+    }
+
     public static string WaitForCancellation(string value, System.Threading.CancellationToken cancellationToken)
     {
         using (var stream = new System.IO.FileStream(
@@ -46,6 +59,22 @@ public static class NoticeAdapter
             cancellationToken.WaitHandle.WaitOne(System.TimeSpan.FromSeconds(10));
             cancellationToken.ThrowIfCancellationRequested();
             return "not-cancelled:" + value;
+        }
+    }
+
+    public static string WaitWithoutCancellation(string value, System.Threading.CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+        using (var stream = new System.IO.FileStream(
+                   value,
+                   System.IO.FileMode.Create,
+                   System.IO.FileAccess.ReadWrite,
+                   System.IO.FileShare.None))
+        {
+            stream.WriteByte(1);
+            stream.Flush(flushToDisk: true);
+            System.Threading.Thread.Sleep(System.TimeSpan.FromMinutes(5));
+            return "not-isolated:" + value;
         }
     }
 

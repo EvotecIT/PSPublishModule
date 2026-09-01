@@ -476,7 +476,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         runtimeIdentifier,
                         dependencyGraph,
                         spec.Optimization,
-                        providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock));
+                        providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock,
+                        commandProviderInputs.Any(static provider =>
+                            provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated)));
                     EnsureStrictDependencyClosureCertified(dependencyClosure);
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);

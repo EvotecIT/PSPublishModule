@@ -103,6 +103,21 @@ public static class PowerShellCompilationProviderContractValidator
             !Enum.IsDefined(typeof(PowerShellCompilationProviderCancellation), contract.Adapter.Cancellation) ||
             !Enum.IsDefined(typeof(PowerShellCompilationProviderCleanup), contract.Adapter.Cleanup))
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' declares an unknown output, cardinality, error, cancellation, or cleanup contract.");
+        if (contract.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated)
+        {
+            if (contract.Adapter.ProcessIsolationTimeoutSeconds is < 1 or > 3600)
+                throw new InvalidOperationException(
+                    $"Process-isolated provider '{contract.ProviderId}' requires a child-process timeout between 1 and 3600 seconds.");
+            if (contract.Cardinality != PowerShellCompilationCommandCardinality.Scalar ||
+                contract.Adapter.EntryPoint?.ResultType != PowerShellCompilationProviderValueType.String)
+                throw new InvalidOperationException(
+                    $"Process-isolated provider '{contract.ProviderId}' must use the closed scalar string-to-string worker ABI.");
+        }
+        else if (contract.Adapter.ProcessIsolationTimeoutSeconds != 0)
+        {
+            throw new InvalidOperationException(
+                $"Provider '{contract.ProviderId}' declares a process-isolation timeout without ProcessIsolated cancellation ownership.");
+        }
         if (contract.Stream.Equals("Success", StringComparison.Ordinal))
         {
             if (contract.Output == PowerShellCompilationCommandOutput.None ||
@@ -126,7 +141,8 @@ public static class PowerShellCompilationProviderContractValidator
             throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' cannot claim runtime-free AOT compatibility.");
         if (!contract.Adapter.RuntimeFree &&
             (contract.Adapter.Cancellation is PowerShellCompilationProviderCancellation.Cooperative or
-                 PowerShellCompilationProviderCancellation.PostInitializationCooperative ||
+                 PowerShellCompilationProviderCancellation.PostInitializationCooperative or
+                 PowerShellCompilationProviderCancellation.ProcessIsolated ||
              contract.Adapter.Cleanup == PowerShellCompilationProviderCleanup.Deterministic))
             throw new InvalidOperationException($"Hosted provider '{contract.ProviderId}' cannot claim runtime-free cancellation or cleanup ownership.");
         var declaredDependencies = (manifest.Assemblies ?? Array.Empty<PowerShellCompilationProviderAssembly>())

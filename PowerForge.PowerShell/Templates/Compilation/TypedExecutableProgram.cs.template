@@ -37,6 +37,7 @@ internal static class Program
         ConfigureSemanticObservationCulture();
         try
         {
+{{PROVIDER_WORKER_INITIALIZATION}}
             var values = ParseArguments(args, out var boundParameters);
 {{INVOCATION}}
         }

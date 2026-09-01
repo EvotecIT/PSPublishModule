@@ -347,6 +347,7 @@ internal sealed class PowerShellCommandSemanticRegistry
                 RuntimeFree = source.Adapter?.RuntimeFree == true,
                 AotCompatible = source.Adapter?.AotCompatible == true,
                 Cancellation = source.Adapter?.Cancellation ?? PowerShellCompilationProviderCancellation.NotApplicable,
+                ProcessIsolationTimeoutSeconds = source.Adapter?.ProcessIsolationTimeoutSeconds ?? 0,
                 Cleanup = source.Adapter?.Cleanup ?? PowerShellCompilationProviderCleanup.NotApplicable,
                 Dependencies = source.Adapter?.Dependencies?.ToArray() ?? Array.Empty<string>(),
                 EntryPoint = source.Adapter?.EntryPoint is null

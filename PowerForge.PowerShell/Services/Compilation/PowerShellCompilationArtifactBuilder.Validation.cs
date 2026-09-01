@@ -183,9 +183,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         IEnumerable<PowerShellCompilationCommandProviderContract> providers)
     {
+        var providerArray = providers.ToArray();
+        var processIsolated = providerArray.FirstOrDefault(static provider =>
+            provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated);
+        if (processIsolated is not null &&
+            (spec.Kind != PowerShellCompilationArtifactKind.Executable || spec.Mode != PowerShellCompilationMode.Strict))
+            throw new InvalidOperationException(
+                $"Process-isolated command provider '{processIsolated.ProviderId}' currently requires a Strict executable host.");
         if (spec.Optimization != PowerShellCompilationExecutableOptimization.NativeAot)
             return;
-        var incompatible = providers.FirstOrDefault(static provider =>
+        var incompatible = providerArray.FirstOrDefault(static provider =>
             provider.Adapter.RuntimeFree && !provider.Adapter.AotCompatible);
         if (incompatible is not null)
             throw new InvalidOperationException(

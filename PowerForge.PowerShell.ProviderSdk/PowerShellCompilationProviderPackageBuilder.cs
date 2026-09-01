@@ -245,6 +245,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 RuntimeFree = source.Adapter.RuntimeFree,
                 AotCompatible = source.Adapter.AotCompatible,
                 Cancellation = source.Adapter.Cancellation,
+                ProcessIsolationTimeoutSeconds = source.Adapter.ProcessIsolationTimeoutSeconds,
                 Cleanup = source.Adapter.Cleanup,
                 Dependencies = (source.Adapter.Dependencies ?? Array.Empty<string>()).OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
                 EntryPoint = source.Adapter.EntryPoint is null

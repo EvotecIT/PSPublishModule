@@ -77,6 +77,8 @@ public enum PowerShellCompilationProviderCancellation
     Cooperative,
     /// <summary>The adapter observes cooperative cancellation after a non-cancellable initialization phase.</summary>
     PostInitializationCooperative,
+    /// <summary>The generated executable owns the adapter in a bounded child process and terminates it on cancellation or deadline.</summary>
+    ProcessIsolated,
     /// <summary>The PowerShell host owns cancellation semantics for a hosted boundary.</summary>
     PowerShellHost
 }
@@ -140,6 +142,9 @@ public sealed class PowerShellCompilationCommandAdapterContract
 
     /// <summary>Cancellation behavior exposed by this adapter operation.</summary>
     public PowerShellCompilationProviderCancellation Cancellation { get; set; }
+
+    /// <summary>Maximum child-process lifetime in seconds when <see cref="Cancellation"/> is <see cref="PowerShellCompilationProviderCancellation.ProcessIsolated"/>.</summary>
+    public int ProcessIsolationTimeoutSeconds { get; set; }
 
     /// <summary>Cleanup behavior exposed by this adapter operation.</summary>
     public PowerShellCompilationProviderCleanup Cleanup { get; set; }

@@ -29,6 +29,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellCompilationProviderCancellation.PostInitializationCooperative
             ? ", __providerCancellationToken"
             : string.Empty;
+        var providerInvocation = entryPoint is null
+            ? string.Empty
+            : stream.Provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated
+                ? "global::PowerForge.Compiled.PowerForgeProviderProcessIsolation.Invoke(" +
+                  PowerShellCSharpLiteral.QuoteString(stream.Provider.ProviderId) + ", " + convertedMessage + ", " +
+                  stream.Provider.Adapter.ProcessIsolationTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                  ", __providerCancellationToken)"
+                : "global::" + EscapeQualifiedProviderIdentifier(entryPoint.TypeName) + "." +
+                  EscapeProviderIdentifier(entryPoint.MethodName) + "(" + convertedMessage + cancellationArgument + ")";
         var nullFailure = "new global::System.InvalidOperationException(" +
             PowerShellCSharpLiteral.QuoteString($"Provider '{stream.Provider.ProviderId}' returned a null value outside its contract.") + ")";
         if (entryPoint is not null && stream.Kind == PowerShellStreamCommandKind.Success &&
@@ -36,9 +45,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             var item = getTemporaryIdentifier("providerItem");
             builder.Append(prefix).Append("foreach (").Append(GetProviderResultTypeName(entryPoint.ResultType)).Append(' ')
-                .Append(item).Append(" in (global::")
-                .Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.').Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
-                .Append(convertedMessage).Append(cancellationArgument).Append(") ?? throw ").Append(nullFailure).AppendLine("))")
+                .Append(item).Append(" in (").Append(providerInvocation)
+                .Append(" ?? throw ").Append(nullFailure).AppendLine("))")
                 .Append(prefix).AppendLine("{");
             if (entryPoint.ResultType == PowerShellCompilationProviderValueType.String)
                 builder.Append(prefix).Append("    if (").Append(item).Append(" is null) throw ").Append(nullFailure).AppendLine(";");
@@ -54,9 +62,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(nullableResult ? "(object?)(" : "(object?)");
             else if (nullableResult)
                 builder.Append('(');
-            builder.Append("global::").Append(EscapeQualifiedProviderIdentifier(entryPoint.TypeName)).Append('.')
-                .Append(EscapeProviderIdentifier(entryPoint.MethodName)).Append('(')
-                .Append(convertedMessage).Append(cancellationArgument).Append(')');
+            builder.Append(providerInvocation);
             if (nullableResult)
                 builder.Append(" ?? throw ").Append(nullFailure).Append(')');
         }

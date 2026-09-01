@@ -178,7 +178,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         RewriteJsonEntry<PowerShellCompilationProviderPackageManifest>(
             packagePath,
             PowerShellCompilationProviderPackageReader.ManifestPath,
-            manifest => manifest.ProviderAbiVersion = "3");
+            manifest => manifest.ProviderAbiVersion = "4");
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             new PowerShellCompilationProviderPackageReader().Resolve(new[]
@@ -186,8 +186,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 new PowerShellCompilationProviderPackageReference(packagePath)
             }));
 
-        Assert.Contains("targets ABI '3'", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("expected '4'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("targets ABI '4'", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("expected '5'", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -256,6 +256,35 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("provider.nupkg"));
 
         Assert.Contains("string Method(string, CancellationToken)", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsProcessIsolationWithoutBoundedDeadline()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Adapter.EntryPoint!.MethodName = "WaitWithoutCancellation";
+        provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.ProcessIsolated;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("provider.nupkg"));
+
+        Assert.Contains("timeout between 1 and 3600 seconds", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReaderRejectsProcessIsolationOutsideScalarStringWorkerAbi()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Cardinality = PowerShellCompilationCommandCardinality.Collection;
+        provider.Output = PowerShellCompilationCommandOutput.Enumerated;
+        provider.Adapter.EntryPoint!.MethodName = "WaitWithoutCancellation";
+        provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.ProcessIsolated;
+        provider.Adapter.ProcessIsolationTimeoutSeconds = 1;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => fixture.BuildPackage("provider.nupkg"));
+
+        Assert.Contains("scalar string-to-string worker ABI", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

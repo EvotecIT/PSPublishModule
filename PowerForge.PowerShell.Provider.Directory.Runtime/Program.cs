@@ -87,7 +87,8 @@ public static class PowerShellDirectoryRuntimeProviderPackage
                                   PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
                 RuntimeFree = true,
                 AotCompatible = false,
-                Cancellation = PowerShellCompilationProviderCancellation.PostInitializationCooperative,
+                Cancellation = PowerShellCompilationProviderCancellation.ProcessIsolated,
+                ProcessIsolationTimeoutSeconds = 45,
                 Cleanup = PowerShellCompilationProviderCleanup.Deterministic,
                 Dependencies = new[] { "System.DirectoryServices.Protocols" },
                 EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint

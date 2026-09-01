@@ -74,6 +74,7 @@ internal static class PowerShellCompilationAbiBuilder
                     Boolean(provider.Adapter.RuntimeFree),
                     Boolean(provider.Adapter.AotCompatible),
                     provider.Adapter.Cancellation.ToString(),
+                    provider.Adapter.ProcessIsolationTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     provider.Adapter.Cleanup.ToString(),
                     string.Join("\0", provider.Adapter.Dependencies.OrderBy(static value => value, StringComparer.Ordinal)),
                     provider.Adapter.EntryPoint?.AssemblyPath ?? string.Empty,
