@@ -643,11 +643,10 @@ internal static partial class ModuleBootstrapperGenerator
                 return NormalizePayloadAssemblyLoadContextTargetFramework(folderName.Substring(prefix.Length));
         }
 
-        return folderName.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-               folderName.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-               folderName.Equals("Default", StringComparison.OrdinalIgnoreCase)
-            ? PowerShell70AssemblyLoadContextTargetFramework
-            : null;
+        // Generic payload folder names describe selection behavior, not a target-framework floor.
+        // Keep the framework already resolved from the module's declared TFMs unless the payload
+        // carries an explicit marker or a framework-qualified folder name.
+        return null;
     }
 
     private static string? NormalizePayloadAssemblyLoadContextTargetFramework(string? framework)

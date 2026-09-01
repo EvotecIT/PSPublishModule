@@ -353,6 +353,30 @@ public partial class ModuleBootstrapperGeneratorTests
         }
     }
 
+    [Theory]
+    [InlineData("Core")]
+    [InlineData("Standard")]
+    [InlineData("Default")]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_GenericFolderKeepsDeclaredRuntime(string folderName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-generic-" + Guid.NewGuid().ToString("N"));
+        var payload = Directory.CreateDirectory(Path.Combine(root, folderName)).FullName;
+
+        try
+        {
+            var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads(
+                "net8.0",
+                new[] { payload });
+
+            Assert.Equal("net8.0", framework);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_InfersPrebuiltCompatibleFloors()
     {
@@ -590,7 +614,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
                 .ConstructorArguments[0]
                 .Value as string;
-            Assert.Equal(".NETCoreApp,Version=v3.1", coreLoaderTargetFramework);
+            Assert.Equal(".NETCoreApp,Version=v8.0", coreLoaderTargetFramework);
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
@@ -684,7 +708,7 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public void Generate_WithAssemblyLoadContextAndStandardFallback_BuildsPowerShell70CompatibleLoader()
+    public void Generate_WithAssemblyLoadContextAndUnmarkedPayloads_UsesDeclaredModernLoaderFramework()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-standard-" + Guid.NewGuid().ToString("N"));
         var libStandard = Directory.CreateDirectory(Path.Combine(root, "Lib", "Standard")).FullName;
@@ -715,7 +739,7 @@ public partial class ModuleBootstrapperGeneratorTests
                     .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
                     .ConstructorArguments[0]
                     .Value as string;
-                Assert.Equal(".NETCoreApp,Version=v3.1", targetFramework);
+                Assert.Equal(".NETCoreApp,Version=v8.0", targetFramework);
             }
         }
         finally
