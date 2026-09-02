@@ -321,6 +321,12 @@ public sealed partial class PowerShellCompilationAnalyzer
                             Contract.Family: PowerShellCompilationCommandFamily.CommandDiscovery
                         } && PowerShellCommandDiscoverySemanticBinder.IsSupportedBooleanConsumption(command, capabilities))
                         break;
+                    if (_commandRegistry.Resolve(commandName) is
+                        {
+                            Status: PowerShellCommandResolutionStatus.Resolved,
+                            Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
+                        } && PowerShellNewObjectSemanticBinder.IsSupportedShape(command))
+                        break;
                     if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(command, capabilities, out _, out _, out _, _commandRegistry) ||
                         capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                         (unitRoot is ScriptBlockAst commandBody &&

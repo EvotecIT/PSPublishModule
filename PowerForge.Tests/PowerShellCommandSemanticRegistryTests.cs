@@ -11,6 +11,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     {
         Assert.Equal(7, (int)PowerShellCompilationCommandFamily.ExternalOperation);
         Assert.Equal(8, (int)PowerShellCompilationCommandFamily.CommandDiscovery);
+        Assert.Equal(9, (int)PowerShellCompilationCommandFamily.ClrConstruction);
     }
 
     [Theory]
@@ -21,6 +22,8 @@ public sealed class PowerShellCommandSemanticRegistryTests
     [InlineData("Get-Command", "powerforge.command.discovery.get-command")]
     [InlineData("gcm", "powerforge.command.discovery.get-command")]
     [InlineData("Microsoft.PowerShell.Core\\Get-Command", "powerforge.command.discovery.get-command")]
+    [InlineData("New-Object", "powerforge.command.construction.new-object")]
+    [InlineData("Microsoft.PowerShell.Utility\\New-Object", "powerforge.command.construction.new-object")]
     public void DefaultRegistryResolvesCanonicalAliasesAndModuleQualification(string commandName, string providerId)
     {
         var result = PowerShellCommandSemanticRegistry.Default.Resolve(commandName);

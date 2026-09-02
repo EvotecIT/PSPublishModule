@@ -239,6 +239,16 @@ internal static class PowerShellClrMemberSemanticBinder
             return Reject(diagnostics, "PSB2612", "PSCustomObject method invocation requires preservation of adapted-object identity and remains on the PowerShell runtime path.", span);
 
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
+        if (target.IsStatic && name.Equals("new", StringComparison.OrdinalIgnoreCase))
+            return BindConstructor(
+                document,
+                syntax,
+                target.Type,
+                argumentSyntax,
+                bindExpression,
+                targetFramework,
+                diagnostics);
+
         var arguments = new PowerShellBoundExpression[argumentSyntax.Length];
         for (var index = 0; index < argumentSyntax.Length; index++)
         {
@@ -247,41 +257,22 @@ internal static class PowerShellClrMemberSemanticBinder
             arguments[index] = argument;
         }
 
-        MethodBase selected;
-        PowerShellClrInvocationKind kind;
-        Type resultType;
-        if (target.IsStatic && name.Equals("new", StringComparison.OrdinalIgnoreCase))
-        {
-            selected = SelectBest(
-                target.Type.GetConstructors(BindingFlags.Public | BindingFlags.Instance).Where(member => IsSupportedMember(member, targetFramework)),
-                arguments,
-                argumentSyntax,
-                diagnostics,
-                span,
-                $"constructor for '{target.Type.FullName}'")!;
-            if (selected is null) return null;
-            kind = PowerShellClrInvocationKind.Constructor;
-            resultType = target.Type;
-        }
-        else
-        {
-            var flags = BindingFlags.Public | (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
-            selected = SelectBest(
-                target.Type.GetMethods(flags).Where(candidate =>
-                    candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
-                    !candidate.IsSpecialName &&
-                    !candidate.IsGenericMethodDefinition &&
-                    !candidate.ContainsGenericParameters &&
-                    IsSupportedMember(candidate, targetFramework)),
-                arguments,
-                argumentSyntax,
-                diagnostics,
-                span,
-                $"method '{target.Type.FullName}.{name}'")!;
-            if (selected is null) return null;
-            kind = target.IsStatic ? PowerShellClrInvocationKind.StaticMethod : PowerShellClrInvocationKind.InstanceMethod;
-            resultType = ((MethodInfo)selected).ReturnType;
-        }
+        var flags = BindingFlags.Public | (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
+        var selected = SelectBest(
+            target.Type.GetMethods(flags).Where(candidate =>
+                candidate.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                !candidate.IsSpecialName &&
+                !candidate.IsGenericMethodDefinition &&
+                !candidate.ContainsGenericParameters &&
+                IsSupportedMember(candidate, targetFramework)),
+            arguments,
+            argumentSyntax,
+            diagnostics,
+            span,
+            $"method '{target.Type.FullName}.{name}'")!;
+        if (selected is null) return null;
+        var kind = target.IsStatic ? PowerShellClrInvocationKind.StaticMethod : PowerShellClrInvocationKind.InstanceMethod;
+        var resultType = ((MethodInfo)selected).ReturnType;
 
         if (!PowerShellGeneratedTypePolicy.IsSupported(resultType, targetFramework))
             return Reject(diagnostics, "PSB2607", $"CLR invocation returns target-incompatible type '{resultType.FullName}'.", span);
@@ -304,6 +295,54 @@ internal static class PowerShellClrMemberSemanticBinder
             arguments,
             parameters.Select(static parameter => parameter.ParameterType).ToArray(),
             new PowerShellTypeFact(resultType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR overload."));
+    }
+
+    internal static PowerShellBoundExpression? BindConstructor(
+        ParsedSourceDocument document,
+        Ast syntax,
+        Type targetType,
+        ExpressionAst[] argumentSyntax,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        string? targetFramework,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (!PowerShellGeneratedTypePolicy.IsSupported(targetType, targetFramework))
+            return Reject(diagnostics, "PSB2611", $"CLR type '{targetType.FullName}' is not available in the generated project reference set for the requested target.", span);
+
+        var arguments = new PowerShellBoundExpression[argumentSyntax.Length];
+        for (var index = 0; index < argumentSyntax.Length; index++)
+        {
+            var argument = bindExpression(argumentSyntax[index], null);
+            if (argument is null) return null;
+            arguments[index] = argument;
+        }
+        var selected = SelectBest(
+            targetType.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
+                .Where(member => IsSupportedMember(member, targetFramework)),
+            arguments,
+            argumentSyntax,
+            diagnostics,
+            span,
+            $"constructor for '{targetType.FullName}'")!;
+        if (selected is null) return null;
+        if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+            return Reject(diagnostics, "PSB2619", $"CLR constructor invocation '{targetType.FullName}' inside a RuntimeException catch cannot preserve PowerShell runtime-error wrapping.", span);
+
+        var parameters = selected.GetParameters();
+        for (var index = 0; index < arguments.Length; index++)
+            arguments[index] = NormalizeLiteralArgument(arguments[index], argumentSyntax[index], parameters[index].ParameterType);
+
+        return new PowerShellBoundClrInvocationExpression(
+            span,
+            targetType,
+            ".ctor",
+            PowerShellClrInvocationKind.Constructor,
+            null,
+            PowerShellClrReceiverBehavior.None,
+            arguments,
+            parameters.Select(static parameter => parameter.ParameterType).ToArray(),
+            new PowerShellTypeFact(targetType, PowerShellTypeFactProvenance.Inferred, "The semantic binder selected one exact target-compatible CLR constructor."));
     }
 
     private static MethodBase? SelectBest<TMember>(

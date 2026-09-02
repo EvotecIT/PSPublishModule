@@ -68,6 +68,19 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void SdkConformanceRejectsPackageRegistrationOfCompilerOwnedConstruction()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Family = PowerShellCompilationCommandFamily.ClrConstruction;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderConformanceKit().Validate(fixture.Manifest));
+
+        Assert.Contains("compiler-owned CLR construction family", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReaderRejectsRuntimeFreeProviderWithoutSingleValueParameter()
     {
         using var fixture = ProviderFixture.Create();

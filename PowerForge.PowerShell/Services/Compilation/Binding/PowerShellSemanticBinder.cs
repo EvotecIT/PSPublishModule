@@ -89,7 +89,7 @@ internal sealed partial class PowerShellSemanticBinder
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, _commandRegistry)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, runtimeTailOffset);
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandRegistry, runtimeTailOffset);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();

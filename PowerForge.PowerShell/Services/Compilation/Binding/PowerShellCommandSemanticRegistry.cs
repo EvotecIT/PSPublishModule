@@ -207,6 +207,31 @@ internal sealed class PowerShellCommandSemanticRegistry
                 Dependencies = new[] { "System.Management.Automation" }
             }
         };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.construction.new-object",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("New-Object"),
+            Family = PowerShellCompilationCommandFamily.ClrConstruction,
+            CommandName = "New-Object",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "TypeName", Position = 0 },
+                new PowerShellCompilationCommandParameterContract { Name = "ArgumentList", Aliases = new[] { "Args" }, Position = 1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.Terminating,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ConstructClrObject",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
     }
 
     private static PowerShellCompilationCommandProviderContract Stream(

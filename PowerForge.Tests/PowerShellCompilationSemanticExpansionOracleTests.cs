@@ -42,6 +42,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [Theory]
     [InlineData("PowerForge.Semantic/expandable-scalar", "value=42; flag=True")]
     [InlineData("PowerForge.Semantic/member-null-propagation", "True")]
+    [InlineData("PowerForge.Semantic/new-object-clr-construction", "True")]
     [InlineData("PowerForge.Semantic/short-circuit-null-refinement", "True")]
     [InlineData("PowerForge.Semantic/typed-generic-list-invocation", "True")]
     [InlineData("PowerForge.Semantic/try-terminal-output", "True")]
@@ -84,6 +85,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                  {
                      "PowerForge.Semantic/expandable-scalar",
                      "PowerForge.Semantic/member-null-propagation",
+                     "PowerForge.Semantic/new-object-clr-construction",
                      "PowerForge.Semantic/short-circuit-null-refinement",
                      "PowerForge.Semantic/typed-generic-list-invocation",
                      "PowerForge.Semantic/try-terminal-output"

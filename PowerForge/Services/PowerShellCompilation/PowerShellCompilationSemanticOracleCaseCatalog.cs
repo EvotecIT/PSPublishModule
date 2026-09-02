@@ -53,6 +53,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("pipeline-lifecycle", PowerShellCompilationFeatureIds.PipelineLifecycle, expectedValue: "1000");
         yield return Case("function-graph", PowerShellCompilationFeatureIds.FunctionGraph);
         yield return Case("member-null-propagation", PowerShellCompilationFeatureIds.ForSyntax("MemberExpressionAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
+        yield return Case("new-object-clr-construction", PowerShellCompilationFeatureIds.ForCommand("New-Object"), expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("null-seeded-reference-local", PowerShellCompilationFeatureIds.AssignmentTarget, expectedValue: "0|1", expectedTypeName: "System.String");
         yield return Case("typed-generic-list-invocation", PowerShellCompilationFeatureIds.ForSyntax("InvokeMemberExpressionAst"), expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("comment-based-help", PowerShellCompilationFeatureIds.CommentBasedHelp);

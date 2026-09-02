@@ -26,9 +26,14 @@ internal static class PowerShellCommandIslandPolicy
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < statements.Count; index++)
         {
+            var assignmentCommands = statements[index]
+                .FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+                .OfType<CommandAst>()
+                .ToArray();
             if (statements[index] is not AssignmentStatementAst assignment ||
                 IsDiscardAssignment(assignment) ||
-                !assignment.Right.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Any())
+                assignmentCommands.Length == 0 ||
+                assignmentCommands.All(command => IsRuntimeFreeCompilerIntrinsic(command, commandRegistry)))
                 continue;
             if (statements.Take(index).Any(static statement =>
                     statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any()))
@@ -114,7 +119,8 @@ internal static class PowerShellCommandIslandPolicy
             return false;
         var commands = statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>().ToArray();
         if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
-            commands.Any(IsVariableSessionStateCommand))
+            commands.Any(IsVariableSessionStateCommand) ||
+            commands.All(command => IsRuntimeFreeCompilerIntrinsic(command, commandRegistry)))
             return false;
         if (localFunctionNames is not null && commands.Any(command =>
                 command.InvocationOperator == TokenKind.Unknown &&
@@ -221,7 +227,8 @@ internal static class PowerShellCommandIslandPolicy
             .OfType<CommandAst>()
             .ToArray();
         if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
-            commands.Any(IsVariableSessionStateCommand))
+            commands.Any(IsVariableSessionStateCommand) ||
+            commands.All(command => IsRuntimeFreeCompilerIntrinsic(command)))
             return false;
         if (localFunctionNames is not null && commands.Any(command =>
                 command.InvocationOperator == TokenKind.Unknown &&
@@ -429,5 +436,14 @@ internal static class PowerShellCommandIslandPolicy
         return (contract?.Family is PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) &&
                !contract.Stream.Equals("Success", StringComparison.Ordinal);
     }
+
+    private static bool IsRuntimeFreeCompilerIntrinsic(
+        CommandAst command,
+        PowerShellCommandSemanticRegistry? registry = null)
+        => (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName()) is
+           {
+               Status: PowerShellCommandResolutionStatus.Resolved,
+               Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
+           } && PowerShellNewObjectSemanticBinder.IsSupportedShape(command);
 
 }

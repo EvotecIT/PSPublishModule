@@ -22,7 +22,9 @@ public enum PowerShellCompilationCommandFamily
     /// <summary>A separately packaged runtime-free operation whose result is routed to a declared stream.</summary>
     ExternalOperation,
     /// <summary>Read-only discovery against the current PowerShell command table.</summary>
-    CommandDiscovery
+    CommandDiscovery,
+    /// <summary>Compiler-owned normalization of a bounded New-Object shape into exact CLR construction.</summary>
+    ClrConstruction
 }
 
 /// <summary>Success-output shape produced by a command provider.</summary>
