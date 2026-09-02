@@ -80,7 +80,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         string root,
         IProjectBuildProgressReporter? progress,
-        IProjectBuildProgressReporterV2? detailedProgress)
+        IProjectBuildProgressReporterV2? detailedProgress,
+        CancellationToken cancellationToken = default)
     {
         var preflight = ValidatePublishPreflight(projects, spec);
         if (!preflight.Success)
@@ -117,7 +118,9 @@ public sealed partial class DotNetRepositoryReleaseService
             includeSymbols: spec.IncludeSymbols,
             packageOutputPath: string.IsNullOrWhiteSpace(spec.OutputPath)
                 ? null
-                : (Path.IsPathRooted(spec.OutputPath!) ? spec.OutputPath : Path.GetFullPath(Path.Combine(root, spec.OutputPath!))));
+                : (Path.IsPathRooted(spec.OutputPath!) ? spec.OutputPath : Path.GetFullPath(Path.Combine(root, spec.OutputPath!))),
+            progress: progress,
+            cancellationToken: cancellationToken);
         var orderedProjects = publishPlan.OrderedProjects;
         var publishSymbolsSeparately = spec.IncludeSymbols && IsLocalPublishSource(source);
         var packages = GetPackagesForPublish(orderedProjects, publishSymbolsSeparately).ToArray();
