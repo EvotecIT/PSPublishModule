@@ -116,12 +116,13 @@ internal sealed partial class PowerShellSemanticBinder
                     $"Variable '${variable.VariablePath.UserPath}' requires dynamic PowerShell scope or runtime-owned automatic state.",
                     span));
                 return null;
-            case ScriptBlockExpressionAst:
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    PowerShellCompilationFeatureIds.ScriptBlock,
-                    "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-                    span));
-                return null;
+            case ScriptBlockExpressionAst scriptBlock:
+                return PowerShellConstantBooleanDelegateSemanticBinder.Bind(
+                    document,
+                    scriptBlock,
+                    contextualType,
+                    targetFramework,
+                    diagnostics);
             case ConvertExpressionAst conversion when PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion):
                 return PowerShellDictionarySemanticBinder.BindLiteral(
                     document,

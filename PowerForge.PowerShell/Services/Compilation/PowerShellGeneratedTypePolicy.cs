@@ -45,6 +45,36 @@ internal static class PowerShellGeneratedTypePolicy
         return IsSupportedNonGeneric(type, targetFramework);
     }
 
+    internal static bool IsSupportedDelegateSignature(Type type, string? targetFramework = null)
+    {
+        if (!typeof(MulticastDelegate).IsAssignableFrom(type) ||
+            type == typeof(MulticastDelegate) ||
+            type == typeof(Delegate) ||
+            type.ContainsGenericParameters ||
+            !IsSupportedSignatureType(type, targetFramework))
+            return false;
+
+        var invoke = type.GetMethod("Invoke", BindingFlags.Public | BindingFlags.Instance);
+        return invoke is not null &&
+               IsSupportedSignatureType(invoke.ReturnType, targetFramework) &&
+               invoke.GetParameters().All(parameter =>
+                   !parameter.IsOut &&
+                   !parameter.ParameterType.IsByRef &&
+                   IsSupportedSignatureType(parameter.ParameterType, targetFramework));
+    }
+
+    private static bool IsSupportedSignatureType(Type type, string? targetFramework)
+    {
+        if (type.IsByRef || type.IsPointer || type.ContainsGenericParameters)
+            return false;
+        if (type.IsArray)
+            return type.GetArrayRank() == 1 && IsSupportedSignatureType(type.GetElementType()!, targetFramework);
+        if (!type.IsConstructedGenericType)
+            return IsSupportedNonGeneric(type, targetFramework);
+        return IsSupportedNonGeneric(type.GetGenericTypeDefinition(), targetFramework) &&
+               type.GetGenericArguments().All(argument => IsSupportedSignatureType(argument, targetFramework));
+    }
+
     private static bool IsSupportedNonGeneric(Type type, string? targetFramework)
     {
         var location = type.Assembly.Location;

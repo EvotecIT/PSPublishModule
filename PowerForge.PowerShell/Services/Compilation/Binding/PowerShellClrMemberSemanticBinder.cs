@@ -66,7 +66,7 @@ internal static class PowerShellClrMemberSemanticBinder
         var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
                     (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
         var members = target.Type.GetMember(name, MemberTypes.Field | MemberTypes.Property, flags)
-            .Where(member => IsSupportedMember(member, targetFramework))
+            .Where(member => IsWritableSupportedMember(member, targetFramework))
             .Where(static member => member switch
             {
                 PropertyInfo property => property.GetMethod is { IsPublic: true } && property.SetMethod is { IsPublic: true } && property.GetIndexParameters().Length == 0,
@@ -102,7 +102,9 @@ internal static class PowerShellClrMemberSemanticBinder
         }
         var memberType = members[0] is PropertyInfo property ? property.PropertyType : ((FieldInfo)members[0]).FieldType;
         var value = bindExpression(syntax.Right, memberType);
-        if (value is null || !PowerShellGeneratedTypePolicy.IsSupported(memberType, targetFramework) || !PowerShellClrTypeSemantics.CanAssign(memberType, value.Type.ClrType))
+        var supportedMemberType = PowerShellGeneratedTypePolicy.IsSupported(memberType, targetFramework) ||
+                                  PowerShellGeneratedTypePolicy.IsSupportedDelegateSignature(memberType, targetFramework);
+        if (value is null || !supportedMemberType || !PowerShellClrTypeSemantics.CanAssign(memberType, value.Type.ClrType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2618", $"Member assignment value is not assignable to '{memberType.FullName}'.", value?.Span ?? span));
             return null;
@@ -489,6 +491,9 @@ internal static class PowerShellClrMemberSemanticBinder
 
     private static bool IsSupportedMember(MemberInfo member, string? targetFramework)
         => string.IsNullOrWhiteSpace(targetFramework) || PowerShellGeneratedMemberPolicy.IsSupported(member, targetFramework!);
+
+    private static bool IsWritableSupportedMember(MemberInfo member, string? targetFramework)
+        => string.IsNullOrWhiteSpace(targetFramework) || PowerShellGeneratedMemberPolicy.IsWritableSupported(member, targetFramework!);
 
     private static MemberInfo[] GetReadableMembers(Type type, string name, BindingFlags flags, string? targetFramework)
     {

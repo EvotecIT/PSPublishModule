@@ -490,6 +490,14 @@ internal sealed partial class PowerShellTypedLowerer
         {
             PowerShellBoundLiteralExpression literal => new PowerShellLoweredLiteralExpression(literal.Span, literal.Type.ClrType, literal.Value),
             PowerShellBoundVariableExpression variable => new PowerShellLoweredVariableExpression(variable.Span, variable.Type.ClrType, variable.Symbol),
+            PowerShellBoundConstantBooleanDelegateExpression booleanDelegate => new PowerShellLoweredConstantBooleanDelegateExpression(
+                booleanDelegate.Span,
+                booleanDelegate.Type.ClrType,
+                booleanDelegate.ParameterTypes.ToArray(),
+                Enumerable.Range(0, booleanDelegate.ParameterTypes.Length)
+                    .Select(_ => names.Allocate("pf_delegate_argument"))
+                    .ToArray(),
+                booleanDelegate.Value),
             PowerShellBoundRuntimeStateExpression runtime => new PowerShellLoweredRuntimeStateExpression(
                 runtime.Span,
                 runtime.Type.ClrType,

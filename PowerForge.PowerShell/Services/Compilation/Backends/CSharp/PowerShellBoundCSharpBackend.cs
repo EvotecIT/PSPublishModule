@@ -306,6 +306,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
+            PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
             PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => EmitHostedBooleanCommand(hostedBoolean),
@@ -337,6 +338,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredInvocationExpression invocation => EmitLocalInvocation(invocation),
             _ => throw new InvalidOperationException($"Lowered expression '{expression.GetType().Name}' has no C# rendering owner.")
         };
+
+    private static string EmitConstantBooleanDelegate(PowerShellLoweredConstantBooleanDelegateExpression expression)
+    {
+        var parameters = string.Join(", ", expression.ParameterNames);
+        return $"({parameters}) => {(expression.Value ? "true" : "false")}";
+    }
 
     private static string EmitCommandAvailability(PowerShellLoweredCommandAvailabilityExpression discovery)
     {

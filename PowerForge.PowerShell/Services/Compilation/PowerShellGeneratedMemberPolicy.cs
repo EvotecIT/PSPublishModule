@@ -15,7 +15,13 @@ internal static class PowerShellGeneratedMemberPolicy
 
     internal static bool IsSupported(MemberInfo member, string targetFramework)
     {
-        var key = CreateReflectionKey(member);
+        var key = CreateReflectionKey(member, writable: false);
+        return key is not null && GetTargetMembers(targetFramework).Contains(key);
+    }
+
+    internal static bool IsWritableSupported(MemberInfo member, string targetFramework)
+    {
+        var key = CreateReflectionKey(member, writable: true);
         return key is not null && GetTargetMembers(targetFramework).Contains(key);
     }
 
@@ -68,6 +74,13 @@ internal static class PowerShellGeneratedMemberPolicy
                             reader.GetString(field.Name),
                             (field.Attributes & FieldAttributes.Static) != 0,
                             field.DecodeSignature(provider, genericContext: null)));
+                        if ((field.Attributes & (FieldAttributes.InitOnly | FieldAttributes.Literal)) == 0)
+                            members.Add(CreateSimpleKey(
+                                typeName,
+                                "FW",
+                                reader.GetString(field.Name),
+                                (field.Attributes & FieldAttributes.Static) != 0,
+                                field.DecodeSignature(provider, genericContext: null)));
                     }
                     foreach (var propertyHandle in type.GetProperties())
                     {
@@ -87,6 +100,17 @@ internal static class PowerShellGeneratedMemberPolicy
                             reader.GetString(property.Name),
                             (accessor.Attributes & MethodAttributes.Static) != 0,
                             signature.ReturnType));
+                        if (!accessors.Setter.IsNil)
+                        {
+                            var setter = reader.GetMethodDefinition(accessors.Setter);
+                            if ((setter.Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public)
+                                members.Add(CreateSimpleKey(
+                                    typeName,
+                                    "PW",
+                                    reader.GetString(property.Name),
+                                    (setter.Attributes & MethodAttributes.Static) != 0,
+                                    signature.ReturnType));
+                        }
                     }
                 }
             }
@@ -98,7 +122,7 @@ internal static class PowerShellGeneratedMemberPolicy
         return members;
     }
 
-    private static string? CreateReflectionKey(MemberInfo member)
+    private static string? CreateReflectionKey(MemberInfo member, bool writable)
     {
         var useStructuralSignature = member.DeclaringType?.IsConstructedGenericType == true;
         member = NormalizeGenericDeclaringMember(member);
@@ -114,13 +138,13 @@ internal static class PowerShellGeneratedMemberPolicy
                 method is MethodInfo genericMethod ? genericMethod.GetGenericArguments().Length : 0,
                 method.GetParameters().Select(parameter => GetReflectionTypeName(parameter.ParameterType, useStructuralSignature)),
                 method is MethodInfo methodInfo ? GetReflectionTypeName(methodInfo.ReturnType, useStructuralSignature) : typeof(void).FullName!),
-            PropertyInfo property => CreateSimpleKey(
+            PropertyInfo property when !writable || property.SetMethod is { IsPublic: true } => CreateSimpleKey(
                 declaringType!,
-                "P",
+                writable ? "PW" : "P",
                 property.Name,
                 (property.GetMethod ?? property.SetMethod)?.IsStatic == true,
-                GetReflectionTypeName(property.PropertyType, useStructuralSignature)),
-            FieldInfo field => CreateSimpleKey(declaringType!, "F", field.Name, field.IsStatic, GetReflectionTypeName(field.FieldType, useStructuralSignature)),
+                GetReflectionTypeName(property.PropertyType, structural: true)),
+            FieldInfo field when !writable || !field.IsInitOnly && !field.IsLiteral => CreateSimpleKey(declaringType!, writable ? "FW" : "F", field.Name, field.IsStatic, GetReflectionTypeName(field.FieldType, useStructuralSignature)),
             _ => null
         };
     }
