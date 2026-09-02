@@ -123,4 +123,24 @@ internal sealed class PowerShellCommandSemanticResolver
             _ => false
         };
     }
+
+    /// <summary>
+    /// Resolves a compiler-synthesized command contract without applying authored PowerShell
+    /// command precedence. Synthetic stream/error behavior still obtains its provider identity
+    /// through this resolver so the registry never becomes a second semantic decision surface.
+    /// </summary>
+    internal PowerShellCompilationCommandProviderContract? ResolveSynthesizedProvider(
+        string canonicalCommandName,
+        PowerShellCompilationCommandFamily expectedFamily)
+    {
+        if (string.IsNullOrWhiteSpace(canonicalCommandName))
+            throw new ArgumentException("A canonical synthesized command name is required.", nameof(canonicalCommandName));
+
+        var catalog = _registry.Resolve(canonicalCommandName);
+        return catalog.Status == PowerShellCommandResolutionStatus.Resolved &&
+               catalog.Contract!.CommandName.Equals(canonicalCommandName, StringComparison.OrdinalIgnoreCase) &&
+               catalog.Contract.Family == expectedFamily
+            ? catalog.Contract
+            : null;
+    }
 }

@@ -105,7 +105,6 @@ internal sealed partial class PowerShellSemanticBinder
                     symbols,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     capabilities,
-                    _commandRegistry,
                     _commandResolver,
                     localFunctionNames,
                     diagnostics,

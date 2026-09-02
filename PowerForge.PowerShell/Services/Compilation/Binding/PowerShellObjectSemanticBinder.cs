@@ -109,7 +109,6 @@ internal static class PowerShellObjectSemanticBinder
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         PowerShellCompilationCapability capabilities,
-        PowerShellCommandSemanticRegistry commandRegistry,
         PowerShellCommandSemanticResolver commandResolver,
         ISet<string>? localFunctionNames,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
@@ -150,8 +149,10 @@ internal static class PowerShellObjectSemanticBinder
         if (receiver is null || value is null) return true;
         if (receiverBinding.Type.TryGetKnownProperty(propertyName, out _))
         {
-            var errorProvider = commandRegistry.Resolve("Write-Error");
-            if (errorProvider.Status != PowerShellCommandResolutionStatus.Resolved)
+            var errorProvider = commandResolver.ResolveSynthesizedProvider(
+                "Write-Error",
+                PowerShellCompilationCommandFamily.Stream);
+            if (errorProvider is null)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSB2912",
@@ -163,7 +164,7 @@ internal static class PowerShellObjectSemanticBinder
             bound = new PowerShellBoundStreamWriteStatement(
                 PowerShellSourceParser.GetSpan(document, pipeline.Extent),
                 PowerShellStreamCommandKind.Error,
-                errorProvider.Contract!,
+                errorProvider,
                 new PowerShellBoundLiteralExpression(
                     PowerShellSourceParser.GetSpan(document, command.Extent),
                     message,
