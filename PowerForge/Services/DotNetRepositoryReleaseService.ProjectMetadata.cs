@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace PowerForge;
 
@@ -17,55 +16,48 @@ public sealed partial class DotNetRepositoryReleaseService
         if (candidates.Count == 0)
             return new Dictionary<string, ProjectMetadataResolution>(StringComparer.OrdinalIgnoreCase);
 
-        var resolutions = new ProjectMetadataResolution[candidates.Count];
-        var completed = 0;
-        var reportingSync = new object();
+        var progressTotal = candidates.Count * 2;
         progress?.PhaseUpdated(
             ProjectBuildProgressPhase.Plan,
-            completed,
-            candidates.Count,
+            0,
+            progressTotal,
             "Evaluating project metadata");
-        var options = new ParallelOptions
-        {
-            CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = GetProjectPlanningMaxDegree(candidates.Count)
-        };
-
-        Parallel.For(0, candidates.Count, options, index =>
-        {
-            var candidate = candidates[index];
-            var logger = new SynchronizedLogger(_logger, reportingSync);
-            try
+        var resolutions = ResolveProjectPlanningItems(
+            candidates.Count,
+            (index, logger) =>
             {
-                resolutions[index] = new ProjectMetadataResolution(
-                    ResolvePackageId(candidate.Path, candidate.Name, spec, logger),
-                    IsPackable(candidate.Path),
-                    error: null);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                var candidate = candidates[index];
+                try
+                {
+                    return new ProjectMetadataResolution(
+                        ResolvePackageId(candidate.Path, candidate.Name, spec, logger),
+                        IsPackable(candidate.Path),
+                        error: null);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    return new ProjectMetadataResolution(
+                        candidate.Name,
+                        IsPackable(candidate.Path),
+                        ex);
+                }
+            },
+            (index, resolution, completed) =>
             {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                resolutions[index] = new ProjectMetadataResolution(
-                    candidate.Name,
-                    IsPackable(candidate.Path),
-                    ex);
-            }
-
-            lock (reportingSync)
-            {
-                completed++;
+                var candidate = candidates[index];
                 progress?.PhaseUpdated(
                     ProjectBuildProgressPhase.Plan,
                     completed,
-                    candidates.Count,
-                    resolutions[index].Error is null
+                    progressTotal,
+                    resolution.Error is null
                         ? $"{candidate.Name}: metadata evaluated"
                         : $"{candidate.Name}: metadata evaluation failed");
-            }
-        });
+            },
+            cancellationToken);
 
         var failed = resolutions.FirstOrDefault(static resolution => resolution.Error is not null);
         if (failed?.Error is not null)

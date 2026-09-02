@@ -74,6 +74,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 packStrategy,
                 includeSymbols,
                 packageOutputPath,
+                progressCompletedOffset: projects.Count,
+                progressTotalItems: projects.Count + byPackageId.Count,
                 progress,
                 cancellationToken);
             foreach (var entry in plannedDependencies)
