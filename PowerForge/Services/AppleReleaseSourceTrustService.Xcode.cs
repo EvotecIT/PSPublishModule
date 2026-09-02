@@ -499,7 +499,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         string? assemblerWorkingDirectory = null)
     {
         EnsureDirectoryWithinRepository(repositoryRoot, path, name);
-        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot);
+        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot, path, recursive: true);
         var indexEntries = repositoryProof.IndexEntries.Values
             .Where(entry => IsPathAtOrWithin(entry.FullPath, path))
             .ToArray();

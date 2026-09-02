@@ -106,8 +106,9 @@ public sealed class AppleReleaseSourceTrustPerformanceTests
         try
         {
             var paths = Enumerable.Range(0, 600)
-                .Select(index => Path.Combine(root, $"Source{index:D4}.swift"))
+                .Select(index => Path.Combine(root, "Sources", $"Source{index:D4}.swift"))
                 .ToArray();
+            Directory.CreateDirectory(Path.Combine(root, "Sources"));
             foreach (var path in paths)
                 File.WriteAllText(path, "struct Source { }\n");
             RunGit(root, "init", "--quiet");
@@ -128,11 +129,13 @@ public sealed class AppleReleaseSourceTrustPerformanceTests
                 service.EnsureTrackedFile(root, path, "Swift source input");
             service.ValidatePendingGitFilters();
 
-            Assert.InRange(runner.Requests.Count, 1, 8);
+            Assert.InRange(runner.Requests.Count, 1, 16);
             Assert.Single(runner.Requests, request =>
-                request.Arguments.Contains("ls-tree", StringComparer.Ordinal));
+                request.Arguments.Contains("ls-tree", StringComparer.Ordinal) &&
+                request.Arguments.Contains("Sources", StringComparer.Ordinal));
             Assert.Single(runner.Requests, request =>
-                request.Arguments.Contains("--stage", StringComparer.Ordinal));
+                request.Arguments.Contains("--stage", StringComparer.Ordinal) &&
+                request.Arguments.Contains("Sources", StringComparer.Ordinal));
             Assert.Equal(3, runner.Requests.Count(request =>
                 request.Arguments.Contains("check-attr", StringComparer.Ordinal)));
 
@@ -183,6 +186,13 @@ public sealed class AppleReleaseSourceTrustPerformanceTests
             service.ValidatePendingGitFilters();
 
             Assert.InRange(runner.Requests.Count, 1, 5);
+            var proofRequests = runner.Requests.Where(request =>
+                request.Arguments.Contains("ls-tree", StringComparer.Ordinal) ||
+                request.Arguments.Contains("--stage", StringComparer.Ordinal));
+            Assert.Equal(2, proofRequests.Count());
+            Assert.All(proofRequests, request =>
+                Assert.Contains(request.Arguments, argument =>
+                    argument.EndsWith("Source0511.swift", StringComparison.Ordinal)));
             var filterRequest = Assert.Single(runner.Requests, request =>
                 request.Arguments.Contains("check-attr", StringComparer.Ordinal));
             Assert.Single(filterRequest.Arguments, argument =>

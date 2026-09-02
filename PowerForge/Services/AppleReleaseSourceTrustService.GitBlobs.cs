@@ -4,17 +4,24 @@ internal sealed partial class AppleReleaseSourceTrustService
 {
     private sealed class TrackedRepositoryProof
     {
-        internal TrackedRepositoryProof(
-            Dictionary<string, TrackedIndexEntry> indexEntries,
-            Dictionary<string, string> headBlobIds)
+        internal TrackedRepositoryProof(IEqualityComparer<string> comparer)
         {
-            IndexEntries = indexEntries;
-            HeadBlobIds = headBlobIds;
+            IndexEntries = new Dictionary<string, TrackedIndexEntry>(comparer);
+            HeadBlobIds = new Dictionary<string, string>(comparer);
+            LoadedFilePaths = new HashSet<string>(comparer);
+            LoadedDirectoryPaths = new HashSet<string>(comparer);
+            FileProbeCountsByDirectory = new Dictionary<string, int>(comparer);
         }
 
         internal Dictionary<string, TrackedIndexEntry> IndexEntries { get; }
 
         internal Dictionary<string, string> HeadBlobIds { get; }
+
+        internal HashSet<string> LoadedFilePaths { get; }
+
+        internal HashSet<string> LoadedDirectoryPaths { get; }
+
+        internal Dictionary<string, int> FileProbeCountsByDirectory { get; }
     }
 
     private sealed class TrackedIndexEntry
@@ -115,16 +122,50 @@ internal sealed partial class AppleReleaseSourceTrustService
         _pendingGitFilterPaths.Remove(root);
     }
 
-    private TrackedRepositoryProof ReadTrackedRepositoryProof(string repositoryRoot)
+    private TrackedRepositoryProof ReadTrackedRepositoryProof(
+        string repositoryRoot,
+        string requestedPath,
+        bool recursive)
     {
+        const int directoryExpansionThreshold = 4;
         var root = Path.GetFullPath(repositoryRoot);
-        if (_trackedRepositoryProofs.TryGetValue(root, out var cached))
-            return cached;
-
         var comparer = GetPathComparer();
-        var indexEntries = new Dictionary<string, TrackedIndexEntry>(comparer);
-        var stagedEntries = RunGit(root, "ls-files", "--stage", "-v", "-z")
+        if (!_trackedRepositoryProofs.TryGetValue(root, out var proof))
+        {
+            proof = new TrackedRepositoryProof(comparer);
+            _trackedRepositoryProofs.Add(root, proof);
+        }
+
+        var requested = Path.GetFullPath(requestedPath);
+        if (proof.LoadedDirectoryPaths.Any(directory => IsPathAtOrWithin(requested, directory)) ||
+            (!recursive && proof.LoadedFilePaths.Contains(requested)))
+        {
+            return proof;
+        }
+
+        var scope = requested;
+        var loadDirectory = recursive;
+        if (!recursive)
+        {
+            var directory = Path.GetDirectoryName(requested) ?? root;
+            proof.FileProbeCountsByDirectory.TryGetValue(directory, out var probes);
+            probes++;
+            proof.FileProbeCountsByDirectory[directory] = probes;
+            // Keep small graphs exact-path scoped, then amortize repeated sibling
+            // lookups without ever expanding root-level files to the whole repository.
+            if (!comparer.Equals(directory, root) && probes >= directoryExpansionThreshold)
+            {
+                scope = directory;
+                loadDirectory = true;
+            }
+        }
+
+        var relativeScope = FrameworkCompatibility.GetRelativePath(root, scope).Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(relativeScope))
+            relativeScope = ".";
+        var stagedEntries = RunGit(root, "--literal-pathspecs", "ls-files", "--stage", "-v", "-z", "--", relativeScope)
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var seenIndexEntries = new HashSet<string>(comparer);
         foreach (var stagedEntry in stagedEntries)
         {
             var tab = stagedEntry.IndexOf('\t');
@@ -142,18 +183,16 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             var relativePath = stagedEntry.Substring(tab + 1);
             var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
-            if (indexEntries.ContainsKey(fullPath))
+            if (!seenIndexEntries.Add(fullPath))
             {
                 throw new InvalidOperationException(
                     $"Tracked Apple source inputs contain duplicate Git index entries for: {relativePath}");
             }
-            indexEntries.Add(
-                fullPath,
-                new TrackedIndexEntry(fullPath, relativePath, stagedEntry.Substring(0, 1)));
+            proof.IndexEntries[fullPath] =
+                new TrackedIndexEntry(fullPath, relativePath, stagedEntry.Substring(0, 1));
         }
 
-        var headBlobIds = new Dictionary<string, string>(comparer);
-        var headEntries = RunGit(root, "ls-tree", "-r", "-z", "HEAD")
+        var headEntries = RunGit(root, "--literal-pathspecs", "ls-tree", "-r", "-z", "HEAD", "--", relativeScope)
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var headEntry in headEntries)
         {
@@ -164,11 +203,13 @@ internal sealed partial class AppleReleaseSourceTrustService
             if (metadata.Length != 3 || !metadata[1].Equals("blob", StringComparison.Ordinal))
                 continue;
             var fullPath = Path.GetFullPath(Path.Combine(root, headEntry.Substring(tab + 1)));
-            headBlobIds[fullPath] = metadata[2];
+            proof.HeadBlobIds[fullPath] = metadata[2];
         }
 
-        var proof = new TrackedRepositoryProof(indexEntries, headBlobIds);
-        _trackedRepositoryProofs[root] = proof;
+        if (loadDirectory)
+            proof.LoadedDirectoryPaths.Add(scope);
+        else
+            proof.LoadedFilePaths.Add(requested);
         return proof;
     }
 

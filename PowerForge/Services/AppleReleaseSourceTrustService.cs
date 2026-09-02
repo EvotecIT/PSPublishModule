@@ -588,7 +588,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var relative = FrameworkCompatibility.GetRelativePath(repositoryRoot, candidate).Replace('\\', '/');
-        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot);
+        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot, candidate, recursive: false);
         if (!repositoryProof.IndexEntries.TryGetValue(candidate, out var tracked))
             throw new InvalidOperationException($"{name} must be tracked at the exact source commit: {relative}");
         if (HasHiddenGitIndexState(tracked.Tag))
