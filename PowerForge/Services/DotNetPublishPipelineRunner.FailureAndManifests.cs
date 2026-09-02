@@ -325,7 +325,8 @@ public sealed partial class DotNetPublishPipelineRunner
         List<DotNetPublishMsiBuildResult>? msiBuilds,
         IEnumerable<string>? cleanTrackedGeneratedPaths = null,
         IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
-        string? msiReservationOwner = null)
+        string? msiReservationOwner = null,
+        SourceProvenance? verifiedSourceProvenance = null)
     {
         ValidateGeneratedConfigurationInputs(plan);
         var orderedArtefacts = (artefacts ?? new List<DotNetPublishArtefactResult>())
@@ -349,7 +350,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ThenBy(a => a.Style.ToString(), StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.InstallerId, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var provenance = ReadSourceProvenance(
+        var provenance = verifiedSourceProvenance ?? ReadSourceProvenance(
             plan.ProjectRoot,
             EnumerateGeneratedProvenancePaths(
                 plan,

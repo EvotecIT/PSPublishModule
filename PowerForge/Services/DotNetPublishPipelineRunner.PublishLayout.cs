@@ -235,20 +235,7 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         try
         {
-            var nameTemplate = string.IsNullOrWhiteSpace(target.Publish.ZipNameTemplate)
-                ? "{target}-{framework}-{rid}-{style}.zip"
-                : target.Publish.ZipNameTemplate!;
-
-            var zipName = ApplyTemplate(nameTemplate, tokens);
-            if (!zipName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                zipName += ".zip";
-
-            var zipPath = string.IsNullOrWhiteSpace(target.Publish.ZipPath)
-                ? Path.Combine(Path.GetDirectoryName(outputDir)!, zipName)
-                : ResolvePath(plan.ProjectRoot, ApplyTemplate(target.Publish.ZipPath!, tokens));
-
-            if (!plan.AllowOutputOutsideProjectRoot)
-                EnsurePathWithinRoot(plan.ProjectRoot, zipPath, $"Target '{target.Name}' zip path");
+            string zipPath = ResolvePublishZipPath(outputDir, plan, target, tokens);
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(zipPath))!);
             if (File.Exists(zipPath)) File.Delete(zipPath);

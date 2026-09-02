@@ -22,7 +22,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 ? Array.Empty<string>()
                 : new[] { outputDirectory! })
             .Concat(additionalGeneratedPaths ?? Array.Empty<string>())
-            .Concat(hookGeneratedOutputs);
+            .Concat(hookDeclaredOutputs);
         SourceProvenance provenance = ReadSourceProvenance(
             plan.ProjectRoot,
             generatedPaths,

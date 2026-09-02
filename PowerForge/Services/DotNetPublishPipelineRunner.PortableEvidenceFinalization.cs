@@ -6,7 +6,8 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     internal void FinalizePortableEvidence(
         DotNetPublishPlan plan,
-        IReadOnlyList<DotNetPublishArtefactResult> artefacts)
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyDictionary<string, SourceProvenance>? verifiedProvenanceByArtifact = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (artefacts is null) throw new ArgumentNullException(nameof(artefacts));
@@ -74,10 +75,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 artefact.BundleId,
                 archivePayload,
                 sign);
-            SourceProvenance provenance = ReadPortableInventorySourceProvenance(
-                plan,
-                outputDirectory,
-                EnumerateBundleGeneratedArtefactPaths(artefacts));
+            SourceProvenance provenance = verifiedProvenanceByArtifact is not null &&
+                                          verifiedProvenanceByArtifact.TryGetValue(
+                                              BuildArtifactProvenanceKey(artefact),
+                                              out SourceProvenance? verifiedProvenance)
+                ? verifiedProvenance
+                : ReadPortableInventorySourceProvenance(
+                    plan,
+                    outputDirectory,
+                    EnumerateBundleGeneratedArtefactPaths(artefacts));
             string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
             PowerForgePortablePayloadInventory inventory = archivePayload
                 ? PowerForgePortablePayloadInventoryCms.CreateFromArchive(
