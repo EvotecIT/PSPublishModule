@@ -110,6 +110,8 @@ internal static class PowerShellObjectSemanticBinder
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
+        PowerShellCommandSemanticResolver commandResolver,
+        ISet<string>? localFunctionNames,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         out PowerShellBoundStatement? bound)
     {
@@ -120,8 +122,8 @@ internal static class PowerShellObjectSemanticBinder
             pipeline.PipelineElements[1] is not CommandAst command)
             return false;
 
-        var resolution = commandRegistry.Resolve(command.GetCommandName());
-        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved ||
+        var resolution = commandResolver.Resolve(command, localFunctionNames, capabilities);
+        if (!resolution.IsProvider ||
             resolution.Contract!.Family != PowerShellCompilationCommandFamily.ObjectMutation)
             return false;
 

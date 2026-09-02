@@ -118,7 +118,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
         var hybridRoot = CreateDslModule(
             testRoot,
             hybridName,
-            "function Get-ConstantValue { return 42 }; function Get-CurrentYear { return (Get-Date).Year }; Export-ModuleMember -Function Get-ConstantValue, Get-CurrentYear");
+            "function Get-ConstantValue { return 42 }; function Get-CurrentYear { return [int](Get-Date -Format yyyy) }; Export-ModuleMember -Function Get-ConstantValue, Get-CurrentYear");
         var strictRoot = CreateDslModule(
             testRoot,
             strictName,
@@ -126,7 +126,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
         _ = CreateDslModule(
             testRoot,
             rejectedName,
-            "function Get-RejectedValue { return (Get-Date).Year }; Export-ModuleMember -Function Get-RejectedValue");
+            "function Get-RejectedValue { return [int](Get-Date -Format yyyy) }; Export-ModuleMember -Function Get-RejectedValue");
         var hybridStaging = Path.Combine(testRoot, "staging-hybrid");
         var strictStaging = Path.Combine(testRoot, "staging-strict");
         var rejectedStaging = Path.Combine(testRoot, "staging-rejected");

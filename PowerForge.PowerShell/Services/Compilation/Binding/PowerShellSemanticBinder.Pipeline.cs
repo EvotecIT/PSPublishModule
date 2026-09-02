@@ -18,7 +18,9 @@ internal sealed partial class PowerShellSemanticBinder
         result = null;
         if (!PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeProcess(
                 pipeline,
-                _commandRegistry,
+                _commandResolver,
+                functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                capabilities,
                 out var inputSyntax,
                 out var processBlock))
             return false;

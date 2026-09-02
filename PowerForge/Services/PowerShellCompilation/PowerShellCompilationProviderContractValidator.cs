@@ -40,9 +40,11 @@ public static class PowerShellCompilationProviderContractValidator
         if (contract.Adapter.RuntimeFree)
         {
             var compilerOwnedConstruction = contract.Family == PowerShellCompilationCommandFamily.ClrConstruction;
+            var compilerOwnedRuntimeState = contract.Family == PowerShellCompilationCommandFamily.RuntimeState;
             if (contract.Family is not (PowerShellCompilationCommandFamily.Stream or
                     PowerShellCompilationCommandFamily.ExternalOperation or
-                    PowerShellCompilationCommandFamily.ClrConstruction) ||
+                    PowerShellCompilationCommandFamily.ClrConstruction or
+                    PowerShellCompilationCommandFamily.RuntimeState) ||
                 contract.Stream is not ("Success" or "Verbose" or "Debug" or "Warning" or "Information" or "Host" or "Error"))
                 throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must use one supported stream adapter contract.");
             var expectedProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" +
@@ -62,6 +64,22 @@ public static class PowerShellCompilationProviderContractValidator
                     !contract.Parameters.Any(static parameter => parameter.Name.Equals("ArgumentList", StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidOperationException($"Compiler-owned CLR construction provider '{contract.ProviderId}' has an invalid intrinsic contract.");
             }
+            else if (compilerOwnedRuntimeState)
+            {
+                if (!contract.Adapter.Operation.Equals("ReadCurrentLocalDateTime", StringComparison.Ordinal) ||
+                    contract.Stream != "Success" ||
+                    contract.Output != PowerShellCompilationCommandOutput.Projected ||
+                    contract.Cardinality != PowerShellCompilationCommandCardinality.Scalar ||
+                    contract.Errors != PowerShellCompilationCommandErrors.None ||
+                    !contract.Adapter.AotCompatible ||
+                    contract.Adapter.Cancellation != PowerShellCompilationProviderCancellation.NotApplicable ||
+                    contract.Adapter.ProcessIsolationTimeoutSeconds != 0 ||
+                    contract.Adapter.Cleanup != PowerShellCompilationProviderCleanup.NotApplicable ||
+                    contract.Adapter.Dependencies is not { Length: 0 } ||
+                    contract.Adapter.EntryPoint is not null ||
+                    contract.Parameters is not { Length: 0 })
+                    throw new InvalidOperationException($"Compiler-owned runtime-state provider '{contract.ProviderId}' has an invalid intrinsic contract.");
+            }
             else if (contract.Family == PowerShellCompilationCommandFamily.Stream)
             {
                 var expectedOperation = contract.Stream.Equals("Success", StringComparison.Ordinal)
@@ -78,15 +96,19 @@ public static class PowerShellCompilationProviderContractValidator
                 if (contract.Adapter.EntryPoint is null)
                     throw new InvalidOperationException($"Runtime-free external provider '{contract.ProviderId}' requires an executable adapter entry point.");
             }
-            if (requireExecutableEntryPoint && !compilerOwnedConstruction && contract.Adapter.EntryPoint is null)
+            if (requireExecutableEntryPoint && !compilerOwnedConstruction && !compilerOwnedRuntimeState && contract.Adapter.EntryPoint is null)
                 throw new InvalidOperationException($"Runtime-free package provider '{contract.ProviderId}' requires an executable adapter entry point.");
-            if (!compilerOwnedConstruction &&
+            if (!compilerOwnedConstruction && !compilerOwnedRuntimeState &&
                 (contract.Parameters ?? Array.Empty<PowerShellCompilationCommandParameterContract>()).Length != 1)
                 throw new InvalidOperationException($"Runtime-free provider '{contract.ProviderId}' must declare exactly one value parameter shape.");
         }
         else if (contract.Family == PowerShellCompilationCommandFamily.ExternalOperation)
         {
             throw new InvalidOperationException($"External provider '{contract.ProviderId}' must declare a runtime-free executable adapter.");
+        }
+        else if (contract.Family == PowerShellCompilationCommandFamily.RuntimeState)
+        {
+            throw new InvalidOperationException($"Compiler-owned runtime-state provider '{contract.ProviderId}' has an invalid intrinsic contract because it must be runtime-free.");
         }
     }
 
@@ -102,6 +124,8 @@ public static class PowerShellCompilationProviderContractValidator
             throw new InvalidOperationException("Provider contracts require schema, provider, feature, and command identities.");
         if (contract.Family == PowerShellCompilationCommandFamily.ClrConstruction)
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' cannot register the compiler-owned CLR construction family from a package.");
+        if (contract.Family == PowerShellCompilationCommandFamily.RuntimeState)
+            throw new InvalidOperationException($"Provider '{contract.ProviderId}' cannot register the compiler-owned runtime-state family from a package.");
         if (!contract.CompileTimeOnly || contract.MayExecuteSource || contract.MayImportSourceModules)
             throw new InvalidOperationException($"Provider '{contract.ProviderId}' violates the no-execution analysis boundary.");
         if (contract.Adapter is null || string.IsNullOrWhiteSpace(contract.Adapter.Operation))

@@ -193,7 +193,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_StrictBinaryModulePropagatesCommandRegionHostAcrossTypedLocalCall()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Write-Verbose 'detail'; Get-RegionText; " +
+            "function Get-FrontierRegionHelper { [CmdletBinding()] param([int] $Value) Microsoft.PowerShell.Utility\\Write-Verbose 'detail'; Get-RegionText; " +
             "[int] $result = $Value; $result += 1; return $result }; " +
             "function Get-FrontierRegionOuter { [CmdletBinding()] param([int] $Value) return Get-FrontierRegionHelper -Value $Value }",
             ".psm1");

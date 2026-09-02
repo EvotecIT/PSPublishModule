@@ -9,6 +9,7 @@ namespace PowerForge;
 internal sealed partial class PowerShellSemanticBinder
 {
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+    private readonly PowerShellCommandSemanticResolver _commandResolver;
     private readonly PowerShellCompilationSemanticOracleProfile _semanticProfile;
 
     internal PowerShellSemanticBinder()
@@ -29,6 +30,7 @@ internal sealed partial class PowerShellSemanticBinder
     internal PowerShellSemanticBinder(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
     {
         _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        _commandResolver = new PowerShellCommandSemanticResolver(_commandRegistry);
         _semanticProfile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
     }
 
@@ -86,10 +88,10 @@ internal sealed partial class PowerShellSemanticBinder
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
-            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, _commandRegistry)
+            ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, capabilities, _commandResolver)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandRegistry, runtimeTailOffset);
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver, runtimeTailOffset);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
@@ -104,6 +106,8 @@ internal sealed partial class PowerShellSemanticBinder
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     capabilities,
                     _commandRegistry,
+                    _commandResolver,
+                    localFunctionNames,
                     diagnostics,
                     out var objectMutation))
             {
@@ -120,7 +124,8 @@ internal sealed partial class PowerShellSemanticBinder
                     symbols,
                     parametersByName,
                     runtimeTailStart,
-                    _commandRegistry,
+                    _commandResolver,
+                    capabilities,
                     ref index,
                     out var hosted))
             {
@@ -500,7 +505,8 @@ internal sealed partial class PowerShellSemanticBinder
                 out var streamKind,
                 out var messageSyntax,
                 out var streamProvider,
-                _commandRegistry))
+                _commandResolver,
+                functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)))
         {
             var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
@@ -562,8 +568,8 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities);
             if (expression is null) return null;
             var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
-            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions) && !allowNonTerminalSuccessOutput) return null;
-            if (isTerminal && IsLocalFunctionPipeline(pipeline, functions))
+            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions, capabilities) && !allowNonTerminalSuccessOutput) return null;
+            if (isTerminal && IsLocalFunctionPipeline(pipeline, functions, capabilities))
                 return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
             return expression is null
                 ? null
@@ -620,8 +626,16 @@ internal sealed partial class PowerShellSemanticBinder
         return null;
     }
 
-    private static bool IsLocalFunctionPipeline(PipelineAst pipeline, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
-        => pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandAst command && TryGetLocalFunction(command, functions, out _);
+    private bool IsLocalFunctionPipeline(
+        PipelineAst pipeline,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        PowerShellCompilationCapability capabilities)
+        => pipeline.PipelineElements.Count == 1 &&
+           pipeline.PipelineElements[0] is CommandAst command &&
+           _commandResolver.Resolve(
+               command,
+               functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+               capabilities).Origin == PowerShellCommandSemanticOrigin.LocalFunction;
 
     private static bool TryGetLocalFunction(CommandAst command, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, out PowerShellLocalCallSignature target)
     {

@@ -23,7 +23,8 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     ErrorCollection,
     EnvironmentVariable,
     ShouldProcessTarget,
-    ShouldProcessAction
+    ShouldProcessAction,
+    CurrentLocalDateTime
 }
 
 internal static class PowerShellRuntimeStateIntrinsicPolicy
@@ -182,6 +183,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.PSVersion => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
+            PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => typeof(DateTime),
             PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
@@ -220,6 +222,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture => "global::System.Globalization.CultureInfo.CurrentCulture.Name",
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => "global::System.Globalization.CultureInfo.CurrentUICulture.Name",
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => "__whatIfPreference",
+            PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => "global::System.DateTime.Now",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };
 

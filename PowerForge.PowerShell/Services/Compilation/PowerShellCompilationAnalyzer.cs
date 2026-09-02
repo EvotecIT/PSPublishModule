@@ -8,6 +8,7 @@ namespace PowerForge;
 public sealed partial class PowerShellCompilationAnalyzer
 {
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
+    private readonly PowerShellCommandSemanticResolver _commandResolver;
     private readonly string _semanticProfileId;
 
     /// <summary>Creates an analyzer with the built-in deterministic command providers.</summary>
@@ -36,6 +37,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
     {
         _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
+        _commandResolver = new PowerShellCommandSemanticResolver(_commandRegistry);
         _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
     }
 
@@ -300,10 +302,13 @@ public sealed partial class PowerShellCompilationAnalyzer
                     break;
                 case CommandAst command:
                     var commandName = command.GetCommandName();
+                    var semanticResolution = _commandResolver.Resolve(command, localFunctionNames, capabilities);
                     if (command.Parent is PipelineAst mappingPipeline &&
                         PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeProcess(
                             mappingPipeline,
-                            _commandRegistry,
+                            _commandResolver,
+                            localFunctionNames,
+                            capabilities,
                             out _,
                             out _))
                         break;
@@ -313,32 +318,67 @@ public sealed partial class PowerShellCompilationAnalyzer
                         break;
                     if (capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls) &&
                         (command.InvocationOperator == TokenKind.Dot ||
-                         commandName is not null && localFunctionNames?.Contains(commandName) == true))
+                         semanticResolution.Origin == PowerShellCommandSemanticOrigin.LocalFunction))
                         break;
-                    if (_commandRegistry.Resolve(commandName) is
+                    if (semanticResolution is
                         {
-                            Status: PowerShellCommandResolutionStatus.Resolved,
+                            IsProvider: true,
                             Contract.Family: PowerShellCompilationCommandFamily.CommandDiscovery
                         } && PowerShellCommandDiscoverySemanticBinder.IsSupportedBooleanConsumption(command, capabilities))
                         break;
-                    if (_commandRegistry.Resolve(commandName) is
+                    if (semanticResolution is
                         {
-                            Status: PowerShellCommandResolutionStatus.Resolved,
+                            IsProvider: true,
+                            Contract.Family: PowerShellCompilationCommandFamily.RuntimeState
+                        } runtimeState && PowerShellRuntimeStateCommandSemanticBinder.IsSupportedShape(command, runtimeState.Contract!, capabilities))
+                        break;
+                    if (semanticResolution is
+                        {
+                            IsProvider: true,
                             Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
                         } && PowerShellNewObjectSemanticBinder.IsSupportedShape(command))
                         break;
-                    if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(command, capabilities, out _, out _, out _, _commandRegistry) ||
+                    if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(
+                            command,
+                            capabilities,
+                            out _,
+                            out _,
+                            out _,
+                            _commandResolver,
+                            localFunctionNames) ||
                         capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                         (unitRoot is ScriptBlockAst commandBody &&
-                          (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
-                           PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(command, commandBody, localFunctionNames, localVariables, out _) ||
-                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(command, commandBody, localFunctionNames, out _))))
+                          (PowerShellCommandIslandPolicy.TryGetRuntimeRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               localVariables,
+                               capabilities,
+                               _commandResolver,
+                               out _) ||
+                           PowerShellCommandIslandPolicy.TryGetCapturedRuntimeRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               localVariables,
+                               capabilities,
+                               _commandResolver,
+                               out _) ||
+                           PowerShellCommandIslandPolicy.TryGetRuntimeTailRegion(
+                               command,
+                               commandBody,
+                               localFunctionNames,
+                               capabilities,
+                               _commandResolver,
+                               out _))))
                         break;
                     diagnostics.Add(CreateDiagnostic(
                         commandName is null ? PowerShellCompilationDiagnosticCode.DynamicCommandInvocation : PowerShellCompilationDiagnosticCode.CommandInvocation,
                         commandName is null
                             ? "Dynamic command resolution requires the PowerShell runtime."
-                            : $"Command invocation '{commandName}' requires the PowerShell runtime.",
+                            : semanticResolution.Origin == PowerShellCommandSemanticOrigin.PowerShellRuntime
+                                ? $"Command invocation '{commandName}' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command."
+                                : $"Command invocation '{commandName}' requires the PowerShell runtime.",
                         file,
                         command.Extent,
                         commandName is null ? PowerShellCompilationFeatureIds.DynamicCommand : PowerShellCompilationFeatureIds.ForCommand(commandName)));
@@ -390,7 +430,13 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                     unitRoot is ScriptBlockAst discardBody &&
                     PowerShellCommandIslandPolicy.IsDiscardAssignment(discard) &&
-                    PowerShellCommandIslandPolicy.IsRuntimeRegion(discard, discardBody, localFunctionNames, localVariables):
+                    PowerShellCommandIslandPolicy.IsRuntimeRegion(
+                        discard,
+                        discardBody,
+                        localFunctionNames,
+                        localVariables,
+                        capabilities,
+                        _commandResolver):
                     break;
                 case AssignmentStatementAst assignment:
                     var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);

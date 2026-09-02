@@ -8,10 +8,12 @@ internal static class PowerShellCommandStageSemanticBinder
     internal static PowerShellBoundCommandStage Bind(
         ParsedSourceDocument document,
         CommandAst command,
-        PowerShellCommandSemanticRegistry registry)
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
-        var resolution = registry.Resolve(command.GetCommandName());
-        var provider = resolution.Status == PowerShellCommandResolutionStatus.Resolved &&
+        var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
+        var provider = resolution.IsProvider &&
                        IsSupportedByFamilyBinder(command, resolution.Contract!)
             ? resolution.Contract!
             : PowerShellHostedRegionCommandSemanticBinder.CreateContract(command.GetCommandName());
@@ -167,7 +169,9 @@ internal static class PowerShellMappingCommandSemanticBinder
 
     internal static bool TryGetRuntimeFreeProcess(
         PipelineAst pipeline,
-        PowerShellCommandSemanticRegistry registry,
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities,
         out ExpressionAst input,
         out NamedBlockAst processBlock)
     {
@@ -180,8 +184,8 @@ internal static class PowerShellMappingCommandSemanticBinder
             command.Redirections.Count != 0)
             return false;
 
-        var resolution = registry.Resolve(command.GetCommandName());
-        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved ||
+        var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
+        if (!resolution.IsProvider ||
             resolution.Contract!.Family != PowerShellCompilationCommandFamily.Mapping ||
             !resolution.Contract.ProviderId.Equals("powerforge.command.mapping.foreach-object", StringComparison.Ordinal))
             return false;

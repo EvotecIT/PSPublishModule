@@ -338,7 +338,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridBinaryModuleDoesNotCoalesceTailThatMutatesTypedPrefixLocal()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FrontierMutation { [int] $value = 1; $Output = Get-Date; $value = 2; return $value }; " +
+            "function Get-FrontierMutation { [int] $value = 1; $Output = Get-Date -Format o; $value = 2; return $value }; " +
             "Export-ModuleMember -Function Get-FrontierMutation",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

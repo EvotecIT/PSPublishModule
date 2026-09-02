@@ -10,9 +10,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_BinaryModuleBindsBoundedHostedBooleanCommands()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Test-ExistingPath { [CmdletBinding()] param([string] $Path) return [bool](Test-Path -LiteralPath \"FileSystem::$Path\" -EA Ignore) }; " +
+            "function Test-ExistingPath { [CmdletBinding()] param([string] $Path) return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath \"FileSystem::$Path\" -EA Ignore) }; " +
             "function Test-LeafPath { [CmdletBinding()] param([string] $Path) if (Microsoft.PowerShell.Management\\Test-Path -PSPath \"FileSystem::$Path\" -PathType Leaf -ErrorAction Ignore) { return $true }; return $false }; " +
-            "function Test-ValidPath { [CmdletBinding()] param() return [bool](Test-Path -LiteralPath 'FileSystem::proof' -IsValid -ErrorAction Ignore) }",
+            "function Test-ValidPath { [CmdletBinding()] param() return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath 'FileSystem::proof' -IsValid -ErrorAction Ignore) }",
             ".psm1");
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -140,13 +140,13 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Test-BoundPath { [CmdletBinding()] param([string] $Optional) " +
-            "return [bool](Test-Path -LiteralPath ('FileSystem::' + [string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore) }; " +
+            "return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath ('FileSystem::' + [string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore) }; " +
             "function Test-NestedBoundPath { [CmdletBinding(SupportsShouldProcess)] param([string] $Optional) " +
-            "return [bool](Test-Path -LiteralPath ('FileSystem::' + [string]$PSCmdlet.ShouldProcess([string]$PSBoundParameters.ContainsKey('Optional'))) -EA Ignore) }; " +
+            "return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath ('FileSystem::' + [string]$PSCmdlet.ShouldProcess([string]$PSBoundParameters.ContainsKey('Optional'))) -EA Ignore) }; " +
             "function Test-DiscoveredBoundName { [CmdletBinding()] param([string] $Optional) " +
-            "return [bool](Get-Command -Name ([string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore) }; " +
+            "return [bool](Microsoft.PowerShell.Core\\Get-Command -Name ([string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore) }; " +
             "function Test-HostedShouldProcess { [CmdletBinding(SupportsShouldProcess)] param([string] $Optional) " +
-            "return $PSCmdlet.ShouldProcess([string][bool](Test-Path -LiteralPath ('FileSystem::' + [string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore)) }",
+            "return $PSCmdlet.ShouldProcess([string][bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath ('FileSystem::' + [string]$PSBoundParameters.ContainsKey('Optional')) -EA Ignore)) }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -229,10 +229,10 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         using var fixture = ArtifactFixture.Create(
-            "function Test-ExistingPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -EA Ignore) }; " +
-            "function Test-LeafPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -PathType Leaf -ErrorAction Ignore) }; " +
-            "function Test-ContainerPath { [CmdletBinding()] param([string] $TargetLocation) if (Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -PathType Container -EA Ignore) { return $true }; return $false }; " +
-            "function Test-ValidPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -IsValid -EA Ignore) }",
+            "function Test-ExistingPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -EA Ignore) }; " +
+            "function Test-LeafPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -PathType Leaf -ErrorAction Ignore) }; " +
+            "function Test-ContainerPath { [CmdletBinding()] param([string] $TargetLocation) if (Microsoft.PowerShell.Management\\Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -PathType Container -EA Ignore) { return $true }; return $false }; " +
+            "function Test-ValidPath { [CmdletBinding()] param([string] $TargetLocation) return [bool](Microsoft.PowerShell.Management\\Test-Path -LiteralPath \"FileSystem::$TargetLocation\" -IsValid -EA Ignore) }",
             ".psm1");
         var existingFile = Path.Combine(fixture.RootPath, "value.txt");
         File.WriteAllText(existingFile, "value");

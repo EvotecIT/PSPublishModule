@@ -263,7 +263,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "$script:__powerForgeRunspaceId = 'authored-runspace'; " +
             "$script:__powerForgeModule = 'authored-module'; " +
             "$script:__powerForgePreviousOnRemove = 'authored-previous'; " +
-            "function Get-RegionValue { [CmdletBinding()] param([string] $Name) Write-Output 'region'; return $Name }; " +
+            "function Get-RegionValue { [CmdletBinding()] param([string] $Name) Microsoft.PowerShell.Utility\\Write-Output 'region'; return $Name }; " +
             "function Get-AuthoredDispatcherState { return \"$script:__powerForgeRunspaceId|$script:__powerForgeModule|$script:__powerForgePreviousOnRemove\" }; " +
             "Export-ModuleMember -Function Get-RegionValue, Get-AuthoredDispatcherState",
             ".psm1");
@@ -363,7 +363,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-TypedHelp {\n<#\n.SYNOPSIS\nTyped command help.\n#>\nreturn 3\n}; " +
-            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\nreturn (Get-Date).Year\n}; " +
+            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\nreturn [int](Get-Date -Format yyyy)\n}; " +
             "Export-ModuleMember -Function @('Get-TypedHelp', 'Get-RetainedHelp')",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

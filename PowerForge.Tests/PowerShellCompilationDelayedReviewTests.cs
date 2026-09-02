@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModulePreservesMixedConditionalAndLiteralExports()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-DirectValue { return 1 }; function Get-ConditionalValue { return (Get-Date).Year }; " +
+            "function Get-DirectValue { return 1 }; function Get-ConditionalValue { return [int](Get-Date -Format yyyy) }; " +
             "Export-ModuleMember -Function Get-DirectValue; if ($true) { Export-ModuleMember -Function Get-ConditionalValue }",
             ".psm1");
         File.WriteAllText(
@@ -100,7 +100,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModuleHonorsModuleQualifiedExportCommand()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-QualifiedPublic { return 1 }; function Get-QualifiedPrivate { return (Get-Date).Year }; " +
+            "function Get-QualifiedPublic { return 1 }; function Get-QualifiedPrivate { return [int](Get-Date -Format yyyy) }; " +
             "Microsoft.PowerShell.Core\\Export-ModuleMember -Function Get-QualifiedPublic",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

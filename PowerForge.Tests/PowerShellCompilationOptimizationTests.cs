@@ -64,7 +64,7 @@ public sealed class PowerShellCompilationOptimizationTests
     public void SemanticPipelineReportsFusedAndCoalescedHostedCommandWork()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Invoke-Hosted { Get-Item . | Select-Object Name; Get-Date }",
+            "function Invoke-Hosted { Get-Item . | Select-Object Name; Get-Date -Format o }",
             "hosted-regions.psm1");
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },

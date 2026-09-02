@@ -148,8 +148,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_BinaryModuleBindsOnlyBooleanGetCommandDiscovery()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }; " +
-            "function Test-LiteralCommandAvailability { if (Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            "function Test-CommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-LiteralCommandAvailability { if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
             ".psm1");
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -184,7 +184,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_BasicCommandDiscoveryDoesNotPermitOtherHostedRegions()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Test-MixedCommandHost { [bool] $available = Get-Command Get-Command -EA Ignore; $ignored = Get-Date; return $available }",
+            "function Test-MixedCommandHost { [bool] $available = Microsoft.PowerShell.Core\\Get-Command Get-Command -EA Ignore; $ignored = Get-Date -Format o; return $available }",
             ".psm1");
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -198,9 +198,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             diagnostic.Message.Contains("Basic function", StringComparison.Ordinal));
 
         const string helper =
-            "function Invoke-HostedHelper { [CmdletBinding()] param() $ignored = Get-Date }; ";
+            "function Invoke-HostedHelper { [CmdletBinding()] param() $ignored = Get-Date -Format o }; ";
         using var transitiveFixture = ArtifactFixture.Create(
-            helper + "function Test-TransitiveAvailability { Invoke-HostedHelper; return [bool](Get-Command Get-Command -EA Ignore) }",
+            helper + "function Test-TransitiveAvailability { Invoke-HostedHelper; return [bool](Microsoft.PowerShell.Core\\Get-Command Get-Command -EA Ignore) }",
             ".psm1");
         var transitive = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { transitiveFixture.ScriptPath },
@@ -213,7 +213,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             diagnostic.Message.Contains("Basic function 'Test-TransitiveAvailability'", StringComparison.Ordinal));
 
         using var countedFixture = ArtifactFixture.Create(
-            helper + "function Test-CountedAvailability { [CmdletBinding()] param() Invoke-HostedHelper; return [bool](Get-Command Get-Command -EA Ignore) }",
+            helper + "function Test-CountedAvailability { [CmdletBinding()] param() Invoke-HostedHelper; return [bool](Microsoft.PowerShell.Core\\Get-Command Get-Command -EA Ignore) }",
             ".psm1");
         var counted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { countedFixture.ScriptPath },
@@ -230,7 +230,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     public void Transpile_CommandDiscoveryNameParticipatesInFlowAndCallGraphAnalysis()
     {
         using var invalidFixture = ArtifactFixture.Create(
-            "function Test-UnassignedDiscovery { param([bool] $UseName) if ($UseName) { $Name = 'Get-Command' }; return [bool](Get-Command $Name -EA Ignore) }",
+            "function Test-UnassignedDiscovery { param([bool] $UseName) if ($UseName) { $Name = 'Get-Command' }; return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -EA Ignore) }",
             ".psm1");
         var invalid = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { invalidFixture.ScriptPath },
@@ -243,8 +243,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             diagnostic.Message.Contains("may remain unassigned", StringComparison.OrdinalIgnoreCase));
 
         using var nestedFixture = ArtifactFixture.Create(
-            "function Get-DiscoveryName { [CmdletBinding()] param() Write-Verbose 'discovery'; return 'Get-Command' }; " +
-            "function Test-NestedCommandAvailability { [CmdletBinding()] param() return [bool](Get-Command (Get-DiscoveryName) -EA Ignore) }",
+            "function Get-DiscoveryName { [CmdletBinding()] param() Microsoft.PowerShell.Utility\\Write-Verbose 'discovery'; return 'Get-Command' }; " +
+            "function Test-NestedCommandAvailability { [CmdletBinding()] param() return [bool](Microsoft.PowerShell.Core\\Get-Command (Get-DiscoveryName) -EA Ignore) }",
             ".psm1");
         var nested = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { nestedFixture.ScriptPath },
@@ -266,9 +266,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         using var fixture = ArtifactFixture.Create(
-            "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }; " +
-            "function Test-IgnoreCommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction Ignore) }; " +
-            "function Test-LiteralCommandAvailability { if (Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            "function Test-CommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-IgnoreCommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction Ignore) }; " +
+            "function Test-LiteralCommandAvailability { if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
             ".psm1");
         var discoveryModuleRoot = Path.Combine(fixture.RootPath, "modules");
         var discoveryModulePath = Path.Combine(discoveryModuleRoot, "PowerForgeCommandDiscoveryFixture");
@@ -790,77 +790,4 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
 
-    [Fact]
-    public void Build_ForeachWhatIfPreferenceIsNotReplacedByHostState()
-    {
-        using var fixture = ArtifactFixture.Create(
-            "function Get-LoopPreference { [CmdletBinding(SupportsShouldProcess = $true)] param([bool[]] $Flags) " +
-            "foreach ($WhatIfPreference in $Flags) { if ($WhatIfPreference) { return $true } }; return $false }",
-            ".psm1");
-        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.LoopWhatIf", "CompiledPowerShell", "net8.0");
-        var method = Assert.Single(typed.Methods);
-        Assert.False(method.RequiresPowerShellRuntimeState);
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            fixture.OutputPath,
-            "PowerForge.LoopWhatIf",
-            PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
-        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
-            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LoopPreference -Flags $false -WhatIf");
-        Assert.Equal((0, "False", string.Empty), (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
-    }
-
-    [Fact]
-    public void Analyze_VersionTableMemberMutationRemainsOnFallback()
-    {
-        using var fixture = ArtifactFixture.Create(
-            "function Set-VersionState { $PSVersionTable.PSVersion = [Version] '1.0'; return $PSVersionTable.PSVersion }",
-            ".psm1");
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-            fixture.ScriptPath,
-            PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
-        var function = Assert.Single(Assert.Single(plan.Files).Units);
-
-        Assert.False(function.IsCompilable);
-        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
-    }
-
-    [Theory]
-    [InlineData("$env:POWERFORGE_RUNTIME_STATE_PROOF = 'changed'; return $env:POWERFORGE_RUNTIME_STATE_PROOF")]
-    [InlineData("$script:Cache = @{ Name = 'changed' }; return $script:Cache")]
-    [InlineData("$global:Preference = 'changed'; return $global:Preference")]
-    public void Analyze_RuntimeOwnedScopeMutationFailsClosed(string body)
-    {
-        using var fixture = ArtifactFixture.Create($"function Set-RuntimeOwnedState {{ {body} }}", ".psm1");
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-            fixture.ScriptPath,
-            PowerShellCompilationMode.Strict,
-            targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
-        var function = Assert.Single(Assert.Single(plan.Files).Units);
-
-        Assert.False(function.IsCompilable);
-        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.RuntimeScope);
-    }
-
-    [Fact]
-    public void Analyze_ErrorSnapshotMutationFailsClosed()
-    {
-        using var fixture = ArtifactFixture.Create("function Clear-Errors { $Error.Clear(); return $Error.Count }", ".psm1");
-        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-            fixture.ScriptPath,
-            PowerShellCompilationMode.Strict,
-            targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
-        var function = Assert.Single(Assert.Single(plan.Files).Units);
-
-        Assert.False(function.IsCompilable);
-        Assert.Contains(function.Diagnostics, static diagnostic => diagnostic.Message.Contains("read-only invocation snapshot", StringComparison.Ordinal));
-    }
 }

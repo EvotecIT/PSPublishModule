@@ -89,6 +89,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     {
         using var providerFixture = ProviderFixture.Create();
         var provider = CreateProcessIsolatedProvider();
+        provider.Adapter.ProcessIsolationTimeoutSeconds = 5;
         providerFixture.Manifest.Providers = new[] { provider };
         var packagePath = providerFixture.PackagePath("process-isolated.nupkg");
         var resolution = providerFixture.BuildPackage("process-isolated.nupkg");

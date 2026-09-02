@@ -102,6 +102,7 @@ internal static class PowerShellLoweredCommandProviderCollector
         switch (expression)
         {
             case PowerShellLoweredRuntimeStateExpression runtime:
+                if (runtime.Provider is not null) yield return runtime.Provider;
                 foreach (var argument in runtime.Arguments)
                 foreach (var provider in Enumerate(argument))
                     yield return provider;

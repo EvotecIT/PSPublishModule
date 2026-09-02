@@ -26,7 +26,9 @@ public enum PowerShellCompilationCommandFamily
     /// <summary>Compiler-owned normalization of a bounded New-Object shape into exact CLR construction.</summary>
     ClrConstruction,
     /// <summary>A scalar Boolean query whose provider semantics remain owned by the current PowerShell host.</summary>
-    HostedBooleanQuery
+    HostedBooleanQuery,
+    /// <summary>Compiler-owned projection of one bounded PowerShell runtime value into an exact CLR value.</summary>
+    RuntimeState
 }
 
 /// <summary>Success-output shape produced by a command provider.</summary>

@@ -18,18 +18,18 @@ public sealed class PowerShellCompilationCommandIslandTests
             function Get-IslandValue {
                 [CmdletBinding()]
                 param([string] $Name)
-                Write-Verbose -Message 'verbose-record'
-                Write-Debug -Message 'debug-record'
-                Write-Warning -Message 'warning-record'
-                Write-Output 'region-one'
-                Write-Output $Name
+                Microsoft.PowerShell.Utility\Write-Verbose -Message 'verbose-record'
+                Microsoft.PowerShell.Utility\Write-Debug -Message 'debug-record'
+                Microsoft.PowerShell.Utility\Write-Warning -Message 'warning-record'
+                Microsoft.PowerShell.Utility\Write-Output 'region-one'
+                Microsoft.PowerShell.Utility\Write-Output $Name
                 return $Name
             }
 
             function Get-PipelineIsland {
                 [CmdletBinding()]
                 param([string] $Name)
-                $Name | ForEach-Object { $_.ToUpperInvariant() }
+                $Name | Microsoft.PowerShell.Core\ForEach-Object { $_.ToUpperInvariant() }
             }
             """);
 

@@ -217,7 +217,9 @@ internal sealed partial class PowerShellSemanticBinder
                     functions,
                     capabilities,
                     diagnostics);
-            case CommandAst command when TryGetLocalFunction(command, functions, out var target):
+            case CommandAst command when
+                ResolveCommand(command, functions, capabilities).Origin == PowerShellCommandSemanticOrigin.LocalFunction &&
+                TryGetLocalFunction(command, functions, out var target):
                 return PowerShellLocalCallSemanticBinder.Bind(
                     document,
                     command,
@@ -227,9 +229,9 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case CommandAst command when
-                _commandRegistry.Resolve(command.GetCommandName()) is
+                ResolveCommand(command, functions, capabilities) is
                 {
-                    Status: PowerShellCommandResolutionStatus.Resolved,
+                    IsProvider: true,
                     Contract.Family: PowerShellCompilationCommandFamily.CommandDiscovery
                 } discovery:
                 return PowerShellCommandDiscoverySemanticBinder.Bind(
@@ -241,9 +243,9 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case CommandAst command when
-                _commandRegistry.Resolve(command.GetCommandName()) is
+                ResolveCommand(command, functions, capabilities) is
                 {
-                    Status: PowerShellCommandResolutionStatus.Resolved,
+                    IsProvider: true,
                     Contract.Family: PowerShellCompilationCommandFamily.HostedBooleanQuery
                 } hostedBoolean:
                 return PowerShellHostedBooleanCommandSemanticBinder.Bind(
@@ -255,9 +257,23 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case CommandAst command when
-                _commandRegistry.Resolve(command.GetCommandName()) is
+                ResolveCommand(command, functions, capabilities) is
                 {
-                    Status: PowerShellCommandResolutionStatus.Resolved,
+                    IsProvider: true,
+                    Contract.Family: PowerShellCompilationCommandFamily.RuntimeState
+                } runtimeStateCommand:
+                return PowerShellRuntimeStateCommandSemanticBinder.Bind(
+                    document,
+                    command,
+                    runtimeStateCommand.Contract!,
+                    targetFramework,
+                    _semanticProfile.ProfileId,
+                    capabilities,
+                    diagnostics);
+            case CommandAst command when
+                ResolveCommand(command, functions, capabilities) is
+                {
+                    IsProvider: true,
                     Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
                 } construction:
                 return PowerShellNewObjectSemanticBinder.Bind(
@@ -269,19 +285,21 @@ internal sealed partial class PowerShellSemanticBinder
                     diagnostics);
             case CommandAst command:
                 var commandName = command.GetCommandName();
-                var commandResolution = _commandRegistry.Resolve(commandName);
-                var featureId = commandResolution.Status == PowerShellCommandResolutionStatus.Resolved
+                var commandResolution = ResolveCommand(command, functions, capabilities);
+                var featureId = commandResolution.Contract is not null
                     ? commandResolution.Contract!.FeatureId
                     : commandName is null
                         ? PowerShellCompilationFeatureIds.DynamicCommand
                         : PowerShellCompilationFeatureIds.ForCommand(commandName);
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     featureId,
-                    commandResolution.Status == PowerShellCommandResolutionStatus.Ambiguous
+                    commandResolution.Origin == PowerShellCommandSemanticOrigin.Ambiguous
                         ? $"Command invocation '{commandName}' is ambiguous across registered semantic providers: {string.Join(", ", commandResolution.Candidates.Select(static contract => contract.ProviderId))}."
-                        : commandName is null
+                        : commandResolution.Origin == PowerShellCommandSemanticOrigin.Dynamic
                         ? "Dynamic command invocation requires PowerShell runtime command discovery."
-                        : commandResolution.Status == PowerShellCommandResolutionStatus.Resolved
+                        : commandResolution.Origin == PowerShellCommandSemanticOrigin.PowerShellRuntime
+                            ? $"Command invocation '{commandName}' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command."
+                        : commandResolution.IsProvider
                             ? $"Command invocation '{commandName}' is owned by semantic provider '{commandResolution.Contract!.ProviderId}' and requires its {commandResolution.Contract.Family} binding context."
                             : $"Command invocation '{commandName}' requires a registered semantic provider or a hosted PowerShell command region.",
                     span));
@@ -291,4 +309,13 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
         }
     }
+
+    private PowerShellCommandInvocationResolution ResolveCommand(
+        CommandAst command,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        PowerShellCompilationCapability capabilities)
+        => _commandResolver.Resolve(
+            command,
+            functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            capabilities);
 }

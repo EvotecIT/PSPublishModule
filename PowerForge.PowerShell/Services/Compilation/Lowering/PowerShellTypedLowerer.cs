@@ -496,7 +496,8 @@ internal sealed partial class PowerShellTypedLowerer
                 runtime.Kind,
                 runtime.TargetFramework,
                 runtime.SemanticProfileId,
-                runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray()),
+                runtime.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
+                runtime.Provider),
             PowerShellBoundCommandAvailabilityExpression discovery => new PowerShellLoweredCommandAvailabilityExpression(
                 discovery.Span,
                 LowerExpression(discovery.Name, functions, names, targetCapabilities),

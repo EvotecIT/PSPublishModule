@@ -10,7 +10,7 @@ internal sealed partial class PowerShellSemanticBinder
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
-        PowerShellCommandSemanticRegistry commandRegistry,
+        PowerShellCommandSemanticResolver commandResolver,
         int? excludedTailOffset = null)
     {
         var locals = new List<PowerShellBoundLocal>();
@@ -32,9 +32,9 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             if (symbols.ContainsKey(name)) continue;
             var span = PowerShellSourceParser.GetSpan(document, variable.Extent);
-            var type = ResolveAssignmentType(assignment, functions, capabilities, commandRegistry);
+            var type = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
             if (type.Provenance == PowerShellTypeFactProvenance.Unknown &&
-                TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, commandRegistry, out var inferred))
+                TryInferNullSeededReferenceType(name, assignment, assignments, functions, capabilities, commandResolver, out var inferred))
                 type = inferred;
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/local/" + name);
             var local = new PowerShellBoundLocal(symbol, type);
@@ -82,7 +82,7 @@ internal sealed partial class PowerShellSemanticBinder
         AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
-        PowerShellCommandSemanticRegistry commandRegistry)
+        PowerShellCommandSemanticResolver commandResolver)
     {
         var expression = UnwrapExpression(assignment.Right);
         if (PowerShellCommentHelpSemanticBinder.TryInferType(expression, functions, capabilities, out var helpType))
@@ -123,10 +123,18 @@ internal sealed partial class PowerShellSemanticBinder
             memberName.Equals("new", StringComparison.OrdinalIgnoreCase) &&
             constructedType.TypeName.GetReflectionType() is { } constructorType)
             return new PowerShellTypeFact(constructorType, PowerShellTypeFactProvenance.Inferred, "The assignment invokes one statically named CLR constructor.");
+        if (expression is CommandAst runtimeStateCommand &&
+            PowerShellRuntimeStateCommandSemanticBinder.TryGetResultType(
+                runtimeStateCommand,
+                commandResolver,
+                functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                capabilities,
+                out var runtimeStateType))
+            return new PowerShellTypeFact(runtimeStateType, PowerShellTypeFactProvenance.Inferred, "The assignment uses one bounded runtime-state command provider.");
         if (expression is CommandAst command &&
-            commandRegistry.Resolve(command.GetCommandName()) is
+            commandResolver.Resolve(command, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities) is
             {
-                Status: PowerShellCommandResolutionStatus.Resolved,
+                IsProvider: true,
                 Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
             } &&
             PowerShellNewObjectSemanticBinder.TryGetConstructionShape(command, out var commandType, out _))
@@ -142,7 +150,7 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyList<AssignmentStatementAst> assignments,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         PowerShellCompilationCapability capabilities,
-        PowerShellCommandSemanticRegistry commandRegistry,
+        PowerShellCommandSemanticResolver commandResolver,
         out PowerShellTypeFact type)
     {
         type = PowerShellTypeFact.Unknown;
@@ -155,7 +163,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (variable is null || !variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
             if (!assignment.Operator.ToString().Equals("Equals", StringComparison.Ordinal)) return false;
             if (IsNullAssignment(assignment)) continue;
-            var candidate = ResolveAssignmentType(assignment, functions, capabilities, commandRegistry);
+            var candidate = ResolveAssignmentType(assignment, functions, capabilities, commandResolver);
             if (candidate.Provenance == PowerShellTypeFactProvenance.Unknown ||
                 candidate.ClrType == typeof(object) ||
                 candidate.ClrType.IsValueType ||

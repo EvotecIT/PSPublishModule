@@ -12,7 +12,8 @@ internal static class PowerShellHostedStatementBinder
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellBoundParameter> parameters,
         int runtimeTailStart,
-        PowerShellCommandSemanticRegistry commandRegistry,
+        PowerShellCommandSemanticResolver commandResolver,
+        PowerShellCompilationCapability capabilities,
         ref int index,
         out PowerShellBoundStatement? bound)
     {
@@ -26,7 +27,9 @@ internal static class PowerShellHostedStatementBinder
                 authoredStatements.Skip(index).ToArray(),
                 available,
                 parameters,
-                commandRegistry);
+                commandResolver,
+                localFunctionNames,
+                capabilities);
             index = authoredStatements.Length;
             return true;
         }
@@ -36,6 +39,8 @@ internal static class PowerShellHostedStatementBinder
                 body,
                 localFunctionNames,
                 allowedNames,
+                capabilities,
+                commandResolver,
                 out var captured))
         {
             bound = PowerShellCommandRegionSemanticBinder.BindCapture(
@@ -43,10 +48,12 @@ internal static class PowerShellHostedStatementBinder
                 captured,
                 GetCaptureSymbols(available, symbols, captured),
                 parameters,
-                commandRegistry);
+                commandResolver,
+                localFunctionNames,
+                capabilities);
             return true;
         }
-        if (!PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, body, localFunctionNames, allowedNames, commandRegistry))
+        if (!PowerShellCommandIslandPolicy.IsRuntimeRegion(statement, body, localFunctionNames, allowedNames, capabilities, commandResolver))
             return false;
 
         var region = new List<StatementAst> { statement };
@@ -56,9 +63,17 @@ internal static class PowerShellHostedStatementBinder
                    body,
                    localFunctionNames,
                    allowedNames,
-                   commandRegistry))
+                   capabilities,
+                   commandResolver))
             region.Add(authoredStatements[++index]);
-        bound = PowerShellCommandRegionSemanticBinder.BindRegion(document, region, available, parameters, commandRegistry);
+        bound = PowerShellCommandRegionSemanticBinder.BindRegion(
+            document,
+            region,
+            available,
+            parameters,
+            commandResolver,
+            localFunctionNames,
+            capabilities);
         return true;
     }
 

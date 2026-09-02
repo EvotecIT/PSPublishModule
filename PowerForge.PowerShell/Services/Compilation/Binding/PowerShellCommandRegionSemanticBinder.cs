@@ -9,7 +9,9 @@ internal static class PowerShellCommandRegionSemanticBinder
         IReadOnlyList<StatementAst> statements,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellBoundParameter> parameters,
-        PowerShellCommandSemanticRegistry commandRegistry)
+        PowerShellCommandSemanticResolver commandResolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
         var arguments = BindArguments(statements, symbols, parameters);
         var source = CreateParameterBlock(arguments, statements) + Environment.NewLine +
@@ -20,7 +22,12 @@ internal static class PowerShellCommandRegionSemanticBinder
             var last = PowerShellSourceParser.GetSpan(document, statements[statements.Count - 1].Extent);
             span = new SourceSpan(span.DocumentId, span.StartOffset, last.EndOffset, span.StartLine, span.StartColumn, last.EndLine, last.EndColumn);
         }
-        return new PowerShellBoundCommandRegionStatement(span, source, arguments, BindStages(document, statements, commandRegistry), statements.Count);
+        return new PowerShellBoundCommandRegionStatement(
+            span,
+            source,
+            arguments,
+            BindStages(document, statements, commandResolver, localFunctionNames, capabilities),
+            statements.Count);
     }
 
     internal static PowerShellBoundCommandCaptureStatement BindCapture(
@@ -28,7 +35,9 @@ internal static class PowerShellCommandRegionSemanticBinder
         AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellBoundParameter> parameters,
-        PowerShellCommandSemanticRegistry commandRegistry)
+        PowerShellCommandSemanticResolver commandResolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
         var targetSyntax = (VariableExpressionAst)((ConvertExpressionAst)assignment.Left).Child;
         var target = symbols[targetSyntax.VariablePath.UserPath];
@@ -41,7 +50,7 @@ internal static class PowerShellCommandRegionSemanticBinder
             ((ConvertExpressionAst)assignment.Left).StaticType,
             source,
             arguments,
-            BindStages(document, referenced, commandRegistry));
+            BindStages(document, referenced, commandResolver, localFunctionNames, capabilities));
     }
 
     private static PowerShellBoundCommandRegionArgument[] BindArguments<TAst>(
@@ -98,14 +107,16 @@ internal static class PowerShellCommandRegionSemanticBinder
     private static PowerShellBoundCommandStage[] BindStages<TAst>(
         ParsedSourceDocument document,
         IEnumerable<TAst> syntax,
-        PowerShellCommandSemanticRegistry commandRegistry)
+        PowerShellCommandSemanticResolver commandResolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
         where TAst : Ast
         => syntax.SelectMany(static item => item.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true))
             .Cast<CommandAst>()
             .OrderBy(static command => command.Extent.StartOffset)
             .Select(command =>
             {
-                return PowerShellCommandStageSemanticBinder.Bind(document, command, commandRegistry);
+                return PowerShellCommandStageSemanticBinder.Bind(document, command, commandResolver, localFunctionNames, capabilities);
             })
             .ToArray();
 }

@@ -13,6 +13,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Equal(8, (int)PowerShellCompilationCommandFamily.CommandDiscovery);
         Assert.Equal(9, (int)PowerShellCompilationCommandFamily.ClrConstruction);
         Assert.Equal(10, (int)PowerShellCompilationCommandFamily.HostedBooleanQuery);
+        Assert.Equal(11, (int)PowerShellCompilationCommandFamily.RuntimeState);
     }
 
     [Theory]
@@ -25,6 +26,8 @@ public sealed class PowerShellCommandSemanticRegistryTests
     [InlineData("Microsoft.PowerShell.Core\\Get-Command", "powerforge.command.discovery.get-command")]
     [InlineData("Test-Path", "powerforge.command.hosted-boolean.test-path")]
     [InlineData("Microsoft.PowerShell.Management\\Test-Path", "powerforge.command.hosted-boolean.test-path")]
+    [InlineData("Get-Date", "powerforge.command.runtime-state.get-date")]
+    [InlineData("Microsoft.PowerShell.Utility\\Get-Date", "powerforge.command.runtime-state.get-date")]
     [InlineData("New-Object", "powerforge.command.construction.new-object")]
     [InlineData("Microsoft.PowerShell.Utility\\New-Object", "powerforge.command.construction.new-object")]
     public void DefaultRegistryResolvesCanonicalAliasesAndModuleQualification(string commandName, string providerId)
@@ -49,6 +52,24 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Equal(new[] { "EA" }, errorAction.Aliases);
         Assert.DoesNotContain(provider.Parameters, static parameter => parameter.Name == "Path");
         Assert.Equal(PowerShellCompilationCommandErrors.None, provider.Errors);
+    }
+
+    [Fact]
+    public void RuntimeStateGetDateContractIsRuntimeFreeAndArgumentless()
+    {
+        var provider = PowerShellCommandSemanticRegistry.Default.Resolve("Get-Date").Contract!;
+
+        Assert.Equal(PowerShellCompilationCommandFamily.RuntimeState, provider.Family);
+        Assert.Empty(provider.Parameters);
+        Assert.Empty(provider.Aliases);
+        Assert.Equal(PowerShellCompilationCommandOutput.Projected, provider.Output);
+        Assert.Equal(PowerShellCompilationCommandCardinality.Scalar, provider.Cardinality);
+        Assert.Equal(PowerShellCompilationCommandErrors.None, provider.Errors);
+        Assert.Equal("ReadCurrentLocalDateTime", provider.Adapter.Operation);
+        Assert.True(provider.Adapter.RuntimeFree);
+        Assert.True(provider.Adapter.AotCompatible);
+        Assert.Empty(provider.Adapter.Dependencies);
+        Assert.Null(provider.Adapter.EntryPoint);
     }
 
     [Fact]
@@ -119,6 +140,20 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Contains("compile-time-only", unsafeError.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(PowerShellCompilationCommandFamily.ClrConstruction)]
+    [InlineData(PowerShellCompilationCommandFamily.RuntimeState)]
+    public void ExtensionsCannotRegisterCompilerOwnedFamilies(PowerShellCompilationCommandFamily family)
+    {
+        var extension = Contract("provider.compiler-owned", "Get-CompilerOwned", "Compiler.Owned");
+        extension.Family = family;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCommandSemanticRegistry.Create(new[] { extension }));
+
+        Assert.Contains("cannot extend compiler-owned command family", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RuntimeFreeProviderRejectsMismatchedOperationProfileAndUnlockedDependencies()
     {
@@ -141,6 +176,47 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Contains("built-in provider", dependencyError.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("operation")]
+    [InlineData("stream")]
+    [InlineData("output")]
+    [InlineData("cardinality")]
+    [InlineData("errors")]
+    [InlineData("aot")]
+    [InlineData("runtime-free")]
+    [InlineData("cancellation")]
+    [InlineData("timeout")]
+    [InlineData("cleanup")]
+    [InlineData("dependencies")]
+    [InlineData("entrypoint")]
+    [InlineData("parameters")]
+    public void RuntimeStateProviderRejectsEveryMalformedIntrinsicContract(string mutation)
+    {
+        var provider = RuntimeStateContract();
+        switch (mutation)
+        {
+            case "operation": provider.Adapter.Operation = "ReadAnotherValue"; break;
+            case "stream": provider.Stream = "Information"; break;
+            case "output": provider.Output = PowerShellCompilationCommandOutput.Unknown; break;
+            case "cardinality": provider.Cardinality = PowerShellCompilationCommandCardinality.Collection; break;
+            case "errors": provider.Errors = PowerShellCompilationCommandErrors.Terminating; break;
+            case "aot": provider.Adapter.AotCompatible = false; break;
+            case "runtime-free": provider.Adapter.RuntimeFree = false; break;
+            case "cancellation": provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative; break;
+            case "timeout": provider.Adapter.ProcessIsolationTimeoutSeconds = 1; break;
+            case "cleanup": provider.Adapter.Cleanup = PowerShellCompilationProviderCleanup.Deterministic; break;
+            case "dependencies": provider.Adapter.Dependencies = new[] { "Another.Dependency" }; break;
+            case "entrypoint": provider.Adapter.EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint(); break;
+            case "parameters": provider.Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Value", Position = 0 } }; break;
+            default: throw new InvalidOperationException($"Unknown mutation '{mutation}'.");
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(provider, requireExecutableEntryPoint: false));
+
+        Assert.Contains("invalid intrinsic contract", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void UnqualifiedConflictsAreAmbiguousButQualifiedCommandsRemainDeterministic()
     {
@@ -160,7 +236,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void HostedPipelineCarriesProviderContractsAndExplicitPipelineSymbolsThroughLowering()
     {
         var source = "function Get-Pipeline { param([object[]] $InputObject) " +
-                     "$InputObject | Where-Object { $_ -ne $null } | ForEach-Object { $PSItem } | Select-Object -First 1 | Sort-Object }";
+                     "$InputObject | Microsoft.PowerShell.Core\\Where-Object { $_ -ne $null } | Microsoft.PowerShell.Core\\ForEach-Object { $PSItem } | Microsoft.PowerShell.Utility\\Select-Object -First 1 | Microsoft.PowerShell.Utility\\Sort-Object }";
         var path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "pipeline.ps1");
         var document = PowerShellSourceParser.Parse(source, path);
 
@@ -227,7 +303,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void RuntimeFreeStreamFamiliesLowerToCompleteClrSinkContracts()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-AllStreams { Write-Output 42; Write-Verbose 'verbose'; Write-Debug 'debug'; Write-Warning 'warning'; Write-Information 'information'; Write-Host 'host'; Write-Error 'error' }",
+            "function Write-AllStreams { Microsoft.PowerShell.Utility\\Write-Output 42; Microsoft.PowerShell.Utility\\Write-Verbose 'verbose'; Microsoft.PowerShell.Utility\\Write-Debug 'debug'; Microsoft.PowerShell.Utility\\Write-Warning 'warning'; Microsoft.PowerShell.Utility\\Write-Information 'information'; Microsoft.PowerShell.Utility\\Write-Host 'host'; Microsoft.PowerShell.Utility\\Write-Error 'error' }",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "streams.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -249,7 +325,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void RuntimeFreeStreamProviderAcceptsProvablyNonEmptyExpandedMessage()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-Proof { param([int] $Value) Write-Verbose \"Current value: $Value\" }",
+            "function Write-Proof { param([int] $Value) Microsoft.PowerShell.Utility\\Write-Verbose \"Current value: $Value\" }",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "expanded-stream.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -266,7 +342,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void RuntimeFreeStreamProviderRejectsExpandedMessageWithoutLiteralContent()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-Proof { param([string] $Value) Write-Verbose \"$Value\" }",
+            "function Write-Proof { param([string] $Value) Microsoft.PowerShell.Utility\\Write-Verbose \"$Value\" }",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "empty-expanded-stream.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -293,7 +369,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Equal(expectedParameter, parameter.Name);
 
         var document = PowerShellSourceParser.Parse(
-            $"function Write-Proof {{ {invocation} }}",
+            $"function Write-Proof {{ Microsoft.PowerShell.Utility\\{invocation} }}",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", commandName + ".ps1"));
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
@@ -308,7 +384,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
     public void RuntimeFreeStreamProviderRejectsAnotherCommandsNamedParameterShape()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-Proof { Write-Output -Message 42 }",
+            "function Write-Proof { Microsoft.PowerShell.Utility\\Write-Output -Message 42 }",
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "CommandRegistry", "wrong-parameter.ps1"));
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
@@ -354,6 +430,27 @@ public sealed class PowerShellCommandSemanticRegistryTests
             Adapter = new PowerShellCompilationCommandAdapterContract
             {
                 Operation = "WriteInformation",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+
+    private static PowerShellCompilationCommandProviderContract RuntimeStateContract()
+        => new()
+        {
+            ProviderId = "tests.runtime-state.current-local-date",
+            ProviderVersion = "1.0",
+            FeatureId = "tests.command.current-local-date",
+            Family = PowerShellCompilationCommandFamily.RuntimeState,
+            CommandName = "Get-CurrentLocalDate",
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ReadCurrentLocalDateTime",
                 SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
                 RuntimeFree = true,
                 AotCompatible = true

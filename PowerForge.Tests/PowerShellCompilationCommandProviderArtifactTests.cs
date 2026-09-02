@@ -99,7 +99,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Fact]
     public void Build_StrictBinaryModulePreservesWriteHostInformationRecordIdentity()
     {
-        using var fixture = ArtifactFixture.Create("function Write-HostProof { [CmdletBinding()] param() Write-Host -Object 'host-proof' }", ".psm1");
+        using var fixture = ArtifactFixture.Create("function Write-HostProof { [CmdletBinding()] param() Microsoft.PowerShell.Utility\\Write-Host -Object 'host-proof' }", ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -121,7 +121,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-SelectedValue { [CmdletBinding()] param([object[]] $InputObject) " +
-            "$InputObject | Where-Object { $_ -ne $null } | Select-Object -First 1 }");
+            "$InputObject | Microsoft.PowerShell.Core\\Where-Object { $_ -ne $null } | Microsoft.PowerShell.Utility\\Select-Object -First 1 }");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,

@@ -10,7 +10,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridModuleWithNoTypedFunctionsPreservesCompletePowerShellFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FallbackOnly { return (Get-Date).Year }",
+            "function Get-FallbackOnly { return [int](Get-Date -Format yyyy) }",
             ".psm1");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -34,7 +34,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """
             function HelperProof
             {
-                return (Get-Date).Year
+                return [int](Get-Date -Format yyyy)
             }
             """,
             ".psm1");
@@ -112,7 +112,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Private"));
         File.WriteAllText(Path.Combine(fixture.RootPath, "Public", "Get-TypedValue.ps1"), "function Get-TypedValue { return 42 }");
-        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return (Get-Date).Year }");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return [int](Get-Date -Format yyyy) }");
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
             "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @() }");

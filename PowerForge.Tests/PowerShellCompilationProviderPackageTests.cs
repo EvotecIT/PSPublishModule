@@ -81,6 +81,19 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     }
 
     [Fact]
+    public void SdkConformanceRejectsPackageRegistrationOfCompilerOwnedRuntimeState()
+    {
+        using var fixture = ProviderFixture.Create();
+        var provider = Assert.Single(fixture.Manifest.Providers);
+        provider.Family = PowerShellCompilationCommandFamily.RuntimeState;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationProviderConformanceKit().Validate(fixture.Manifest));
+
+        Assert.Contains("compiler-owned runtime-state family", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReaderRejectsRuntimeFreeProviderWithoutSingleValueParameter()
     {
         using var fixture = ProviderFixture.Create();
@@ -617,6 +630,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                         FeatureId = "command.write-package-notice-core",
                         Family = PowerShellCompilationCommandFamily.Stream,
                         CommandName = "Write-PackageNoticeCore",
+                        ModuleNames = new[] { "Generic.Semantic.Provider" },
                         Parameters = new[]
                         {
                             new PowerShellCompilationCommandParameterContract { Name = "Message", Position = 0 }

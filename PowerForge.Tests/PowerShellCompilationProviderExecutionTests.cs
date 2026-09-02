@@ -47,7 +47,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
         using var artifactFixture = ScriptFixture.Create(
             $"function Invoke-Collision {{ [CmdletBinding()] param([string] ${parameterName}) " +
-            "Invoke-PackageCancellationCore 'value' }");
+            "Generic.Semantic.Provider\\Invoke-PackageCancellationCore 'value' }");
         var typed = new PowerShellTypedCompilationTranspiler(providerFixture.Manifest.Providers)
             .TranspileForBinaryModule(
                 new[] { artifactFixture.ScriptPath },
@@ -76,7 +76,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
         var cancellationPath = Path.Combine(providerFixture.RootPath, "binary-cancellation.started");
         using var artifactFixture = ScriptFixture.Create(
-            "function Invoke-PackageCancellationCoreWrapper { [CmdletBinding()] param() Invoke-PackageCancellationCore '" +
+            "function Invoke-PackageCancellationCoreWrapper { [CmdletBinding()] param() Generic.Semantic.Provider\\Invoke-PackageCancellationCore '" +
             cancellationPath.Replace("'", "''", StringComparison.Ordinal) + "' }; " +
             "function Invoke-PackageCancellation { [CmdletBinding()] param() Invoke-PackageCancellationCoreWrapper }");
         var typed = new PowerShellTypedCompilationTranspiler(providerFixture.Manifest.Providers)

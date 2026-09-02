@@ -97,7 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void ReproductionEvidenceRejectsDiagnosticFileIdentityTampering()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-HostedValue { Get-Date }; Export-ModuleMember -Function Get-HostedValue",
+            "function Get-HostedValue { Get-Date -Format o }; Export-ModuleMember -Function Get-HostedValue",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,

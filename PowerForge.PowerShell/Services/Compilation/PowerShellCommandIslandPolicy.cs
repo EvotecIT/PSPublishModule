@@ -19,8 +19,10 @@ internal static class PowerShellCommandIslandPolicy
         IReadOnlyList<StatementAst> statements,
         ScriptBlockAst body,
         ISet<string>? localFunctionNames = null,
-        PowerShellCommandSemanticRegistry? commandRegistry = null)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         var parameters = body.ParamBlock?.Parameters
             .Select(static parameter => parameter.Name.VariablePath.UserPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +35,7 @@ internal static class PowerShellCommandIslandPolicy
             if (statements[index] is not AssignmentStatementAst assignment ||
                 IsDiscardAssignment(assignment) ||
                 assignmentCommands.Length == 0 ||
-                assignmentCommands.All(command => IsRuntimeFreeCompilerIntrinsic(command, commandRegistry)))
+                assignmentCommands.All(command => commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))
                 continue;
             if (statements.Take(index).Any(static statement =>
                     statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any()))
@@ -48,7 +50,14 @@ internal static class PowerShellCommandIslandPolicy
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var available = new HashSet<string>(parameters, StringComparer.OrdinalIgnoreCase);
             available.UnionWith(prefixAssignments);
-            if (TryGetCapturedRuntimeAssignment(statements[index], body, localFunctionNames, available, out _))
+            if (TryGetCapturedRuntimeAssignment(
+                    statements[index],
+                    body,
+                    localFunctionNames,
+                    available,
+                    capabilities,
+                    commandResolver,
+                    out _))
                 continue;
             var tail = statements.Skip(index).ToArray();
             var assigned = tail
@@ -67,10 +76,9 @@ internal static class PowerShellCommandIslandPolicy
             if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
                 commands.Any(IsVariableSessionStateCommand))
                 continue;
-            if (localFunctionNames is not null && commands.Any(command =>
-                    command.InvocationOperator == TokenKind.Unknown &&
-                    command.GetCommandName() is { } name &&
-                    localFunctionNames.Contains(name)))
+            if (commands.Any(command =>
+                    commandResolver.Resolve(command, localFunctionNames, capabilities).Origin ==
+                    PowerShellCommandSemanticOrigin.LocalFunction))
                 continue;
             var variablesSafe = tail
                 .SelectMany(static statement => statement.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true))
@@ -95,10 +103,12 @@ internal static class PowerShellCommandIslandPolicy
         CommandAst command,
         ScriptBlockAst body,
         ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticResolver commandResolver,
         out StatementAst region)
     {
         var statements = body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
-        var start = FindRuntimeTailStart(statements, body, localFunctionNames);
+        var start = FindRuntimeTailStart(statements, body, localFunctionNames, capabilities, commandResolver);
         if (start >= 0 && command.Extent.StartOffset >= statements[start].Extent.StartOffset)
         {
             region = statements[start];
@@ -113,23 +123,24 @@ internal static class PowerShellCommandIslandPolicy
         ScriptBlockAst body,
         ISet<string>? localFunctionNames = null,
         ISet<string>? allowedVariables = null,
-        PowerShellCommandSemanticRegistry? commandRegistry = null)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        PowerShellCommandSemanticResolver? commandResolver = null)
     {
+        commandResolver ??= new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default);
         if (!ReferenceEquals(statement.Parent, body.EndBlock))
             return false;
         var commands = statement.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>().ToArray();
         if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
             commands.Any(IsVariableSessionStateCommand) ||
-            commands.All(command => IsRuntimeFreeCompilerIntrinsic(command, commandRegistry)))
+            commands.All(command => commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))
             return false;
-        if (localFunctionNames is not null && commands.Any(command =>
-                command.InvocationOperator == TokenKind.Unknown &&
-                command.GetCommandName() is { } name &&
-                localFunctionNames.Contains(name)))
+        if (commands.Any(command =>
+                commandResolver.Resolve(command, localFunctionNames, capabilities).Origin ==
+                PowerShellCommandSemanticOrigin.LocalFunction))
             return false;
         if (statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
             pipeline.PipelineElements[0] is CommandAst stream &&
-            IsStreamCommand(stream, commandRegistry))
+            IsStreamCommand(stream, commandResolver, localFunctionNames, capabilities))
             return false;
         if (statement.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ThrowStatementAst, searchNestedScriptBlocks: true).Any() ||
             statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
@@ -170,11 +181,15 @@ internal static class PowerShellCommandIslandPolicy
         ScriptBlockAst body,
         ISet<string>? localFunctionNames,
         ISet<string>? allowedVariables,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticResolver commandResolver,
         out StatementAst region)
     {
         for (Ast? current = command; current is not null && !ReferenceEquals(current, body); current = current.Parent)
         {
-            if (current is StatementAst statement && ReferenceEquals(statement.Parent, body.EndBlock) && IsRuntimeRegion(statement, body, localFunctionNames, allowedVariables))
+            if (current is StatementAst statement &&
+                ReferenceEquals(statement.Parent, body.EndBlock) &&
+                IsRuntimeRegion(statement, body, localFunctionNames, allowedVariables, capabilities, commandResolver))
             {
                 region = statement;
                 return true;
@@ -185,19 +200,35 @@ internal static class PowerShellCommandIslandPolicy
     }
 
     internal static bool TryGetRuntimeRegion(CommandAst command, ScriptBlockAst body, out StatementAst region)
-        => TryGetRuntimeRegion(command, body, localFunctionNames: null, allowedVariables: null, out region);
+        => TryGetRuntimeRegion(
+            command,
+            body,
+            localFunctionNames: null,
+            allowedVariables: null,
+            PowerShellCompilationCapability.None,
+            new PowerShellCommandSemanticResolver(PowerShellCommandSemanticRegistry.Default),
+            out region);
 
     internal static bool TryGetCapturedRuntimeRegion(
         CommandAst command,
         ScriptBlockAst body,
         ISet<string>? localFunctionNames,
         ISet<string>? allowedVariables,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticResolver commandResolver,
         out AssignmentStatementAst assignment)
     {
         for (Ast? current = command; current is not null && !ReferenceEquals(current, body); current = current.Parent)
         {
             if (current is StatementAst statement &&
-                TryGetCapturedRuntimeAssignment(statement, body, localFunctionNames, allowedVariables, out assignment))
+                TryGetCapturedRuntimeAssignment(
+                    statement,
+                    body,
+                    localFunctionNames,
+                    allowedVariables,
+                    capabilities,
+                    commandResolver,
+                    out assignment))
                 return true;
         }
         assignment = null!;
@@ -209,6 +240,8 @@ internal static class PowerShellCommandIslandPolicy
         ScriptBlockAst body,
         ISet<string>? localFunctionNames,
         ISet<string>? allowedVariables,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCommandSemanticResolver commandResolver,
         out AssignmentStatementAst assignment)
     {
         assignment = null!;
@@ -228,12 +261,11 @@ internal static class PowerShellCommandIslandPolicy
             .ToArray();
         if (commands.Length == 0 || commands.Any(static command => command.Redirections.Count != 0) ||
             commands.Any(IsVariableSessionStateCommand) ||
-            commands.All(command => IsRuntimeFreeCompilerIntrinsic(command)))
+            commands.All(command => commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))
             return false;
-        if (localFunctionNames is not null && commands.Any(command =>
-                command.InvocationOperator == TokenKind.Unknown &&
-                command.GetCommandName() is { } name &&
-                localFunctionNames.Contains(name)))
+        if (commands.Any(command =>
+                commandResolver.Resolve(command, localFunctionNames, capabilities).Origin ==
+                PowerShellCommandSemanticOrigin.LocalFunction))
             return false;
 
         var parameters = GetAvailableVariablesBefore(body, candidate, allowedVariables);
@@ -432,21 +464,32 @@ internal static class PowerShellCommandIslandPolicy
         CommandAst command,
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message,
-        PowerShellCommandSemanticRegistry? registry = null)
-        => TryGetStreamCommand(command, out kind, out message, out _, registry);
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
+        => TryGetStreamCommand(
+            command,
+            out kind,
+            out message,
+            out _,
+            resolver,
+            localFunctionNames,
+            capabilities);
 
     internal static bool TryGetStreamCommand(
         CommandAst command,
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message,
         out PowerShellCompilationCommandProviderContract? provider,
-        PowerShellCommandSemanticRegistry? registry = null)
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
         kind = default;
         message = null!;
         provider = null;
-        var resolution = (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName());
-        if (resolution.Status != PowerShellCommandResolutionStatus.Resolved || resolution.Contract is null ||
+        var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
+        if (!resolution.IsProvider || resolution.Contract is null ||
             !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message))
             return false;
         provider = resolution.Contract;
@@ -459,9 +502,17 @@ internal static class PowerShellCommandIslandPolicy
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message,
         out PowerShellCompilationCommandProviderContract? provider,
-        PowerShellCommandSemanticRegistry? registry = null)
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames)
     {
-        if (!TryGetStreamCommand(command, out kind, out message, out provider, registry))
+        if (!TryGetStreamCommand(
+                command,
+                out kind,
+                out message,
+                out provider,
+                resolver,
+                localFunctionNames,
+                capabilities))
             return false;
 
         return capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
@@ -470,22 +521,18 @@ internal static class PowerShellCommandIslandPolicy
                provider.Adapter.EntryPoint is not null;
     }
 
-    private static bool IsStreamCommand(CommandAst command, PowerShellCommandSemanticRegistry? registry = null)
+    private static bool IsStreamCommand(
+        CommandAst command,
+        PowerShellCommandSemanticResolver resolver,
+        ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
     {
-        if (TryGetStreamCommand(command, out _, out _, registry))
+        if (TryGetStreamCommand(command, out _, out _, resolver, localFunctionNames, capabilities))
             return true;
-        var contract = (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName()).Contract;
+        var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
+        var contract = resolution.Contract;
         return (contract?.Family is PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) &&
                !contract.Stream.Equals("Success", StringComparison.Ordinal);
     }
-
-    private static bool IsRuntimeFreeCompilerIntrinsic(
-        CommandAst command,
-        PowerShellCommandSemanticRegistry? registry = null)
-        => (registry ?? PowerShellCommandSemanticRegistry.Default).Resolve(command.GetCommandName()) is
-           {
-               Status: PowerShellCommandResolutionStatus.Resolved,
-               Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
-           } && PowerShellNewObjectSemanticBinder.IsSupportedShape(command);
 
 }

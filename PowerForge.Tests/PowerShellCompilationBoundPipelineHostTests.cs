@@ -6,7 +6,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     public void StreamWritesAndTheirLocalCallAbiAreLoweredFromBoundNodes()
     {
         var document = PowerShellSourceParser.Parse(
-            "function Write-Inner { Write-Verbose 'inner' } function Write-Outer { Write-Inner }",
+            "function Write-Inner { Microsoft.PowerShell.Utility\\Write-Verbose 'inner' } function Write-Outer { Write-Inner }",
             TestPath("stream-write-ir.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(

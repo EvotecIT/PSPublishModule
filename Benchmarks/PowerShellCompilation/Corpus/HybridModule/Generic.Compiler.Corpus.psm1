@@ -89,7 +89,7 @@ function Get-ObjectShape {
 
     $item = [pscustomobject]@{ Name = 'Ada'; Count = 2 }
     $item.Name = 'Grace'
-    $item | Add-Member -NotePropertyName Status -NotePropertyValue 'Ready'
+    $item | Microsoft.PowerShell.Utility\Add-Member -NotePropertyName Status -NotePropertyValue 'Ready'
     return @($item.Name, $item.PSObject.Properties['Status'].Value, $item.Count)
 }
 

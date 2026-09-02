@@ -468,7 +468,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var fixture = ArtifactFixture.Create(
             """
             function Get-CompiledValue { return 1 }
-            function Get-FallbackValue { return (Get-Date).Year }
+            function Get-FallbackValue { return [int](Get-Date -Format yyyy) }
             function Get-PrivateValue { return 2 }
             """,
             ".psm1");

@@ -68,7 +68,15 @@ internal sealed class PowerShellCommandSemanticRegistry
     internal static PowerShellCommandSemanticRegistry Default { get; } = new(CreateBuiltIns());
 
     internal static PowerShellCommandSemanticRegistry Create(IEnumerable<PowerShellCompilationCommandProviderContract>? extensions)
-        => new(CreateBuiltIns().Concat(extensions ?? Array.Empty<PowerShellCompilationCommandProviderContract>()));
+    {
+        var extensionArray = (extensions ?? Array.Empty<PowerShellCompilationCommandProviderContract>()).ToArray();
+        var compilerOwned = extensionArray.FirstOrDefault(static contract =>
+            contract.Family is PowerShellCompilationCommandFamily.ClrConstruction or PowerShellCompilationCommandFamily.RuntimeState);
+        if (compilerOwned is not null)
+            throw new InvalidOperationException(
+                $"Command provider '{compilerOwned.ProviderId}' cannot extend compiler-owned command family '{compilerOwned.Family}'.");
+        return new PowerShellCommandSemanticRegistry(CreateBuiltIns().Concat(extensionArray));
+    }
 
     internal IReadOnlyList<PowerShellCompilationCommandProviderContract> Contracts { get; }
 
@@ -106,7 +114,8 @@ internal sealed class PowerShellCommandSemanticRegistry
             PowerShellCompilationCommandCardinality.Unknown,
             "Success+PowerShell",
             PowerShellCompilationCommandErrors.PowerShellHost,
-            runtimeFree: false);
+            runtimeFree: false,
+            moduleNames: Array.Empty<string>());
 
     private static IEnumerable<PowerShellCompilationCommandProviderContract> CreateBuiltIns()
     {
@@ -159,7 +168,8 @@ internal sealed class PowerShellCommandSemanticRegistry
             PowerShellCompilationCommandCardinality.Collection,
             "Success",
             PowerShellCompilationCommandErrors.PowerShellHost,
-            runtimeFree: false);
+            runtimeFree: false,
+            moduleNames: new[] { "Microsoft.PowerShell.Core" });
         yield return Contract(
             "powerforge.command.mapping.foreach-object",
             PowerShellCompilationCommandFamily.Mapping,
@@ -169,7 +179,8 @@ internal sealed class PowerShellCommandSemanticRegistry
             PowerShellCompilationCommandCardinality.Collection,
             "Success",
             PowerShellCompilationCommandErrors.PowerShellHost,
-            runtimeFree: false);
+            runtimeFree: false,
+            moduleNames: new[] { "Microsoft.PowerShell.Core" });
         yield return Contract(
             "powerforge.command.sorting.sort-object",
             PowerShellCompilationCommandFamily.Sorting,
@@ -233,6 +244,26 @@ internal sealed class PowerShellCommandSemanticRegistry
                 RuntimeFree = false,
                 AotCompatible = false,
                 Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
+            ProviderId = "powerforge.command.runtime-state.get-date",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Get-Date"),
+            Family = PowerShellCompilationCommandFamily.RuntimeState,
+            CommandName = "Get-Date",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ReadCurrentLocalDateTime",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
             }
         };
         yield return new PowerShellCompilationCommandProviderContract
@@ -304,7 +335,8 @@ internal sealed class PowerShellCommandSemanticRegistry
         PowerShellCompilationCommandCardinality cardinality,
         string stream,
         PowerShellCompilationCommandErrors errors,
-        bool runtimeFree)
+        bool runtimeFree,
+        string[]? moduleNames = null)
         => new()
         {
             ProviderId = providerId,
@@ -312,7 +344,7 @@ internal sealed class PowerShellCommandSemanticRegistry
             FeatureId = PowerShellCompilationFeatureIds.ForCommand(commandName),
             Family = family,
             CommandName = commandName,
-            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            ModuleNames = moduleNames ?? new[] { "Microsoft.PowerShell.Utility" },
             Aliases = aliases,
             Output = output,
             Cardinality = cardinality,

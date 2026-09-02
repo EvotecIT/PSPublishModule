@@ -67,7 +67,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Invoke-ObjectFlow { $item = [pscustomobject]@{ Name = 'Ada'; Count = 1 }; " +
-            "$item.Name = 'Grace'; $item | Add-Member -NotePropertyName Status -NotePropertyValue 'Ready'; " +
+            "$item.Name = 'Grace'; $item | Microsoft.PowerShell.Utility\\Add-Member -NotePropertyName Status -NotePropertyValue 'Ready'; " +
             "return @($item.Name, $item.PSObject.Properties['Status'].Value, $item.Count) }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -130,7 +130,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Add-DuplicateProperty { [CmdletBinding()] param(); $item = [pscustomobject]@{ Name = 'original' }; " +
-            "$item | Add-Member -NotePropertyName Name -NotePropertyValue 'replacement'; return $item.Name }",
+            "$item | Microsoft.PowerShell.Utility\\Add-Member -NotePropertyName Name -NotePropertyValue 'replacement'; return $item.Name }",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
