@@ -490,6 +490,8 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, invalidContinue.Extent)));
             return null;
         }
+        if (TryBindStatementDiscard(document, statement, symbols, functions, diagnostics, targetFramework, capabilities, out var discard))
+            return discard;
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
             streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
             PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(

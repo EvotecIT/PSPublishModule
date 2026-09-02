@@ -29,6 +29,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
             targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
         AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
+        var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
+            .Concat(function.Locals.Select(static local => PowerShellClrSymbolMapper.MapIdentifier(local.Symbol.Name)))
+            .ToHashSet(StringComparer.Ordinal);
+        var temporaryIndex = 0;
+        string GetTemporaryIdentifier(string prefix)
+        {
+            string candidate;
+            do { candidate = $"__{prefix}_{temporaryIndex++}"; } while (!usedIdentifiers.Add(candidate));
+            return candidate;
+        }
+        var discardHelper = ContainsDiscardValue(function.Statements)
+            ? GetTemporaryIdentifier("discardValue")
+            : null;
         builder.Append("    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
@@ -48,16 +61,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .AppendLine("                return (T)global::System.Management.Automation.LanguagePrimitives.ConvertTo(value, typeof(T), global::System.Globalization.CultureInfo.InvariantCulture)!;")
                 .AppendLine("            }");
         }
-
-        var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
-            .Concat(function.Locals.Select(static local => PowerShellClrSymbolMapper.MapIdentifier(local.Symbol.Name)))
-            .ToHashSet(StringComparer.Ordinal);
-        var temporaryIndex = 0;
-        string GetTemporaryIdentifier(string prefix)
+        if (discardHelper is not null)
         {
-            string candidate;
-            do { candidate = $"__{prefix}_{temporaryIndex++}"; } while (!usedIdentifiers.Add(candidate));
-            return candidate;
+            builder.Append("            static void ").Append(discardHelper).AppendLine("<T>(T value) { }");
         }
         var parameterContracts = function.Parameters.Select(static parameter => new PowerShellParameterEmissionContract(
             parameter.Symbol.Name,
@@ -73,7 +79,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append("            ").AppendLine(line);
         }
 
-        foreach (var statement in function.Statements) EmitStatement(builder, statement, 3, GetTemporaryIdentifier, sourceMap);
+        foreach (var statement in function.Statements)
+            EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
 
         builder.AppendLine("        }").Append("    }");
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
@@ -122,6 +129,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredStatement statement,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
@@ -129,7 +137,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(statement.Span.StartLine.ToString(CultureInfo.InvariantCulture))
             .Append(" \"").Append(statement.Span.DocumentId).AppendLine("\"");
         var start = PowerShellGeneratedSourcePosition.Get(builder);
-        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, sourceMap);
+        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
         var end = PowerShellGeneratedSourcePosition.Get(builder);
         builder.Append(prefix).AppendLine("#line default");
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
@@ -148,6 +156,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredStatement statement,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
@@ -188,6 +197,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
             case PowerShellLoweredReturnStatement returned:
                 builder.Append(prefix).Append("return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
                 return;
+            case PowerShellLoweredExpressionStatement { DiscardValue: true } expression:
+                builder.Append(prefix).Append(discardHelper).Append('<')
+                    .Append(PowerShellCSharpSymbolRenderer.TypeName(expression.Expression.ClrType)).Append(">(")
+                    .Append(EmitExpression(expression.Expression)).AppendLine(");");
+                return;
             case PowerShellLoweredExpressionStatement expression:
                 builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
                 return;
@@ -207,24 +221,24 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 {
                     var clause = conditional.Clauses[index];
                     builder.Append(prefix).Append(index == 0 ? "if (" : "else if (").Append(EmitExpression(clause.Condition)).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, sourceMap);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 }
                 if (conditional.ElseStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("else");
-                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, sourceMap);
+                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 }
                 return;
             case PowerShellLoweredWhileStatement loop:
                 if (loop.Kind == PowerShellLoweredLoopKind.While)
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
@@ -239,13 +253,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 return;
             case PowerShellLoweredForEachStatement loop:
-                EmitForEach(builder, loop, indent, getTemporaryIdentifier, sourceMap);
+                EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
-                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, sourceMap);
+                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 return;
             case PowerShellLoweredThrowStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("throw;");
@@ -255,25 +269,25 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredTryStatement tryStatement:
                 builder.Append(prefix).AppendLine("try");
-                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, sourceMap);
+                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 foreach (var clause in tryStatement.Catches)
                 {
                     if (clause.ExceptionTypes.Length == 0)
                     {
                         builder.Append(prefix).AppendLine("catch (global::System.Exception)");
-                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, sourceMap);
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                         continue;
                     }
                     foreach (var exceptionType in clause.ExceptionTypes)
                     {
                         builder.Append(prefix).Append("catch (").Append(PowerShellCSharpSymbolRenderer.TypeName(exceptionType)).AppendLine(")");
-                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, sourceMap);
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                     }
                 }
                 if (tryStatement.FinallyStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("finally");
-                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, sourceMap);
+                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 }
                 return;
             case PowerShellLoweredBreakStatement:

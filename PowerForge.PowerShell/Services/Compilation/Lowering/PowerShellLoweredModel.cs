@@ -103,10 +103,15 @@ internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatem
 
 internal sealed class PowerShellLoweredExpressionStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredExpressionStatement(SourceSpan span, PowerShellLoweredExpression expression)
-        : base(span) => Expression = expression;
+    internal PowerShellLoweredExpressionStatement(SourceSpan span, PowerShellLoweredExpression expression, bool discardValue)
+        : base(span)
+    {
+        Expression = expression;
+        DiscardValue = discardValue;
+    }
 
     internal PowerShellLoweredExpression Expression { get; }
+    internal bool DiscardValue { get; }
 }
 
 internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredStatement

@@ -32,11 +32,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
         IEnumerable<PowerShellLoweredStatement> statements,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
-        foreach (var statement in statements) EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, sourceMap);
+        foreach (var statement in statements)
+            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -45,18 +47,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredForEachStatement loop,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
         var collection = EmitExpression(loop.Collection);
         if (loop.SystemArray)
         {
-            EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, sourceMap);
+            EmitSystemArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
             return;
         }
         if (!loop.ScalarString && loop.Collection.ClrType.IsArray)
         {
-            EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, sourceMap);
+            EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap);
             return;
         }
 
@@ -68,7 +71,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("foreach (").Append(elementTypeName).Append(' ')
             .Append(iterationVariable).Append(" in ").Append(enumerable).AppendLine(")");
         builder.Append(prefix).AppendLine("{");
-        EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, sourceMap);
+        EmitForEachBody(builder, loop, iterationVariable, indent, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -78,6 +81,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string collection,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
@@ -86,7 +90,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(" in (").Append(collection).Append(" ?? global::System.Array.Empty<object>()))")
             .AppendLine();
         builder.Append(prefix).AppendLine("{");
-        EmitForEachBody(builder, loop, iterationVariable + "!", indent, getTemporaryIdentifier, sourceMap);
+        EmitForEachBody(builder, loop, iterationVariable + "!", indent, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -96,6 +100,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string collection,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
@@ -125,7 +130,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).AppendLine("{");
         builder.Append(prefix).Append("    ").Append(elementTypeName).Append(' ').Append(itemIdentifier)
             .Append(" = ").Append(arrayIdentifier).Append('[').Append(indexIdentifier).AppendLine("];");
-        EmitForEachBody(builder, loop, itemIdentifier, indent, getTemporaryIdentifier, sourceMap);
+        EmitForEachBody(builder, loop, itemIdentifier, indent, getTemporaryIdentifier, discardHelper, sourceMap);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -135,6 +140,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string itemIdentifier,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', (indent + 1) * 4);
@@ -145,7 +151,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(itemIdentifier).AppendLine(";");
         foreach (var nested in loop.Statements)
         {
-            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, sourceMap);
+            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         }
     }
 
@@ -154,6 +160,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredSwitchStatement statement,
         int indent,
         Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
     {
         var prefix = new string(' ', indent * 4);
@@ -178,13 +185,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).Append("    if (").Append(comparison).AppendLine(")");
             builder.Append(prefix).AppendLine("    {");
             builder.Append(prefix).Append("        ").Append(matchedIdentifier).AppendLine(" = true;");
-            foreach (var nested in clause.Statements) EmitStatement(builder, nested, indent + 2, getTemporaryIdentifier, sourceMap);
+            foreach (var nested in clause.Statements)
+                EmitStatement(builder, nested, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap);
             builder.Append(prefix).AppendLine("    }");
         }
         if (statement.DefaultStatements is not null)
         {
             builder.Append(prefix).Append("    if (!").Append(matchedIdentifier).AppendLine(")");
-            EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier, sourceMap);
+            EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap);
         }
         builder.Append(prefix).AppendLine("}");
         builder.Append(prefix).AppendLine("while (false);");

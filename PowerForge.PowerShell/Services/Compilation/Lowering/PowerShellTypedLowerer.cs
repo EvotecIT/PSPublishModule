@@ -420,7 +420,10 @@ internal sealed partial class PowerShellTypedLowerer
         var expression = LowerExpression(statement.Expression, functions, names, targetCapabilities);
         return statement.EmitsOutput && expression.ClrType != typeof(void)
             ? new PowerShellLoweredReturnStatement(statement.Span, expression, emitsValue: true)
-            : new PowerShellLoweredExpressionStatement(statement.Span, expression);
+            : new PowerShellLoweredExpressionStatement(
+                statement.Span,
+                expression,
+                discardValue: !statement.EmitsOutput && expression.ClrType != typeof(void));
     }
 
     private static PowerShellLoweredForStatement LowerFor(
