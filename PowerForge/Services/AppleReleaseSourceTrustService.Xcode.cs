@@ -570,14 +570,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         relativePath);
                 }
-                if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase) &&
-                    !expectedBlob.Equals(
-                        ComputePathAwareGitBlobId(repositoryRoot, fullPath, relativePath),
-                        StringComparison.OrdinalIgnoreCase))
+                if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException(
-                        $"{name} differs from the exact source commit: " +
-                        relativePath);
+                    EnsureNoCustomGitFilter(repositoryRoot, relativePath, name);
+                    if (!expectedBlob.Equals(
+                            ComputePathAwareGitBlobId(repositoryRoot, fullPath, relativePath),
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"{name} differs from the exact source commit: " +
+                            relativePath);
+                    }
                 }
                 _validatedTrackedFileBlobs[fullPath] = worktreeBlob;
                 ValidateSourceLevelIncludes(

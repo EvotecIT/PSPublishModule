@@ -15,7 +15,6 @@ internal sealed partial class AppleReleaseSourceTrustService
         internal Dictionary<string, TrackedIndexEntry> IndexEntries { get; }
 
         internal Dictionary<string, string> HeadBlobIds { get; }
-
     }
 
     private sealed class TrackedIndexEntry
