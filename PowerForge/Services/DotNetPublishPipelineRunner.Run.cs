@@ -117,6 +117,18 @@ public sealed partial class DotNetPublishPipelineRunner
                             Clean(plan);
                             break;
                         case DotNetPublishStepKind.Build:
+                            if (manifestProvenanceLease is not null)
+                            {
+                                // A per-combination build is allowed to replace the previous combination's
+                                // generated bin/obj inputs. Validate the completed publish boundary, then
+                                // release and reacquire provenance after this build for the next publish.
+                                manifestProvenanceLease.ValidateUnchanged();
+                                sharedPublishProvenance?.ValidateCurrentSource();
+                                manifestProvenanceLease.Dispose();
+                                manifestProvenanceLease = null;
+                                sharedPublishProvenance = null;
+                            }
+
                             if ((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
                                 .Any(static target => target?.Publish?.Sign?.Enabled == true))
                             {
