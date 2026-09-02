@@ -403,6 +403,34 @@ public sealed class AppleBuildProvenanceTests
     }
 
     [Fact]
+    public void RejectIgnoredBuildInputs_rejects_ignored_outputs_beside_tracked_generated_root_inputs()
+    {
+        var root = CreateRepository();
+        try
+        {
+            var build = Directory.CreateDirectory(Path.Combine(root.FullName, "build"));
+            File.WriteAllText(Path.Combine(build.FullName, "build.sh"), "#!/bin/sh\n");
+            RunGit(root.FullName, "add", "build/build.sh");
+            RunGit(root.FullName, "commit", "-m", "track build helper");
+            File.WriteAllText(Path.Combine(root.FullName, ".gitignore"), "build/*\n");
+            RunGit(root.FullName, "add", ".gitignore");
+            RunGit(root.FullName, "commit", "-m", "ignore build outputs");
+            File.WriteAllText(Path.Combine(build.FullName, "generated.xcconfig"), "SETTING = local");
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => AppleBuildProvenance.RejectIgnoredBuildInputs(
+                    root.FullName,
+                    excludesGeneratedDirectories: true));
+
+            Assert.Contains("build/generated.xcconfig", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void RejectIgnoredBuildInputs_rejects_nested_generated_named_directories_for_mirrors()
     {
         var root = CreateRepository();
