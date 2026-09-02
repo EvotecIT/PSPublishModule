@@ -102,6 +102,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
         var assetName = Path.GetFileName(assetPath);
         var requests = new List<string>();
         var delays = new List<TimeSpan>();
+        var requestCountsAtDelay = new List<int>();
 
         async Task<HttpListenerContext> NextRequest()
         {
@@ -153,6 +154,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         delays.Add(delay);
+                        requestCountsAtDelay.Add(requests.Count);
                     })
                 .PublishRelease(
                     new GitHubReleasePublishRequest
@@ -168,6 +170,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.Succeeded);
             Assert.Equal(TimeSpan.FromMinutes(2), Assert.Single(delays));
+            Assert.Equal(2, Assert.Single(requestCountsAtDelay));
             Assert.Equal(2, requests.Count(request => request == "POST /uploads"));
         }
         finally

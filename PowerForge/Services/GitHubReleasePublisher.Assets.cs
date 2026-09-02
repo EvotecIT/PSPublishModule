@@ -210,13 +210,26 @@ public sealed partial class GitHubReleasePublisher {
 
             if (IsTransientAssetUploadResponse(response)) {
                 sawTransientFailure = true;
-                var delay = GetAssetUploadRetryDelay(response, attempt);
+                var serverDelay = GetAssetRetryAfterDelay(response);
+                var delay = serverDelay ?? GetAssetUploadExponentialDelay(attempt);
                 var statusCode = response.StatusCode;
                 var reasonPhrase = response.ReasonPhrase;
                 var terminalAttempt = attempt >= MaximumAssetUploadAttempts;
                 if (!terminalAttempt)
                     response.Dispose();
+
+                var waitBeforeReconciliation = serverDelay.HasValue ||
+                                               (int)statusCode == 429 ||
+                                               statusCode == HttpStatusCode.Forbidden;
+                if (waitBeforeReconciliation) {
+                    _logger.Warn(
+                        $"GitHub release asset upload for '{fileName}' returned " +
+                        $"{(int)statusCode} {reasonPhrase}; waiting {FormatRetryDelay(delay)} before reconciliation.");
+                }
+
                 try {
+                    if (waitBeforeReconciliation)
+                        WaitBeforeAssetUploadRetry(delay, cancellationToken);
                     ReconcileUploadWithRetry(reconcileUpload, fileName, cancellationToken);
                 }
                 catch {
@@ -228,11 +241,13 @@ public sealed partial class GitHubReleasePublisher {
                 if (terminalAttempt)
                     return response;
 
-                _logger.Warn(
-                    $"GitHub release asset upload for '{fileName}' returned " +
-                    $"{(int)statusCode} {reasonPhrase}; retrying attempt " +
-                    $"{attempt + 1}/{MaximumAssetUploadAttempts} in {FormatRetryDelay(delay)}.");
-                WaitBeforeAssetUploadRetry(delay, cancellationToken);
+                if (!waitBeforeReconciliation) {
+                    _logger.Warn(
+                        $"GitHub release asset upload for '{fileName}' returned " +
+                        $"{(int)statusCode} {reasonPhrase}; retrying attempt " +
+                        $"{attempt + 1}/{MaximumAssetUploadAttempts} in {FormatRetryDelay(delay)}.");
+                    WaitBeforeAssetUploadRetry(delay, cancellationToken);
+                }
                 continue;
             }
 
