@@ -588,6 +588,7 @@ public sealed partial class GitHubReleasePublisher
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
                 verifiedAssetIds,
+                requireExactAssetSet: replaceExistingAssets || !reusedExistingRelease,
                 cancellationToken);
         }
 

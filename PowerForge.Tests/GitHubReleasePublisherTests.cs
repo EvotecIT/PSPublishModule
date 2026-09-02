@@ -309,7 +309,7 @@ public sealed class GitHubReleasePublisherTests
     }
 
     [Fact]
-    public async Task PublishRelease_ReusedReleaseRetainsOrdinarySameNameSkipCompatibility()
+    public async Task PublishRelease_ReusedReleaseAllowsUnrelatedAssetsDuringSameNameSkip()
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -337,10 +337,10 @@ public sealed class GitHubReleasePublisherTests
             await Respond(
                 """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
                 422);
-            var existingAsset = $$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""";
-            await Respond(existingAsset, 200);
-            await Respond(existingAsset, 200);
-            await Respond(existingAsset, 200);
+            var existingAssets = $$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"},{"id":100,"name":"unrelated.zip","state":"uploaded"}]""";
+            await Respond(existingAssets, 200);
+            await Respond(existingAssets, 200);
+            await Respond(existingAssets, 200);
         });
 
         try

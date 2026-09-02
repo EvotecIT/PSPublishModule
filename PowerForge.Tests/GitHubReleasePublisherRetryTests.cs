@@ -19,6 +19,26 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
+    public void UploadRetryClassification_UsesPrimaryRateLimitResetForForbiddenResponses()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
+        var reset = DateTimeOffset.UtcNow.AddMinutes(2).ToUnixTimeSeconds();
+        response.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "0");
+        response.Headers.TryAddWithoutValidation(
+            "X-RateLimit-Reset",
+            reset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.True(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+        var delay = GitHubReleasePublisher.GetAssetRetryAfterDelay(response);
+        Assert.NotNull(delay);
+        Assert.InRange(delay.Value.TotalSeconds, 115, 121);
+
+        response.Headers.Remove("X-RateLimit-Remaining");
+        response.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "1");
+        Assert.False(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+    }
+
+    [Fact]
     public async Task PublishRelease_RetriesTransientAssetFailureWithFreshContent()
     {
         var listener = new HttpListener();

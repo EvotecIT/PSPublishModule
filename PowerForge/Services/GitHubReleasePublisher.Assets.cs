@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -145,21 +146,25 @@ public sealed partial class GitHubReleasePublisher {
         string apiBaseUrl,
         long releaseId,
         IReadOnlyDictionary<string, long> expectedAssets,
+        bool requireExactAssetSet,
         CancellationToken cancellationToken) {
-        var current = CreateReplaceableAssetMap(
-            ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken));
-        ValidateExistingAssetNamesAuthorized(current.Keys, new HashSet<string>(
-            expectedAssets.Keys,
-            StringComparer.OrdinalIgnoreCase));
-        if (current.Count != expectedAssets.Count)
-            throw new InvalidOperationException(
-                $"GitHub release asset reconciliation returned {current.Count} asset(s), expected {expectedAssets.Count}.");
+        var currentAssets = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken);
+        if (requireExactAssetSet) {
+            var current = CreateReplaceableAssetMap(currentAssets);
+            ValidateExistingAssetNamesAuthorized(current.Keys, new HashSet<string>(
+                expectedAssets.Keys,
+                StringComparer.OrdinalIgnoreCase));
+            if (current.Count != expectedAssets.Count)
+                throw new InvalidOperationException(
+                    $"GitHub release asset reconciliation returned {current.Count} asset(s), expected {expectedAssets.Count}.");
+        }
 
         foreach (var expected in expectedAssets) {
-            if (!current.TryGetValue(expected.Key, out var actualId))
+            var current = FindUniqueReleaseAsset(currentAssets, expected.Key);
+            if (current is null)
                 throw new InvalidOperationException(
                     $"GitHub release asset '{expected.Key}' disappeared before recovery completed.");
-            ValidateExpectedAssetId(expected.Key, expected.Value, actualId);
+            ValidateExpectedAssetId(expected.Key, expected.Value, current.Id);
         }
     }
 
@@ -344,7 +349,7 @@ public sealed partial class GitHubReleasePublisher {
         return GetAssetUploadExponentialDelay(failedAttempt);
     }
 
-    private static TimeSpan? GetAssetRetryAfterDelay(HttpResponseMessage? response) {
+    internal static TimeSpan? GetAssetRetryAfterDelay(HttpResponseMessage? response) {
         var retryAfter = response?.Headers.RetryAfter;
         if (retryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
             return delta;
@@ -354,7 +359,33 @@ public sealed partial class GitHubReleasePublisher {
                 return until;
         }
 
+        if (response?.StatusCode == HttpStatusCode.Forbidden &&
+            TryGetSingleInt64Header(response, "X-RateLimit-Remaining", out var remaining) &&
+            remaining == 0 &&
+            TryGetSingleInt64Header(response, "X-RateLimit-Reset", out var resetUnixSeconds)) {
+            try {
+                var untilReset = DateTimeOffset.FromUnixTimeSeconds(resetUnixSeconds) - DateTimeOffset.UtcNow;
+                if (untilReset > TimeSpan.Zero)
+                    return untilReset + TimeSpan.FromSeconds(1);
+            }
+            catch (ArgumentOutOfRangeException) {
+                return null;
+            }
+        }
+
         return null;
+    }
+
+    private static bool TryGetSingleInt64Header(
+        HttpResponseMessage response,
+        string headerName,
+        out long value) {
+        value = 0;
+        if (!response.Headers.TryGetValues(headerName, out var values))
+            return false;
+        var text = values.FirstOrDefault();
+        return text is not null &&
+               long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
     }
 
     private static TimeSpan GetAssetUploadExponentialDelay(int failedAttempt)
@@ -518,6 +549,7 @@ public sealed partial class GitHubReleasePublisher {
         string? expectedTagCommitSha,
         bool requirePublishedStableRelease,
         IReadOnlyDictionary<string, long> verifiedAssetIds,
+        bool requireExactAssetSet,
         CancellationToken cancellationToken)
         => ExecuteAssetVerificationWithRetry(
             operation,
@@ -540,6 +572,7 @@ public sealed partial class GitHubReleasePublisher {
                     apiBaseUrl,
                     releaseId,
                     verifiedAssetIds,
+                    requireExactAssetSet,
                     cancellationToken);
                 ValidateReleaseBeforeAssetMutation(
                     owner,
