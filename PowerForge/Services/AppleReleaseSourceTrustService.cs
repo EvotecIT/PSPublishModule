@@ -30,6 +30,8 @@ internal sealed partial class AppleReleaseSourceTrustService
     private readonly HashSet<string> _remotePackagesUnderValidation = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _validatedRemotePackages = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _validatedTrackedFileBlobs = new(GetPathComparer());
+    private readonly Dictionary<string, TrackedRepositoryProof> _trackedRepositoryProofs = new(GetPathComparer());
+    private readonly Dictionary<string, HashSet<string>> _pendingGitFilterPaths = new(GetPathComparer());
     private readonly HashSet<string> _validatedSourceIncludeFiles = new(GetPathComparer());
     private readonly HashSet<string> _validatedAssemblerInputFiles = new(GetPathComparer());
     private readonly HashSet<string> _validatedSourceSemanticInputs = new(StringComparer.Ordinal);
@@ -94,6 +96,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             ?? throw new InvalidOperationException("The release configuration does not contain an AppleApps contract.");
         var generatedOutputs = ResolveGeneratedOutputPaths(releaseConfigPath, options);
         ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
+        ValidatePendingGitFilters();
 
         EnsureNoGitReplacementRefs(root);
         _git.EnsureClean(root);
@@ -161,6 +164,7 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         ValidateAppleInputs(root, releaseConfigPath, options, generatedOutputs);
+        ValidatePendingGitFilters();
         EnsureNoGitReplacementRefs(root);
         EnsureNoUnexpectedWorktreeChanges(root, generatedOutputs);
         if (!ReadExactHead(root).Equals(snapshot.SourceCommit, StringComparison.OrdinalIgnoreCase))
@@ -175,6 +179,8 @@ internal sealed partial class AppleReleaseSourceTrustService
         _remotePackagesUnderValidation.Clear();
         _validatedRemotePackages.Clear();
         _validatedTrackedFileBlobs.Clear();
+        _trackedRepositoryProofs.Clear();
+        _pendingGitFilterPaths.Clear();
         _validatedSourceIncludeFiles.Clear();
         _validatedAssemblerInputFiles.Clear();
         _validatedSourceSemanticInputs.Clear();
@@ -582,25 +588,22 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
 
         var relative = FrameworkCompatibility.GetRelativePath(repositoryRoot, candidate).Replace('\\', '/');
-        var tracked = RunGitAllowFailure(repositoryRoot, "ls-files", "-v", "--error-unmatch", "--", relative);
-        if (!tracked.Succeeded)
+        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot, candidate, recursive: false);
+        if (!repositoryProof.IndexEntries.TryGetValue(candidate, out var tracked))
             throw new InvalidOperationException($"{name} must be tracked at the exact source commit: {relative}");
-        var indexEntry = tracked.StdOut
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault();
-        if (HasHiddenGitIndexState(indexEntry))
+        if (HasHiddenGitIndexState(tracked.Tag))
         {
             throw new InvalidOperationException(
                 $"{name} uses a skip-worktree or assume-unchanged Git index flag and cannot be attested to the exact source commit: {relative}");
         }
-        var headBlob = RunGitAllowFailure(repositoryRoot, "rev-parse", "--verify", $"HEAD:{relative}");
-        if (!headBlob.Succeeded || string.IsNullOrWhiteSpace(headBlob.StdOut))
+        if (!repositoryProof.HeadBlobIds.TryGetValue(candidate, out var expectedBlob) ||
+            string.IsNullOrWhiteSpace(expectedBlob))
             throw new InvalidOperationException($"{name} is not present in the exact source commit: {relative}");
-        EnsureNoCustomGitFilter(repositoryRoot, relative, name);
+        TrackGitFilterPath(repositoryRoot, relative);
         var worktreeBlob = capturedWorktreeBlob ?? ComputeRawGitBlobId(repositoryRoot, candidate);
-        var expectedBlob = headBlob.StdOut.Trim();
         if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
         {
+            EnsureNoCustomGitFilter(repositoryRoot, relative, name);
             var filteredWorktreeBlob = capturedWorktreeBytes is null
                 ? ComputePathAwareGitBlobId(repositoryRoot, candidate, relative)
                 : ComputePathAwareGitBlobId(repositoryRoot, capturedWorktreeBytes, relative);
@@ -624,31 +627,9 @@ internal sealed partial class AppleReleaseSourceTrustService
         return reader.ReadToEnd();
     }
 
-    private Dictionary<string, string> ReadHeadTreeBlobIds(string repositoryRoot, string relativeRoot)
-    {
-        var comparer = GetPathComparer();
-        var result = new Dictionary<string, string>(comparer);
-        var entries = RunGit(repositoryRoot, "ls-tree", "-r", "-z", "HEAD", "--", relativeRoot)
-            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var entry in entries)
-        {
-            var tab = entry.IndexOf('\t');
-            if (tab < 0)
-                continue;
-            var header = entry.Substring(0, tab).Split(' ');
-            if (header.Length != 3 || !header[1].Equals("blob", StringComparison.Ordinal))
-                continue;
-            var fullPath = Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(tab + 1)));
-            result[fullPath] = header[2];
-        }
-        return result;
-    }
-
     private static bool HasHiddenGitIndexState(string? entry)
         => !string.IsNullOrWhiteSpace(entry) &&
-           entry!.Length > 2 &&
-           entry[1] == ' ' &&
-           (entry[0] == 'S' || char.IsLower(entry[0]));
+           (entry![0] == 'S' || char.IsLower(entry[0]));
 
     private static void EnsureDirectoryWithinRepository(string repositoryRoot, string path, string name)
     {
