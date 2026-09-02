@@ -113,6 +113,68 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
+    public async Task DeployAsync_resolves_packages_from_the_build_mirror()
+    {
+        if (!File.Exists("/usr/bin/rsync"))
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var mirrorPath = ExternalOutputPath(
+            new DirectoryInfo(fixture.RootPath),
+            "BuildMirror");
+        try
+        {
+            var runner = new LocalPackageBuildRunner(
+                fixture.RemoteRoot,
+                fixture.RemoteUrl,
+                mutateDuringBuild: false,
+                executeRsync: true);
+
+            var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
+                new AppleAppDeviceDeploymentRequest
+                {
+                    ProjectPath = fixture.ProjectPath,
+                    BuildRoot = fixture.RootPath,
+                    BuildMirrorPath = mirrorPath,
+                    UseBuildMirror = true,
+                    RsyncExecutable = "/usr/bin/rsync",
+                    Scheme = "CasaRay",
+                    ProductName = "CasaRay",
+                    DerivedDataPath = fixture.DerivedDataPath,
+                    DeviceIdentifier = "device-1",
+                    BundleIdentifier = "com.evotecit.casaray",
+                    Launch = false,
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                    XcrunExecutable = "/usr/bin/xcrun"
+                });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(4, runner.Requests.Count);
+            var resolve = runner.Requests[1];
+            var build = runner.Requests[2];
+            var mirroredProjectPath = Path.Combine(
+                mirrorPath,
+                Path.GetRelativePath(fixture.RootPath, fixture.ProjectPath));
+            Assert.Equal(
+                AppleReleaseArtifactService.ResolvePhysicalPath(mirroredProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(resolve, "-project")));
+            Assert.Equal(
+                AppleReleaseArtifactService.ResolvePhysicalPath(mirroredProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(build, "-project")));
+            Assert.NotEqual(
+                AppleReleaseArtifactService.ResolvePhysicalPath(fixture.ProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(resolve, "-project")));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
     public void Materialized_package_validation_accepts_an_owned_mirror_through_a_path_alias()
     {
         if (Path.DirectorySeparatorChar == '\\')
@@ -619,17 +681,20 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         private readonly string _remoteUrl;
         private readonly bool _mutateDuringBuild;
         private readonly bool _replaceSnapshotRootDuringBuild;
+        private readonly bool _executeRsync;
 
         internal LocalPackageBuildRunner(
             string remoteRoot,
             string remoteUrl,
             bool mutateDuringBuild,
-            bool replaceSnapshotRootDuringBuild = false)
+            bool replaceSnapshotRootDuringBuild = false,
+            bool executeRsync = false)
         {
             _remoteRoot = remoteRoot;
             _remoteUrl = remoteUrl;
             _mutateDuringBuild = mutateDuringBuild;
             _replaceSnapshotRootDuringBuild = replaceSnapshotRootDuringBuild;
+            _executeRsync = executeRsync;
         }
 
         internal List<ProcessRunRequest> Requests { get; } = new();
@@ -641,6 +706,12 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (_executeRsync &&
+                request.FileName.Equals("/usr/bin/rsync", StringComparison.Ordinal))
+            {
+                return new ProcessRunner().RunAsync(request, cancellationToken);
+            }
+
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             if (request.Arguments.Contains("-resolvePackageDependencies"))
