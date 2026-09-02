@@ -409,6 +409,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("    private global::System.Collections.Generic.IReadOnlyDictionary<string, object?> CaptureRuntimeState()");
             builder.AppendLine("    {");
             builder.AppendLine("        var values = new global::System.Collections.Generic.Dictionary<string, object?>(global::System.StringComparer.OrdinalIgnoreCase);");
+            builder.AppendLine("        values[\"LanguageMode\"] = SessionState.LanguageMode;");
             foreach (var preference in new[] { "VerbosePreference", "DebugPreference", "WarningPreference", "InformationPreference", "ErrorActionPreference", "ProgressPreference", "ConfirmPreference" })
                 builder.AppendLine($"        values[{PowerShellCSharpLiteral.QuoteString(preference)}] = SessionState.PSVariable.GetValue({PowerShellCSharpLiteral.QuoteString(preference)});");
             builder.AppendLine("        if (MyInvocation.BoundParameters.TryGetValue(\"Verbose\", out var verbose)) values[\"VerbosePreference\"] = global::System.Management.Automation.LanguagePrimitives.IsTrue(verbose) ? global::System.Management.Automation.ActionPreference.Continue : global::System.Management.Automation.ActionPreference.SilentlyContinue;");

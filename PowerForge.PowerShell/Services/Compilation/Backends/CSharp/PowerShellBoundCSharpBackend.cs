@@ -365,6 +365,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return $"(global::System.Management.Automation.ConfirmImpact)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__runtimeState[{EmitExpression(expression.Arguments[0])}], typeof(global::System.Management.Automation.ConfirmImpact), global::System.Globalization.CultureInfo.InvariantCulture)!";
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ErrorCollection)
             return $"(global::System.Collections.ArrayList)__runtimeState[{EmitExpression(expression.Arguments[0])}]";
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.LanguageMode)
+            return $"(global::System.Management.Automation.PSLanguageMode)__runtimeState[{EmitExpression(expression.Arguments[0])}]!";
         return PowerShellRuntimeStateIntrinsicPolicy.EmitStatic(expression.Kind, expression.TargetFramework, expression.SemanticProfileId);
     }
 

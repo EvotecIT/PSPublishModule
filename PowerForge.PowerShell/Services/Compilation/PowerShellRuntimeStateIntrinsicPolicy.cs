@@ -16,6 +16,7 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     HomeDirectory,
     CurrentCulture,
     CurrentUICulture,
+    LanguageMode,
     WhatIfPreference,
     ActionPreference,
     ConfirmPreference,
@@ -107,6 +108,13 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             return kind != PowerShellRuntimeStateIntrinsicKind.None;
         }
 
+        if (IsExecutionContextLanguageMode(ast, body) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
+        {
+            kind = PowerShellRuntimeStateIntrinsicKind.LanguageMode;
+            return true;
+        }
+
         if (ast is InvokeMemberExpressionAst invocation &&
             invocation.Expression is VariableExpressionAst receiver &&
             receiver.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase) &&
@@ -148,6 +156,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                 searchNestedScriptBlocks: false))
             .Any(node => TryClassify(node, body, targetFramework, capabilities, out var kind) &&
                          kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or
+                             PowerShellRuntimeStateIntrinsicKind.LanguageMode or
                              PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
                              PowerShellRuntimeStateIntrinsicKind.ActionPreference or
                              PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
@@ -176,6 +185,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.LanguageMode => typeof(System.Management.Automation.PSLanguageMode),
             PowerShellRuntimeStateIntrinsicKind.ActionPreference => typeof(System.Management.Automation.ActionPreference),
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
@@ -212,6 +222,24 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => "__whatIfPreference",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };
+
+    private static bool IsExecutionContextLanguageMode(Ast ast, ScriptBlockAst body)
+        => !IsAssignmentTarget(ast) &&
+           ast is MemberExpressionAst
+           {
+               Static: false,
+               Expression: MemberExpressionAst
+               {
+                   Static: false,
+                   Expression: VariableExpressionAst executionContext,
+                   Member: StringConstantExpressionAst { Value: var sessionState }
+               },
+               Member: StringConstantExpressionAst { Value: var languageMode }
+           } &&
+           executionContext.VariablePath.UserPath.Equals("ExecutionContext", StringComparison.OrdinalIgnoreCase) &&
+           sessionState.Equals("SessionState", StringComparison.OrdinalIgnoreCase) &&
+           languageMode.Equals("LanguageMode", StringComparison.OrdinalIgnoreCase) &&
+           !HasLocalDefinition(body, "ExecutionContext");
 
     private static bool TryGetVersionTableMember(Ast ast, out string member)
     {

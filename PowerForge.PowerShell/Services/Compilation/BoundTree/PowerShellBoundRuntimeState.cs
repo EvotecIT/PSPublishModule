@@ -36,6 +36,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
 
     private static bool KindRequiresHostBinding(PowerShellRuntimeStateIntrinsicKind kind)
         => kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or
+            PowerShellRuntimeStateIntrinsicKind.LanguageMode or
             PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
             PowerShellRuntimeStateIntrinsicKind.ActionPreference or
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
@@ -45,7 +46,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
 
     private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellRuntimeStateIntrinsicKind kind)
         => PowerShellRequiredCapability.RuntimeStateIntrinsics |
-           (kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or PowerShellRuntimeStateIntrinsicKind.ActionPreference or PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or PowerShellRuntimeStateIntrinsicKind.ErrorCollection
+           (kind is PowerShellRuntimeStateIntrinsicKind.PSVersion or PowerShellRuntimeStateIntrinsicKind.LanguageMode or PowerShellRuntimeStateIntrinsicKind.ActionPreference or PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or PowerShellRuntimeStateIntrinsicKind.ErrorCollection
                ? PowerShellRequiredCapability.PowerShellHostTypes
                : PowerShellRequiredCapability.None) |
            (kind is PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or

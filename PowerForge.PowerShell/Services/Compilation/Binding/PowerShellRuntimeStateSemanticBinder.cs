@@ -23,13 +23,16 @@ internal static class PowerShellRuntimeStateSemanticBinder
         PowerShellBoundExpression?[] arguments;
         if (syntax is InvokeMemberExpressionAst invocation)
             arguments = invocation.Arguments.Select(argument => bindExpression(argument, typeof(string))).ToArray();
-        else if (syntax is VariableExpressionAst variable && kind is
-                     PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or
-                     PowerShellRuntimeStateIntrinsicKind.ActionPreference or
-                     PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
-                     PowerShellRuntimeStateIntrinsicKind.ErrorCollection)
+        else if (kind == PowerShellRuntimeStateIntrinsicKind.LanguageMode ||
+                 syntax is VariableExpressionAst && kind is
+                     (PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or
+                      PowerShellRuntimeStateIntrinsicKind.ActionPreference or
+                      PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
+                      PowerShellRuntimeStateIntrinsicKind.ErrorCollection))
         {
-            var name = variable.VariablePath.UserPath;
+            var name = kind == PowerShellRuntimeStateIntrinsicKind.LanguageMode
+                ? "LanguageMode"
+                : ((VariableExpressionAst)syntax).VariablePath.UserPath;
             if (kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable) name = name.Substring(4);
             arguments = new PowerShellBoundExpression?[]
             {
