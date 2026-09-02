@@ -205,19 +205,19 @@ function Compare-PublicBaseline {
         $metrics = [ordered]@{
             modulesPassed = $successful.Count
             modulesTotal = $Modules.Count
-            scenarioFamilies = @($successful.scenarioFamily | Sort-Object -Unique).Count
-            cleanImportedCommands = Get-Sum @($successful.exportedCommands)
-            analyzedUnits = Get-Sum @($successful.counts.analyzedUnits)
-            boundUnits = Get-Sum @($successful.counts.boundUnits)
-            emittedClrUnits = Get-Sum @($successful.counts.emittedClrUnits)
-            exportedCmdletUnits = Get-Sum @($successful.counts.exportedCmdletUnits)
-            hostedRegions = Get-Sum @($successful.counts.hostedRegions)
-            retainedSourceUnits = Get-Sum @($successful.counts.retainedSourceUnits)
-            semanticFallbackUnits = Get-Sum @($successful.counts.semanticFallbackUnits)
-            shapingFallbackUnits = Get-Sum @($successful.counts.shapingFallbackUnits)
-            runtimeRoutedUnits = Get-Sum @($successful.counts.runtimeRoutedUnits)
-            omittedUnits = Get-Sum @($successful.counts.omittedUnits)
-            rejectedUnits = Get-Sum @($successful.counts.rejectedUnits)
+            scenarioFamilies = @($successful | ForEach-Object { $_.scenarioFamily } | Sort-Object -Unique).Count
+            cleanImportedCommands = Get-Sum @($successful | ForEach-Object { $_.exportedCommands })
+            analyzedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.analyzedUnits })
+            boundUnits = Get-Sum @($successful | ForEach-Object { $_.counts.boundUnits })
+            emittedClrUnits = Get-Sum @($successful | ForEach-Object { $_.counts.emittedClrUnits })
+            exportedCmdletUnits = Get-Sum @($successful | ForEach-Object { $_.counts.exportedCmdletUnits })
+            hostedRegions = Get-Sum @($successful | ForEach-Object { $_.counts.hostedRegions })
+            retainedSourceUnits = Get-Sum @($successful | ForEach-Object { $_.counts.retainedSourceUnits })
+            semanticFallbackUnits = Get-Sum @($successful | ForEach-Object { $_.counts.semanticFallbackUnits })
+            shapingFallbackUnits = Get-Sum @($successful | ForEach-Object { $_.counts.shapingFallbackUnits })
+            runtimeRoutedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.runtimeRoutedUnits })
+            omittedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.omittedUnits })
+            rejectedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.rejectedUnits })
         }
         foreach ($metric in @('modulesPassed', 'modulesTotal', 'scenarioFamilies', 'cleanImportedCommands', 'analyzedUnits')) {
             if ([int] $metrics[$metric] -ne [int] $Baseline.hybrid.$metric) {
@@ -247,9 +247,9 @@ function Compare-PublicBaseline {
                 programs = $StrictPrograms.Count
                 programsPassed = $successful.Count
                 qualifiedApplications = $qualifiedApplications.Count
-                analyzedUnits = Get-Sum @($successful.counts.analyzedUnits)
-                boundUnits = Get-Sum @($successful.counts.boundUnits)
-                emittedClrUnits = Get-Sum @($successful.counts.emittedClrUnits)
+                analyzedUnits = Get-Sum @($successful | ForEach-Object { $_.counts.analyzedUnits })
+                boundUnits = Get-Sum @($successful | ForEach-Object { $_.counts.boundUnits })
+                emittedClrUnits = Get-Sum @($successful | ForEach-Object { $_.counts.emittedClrUnits })
             }
             foreach ($metric in @('programs', 'analyzedUnits')) {
                 if ([int] $metrics[$metric] -ne [int] $Baseline.strict.$metric) {
@@ -271,7 +271,7 @@ function Compare-PublicBaseline {
             foreach ($expected in $expectedQualifications) {
                 $actual = @($qualifiedApplications | Where-Object id -eq $expected.id)
                 if ($actual.Count -ne 1) {
-                    $regressions.Add([ordered]@{ scope = 'strictQualification'; metric = 'applicationIdentity'; expected = $expected.id; actual = @($qualifiedApplications.id) -join ',' })
+                    $regressions.Add([ordered]@{ scope = 'strictQualification'; metric = 'applicationIdentity'; expected = $expected.id; actual = @($qualifiedApplications | ForEach-Object { $_.id }) -join ',' })
                     continue
                 }
                 $qualification = $actual[0].qualification
