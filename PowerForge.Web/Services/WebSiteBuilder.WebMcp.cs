@@ -14,7 +14,7 @@ public static partial class WebSiteBuilder
 
         WebAgentReadiness.ValidateWebMcpConfiguration(readiness);
         return (readiness.WebMcpTools ?? Array.Empty<AgentWebMcpToolSpec>())
-            .Where(static tool => string.Equals(tool.Kind, "site-search", StringComparison.OrdinalIgnoreCase))
+            .Where(static tool => string.Equals(tool.Kind.Trim(), "site-search", StringComparison.OrdinalIgnoreCase))
             .ToArray();
     }
 

@@ -109,7 +109,7 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  function loadIndex(signal) {
+  function loadIndex() {
     var indexUrl = new URL(indexPath || '/search/index.json', document.baseURI);
     if (indexUrl.origin !== global.location.origin) {
       throw new Error('The WebMCP search index must be same-origin.');
@@ -118,8 +118,7 @@
     if (!indexPromise) {
       indexPromise = global.fetch(indexUrl.href, {
         cache: 'no-cache',
-        credentials: 'same-origin',
-        signal: signal
+        credentials: 'same-origin'
       }).then(function (response) {
         if (!response.ok) throw new Error('Search index request failed with HTTP ' + response.status + '.');
         return response.json();
@@ -135,8 +134,31 @@
     return indexPromise;
   }
 
+  function awaitWithSignal(promise, signal) {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(new DOMException('The WebMCP search was cancelled.', 'AbortError'));
+
+    return new Promise(function (resolve, reject) {
+      function cleanup() {
+        signal.removeEventListener('abort', abort);
+      }
+      function abort() {
+        cleanup();
+        reject(new DOMException('The WebMCP search was cancelled.', 'AbortError'));
+      }
+      signal.addEventListener('abort', abort, { once: true });
+      promise.then(function (value) {
+        cleanup();
+        resolve(value);
+      }, function (error) {
+        cleanup();
+        reject(error);
+      });
+    });
+  }
+
   async function genericSearch(request) {
-    var entries = await loadIndex(request.signal);
+    var entries = await awaitWithSignal(loadIndex(), request.signal);
     var result = searchEntries(entries, request.query, request.limit);
     syncVisibleSearch(request.query);
     return result;

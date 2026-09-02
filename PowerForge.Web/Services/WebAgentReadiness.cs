@@ -535,7 +535,7 @@ public static partial class WebAgentReadiness
                     Name = tool.Name,
                     Route = tool.Route,
                     Description = tool.Description,
-                    Kind = tool.Kind,
+                    Kind = tool.Kind?.Trim() ?? string.Empty,
                     ReadOnly = tool.ReadOnly
                 }).ToArray() ?? Array.Empty<AgentWebMcpToolSpec>(),
                 MarkdownArtifacts = spec.MarkdownArtifacts,
@@ -995,7 +995,7 @@ public static partial class WebAgentReadiness
                     ["name"] = tool.Name,
                     ["route"] = NormalizeRoute(tool.Route),
                     ["description"] = tool.Description,
-                    ["kind"] = tool.Kind,
+                    ["kind"] = tool.Kind.Trim(),
                     ["readOnly"] = tool.ReadOnly
                 });
             }

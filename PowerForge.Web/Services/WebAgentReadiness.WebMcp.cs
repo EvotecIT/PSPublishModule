@@ -34,7 +34,7 @@ public static partial class WebAgentReadiness
                 throw new ArgumentException($"WebMCP tool '{tool.Name}' uses the read-only 'site-search' implementation and cannot be declared writable.");
 
             ValidateWebMcpRoute(tool.Route, toolName);
-            var normalizedRoute = NormalizeWebMcpRoute(tool.Route);
+            var normalizedRoute = NormalizeWebMcpDocumentRoute(NormalizeWebMcpRoute(tool.Route));
             if (!seenRoutes.Add(normalizedRoute))
                 throw new ArgumentException($"Only one WebMCP site-search tool can be configured for route '{normalizedRoute}'.");
         }
@@ -249,10 +249,21 @@ public static partial class WebAgentReadiness
             }
             indexUri = resolvedIndexUri;
 
-            markedScripts = document.QuerySelectorAll("script[data-powerforge-webmcp]").ToArray();
-            if (markedScripts.Length == 0)
+            var markedCandidates = document.QuerySelectorAll("script[data-powerforge-webmcp]").ToArray();
+            if (markedCandidates.Length == 0)
             {
                 message = "no script is explicitly marked with data-powerforge-webmcp.";
+                return false;
+            }
+
+            var documentElements = document.All.ToArray();
+            var surfaceIndex = Array.IndexOf(documentElements, surface);
+            markedScripts = markedCandidates
+                .Where(script => CanExecuteAfterSurface(script, documentElements, surfaceIndex))
+                .ToArray();
+            if (markedScripts.Length == 0)
+            {
+                message = "the marked WebMCP runtime can execute before its site-search surface exists; load it after the surface or use defer/module semantics.";
                 return false;
             }
 
@@ -264,6 +275,19 @@ public static partial class WebAgentReadiness
             message = $"the route HTML could not be parsed ({ex.GetType().Name}).";
             return false;
         }
+    }
+
+    private static bool CanExecuteAfterSurface(IElement script, IElement[] documentElements, int surfaceIndex)
+    {
+        var scriptIndex = Array.IndexOf(documentElements, script);
+        if (surfaceIndex >= 0 && scriptIndex > surfaceIndex)
+            return true;
+
+        if (script.HasAttribute("async"))
+            return false;
+
+        var type = script.GetAttribute("type")?.Trim();
+        return script.HasAttribute("defer") || string.Equals(type, "module", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ScriptsContainCanonicalSiteSearchRuntime(
@@ -333,6 +357,10 @@ public static partial class WebAgentReadiness
 
     private static string NormalizeWebMcpDocumentRoute(string route)
     {
+        const string indexDocument = "/index.html";
+        if (route.EndsWith(indexDocument, StringComparison.OrdinalIgnoreCase))
+            return route[..^"index.html".Length];
+
         if (route.EndsWith("/", StringComparison.Ordinal) ||
             route.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
             route.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))

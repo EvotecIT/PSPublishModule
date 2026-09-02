@@ -17,6 +17,8 @@ public partial class WebAgentReadinessTests
 
         try
         {
+            var readiness = WebMcpOnlySpec(agentsJson: true);
+            readiness.WebMcpTools[0].Kind = " site-search ";
             File.WriteAllText(Path.Combine(root, "sitemap.xml"),
                 "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.test/</loc></url></urlset>");
             File.WriteAllText(Path.Combine(root, "index.html"),
@@ -40,7 +42,7 @@ public partial class WebAgentReadinessTests
                 SiteRoot = root,
                 BaseUrl = "https://example.test",
                 SiteName = "Example",
-                AgentReadiness = WebMcpOnlySpec(agentsJson: true)
+                AgentReadiness = readiness
             });
 
             using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "agents.json")));
@@ -287,8 +289,11 @@ public partial class WebAgentReadinessTests
         }
     }
 
-    [Fact]
-    public void Prepare_RejectsMultipleSiteSearchToolsOnOneRoute()
+    [Theory]
+    [InlineData("/search/")]
+    [InlineData("/search")]
+    [InlineData("/search/index.html")]
+    public void Prepare_RejectsMultipleSiteSearchToolsOnOneDocumentRoute(string secondRoute)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webmcp-duplicate-route-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -302,7 +307,7 @@ public partial class WebAgentReadinessTests
                 new AgentWebMcpToolSpec
                 {
                     Name = "search_other",
-                    Route = "/search/",
+                    Route = secondRoute,
                     Description = "Search another collection.",
                     Kind = "site-search",
                     ReadOnly = true
@@ -319,6 +324,64 @@ public partial class WebAgentReadinessTests
 
             Assert.Contains("Only one", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/search/", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("/search-results.html")]
+    [InlineData("/searchindex.html")]
+    public void Configuration_AllowsDistinctExplicitHtmlDocumentRoutes(string secondRoute)
+    {
+        var spec = WebMcpOnlySpec(agentsJson: false);
+        spec.WebMcpTools =
+        [
+            spec.WebMcpTools[0],
+            new AgentWebMcpToolSpec
+            {
+                Name = "search_other",
+                Route = secondRoute,
+                Description = "Search another collection.",
+                Kind = "site-search",
+                ReadOnly = true
+            }
+        ];
+
+        WebAgentReadiness.ValidateWebMcpConfiguration(spec);
+    }
+
+    [Theory]
+    [InlineData("<script src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main>", false)]
+    [InlineData("<head><script defer src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", true)]
+    [InlineData("<head><script async defer src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", false)]
+    [InlineData("<head><script type=\"module\" src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", true)]
+    public void Verify_RequiresRuntimeToExecuteAfterItsSurface(string markup, bool expectedPass)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webmcp-script-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "search"));
+        Directory.CreateDirectory(Path.Combine(root, "assets", "powerforge"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "search", "index.html"), "<!doctype html><html>" + markup + "</html>");
+            File.WriteAllText(Path.Combine(root, "search", "index.json"), "[]");
+            File.WriteAllText(Path.Combine(root, "assets", "powerforge", "webmcp-site-search.v1.js"),
+                WebSiteBuilder.GetWebMcpSiteSearchAssetContent());
+
+            var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = WebMcpOnlySpec(agentsJson: false)
+            });
+
+            var webMcp = Assert.Single(result.Checks, check => check.Id == "webmcp");
+            Assert.Equal(expectedPass ? "pass" : "fail", webMcp.Status);
+            if (!expectedPass)
+                Assert.Contains("before its site-search surface", webMcp.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -438,6 +501,7 @@ public partial class WebAgentReadinessTests
                     new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" }
                 ]
             };
+            spec.AgentReadiness.WebMcpTools[0].Kind = " site-search ";
             var configPath = Path.Combine(root, "site.json");
             File.WriteAllText(configPath, "{}");
             var outputRoot = Path.Combine(root, "_site");
