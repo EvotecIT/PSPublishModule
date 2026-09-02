@@ -7,6 +7,8 @@ namespace PowerForge;
 internal static class AppleBuildProvenance
 {
     internal const string XcodeBuildSetting = "POWERFORGE_SOURCE_REVISION";
+    private static readonly string[] GeneratedRootPaths =
+        [".build", ".swiftpm", "build", "DerivedData"];
 
     internal sealed class Snapshot
     {
@@ -18,6 +20,7 @@ internal static class AppleBuildProvenance
             RootPath = rootPath;
             Revision = revision;
             TrackedFileMutationIdentities = trackedFileMutationIdentities;
+            MirrorExcludedRootPaths = Array.Empty<string>();
         }
 
         internal string RootPath { get; }
@@ -26,6 +29,8 @@ internal static class AppleBuildProvenance
 
         internal IReadOnlyDictionary<string, string>
             TrackedFileMutationIdentities { get; }
+
+        internal IReadOnlyCollection<string> MirrorExcludedRootPaths { get; set; }
     }
 
     internal static string? ResolveLocalSourceRevision(string projectRoot)
@@ -92,9 +97,17 @@ internal static class AppleBuildProvenance
     {
         var snapshot = Capture(sourceRoot);
         if (excludesGeneratedDirectories)
-            RejectTrackedMirrorExclusions(sourceRoot);
-        RejectIgnoredBuildInputs(sourceRoot, excludesGeneratedDirectories);
-        RejectSymbolicLinkBuildInputs(sourceRoot, excludesGeneratedDirectories);
+        {
+            snapshot.MirrorExcludedRootPaths = ResolveMirrorExcludedRootPaths(sourceRoot);
+        }
+        RejectIgnoredBuildInputs(
+            sourceRoot,
+            excludesGeneratedDirectories,
+            snapshot.MirrorExcludedRootPaths);
+        RejectSymbolicLinkBuildInputs(
+            sourceRoot,
+            excludesGeneratedDirectories,
+            snapshot.MirrorExcludedRootPaths);
         return snapshot;
     }
 
@@ -149,41 +162,48 @@ internal static class AppleBuildProvenance
             "Declare build inputs in tracked Xcode project or workspace metadata instead.");
     }
 
-    private static void RejectTrackedMirrorExclusions(string sourceRoot)
+    private static IReadOnlyCollection<string> ResolveMirrorExcludedRootPaths(string sourceRoot)
     {
         var root = Path.GetFullPath(sourceRoot);
         var git = GitClient.CreateTrustedSystemClient(
             defaultTimeout: TimeSpan.FromSeconds(10));
         var tracked = git.RunRawAsync(
                 root,
-                ["ls-files", "-z", "--", ".build", ".swiftpm", "build", "DerivedData"])
+                ["ls-files", "-z", "--", .. GeneratedRootPaths])
             .GetAwaiter()
             .GetResult();
         if (!tracked.Succeeded)
         {
             throw new InvalidOperationException(
-                "Unable to verify tracked Apple build-mirror exclusions. " +
+                "Unable to resolve safe Apple build-mirror exclusions. " +
                 (string.IsNullOrWhiteSpace(tracked.StdErr)
                     ? "git ls-files failed."
                     : tracked.StdErr.Trim()));
         }
 
-        var excluded = tracked.StdOut
+        var trackedRoots = tracked.StdOut
             .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-            .Take(5)
+            .Select(GetRootPathSegment)
+            .ToHashSet(StringComparer.Ordinal);
+        return GeneratedRootPaths
+            .Where(path => !trackedRoots.Contains(path))
             .ToArray();
-        if (excluded.Length == 0)
-            return;
-
-        throw new InvalidOperationException(
-            "Apple build-mirror exclusions contain tracked source inputs: " +
-            string.Join(", ", excluded) +
-            ". Relocate those tracked inputs or disable the build mirror so xcodebuild consumes the complete attested source tree.");
     }
 
     internal static void RejectIgnoredBuildInputs(
         string sourceRoot,
         bool excludesGeneratedDirectories)
+        => RejectIgnoredBuildInputs(
+            sourceRoot,
+            excludesGeneratedDirectories,
+            excludesGeneratedDirectories
+                ? ResolveMirrorExcludedRootPaths(sourceRoot)
+                : Array.Empty<string>());
+
+    private static void RejectIgnoredBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories,
+        IReadOnlyCollection<string> excludedRootPaths)
     {
         var root = Path.GetFullPath(sourceRoot);
         var git = GitClient.CreateTrustedSystemClient(
@@ -204,7 +224,8 @@ internal static class AppleBuildProvenance
 
         var unexpected = ignored.StdOut
             .Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(path => !excludesGeneratedDirectories || !IsExcludedGeneratedPath(path))
+            .Where(path => !excludesGeneratedDirectories ||
+                           !IsExcludedGeneratedPath(path, excludedRootPaths))
             .Take(5)
             .ToArray();
         if (unexpected.Length == 0)
@@ -219,6 +240,17 @@ internal static class AppleBuildProvenance
     internal static void RejectSymbolicLinkBuildInputs(
         string sourceRoot,
         bool excludesGeneratedDirectories)
+        => RejectSymbolicLinkBuildInputs(
+            sourceRoot,
+            excludesGeneratedDirectories,
+            excludesGeneratedDirectories
+                ? ResolveMirrorExcludedRootPaths(sourceRoot)
+                : Array.Empty<string>());
+
+    private static void RejectSymbolicLinkBuildInputs(
+        string sourceRoot,
+        bool excludesGeneratedDirectories,
+        IReadOnlyCollection<string> excludedRootPaths)
     {
         var root = Path.GetFullPath(sourceRoot);
         var pendingDirectories = new Stack<string>();
@@ -234,7 +266,8 @@ internal static class AppleBuildProvenance
                     .Replace('\\', '/');
                 if (relativePath.Equals(".git", StringComparison.Ordinal) ||
                     relativePath.StartsWith(".git/", StringComparison.Ordinal) ||
-                    excludesGeneratedDirectories && IsExcludedGeneratedPath(relativePath))
+                    excludesGeneratedDirectories &&
+                    IsExcludedGeneratedPath(relativePath, excludedRootPaths))
                 {
                     continue;
                 }
@@ -599,16 +632,18 @@ internal static class AppleBuildProvenance
         }
     }
 
-    private static bool IsExcludedGeneratedPath(string path)
+    private static bool IsExcludedGeneratedPath(
+        string path,
+        IReadOnlyCollection<string> excludedRootPaths)
+    {
+        var rootSegment = GetRootPathSegment(path);
+        return excludedRootPaths.Contains(rootSegment, StringComparer.Ordinal);
+    }
+
+    private static string GetRootPathSegment(string path)
     {
         var normalized = path.Replace('\\', '/').TrimStart('/');
         var separator = normalized.IndexOf('/');
-        var rootSegment = separator < 0
-            ? normalized
-            : normalized.Substring(0, separator);
-        return rootSegment.Equals(".build", StringComparison.Ordinal) ||
-               rootSegment.Equals(".swiftpm", StringComparison.Ordinal) ||
-               rootSegment.Equals("build", StringComparison.Ordinal) ||
-               rootSegment.Equals("DerivedData", StringComparison.Ordinal);
+        return separator < 0 ? normalized : normalized.Substring(0, separator);
     }
 }

@@ -213,6 +213,7 @@ public sealed partial class AppleDeviceDeploymentService
                     request,
                     rsyncExecutable!,
                     sourcePathComparison,
+                    sourceSnapshot.MirrorExcludedRootPaths,
                     cancellationToken).ConfigureAwait(false);
                 if (!mirror.ProcessResult.Succeeded)
                 {
@@ -418,7 +419,7 @@ public sealed partial class AppleDeviceDeploymentService
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
                         _processRunner,
                         xcodeBuildExecutable,
-                        projectPath,
+                        buildProjectPath,
                         request.IsWorkspace,
                         request.Scheme.Trim(),
                         approvedPackageRevisions,

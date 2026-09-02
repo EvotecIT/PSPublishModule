@@ -499,20 +499,20 @@ internal sealed partial class AppleReleaseSourceTrustService
         string? assemblerWorkingDirectory = null)
     {
         EnsureDirectoryWithinRepository(repositoryRoot, path, name);
-        var relativeRoot = FrameworkCompatibility.GetRelativePath(repositoryRoot, path).Replace('\\', '/');
-        var indexEntries = RunGit(repositoryRoot, "ls-files", "-v", "-z", "--", relativeRoot)
-            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
-        var hiddenEntry = indexEntries.FirstOrDefault(HasHiddenGitIndexState);
+        var repositoryProof = ReadTrackedRepositoryProof(repositoryRoot, path, recursive: true);
+        var indexEntries = repositoryProof.IndexEntries.Values
+            .Where(entry => IsPathAtOrWithin(entry.FullPath, path))
+            .ToArray();
+        var hiddenEntry = indexEntries.FirstOrDefault(entry => HasHiddenGitIndexState(entry.Tag));
         if (hiddenEntry is not null)
         {
             throw new InvalidOperationException(
-                $"{name} contains a skip-worktree or assume-unchanged Git index entry and cannot be attested: {hiddenEntry.Substring(2)}");
+                $"{name} contains a skip-worktree or assume-unchanged Git index entry and cannot be attested: {hiddenEntry.RelativePath}");
         }
         var tracked = indexEntries
-            .Where(static entry => entry.Length > 2 && entry[1] == ' ')
-            .Select(entry => Path.GetFullPath(Path.Combine(repositoryRoot, entry.Substring(2))))
+            .Select(static entry => entry.FullPath)
             .ToHashSet(GetPathComparer());
-        var headBlobs = ReadHeadTreeBlobIds(repositoryRoot, relativeRoot);
+        var headBlobs = repositoryProof.HeadBlobIds;
         var entries = EnumerateTreeWithoutLinks(path, name);
         var impliedDirectories = new HashSet<string>(GetPathComparer());
         foreach (var trackedPath in tracked.Where(File.Exists))
@@ -544,12 +544,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(File.Exists)
             .Select(Path.GetFullPath)
             .ToArray();
-        EnsureNoCustomGitFilters(
+        TrackGitFilterPaths(
             repositoryRoot,
-            trackedFiles
-                .Select(file => FrameworkCompatibility.GetRelativePath(repositoryRoot, file).Replace('\\', '/'))
-                .ToArray(),
-            name);
+            trackedFiles.Select(file => FrameworkCompatibility
+                .GetRelativePath(repositoryRoot, file)
+                .Replace('\\', '/')));
         foreach (var entry in entries)
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
@@ -571,14 +570,17 @@ internal sealed partial class AppleReleaseSourceTrustService
                         $"{name} differs from the exact source commit: " +
                         relativePath);
                 }
-                if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase) &&
-                    !expectedBlob.Equals(
-                        ComputePathAwareGitBlobId(repositoryRoot, fullPath, relativePath),
-                        StringComparison.OrdinalIgnoreCase))
+                if (!expectedBlob.Equals(worktreeBlob, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException(
-                        $"{name} differs from the exact source commit: " +
-                        relativePath);
+                    EnsureNoCustomGitFilter(repositoryRoot, relativePath, name);
+                    if (!expectedBlob.Equals(
+                            ComputePathAwareGitBlobId(repositoryRoot, fullPath, relativePath),
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"{name} differs from the exact source commit: " +
+                            relativePath);
+                    }
                 }
                 _validatedTrackedFileBlobs[fullPath] = worktreeBlob;
                 ValidateSourceLevelIncludes(

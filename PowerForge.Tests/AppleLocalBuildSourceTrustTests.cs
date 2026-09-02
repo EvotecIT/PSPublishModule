@@ -236,6 +236,72 @@ public sealed class AppleLocalBuildSourceTrustTests
     }
 
     [Fact]
+    public void ValidateLocalBuildInputContainment_checks_directory_filters_before_path_aware_hashing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LocalAppleTrust",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "CasaRay.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                """
+                {
+                    objects = {
+                        AA0000000000000000000001 = {
+                            isa = PBXBuildFile;
+                            fileRef = AA0000000000000000000002;
+                        };
+                        AA0000000000000000000002 = {
+                            isa = PBXFileReference;
+                            lastKnownFileType = folder;
+                            path = Assets;
+                            sourceTree = "<group>";
+                        };
+                    };
+                }
+                """);
+            var schemeRoot = Directory.CreateDirectory(Path.Combine(
+                project.FullName,
+                "xcshareddata",
+                "xcschemes"));
+            File.WriteAllText(
+                Path.Combine(schemeRoot.FullName, "CasaRay.xcscheme"),
+                "<Scheme />");
+            var assets = Directory.CreateDirectory(Path.Combine(
+                root.FullName,
+                "Assets"));
+            var trackedAsset = Path.Combine(assets.FullName, "tracked.txt");
+            File.WriteAllText(trackedAsset, "tracked\n");
+            InitializeGitRepository(root.FullName, writeInputs: null);
+            var infoRoot = Path.Combine(root.FullName, ".git", "info");
+            Directory.CreateDirectory(infoRoot);
+            File.WriteAllText(
+                Path.Combine(infoRoot, "attributes"),
+                "Assets/tracked.txt filter=malicious\n");
+            File.WriteAllText(trackedAsset, "changed\n");
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService()
+                    .ValidateLocalBuildInputContainment(
+                        root.FullName,
+                        project.FullName,
+                        "CasaRay"));
+
+            Assert.Contains("custom Git filter", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Assets/tracked.txt", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void ValidateLocalBuildInputContainment_inspects_locked_remote_package_execution_features()
     {
         var root = Directory.CreateDirectory(Path.Combine(
