@@ -318,7 +318,7 @@ public sealed partial class GitHubReleasePublisher
             throw new GitHubApiRequestException(
                 $"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
                 response.StatusCode,
-                GetAssetRetryAfterDelay(response));
+                GetAssetRetryAfterDelay(response, responseText));
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
         var html = parsed.HtmlUrl ?? string.Empty;

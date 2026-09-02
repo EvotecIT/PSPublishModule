@@ -52,6 +52,10 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
                 "{\"message\":\"rate limited\"}",
                 429,
                 retryAfter: "120");
+            await Respond(
+                await NextRequest(),
+                "{\"message\":\"You have exceeded a secondary rate limit.\"}",
+                403);
 
             var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
             await Respond(await NextRequest(), uploadedAsset);
@@ -80,7 +84,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.Succeeded);
-            Assert.Equal(TimeSpan.FromMinutes(2), Assert.Single(delays));
+            Assert.Equal([TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(1)], delays);
         }
         finally
         {
@@ -90,7 +94,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
     }
 
     [Fact]
-    public async Task PublishRelease_RetriesDirectUploadForbiddenWithRetryAfter()
+    public async Task PublishRelease_RetriesDirectUploadRateLimitsBeforeReconciliation()
     {
         using var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -140,6 +144,11 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
                 403,
                 retryAfter: "120");
             await Respond(await NextRequest(), "[]");
+            await Respond(
+                await NextRequest(),
+                "{\"message\":\"You have exceeded a secondary rate limit.\"}",
+                403);
+            await Respond(await NextRequest(), "[]");
             await Respond(await NextRequest(), $$"""{"id":99,"name":"{{assetName}}"}""", 201);
             var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
             await Respond(await NextRequest(), uploadedAsset);
@@ -169,9 +178,9 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.Succeeded);
-            Assert.Equal(TimeSpan.FromMinutes(2), Assert.Single(delays));
-            Assert.Equal(2, Assert.Single(requestCountsAtDelay));
-            Assert.Equal(2, requests.Count(request => request == "POST /uploads"));
+            Assert.Equal([TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(1)], delays);
+            Assert.Equal([2, 4], requestCountsAtDelay);
+            Assert.Equal(3, requests.Count(request => request == "POST /uploads"));
         }
         finally
         {

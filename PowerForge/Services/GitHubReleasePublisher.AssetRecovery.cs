@@ -141,7 +141,7 @@ public sealed partial class GitHubReleasePublisher {
                     throw new GitHubApiRequestException(
                         $"GitHub asset delete failed for '{fileName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
                         response.StatusCode,
-                        GetAssetRetryAfterDelay(response));
+                        GetAssetRetryAfterDelay(response, responseText));
                 }
 
                 var remainingAsset = FindUniqueReleaseAsset(

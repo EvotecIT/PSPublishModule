@@ -39,6 +39,25 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
+    public void UploadRetryClassification_UsesSecondaryRateLimitFallbackWithoutRetryHeaders()
+    {
+        const string secondaryRateLimit = "{\"message\":\"You have exceeded a secondary rate limit.\"}";
+        using var forbidden = new HttpResponseMessage(HttpStatusCode.Forbidden);
+        forbidden.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "100");
+
+        Assert.True(GitHubReleasePublisher.IsTransientAssetUploadResponse(forbidden, secondaryRateLimit));
+        Assert.Equal(
+            TimeSpan.FromMinutes(1),
+            GitHubReleasePublisher.GetAssetRetryAfterDelay(forbidden, secondaryRateLimit));
+        Assert.False(GitHubReleasePublisher.IsTransientAssetUploadResponse(
+            forbidden,
+            "{\"message\":\"Resource not accessible by integration\"}"));
+
+        using var tooManyRequests = new HttpResponseMessage((HttpStatusCode)429);
+        Assert.Equal(TimeSpan.FromMinutes(1), GitHubReleasePublisher.GetAssetRetryAfterDelay(tooManyRequests));
+    }
+
+    [Fact]
     public async Task PublishRelease_RetriesTransientAssetFailureWithFreshContent()
     {
         var listener = new HttpListener();

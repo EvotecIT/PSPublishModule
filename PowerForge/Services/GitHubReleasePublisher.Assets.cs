@@ -212,9 +212,12 @@ public sealed partial class GitHubReleasePublisher {
                 continue;
             }
 
-            if (IsTransientAssetUploadResponse(response)) {
+            var forbiddenResponseText = response.StatusCode == HttpStatusCode.Forbidden
+                ? response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult()
+                : null;
+            if (IsTransientAssetUploadResponse(response, forbiddenResponseText)) {
                 sawTransientFailure = true;
-                var serverDelay = GetAssetRetryAfterDelay(response);
+                var serverDelay = GetAssetRetryAfterDelay(response, forbiddenResponseText);
                 var delay = serverDelay ?? GetAssetUploadExponentialDelay(attempt);
                 var statusCode = response.StatusCode;
                 var reasonPhrase = response.ReasonPhrase;
@@ -351,10 +354,13 @@ public sealed partial class GitHubReleasePublisher {
            (int)statusCode == 429 ||
            (int)statusCode is >= 500 and <= 599;
 
-    internal static bool IsTransientAssetUploadResponse(HttpResponseMessage response) {
+    internal static bool IsTransientAssetUploadResponse(
+        HttpResponseMessage response,
+        string? responseText = null) {
         if (response is null) throw new ArgumentNullException(nameof(response));
         return IsTransientAssetUploadStatus(response.StatusCode) ||
-               (response.StatusCode == HttpStatusCode.Forbidden && GetAssetRetryAfterDelay(response).HasValue);
+               (response.StatusCode == HttpStatusCode.Forbidden &&
+                GetAssetRetryAfterDelay(response, responseText).HasValue);
     }
 
     private static TimeSpan GetAssetUploadRetryDelay(HttpResponseMessage? response, int failedAttempt)
@@ -368,7 +374,9 @@ public sealed partial class GitHubReleasePublisher {
         return GetAssetUploadExponentialDelay(failedAttempt);
     }
 
-    internal static TimeSpan? GetAssetRetryAfterDelay(HttpResponseMessage? response) {
+    internal static TimeSpan? GetAssetRetryAfterDelay(
+        HttpResponseMessage? response,
+        string? responseText = null) {
         var retryAfter = response?.Headers.RetryAfter;
         if (retryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
             return delta;
@@ -392,8 +400,16 @@ public sealed partial class GitHubReleasePublisher {
             }
         }
 
+        if ((int?)response?.StatusCode == 429 ||
+            (response?.StatusCode == HttpStatusCode.Forbidden &&
+             IsSecondaryRateLimitResponse(responseText)))
+            return TimeSpan.FromMinutes(1);
+
         return null;
     }
+
+    private static bool IsSecondaryRateLimitResponse(string? responseText)
+        => (responseText?.IndexOf("secondary rate limit", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0;
 
     private static bool TryGetSingleInt64Header(
         HttpResponseMessage response,
@@ -690,7 +706,7 @@ public sealed partial class GitHubReleasePublisher {
                     throw new GitHubApiRequestException(
                         $"GitHub list-release-assets failed for release '{releaseId}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
                         response.StatusCode,
-                        GetAssetRetryAfterDelay(response));
+                        GetAssetRetryAfterDelay(response, responseText));
             }
 
             var pageAssets = Deserialize<GitHubReleaseAssetResponse[]>(responseText) ?? Array.Empty<GitHubReleaseAssetResponse>();
