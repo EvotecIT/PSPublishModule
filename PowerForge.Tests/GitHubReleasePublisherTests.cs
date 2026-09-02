@@ -279,7 +279,8 @@ public sealed class GitHubReleasePublisherTests
             await Respond(
                 """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
                 422);
-            await Respond($$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""", 200);
+            var existingAsset = $$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""";
+            await Respond(existingAsset, 200);
         });
 
         try
@@ -336,7 +337,10 @@ public sealed class GitHubReleasePublisherTests
             await Respond(
                 """{"message":"Validation Failed","errors":[{"resource":"ReleaseAsset","code":"already_exists","field":"name"}]}""",
                 422);
-            await Respond($$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""", 200);
+            var existingAsset = $$"""[{"id":99,"name":"{{Path.GetFileName(assetPath)}}","state":"uploaded"}]""";
+            await Respond(existingAsset, 200);
+            await Respond(existingAsset, 200);
+            await Respond(existingAsset, 200);
         });
 
         try
@@ -436,6 +440,7 @@ public sealed class GitHubReleasePublisherTests
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond(await listener.GetContextAsync(), $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
             await Respond(await listener.GetContextAsync(), string.Empty, 204);
+            await Respond(await listener.GetContextAsync(), "[]");
             await Respond(await listener.GetContextAsync(), releaseJson);
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond(await listener.GetContextAsync(), $"{{\"id\":100,\"name\":\"{Path.GetFileName(assetPath)}\"}}", 201);
@@ -480,6 +485,7 @@ public sealed class GitHubReleasePublisherTests
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/releases/42/assets",
                     "DELETE /repos/EvotecIT/example/releases/assets/99",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "POST /uploads",

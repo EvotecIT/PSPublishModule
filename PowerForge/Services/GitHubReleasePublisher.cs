@@ -358,9 +358,16 @@ public sealed partial class GitHubReleasePublisher
     {
         var skippedAssets = new List<string>();
         var authorizedAssetNames = CreateAuthorizedAssetNameSet(assets);
-        var uploadedAssetIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var verifiedAssetIds = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         var replaceableAssets = replaceExistingAssets
-            ? CreateReplaceableAssetMap(ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken))
+            ? CreateReplaceableAssetMap(ListReleaseAssetsWithRetry(
+                "GitHub replacement asset inventory",
+                owner,
+                repo,
+                token,
+                apiBaseUrl,
+                releaseId,
+                cancellationToken))
             : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         if (replaceExistingAssets)
             ValidateExistingAssetNamesAuthorized(replaceableAssets.Keys, authorizedAssetNames);
@@ -396,7 +403,8 @@ public sealed partial class GitHubReleasePublisher
                     assets.Length,
                     GitHubReleaseAssetProgressState.Replacing,
                     totalBytes: assetSize);
-                if (DeleteExpectedExistingAsset(
+                if (DeleteExpectedExistingAssetWithRetry(
+                    $"GitHub replacement deletion for '{fileName}'",
                     owner,
                     repo,
                     token,
@@ -451,18 +459,13 @@ public sealed partial class GitHubReleasePublisher
                     GitHubReleaseAssetProgressState.Uploading,
                     transferred,
                     total),
-                reconciliationContext => ReconcileReleaseAssetAfterUploadFailure(
+                () => ReconcileReleaseAssetAfterUploadFailure(
                     owner,
                     repo,
                     token,
                     apiBaseUrl,
                     releaseId,
-                    tagName,
-                    expectedReleaseBodyMarker,
-                    expectedTagCommitSha,
-                    requirePublishedStableRelease,
                     fileName,
-                    reconciliationContext,
                     cancellationToken),
                 cancellationToken);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -490,6 +493,16 @@ public sealed partial class GitHubReleasePublisher
                                 $"GitHub release asset '{fileName}' appeared during first publication; refusing to accept unverified bytes.");
                         }
 
+                        var skippedAssetId = ReadCurrentAssetIdWithRetry(
+                            $"GitHub skipped asset identity verification for '{fileName}'",
+                            owner,
+                            repo,
+                            token,
+                            apiBaseUrl,
+                            releaseId,
+                            fileName,
+                            cancellationToken);
+                        verifiedAssetIds.Add(fileName, skippedAssetId);
                         assetWatch.Stop();
                         _logger.Info($"GitHub release asset '{fileName}' already exists; skipping upload after {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)}.");
                         skippedAssets.Add(fileName);
@@ -547,7 +560,7 @@ public sealed partial class GitHubReleasePublisher
                 fileName,
                 uploadedAssetId,
                 cancellationToken);
-            uploadedAssetIds.Add(fileName, uploadedAssetId);
+            verifiedAssetIds.Add(fileName, uploadedAssetId);
 
             assetWatch.Stop();
             uploadedAssets.Add(fileName);
@@ -562,8 +575,7 @@ public sealed partial class GitHubReleasePublisher
             _logger.Success($"Uploaded GitHub release asset: {fileName} in {DotNetRepositoryReleaseService.FormatDuration(assetWatch.Elapsed)} ({DotNetRepositoryReleaseService.FormatBytes(assetSize)}).");
         }
 
-        if (replaceExistingAssets || uploadedAssetIds.Count == assets.Length)
-        {
+        if (verifiedAssetIds.Count > 0) {
             ValidateFinalAssetSetWithRetry(
                 "GitHub final release asset verification",
                 owner,
@@ -575,7 +587,7 @@ public sealed partial class GitHubReleasePublisher
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
-                uploadedAssetIds,
+                verifiedAssetIds,
                 cancellationToken);
         }
 

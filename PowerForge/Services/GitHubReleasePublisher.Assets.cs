@@ -14,14 +14,9 @@ public sealed partial class GitHubReleasePublisher {
 
     private enum AssetUploadReconciliationState {
         Absent,
-        StarterRemoved,
         Uploaded,
         LegacyStateUnavailable,
         TemporarilyUnavailable
-    }
-
-    private sealed class AssetUploadReconciliationContext {
-        internal long? StarterAssetId { get; set; }
     }
 
     private static void ReportAssetProgress(
@@ -137,13 +132,10 @@ public sealed partial class GitHubReleasePublisher {
         string fileName,
         long expectedAssetId,
         CancellationToken cancellationToken) {
-        var current = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken)
-            .Where(asset => string.Equals(asset.Name, fileName, StringComparison.Ordinal))
-            .ToArray();
-        if (current.Length != 1)
-            throw new InvalidOperationException(
-                $"GitHub release asset '{fileName}' was not uniquely present after upload.");
-        ValidateExpectedAssetId(fileName, expectedAssetId, current[0].Id);
+        ValidateExpectedAssetId(
+            fileName,
+            expectedAssetId,
+            ReadCurrentAssetId(owner, repo, token, apiBaseUrl, releaseId, fileName, cancellationToken));
     }
 
     private static void ValidateFinalAssetSet(
@@ -177,7 +169,7 @@ public sealed partial class GitHubReleasePublisher {
         string fileName,
         string token,
         Action<long, long>? reportProgress,
-        Func<AssetUploadReconciliationContext, AssetUploadReconciliationState> reconcileUpload,
+        Func<AssetUploadReconciliationState> reconcileUpload,
         CancellationToken cancellationToken) {
         if (reconcileUpload is null) throw new ArgumentNullException(nameof(reconcileUpload));
         var sawTransientFailure = false;
@@ -211,7 +203,7 @@ public sealed partial class GitHubReleasePublisher {
                 continue;
             }
 
-            if (IsTransientAssetUploadStatus(response.StatusCode)) {
+            if (IsTransientAssetUploadResponse(response)) {
                 sawTransientFailure = true;
                 var delay = GetAssetUploadRetryDelay(response, attempt);
                 var statusCode = response.StatusCode;
@@ -254,8 +246,7 @@ public sealed partial class GitHubReleasePublisher {
                         throw;
                     }
 
-                    if (reconciliation == AssetUploadReconciliationState.Absent ||
-                        reconciliation == AssetUploadReconciliationState.StarterRemoved) {
+                    if (reconciliation == AssetUploadReconciliationState.Absent) {
                         response.Dispose();
                         if (attempt >= MaximumAssetUploadAttempts) {
                             throw new InvalidOperationException(
@@ -324,7 +315,8 @@ public sealed partial class GitHubReleasePublisher {
         if (exception is null) throw new ArgumentNullException(nameof(exception));
         if (cancellationToken.IsCancellationRequested) return false;
         if (exception is GitHubApiRequestException apiException)
-            return IsTransientAssetUploadStatus(apiException.StatusCode);
+            return IsTransientAssetUploadStatus(apiException.StatusCode) ||
+                   (apiException.StatusCode == HttpStatusCode.Forbidden && apiException.RetryAfter.HasValue);
         return exception is HttpRequestException ||
                exception is IOException ||
                exception is TaskCanceledException;
@@ -334,6 +326,12 @@ public sealed partial class GitHubReleasePublisher {
         => statusCode == HttpStatusCode.RequestTimeout ||
            (int)statusCode == 429 ||
            (int)statusCode is >= 500 and <= 599;
+
+    internal static bool IsTransientAssetUploadResponse(HttpResponseMessage response) {
+        if (response is null) throw new ArgumentNullException(nameof(response));
+        return IsTransientAssetUploadStatus(response.StatusCode) ||
+               (response.StatusCode == HttpStatusCode.Forbidden && GetAssetRetryAfterDelay(response).HasValue);
+    }
 
     private static TimeSpan GetAssetUploadRetryDelay(HttpResponseMessage? response, int failedAttempt)
         => GetAssetRetryAfterDelay(response) ?? GetAssetUploadExponentialDelay(failedAttempt);
@@ -371,16 +369,15 @@ public sealed partial class GitHubReleasePublisher {
             : $"{delay.TotalMilliseconds:0}ms";
 
     private AssetUploadReconciliationState ReconcileUploadWithRetry(
-        Func<AssetUploadReconciliationContext, AssetUploadReconciliationState> reconcileUpload,
+        Func<AssetUploadReconciliationState> reconcileUpload,
         string fileName,
         CancellationToken cancellationToken) {
-        var reconciliationContext = new AssetUploadReconciliationContext();
         for (var attempt = 1; attempt <= MaximumAssetReconciliationAttempts; attempt++) {
             cancellationToken.ThrowIfCancellationRequested();
             AssetUploadReconciliationState reconciliation;
             Exception? transientException = null;
             try {
-                reconciliation = reconcileUpload(reconciliationContext);
+                reconciliation = reconcileUpload();
             }
             catch (Exception exception) when (IsTransientAssetUploadException(exception, cancellationToken)) {
                 if (attempt >= MaximumAssetReconciliationAttempts) {
@@ -520,7 +517,7 @@ public sealed partial class GitHubReleasePublisher {
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
         bool requirePublishedStableRelease,
-        IReadOnlyDictionary<string, long> uploadedAssetIds,
+        IReadOnlyDictionary<string, long> verifiedAssetIds,
         CancellationToken cancellationToken)
         => ExecuteAssetVerificationWithRetry(
             operation,
@@ -542,7 +539,7 @@ public sealed partial class GitHubReleasePublisher {
                     token,
                     apiBaseUrl,
                     releaseId,
-                    uploadedAssetIds,
+                    verifiedAssetIds,
                     cancellationToken);
                 ValidateReleaseBeforeAssetMutation(
                     owner,
@@ -579,17 +576,12 @@ public sealed partial class GitHubReleasePublisher {
         string token,
         string apiBaseUrl,
         long releaseId,
-        string tagName,
-        string? expectedReleaseBodyMarker,
-        string? expectedTagCommitSha,
-        bool requirePublishedStableRelease,
         string fileName,
-        AssetUploadReconciliationContext reconciliationContext,
         CancellationToken cancellationToken) {
         var currentAssets = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken);
 
         var sameNameAssets = currentAssets
-            .Where(asset => string.Equals(asset.Name, fileName, StringComparison.Ordinal))
+            .Where(asset => string.Equals(asset.Name, fileName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
         if (sameNameAssets.Length == 0)
             return AssetUploadReconciliationState.Absent;
@@ -606,37 +598,9 @@ public sealed partial class GitHubReleasePublisher {
             throw new InvalidOperationException(
                 $"GitHub release asset '{fileName}' has unexpected state '{incompleteAsset.State}'.");
 
-        if (reconciliationContext.StarterAssetId is long expectedStarterAssetId)
-            ValidateExpectedAssetId(fileName, expectedStarterAssetId, incompleteAsset.Id);
-        else
-            reconciliationContext.StarterAssetId = incompleteAsset.Id;
-
-        ValidateReleaseBeforeAssetMutation(
-            owner,
-            repo,
-            token,
-            apiBaseUrl,
-            releaseId,
-            tagName,
-            expectedReleaseBodyMarker,
-            expectedTagCommitSha,
-            requirePublishedStableRelease,
-            cancellationToken);
-        if (DeleteExpectedExistingAsset(
-            owner,
-            repo,
-            token,
-            apiBaseUrl,
-            releaseId,
-            fileName,
-            reconciliationContext.StarterAssetId!.Value,
-            requiredState: "starter",
-            cancellationToken)) {
-            _logger.Warn($"Removed incomplete GitHub release asset '{fileName}' before retrying its upload.");
-            return AssetUploadReconciliationState.StarterRemoved;
-        }
-
-        return AssetUploadReconciliationState.Absent;
+        throw new InvalidOperationException(
+            $"GitHub release asset '{fileName}' is in state 'starter' after an interrupted upload. " +
+            "Its publisher cannot be proven, so recovery refuses to delete it.");
     }
 
     private sealed class GitHubApiRequestException : InvalidOperationException {
@@ -651,49 +615,6 @@ public sealed partial class GitHubReleasePublisher {
 
         internal HttpStatusCode StatusCode { get; }
         internal TimeSpan? RetryAfter { get; }
-    }
-
-    private bool DeleteExpectedExistingAsset(
-        string owner,
-        string repo,
-        string token,
-        string apiBaseUrl,
-        long releaseId,
-        string fileName,
-        long expectedAssetId,
-        string? requiredState,
-        CancellationToken cancellationToken) {
-        if (releaseId <= 0)
-            throw new InvalidOperationException("GitHub release asset replacement requires the release id returned by GitHub.");
-
-        var asset = ListReleaseAssets(owner, repo, token, apiBaseUrl, releaseId, cancellationToken)
-            .FirstOrDefault(existing => string.Equals(existing.Name, fileName, StringComparison.OrdinalIgnoreCase));
-        if (asset is null)
-            return false;
-        ValidateExpectedAssetId(fileName, expectedAssetId, asset.Id);
-        if (!string.IsNullOrWhiteSpace(requiredState) &&
-            !string.Equals(asset.State, requiredState, StringComparison.OrdinalIgnoreCase)) {
-            throw new InvalidOperationException(
-                $"GitHub release asset '{fileName}' changed from state '{requiredState}' to " +
-                $"'{asset.State ?? "<missing>"}' before deletion.");
-        }
-
-        var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/assets/{expectedAssetId}");
-        using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
-        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-        using (response) {
-            if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
-                throw new GitHubApiRequestException(
-                    $"GitHub asset delete failed for '{fileName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
-                    response.StatusCode,
-                    GetAssetRetryAfterDelay(response));
-        }
-
-        _logger.Info($"Deleted existing GitHub release asset before replacement: {fileName}");
-        return true;
     }
 
     private static IReadOnlyList<GitHubReleaseAssetResponse> ListReleaseAssets(
