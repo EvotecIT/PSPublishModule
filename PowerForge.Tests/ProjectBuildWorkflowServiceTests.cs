@@ -41,6 +41,135 @@ public sealed class ProjectBuildWorkflowServiceTests
             progress.Events);
     }
 
+    [Fact]
+    public void Execute_reports_version_progress_while_preparing_the_plan()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            File.WriteAllText(
+                Path.Combine(projectDirectory.FullName, "Sample.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup></Project>");
+            var progress = new RecordingProjectBuildProgress();
+            var workflow = new ProjectBuildWorkflowService(new NullLogger()).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    PlanOnly = false,
+                    RootPath = root.FullName,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = false,
+                        UpdateVersions = false
+                    }
+                },
+                executeBuild: false,
+                progress: progress);
+
+            Assert.True(workflow.Result.Success, workflow.Result.ErrorMessage);
+            Assert.Contains("start:Versioning:1", progress.Events);
+            Assert.Contains("update:Versioning:1/1", progress.Events);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_keeps_parallel_planning_callbacks_on_the_calling_thread_and_plan_progress_monotonic()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            File.WriteAllText(
+                Path.Combine(projectDirectory.FullName, "Sample.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup></Project>");
+            var ownerThreadId = Environment.CurrentManagedThreadId;
+            var progress = new ThreadAffineProjectBuildProgress(ownerThreadId);
+            var workflow = new ProjectBuildWorkflowService(new ThreadAffineLogger(ownerThreadId)).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    RootPath = root.FullName,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = true,
+                        PublishApiKey = "test-only",
+                        PublishSource = Path.Combine(root.FullName, "feed"),
+                        UpdateVersions = false
+                    }
+                },
+                executeBuild: false,
+                progress: progress);
+
+            Assert.False(workflow.Result.Success);
+            Assert.Contains("has no packages to publish", workflow.Result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(progress.PlanUpdates.Count >= 2);
+            for (var index = 1; index < progress.PlanUpdates.Count; index++)
+            {
+                var previous = progress.PlanUpdates[index - 1];
+                var current = progress.PlanUpdates[index];
+                Assert.True(
+                    (long)previous.Completed * current.Total <= (long)current.Completed * previous.Total,
+                    $"Plan progress moved backwards from {previous.Completed}/{previous.Total} to {current.Completed}/{current.Total}.");
+            }
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Execute_does_not_complete_execution_phases_during_release_preflight()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            File.WriteAllText(
+                Path.Combine(projectDirectory.FullName, "Sample.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup></Project>");
+            var progress = new RecordingProjectBuildProgress();
+            var workflow = new ProjectBuildWorkflowService(new NullLogger()).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    RootPath = root.FullName,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = false,
+                        UpdateVersions = false
+                    }
+                },
+                executeBuild: true,
+                progress: progress);
+
+            Assert.True(workflow.Result.Success, workflow.Result.ErrorMessage);
+            Assert.Equal(1, progress.Events.Count(entry => entry == "start:Versioning:1"));
+            Assert.Equal(1, progress.Events.Count(entry => entry == "complete:Versioning"));
+            Assert.True(
+                progress.Events.IndexOf("complete:Plan") < progress.Events.IndexOf("start:Versioning:1"),
+                "The release execution phase started before plan preflight completed.");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporterV2
     {
         public List<string> Events { get; } = new();
@@ -63,6 +192,75 @@ public sealed class ProjectBuildWorkflowServiceTests
 
         public void ItemUpdated(ProjectBuildProgressItem item, ProjectBuildProgressItemState state, string? detail = null)
             => Events.Add($"item:{item.Phase}:{item.Title}:{state}");
+    }
+
+    private sealed class ThreadAffineProjectBuildProgress : IProjectBuildProgressReporterV2
+    {
+        private readonly int _ownerThreadId;
+
+        internal ThreadAffineProjectBuildProgress(int ownerThreadId)
+        {
+            _ownerThreadId = ownerThreadId;
+        }
+
+        internal List<(int Completed, int Total)> PlanUpdates { get; } = new();
+
+        public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
+            => AssertOwnerThread();
+
+        public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null)
+        {
+            AssertOwnerThread();
+            if (phase == ProjectBuildProgressPhase.Plan)
+                PlanUpdates.Add((completedItems, totalItems));
+        }
+
+        public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
+            => AssertOwnerThread();
+
+        public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
+            => AssertOwnerThread();
+
+        public void ItemsPlanned(ProjectBuildProgressPhase phase, IReadOnlyList<ProjectBuildProgressItem> items)
+            => AssertOwnerThread();
+
+        public void ItemUpdated(ProjectBuildProgressItem item, ProjectBuildProgressItemState state, string? detail = null)
+            => AssertOwnerThread();
+
+        private void AssertOwnerThread()
+            => Assert.Equal(_ownerThreadId, Environment.CurrentManagedThreadId);
+    }
+
+    private sealed class ThreadAffineLogger : ILogger
+    {
+        private readonly int _ownerThreadId;
+
+        internal ThreadAffineLogger(int ownerThreadId)
+        {
+            _ownerThreadId = ownerThreadId;
+        }
+
+        public bool IsVerbose
+        {
+            get
+            {
+                AssertOwnerThread();
+                return true;
+            }
+        }
+
+        public void Info(string message) => AssertOwnerThread();
+
+        public void Success(string message) => AssertOwnerThread();
+
+        public void Warn(string message) => AssertOwnerThread();
+
+        public void Error(string message) => AssertOwnerThread();
+
+        public void Verbose(string message) => AssertOwnerThread();
+
+        private void AssertOwnerThread()
+            => Assert.Equal(_ownerThreadId, Environment.CurrentManagedThreadId);
     }
 
     [Fact]

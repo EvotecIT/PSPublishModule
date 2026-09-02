@@ -58,7 +58,10 @@ internal sealed class ProjectBuildWorkflowService
         progress?.PhaseStarted(ProjectBuildProgressPhase.Plan, 1, "Discovering projects and resolving versions");
         var planWatch = Stopwatch.StartNew();
         cancellationToken.ThrowIfCancellationRequested();
-        var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning, null, cancellationToken);
+        var preflightProgress = executeBuild && !preparation.PlanOnly && progress is not null
+            ? new ProjectBuildPlanProgressReporter(progress)
+            : progress;
+        var plan = _executeRelease(spec, _signAssemblies, _validateAssemblySigning, preflightProgress, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         planWatch.Stop();
         if (plan.Success)
