@@ -21,7 +21,7 @@ internal static class PowerShellConversionSemanticBinder
             return null;
         }
 
-        if (PowerShellCompilationLiteralPolicy.TryResolveValue(syntax, targetType, out var value) &&
+        if (PowerShellCompilationLiteralPolicy.TryResolveValue(syntax, targetType, targetFramework, out var value) &&
             PowerShellCompilationLiteralPolicy.CanEmitBoundValue(value, targetType))
             return BindResolvedLiteral(span, targetType, value);
 

@@ -15,7 +15,7 @@ internal static class PowerShellCompilationConversionPolicy
         if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
             return false;
 
-        return PowerShellCompilationLiteralPolicy.TryResolve(conversion, targetType, out _) ||
+        return PowerShellCompilationLiteralPolicy.TryResolve(conversion, targetType, targetFramework, out _) ||
                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions);
     }
 

@@ -9,14 +9,31 @@ namespace PowerForge;
 internal static class PowerShellCompilationLiteralPolicy
 {
     internal static bool TryResolve(ExpressionAst expression, Type targetType, out PowerShellCompilationLiteral? literal)
+        => TryResolve(expression, targetType, targetFramework: null, out literal);
+
+    internal static bool TryResolve(
+        ExpressionAst expression,
+        Type targetType,
+        string? targetFramework,
+        out PowerShellCompilationLiteral? literal)
     {
         literal = null;
-        return TryResolveValue(expression, targetType, out var converted) && TryEncodeValue(converted, targetType, out literal);
+        return TryResolveValue(expression, targetType, targetFramework, out var converted) && TryEncodeValue(converted, targetType, out literal);
     }
 
     internal static bool TryResolveValue(ExpressionAst expression, Type targetType, out object? converted)
+        => TryResolveValue(expression, targetType, targetFramework: null, out converted);
+
+    internal static bool TryResolveValue(
+        ExpressionAst expression,
+        Type targetType,
+        string? targetFramework,
+        out object? converted)
     {
         converted = null;
+        if (TryResolveExactEnumMember(expression, targetType, targetFramework, out converted))
+            return true;
+
         object? raw;
         try
         {
@@ -36,6 +53,46 @@ internal static class PowerShellCompilationLiteralPolicy
         {
             return false;
         }
+    }
+
+    private static bool TryResolveExactEnumMember(
+        ExpressionAst expression,
+        Type targetType,
+        string? targetFramework,
+        out object? value)
+    {
+        value = null;
+        var enumType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if (!enumType.IsEnum)
+            return false;
+
+        while (expression is ParenExpressionAst
+               {
+                   Pipeline: PipelineAst { PipelineElements.Count: 1 } pipeline
+               } &&
+               pipeline.PipelineElements[0] is CommandExpressionAst
+               {
+                   Redirections.Count: 0,
+                   Expression: var nested
+               })
+        {
+            expression = nested;
+        }
+
+        if (expression is not MemberExpressionAst
+            {
+                Static: true,
+                Expression: TypeExpressionAst typeExpression,
+                Member: StringConstantExpressionAst member
+            } ||
+            typeExpression.TypeName.GetReflectionType() != enumType)
+            return false;
+
+        return PowerShellGeneratedTypePolicy.TryResolveEnumMember(
+            enumType,
+            member.Value,
+            targetFramework,
+            out value);
     }
 
     internal static bool TryEncodeValue(object? value, Type targetType, out PowerShellCompilationLiteral? literal)

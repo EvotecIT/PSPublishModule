@@ -41,7 +41,11 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
     private static IEnumerable<PowerShellCompilationSemanticOracleCase> CreateCases()
     {
         yield return Case("parameter-type", PowerShellCompilationFeatureIds.ParameterType, new[] { "42" });
-        yield return Case("parameter-default", PowerShellCompilationFeatureIds.ParameterDefault);
+        yield return Case(
+            "parameter-default",
+            PowerShellCompilationFeatureIds.ParameterDefault,
+            expectedValue: "42|User",
+            expectedTypeName: "System.String");
         yield return Case("parameter-metadata", PowerShellCompilationFeatureIds.ParameterMetadata);
         yield return Case("parameter-binding", PowerShellCompilationFeatureIds.ParameterBinding);
         yield return Case("conversion", PowerShellCompilationFeatureIds.Conversion);

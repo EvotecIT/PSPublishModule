@@ -216,6 +216,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                  !PowerShellCompilationLiteralPolicy.TryResolve(
                      parameter.DefaultValue,
                      isSwitch ? typeof(bool) : type,
+                     targetFramework,
                      out _)))
             {
                 diagnostics.Add(CreateDiagnostic(

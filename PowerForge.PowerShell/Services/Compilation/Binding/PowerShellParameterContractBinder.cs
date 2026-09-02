@@ -17,7 +17,7 @@ internal static class PowerShellParameterContractBinder
         var bindings = GetBindings(parameter);
         PowerShellCompilationLiteral? defaultValue = null;
         if (parameter.DefaultValue is not null)
-            PowerShellCompilationLiteralPolicy.TryResolve(parameter.DefaultValue, clrType, out defaultValue);
+            PowerShellCompilationLiteralPolicy.TryResolve(parameter.DefaultValue, clrType, targetFramework, out defaultValue);
         return new PowerShellCompilationParameter(
             parameter.Name.VariablePath.UserPath,
             clrType.FullName ?? clrType.Name,

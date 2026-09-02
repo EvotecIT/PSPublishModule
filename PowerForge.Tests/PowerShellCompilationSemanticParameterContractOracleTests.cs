@@ -12,7 +12,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public void RuntimeFreeTypedAndDefaultedParametersExecuteAcrossTargets(string targetFramework)
     {
         const string source = "function Get-TypedValue { param([int] $Value) return $Value }\n" +
-                              "function Get-DefaultValue { param([int] $Value = 42) return $Value }";
+                              "function Get-DefaultValue { param([int] $Value = 42) return $Value }\n" +
+                              "function Get-DefaultTarget { param([EnvironmentVariableTarget] $Target = ([EnvironmentVariableTarget]::User)) return $Target }";
         using var fixture = OracleFixture.Create(source);
         var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -43,6 +44,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         Assert.True(parameter.HasDefaultValue);
         Assert.Equal("42", parameter.DefaultValue?.Value);
         Assert.Equal("BoundParameterNames", boundState.CompilerPurpose);
+        var enumDefault = methods.Single(static method => method.Name == "Get_DefaultTarget");
+        Assert.Equal(
+            EnvironmentVariableTarget.User,
+            enumDefault.Invoke(null, new object?[] { default(EnvironmentVariableTarget), omitted }));
+        var enumDefaultMethod = build.Manifest.PublicAbi.Methods.Single(static method => method.ClrName == "Get_DefaultTarget");
+        Assert.Equal(
+            ((int)EnvironmentVariableTarget.User).ToString(),
+            Assert.Single(enumDefaultMethod.Parameters, static item => !item.CompilerAdded).DefaultValue?.Value);
     }
 
     [PinnedSemanticHostFact]

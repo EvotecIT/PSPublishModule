@@ -1,2 +1,5 @@
-param([int] $Value = 42)
-$Value
+param(
+    [int] $Value = 42,
+    [EnvironmentVariableTarget] $Target = ([EnvironmentVariableTarget]::User)
+)
+"$Value|$Target"
