@@ -86,6 +86,8 @@ internal static class PowerShellParameterSemanticValidator
 
     private static bool IsSupportedMetadata(AttributeAst attribute, PowerShellCompilationCapability capabilities, string? targetFramework)
     {
+        if (PowerShellCompileTimeMetadataSemanticPolicy.IsSupported(attribute))
+            return true;
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "CmdletBinding"))
             return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.All(argument => IsSupportedCmdletBindingArgument(argument, capabilities));
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "Parameter"))

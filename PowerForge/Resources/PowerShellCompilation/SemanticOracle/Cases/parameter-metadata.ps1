@@ -1,4 +1,5 @@
 function Get-ValidatedValue {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PowerForge.Semantic', 'ParameterMetadata', Justification = 'Compile-time-only oracle metadata.')]
     [CmdletBinding()]
     param([ValidateRange(1, 100)][int] $Value)
     $Value

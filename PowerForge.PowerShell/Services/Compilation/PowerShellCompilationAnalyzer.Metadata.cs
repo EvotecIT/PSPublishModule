@@ -9,6 +9,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         PowerShellCompilationCapability capabilities,
         string? targetFramework)
     {
+        if (PowerShellCompileTimeMetadataSemanticPolicy.IsSupported(attribute))
+            return true;
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "CmdletBinding"))
             return attribute.PositionalArguments.Count == 0 && attribute.NamedArguments.All(argument =>
                 IsSupportedCmdletBindingNamedArgument(argument, capabilities));
