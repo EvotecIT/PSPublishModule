@@ -2,17 +2,28 @@ namespace PowerForge;
 
 internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredBinaryExpression(SourceSpan span, Type clrType, PowerShellBoundBinaryOperator operation, PowerShellLoweredExpression left, PowerShellLoweredExpression right)
+    internal PowerShellLoweredBinaryExpression(
+        SourceSpan span,
+        Type clrType,
+        PowerShellBoundBinaryOperator operation,
+        PowerShellLoweredExpression left,
+        PowerShellLoweredExpression right,
+        string? leftTemporary,
+        string? rightTemporary)
         : base(span, clrType)
     {
         Operation = operation;
         Left = left;
         Right = right;
+        LeftTemporary = leftTemporary;
+        RightTemporary = rightTemporary;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
     internal PowerShellLoweredExpression Left { get; }
     internal PowerShellLoweredExpression Right { get; }
+    internal string? LeftTemporary { get; }
+    internal string? RightTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredUnaryExpression : PowerShellLoweredExpression

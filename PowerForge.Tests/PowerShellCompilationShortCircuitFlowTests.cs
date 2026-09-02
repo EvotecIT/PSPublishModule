@@ -25,6 +25,14 @@ function Test-OrNullRefinement {
     param([System.Version] $Value)
     return ($null -eq $Value) -or ($Value.Major -gt 0)
 }
+function Test-AndOppositePredicate {
+    param([System.Version] $Value)
+    return ($null -eq $Value) -and ($Value.Major -gt 0)
+}
+function Test-OrOppositePredicate {
+    param([System.Version] $Value)
+    return ($null -ne $Value) -or ($Value.Major -gt 0)
+}
 """;
 
     [Fact]
@@ -34,7 +42,7 @@ function Test-OrNullRefinement {
         var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        Assert.Equal(3, result.Emitted.Methods.Length);
+        Assert.Equal(5, result.Emitted.Methods.Length);
         Assert.All(result.Emitted.Methods, static method =>
             Assert.Contains("global::System.Object.ReferenceEquals", method.Source, StringComparison.Ordinal));
     }
@@ -74,22 +82,11 @@ function Test-OrNullRefinement {
         Assert.Equal(true, methods["Test_AndReversedNullRefinement"].Invoke(null, new object?[] { one }));
         Assert.Equal(true, methods["Test_OrNullRefinement"].Invoke(null, new object?[] { null }));
         Assert.Equal(false, methods["Test_OrNullRefinement"].Invoke(null, new object?[] { zero }));
-    }
-
-    [Theory]
-    [InlineData("return ($null -eq $Value) -and ($Value.Major -gt 0)")]
-    [InlineData("return ($null -ne $Value) -or ($Value.Major -gt 0)")]
-    public void OppositeShortCircuitPredicatesRemainRejected(string expression)
-    {
-        using var fixture = OracleFixture.Create($"function Test-Value {{ param([System.Version] $Value) {expression} }}");
-        var unit = Assert.Single(Assert.Single(new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
-            fixture.ScriptPath,
-            PowerShellCompilationMode.Strict,
-            targetFramework: "net10.0")).Files).Units);
-
-        Assert.False(unit.IsCompilable);
-        Assert.Contains(unit.Diagnostics, static diagnostic =>
-            diagnostic.Message.Contains("sign-sensitive null ordering", StringComparison.Ordinal));
+        Assert.Equal(false, methods["Test_AndOppositePredicate"].Invoke(null, new object?[] { null }));
+        Assert.Equal(false, methods["Test_AndOppositePredicate"].Invoke(null, new object?[] { one }));
+        Assert.Equal(false, methods["Test_OrOppositePredicate"].Invoke(null, new object?[] { null }));
+        Assert.Equal(true, methods["Test_OrOppositePredicate"].Invoke(null, new object?[] { one }));
+        Assert.Equal(true, methods["Test_OrOppositePredicate"].Invoke(null, new object?[] { zero }));
     }
 
     [Theory]

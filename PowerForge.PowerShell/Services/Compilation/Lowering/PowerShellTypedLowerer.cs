@@ -511,7 +511,9 @@ internal sealed partial class PowerShellTypedLowerer
                 binary.Type.ClrType,
                 binary.Operation,
                 LowerExpression(binary.Left, functions, names, targetCapabilities),
-                LowerExpression(binary.Right, functions, names, targetCapabilities)),
+                LowerExpression(binary.Right, functions, names, targetCapabilities),
+                IsNullOrderedComparison(binary.Operation) ? names.Allocate("pf_null_order_left") : null,
+                IsNullOrderedComparison(binary.Operation) ? names.Allocate("pf_null_order_right") : null),
             PowerShellBoundUnaryExpression unary => new PowerShellLoweredUnaryExpression(
                 unary.Span,
                 unary.Type.ClrType,
@@ -644,6 +646,12 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresPowerShellRuntimeState),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
+
+    private static bool IsNullOrderedComparison(PowerShellBoundBinaryOperator operation)
+        => operation is PowerShellBoundBinaryOperator.NullOrderedLessThan or
+            PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual or
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThan or
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
 
     private static string?[] CreateEvaluationTemporaryNames(
         PowerShellBoundInvocationExpression invocation,

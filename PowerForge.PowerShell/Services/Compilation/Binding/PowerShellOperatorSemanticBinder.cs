@@ -112,8 +112,8 @@ internal static class PowerShellOperatorSemanticBinder
 
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge")
         {
-            if ((left.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
-                (right.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
+            if ((left.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(leftType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
+                (right.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(rightType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
                 return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
             var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
@@ -132,8 +132,6 @@ internal static class PowerShellOperatorSemanticBinder
             }
             if (leftType.IsArray || rightType.IsArray)
                 return Reject(diagnostics, span, "PSB2208", "PowerShell array comparison is element-wise and is not supported by the scalar typed compiler.");
-            if (relational && (Nullable.GetUnderlyingType(leftType) is not null || Nullable.GetUnderlyingType(rightType) is not null))
-                return Reject(diagnostics, span, "PSB2217", "Relational comparison involving a nullable CLR value requires PowerShell's sign-sensitive null ordering and is not supported by the typed compiler.");
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
             var leftNumericType = Nullable.GetUnderlyingType(leftType) ?? leftType;
             if (leftType != rightType &&
@@ -146,11 +144,15 @@ internal static class PowerShellOperatorSemanticBinder
                     new PowerShellTypeFact(
                         leftType,
                         PowerShellTypeFactProvenance.Inferred,
-                        "PowerShell comparison converts the right integral operand to the left operand's static integral type using one exact CLR-safe widening conversion, lifted for nullable equality."),
+                        "PowerShell comparison converts the right integral operand to the left operand's static integral type using one exact CLR-safe widening conversion, lifted when the left operand is nullable."),
                     right);
                 rightType = leftType;
             }
-            if (leftType != rightType && !liftedEquality && left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null)
+            var nullableRelational = relational &&
+                                     (Nullable.GetUnderlyingType(leftType) is not null || Nullable.GetUnderlyingType(rightType) is not null);
+            if (nullableRelational && !TryNormalizeNullableRelationalOperands(ref left, ref right, ref leftType, ref rightType))
+                return Reject(diagnostics, span, "PSB2217", "Nullable relational comparison requires one exact integral or decimal underlying type and PowerShell's sign-sensitive null ordering; floating-point, narrowing, nullable-right widening, and dynamic coercion remain unsupported.");
+            if (leftType != rightType && !liftedEquality && !nullableRelational && left.ValueState != PowerShellValueState.Null && right.ValueState != PowerShellValueState.Null)
                 return Reject(diagnostics, span, "PSB2210", "Comparison operands must have the same static CLR type on the conservative compilation path.");
             var equalityType = Nullable.GetUnderlyingType(leftType) is { } nullableLeftType &&
                                (PowerShellClrTypeSemantics.IsIntegral(nullableLeftType) || nullableLeftType == typeof(decimal))
@@ -162,9 +164,11 @@ internal static class PowerShellOperatorSemanticBinder
                 return Reject(diagnostics, span, "PSB2216", $"Equality comparison for CLR type '{leftType.FullName}' has no supported static CLR equality operator.");
             if (relational && leftType == typeof(string) && rightType == typeof(string))
                 return Reject(diagnostics, span, "PSB2211", "PowerShell string relational comparison uses culture-aware runtime semantics and is not supported by the typed compiler.");
+            var leftRelationalType = Nullable.GetUnderlyingType(leftType) ?? leftType;
+            var rightRelationalType = Nullable.GetUnderlyingType(rightType) ?? rightType;
             if (relational &&
-                !(PowerShellClrTypeSemantics.IsNumeric(leftType) && PowerShellClrTypeSemantics.IsNumeric(rightType)) &&
-                !(leftType == typeof(char) && rightType == typeof(char)))
+                !(PowerShellClrTypeSemantics.IsNumeric(leftRelationalType) && PowerShellClrTypeSemantics.IsNumeric(rightRelationalType)) &&
+                !(leftRelationalType == typeof(char) && rightRelationalType == typeof(char)))
                 return Reject(diagnostics, span, "PSB2212", $"Relational comparison for CLR type '{leftType.FullName}' is not supported by the conservative compiler.");
             var bound = operation switch
             {
@@ -174,6 +178,10 @@ internal static class PowerShellOperatorSemanticBinder
                 "Cne" when leftType == typeof(string) => PowerShellBoundBinaryOperator.NotEqualCaseSensitive,
                 "Ieq" or "Ceq" => PowerShellBoundBinaryOperator.Equal,
                 "Ine" or "Cne" => PowerShellBoundBinaryOperator.NotEqual,
+                "Ilt" or "Clt" when nullableRelational => PowerShellBoundBinaryOperator.NullOrderedLessThan,
+                "Ile" or "Cle" when nullableRelational => PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual,
+                "Igt" or "Cgt" when nullableRelational => PowerShellBoundBinaryOperator.NullOrderedGreaterThan,
+                "Ige" or "Cge" when nullableRelational => PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual,
                 "Ilt" or "Clt" => PowerShellBoundBinaryOperator.LessThan,
                 "Ile" or "Cle" => PowerShellBoundBinaryOperator.LessThanOrEqual,
                 "Igt" or "Cgt" => PowerShellBoundBinaryOperator.GreaterThan,
@@ -194,6 +202,44 @@ internal static class PowerShellOperatorSemanticBinder
 
     private static bool IsNullableUnderlyingPair(Type left, Type right)
         => Nullable.GetUnderlyingType(left) == right || Nullable.GetUnderlyingType(right) == left;
+
+    private static bool TryNormalizeNullableRelationalOperands(
+        ref PowerShellBoundExpression left,
+        ref PowerShellBoundExpression right,
+        ref Type leftType,
+        ref Type rightType)
+    {
+        var leftUnderlying = Nullable.GetUnderlyingType(leftType);
+        var rightUnderlying = Nullable.GetUnderlyingType(rightType);
+        var underlyingType = leftUnderlying ?? rightUnderlying;
+        if (underlyingType is null ||
+            (!PowerShellClrTypeSemantics.IsIntegral(underlyingType) && underlyingType != typeof(decimal)) ||
+            (leftUnderlying ?? leftType) != underlyingType ||
+            (rightUnderlying ?? rightType) != underlyingType)
+            return false;
+
+        var nullableType = typeof(Nullable<>).MakeGenericType(underlyingType);
+        if (leftType != nullableType)
+        {
+            left = LiftNullableRelationalOperand(left, nullableType);
+            leftType = nullableType;
+        }
+        if (rightType != nullableType)
+        {
+            right = LiftNullableRelationalOperand(right, nullableType);
+            rightType = nullableType;
+        }
+        return true;
+    }
+
+    private static PowerShellBoundExpression LiftNullableRelationalOperand(PowerShellBoundExpression operand, Type nullableType)
+        => new PowerShellBoundConversionExpression(
+            operand.Span,
+            new PowerShellTypeFact(
+                nullableType,
+                PowerShellTypeFactProvenance.Inferred,
+                "PowerShell nullable ordering lifts the exact non-nullable operand without changing its value."),
+            operand);
 
     private static PowerShellBoundExpression? BindTypeTest(
         BinaryExpressionAst syntax,

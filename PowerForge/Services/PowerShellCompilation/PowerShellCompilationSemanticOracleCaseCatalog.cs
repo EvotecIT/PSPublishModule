@@ -61,6 +61,7 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
         yield return Case("dictionary-flow", PowerShellCompilationFeatureIds.DictionaryFlow);
         yield return Case("operator-arithmetic", "operator.arithmetic");
         yield return Case("operator-comparison", "operator.comparison", expectedValue: "True", expectedTypeName: "System.Boolean");
+        yield return Case("nullable-relational-ordering", "operator.comparison", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("operator-logical", "operator.logical", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("short-circuit-null-refinement", "operator.logical", expectedValue: "True", expectedTypeName: "System.Boolean");
         yield return Case("post-test-loop", PowerShellCompilationFeatureIds.PostTestLoop);

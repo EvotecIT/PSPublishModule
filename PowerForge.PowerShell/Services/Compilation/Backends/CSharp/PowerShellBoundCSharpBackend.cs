@@ -643,6 +643,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (IsNullOrderedComparison(expression.Operation))
+            return EmitNullOrderedComparison(expression, left, right);
         if (expression.Operation is PowerShellBoundBinaryOperator.NullEqual or PowerShellBoundBinaryOperator.NullNotEqual)
         {
             var comparison = $"global::System.Object.ReferenceEquals({left}, {right})";
@@ -689,6 +691,38 @@ internal sealed partial class PowerShellBoundCSharpBackend
             right = $"(int)({right})";
         return $"({left} {symbol} {right})";
     }
+
+    private static string EmitNullOrderedComparison(PowerShellLoweredBinaryExpression expression, string left, string right)
+    {
+        var underlyingType = Nullable.GetUnderlyingType(expression.Left.ClrType);
+        if (underlyingType is null || Nullable.GetUnderlyingType(expression.Right.ClrType) != underlyingType ||
+            expression.LeftTemporary is null || expression.RightTemporary is null)
+            throw new InvalidOperationException("PowerShell null-ordered comparison lowering requires two matching nullable operands and two allocated temporaries.");
+
+        var symbol = expression.Operation switch
+        {
+            PowerShellBoundBinaryOperator.NullOrderedLessThan => "<",
+            PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual => "<=",
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThan => ">",
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual => ">=",
+            _ => throw new InvalidOperationException($"Lowered binary operator '{expression.Operation}' is not a null-ordered comparison.")
+        };
+        var lessFamily = expression.Operation is PowerShellBoundBinaryOperator.NullOrderedLessThan or PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual;
+        var inclusive = expression.Operation is PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual or PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
+        var leftValue = $"{expression.LeftTemporary}.GetValueOrDefault()";
+        var rightValue = $"{expression.RightTemporary}.GetValueOrDefault()";
+        var zero = $"default({PowerShellCSharpSymbolRenderer.TypeName(underlyingType)})";
+        var leftOnly = lessFamily ? $"{leftValue} < {zero}" : $"{leftValue} >= {zero}";
+        var rightOnly = lessFamily ? $"{rightValue} >= {zero}" : $"{rightValue} < {zero}";
+        var nullableType = PowerShellCSharpSymbolRenderer.TypeName(expression.Left.ClrType);
+        return $"new global::System.Func<bool>(() => {{ {nullableType} {expression.LeftTemporary} = {left}; {nullableType} {expression.RightTemporary} = {right}; return {expression.LeftTemporary}.HasValue ? ({expression.RightTemporary}.HasValue ? {leftValue} {symbol} {rightValue} : {leftOnly}) : ({expression.RightTemporary}.HasValue ? {rightOnly} : {(inclusive ? "true" : "false")}); }})()";
+    }
+
+    private static bool IsNullOrderedComparison(PowerShellBoundBinaryOperator operation)
+        => operation is PowerShellBoundBinaryOperator.NullOrderedLessThan or
+            PowerShellBoundBinaryOperator.NullOrderedLessThanOrEqual or
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThan or
+            PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
 
     private static string EmitUnary(PowerShellLoweredUnaryExpression expression)
     {

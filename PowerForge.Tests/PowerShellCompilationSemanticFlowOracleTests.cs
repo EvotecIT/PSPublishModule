@@ -379,6 +379,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-comparison", "BoundedComparisonOracle");
 
     [PinnedSemanticHostFact]
+    public void RuntimeFreeArtifactObserverQualifiesNullableRelationalOrderingCaseAgainstPinnedHost()
+        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/nullable-relational-ordering", "BoundedNullableRelationalOrderingOracle");
+
+    [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesLogicalCaseAgainstPinnedHost()
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-logical", "BoundedLogicalOracle");
 
