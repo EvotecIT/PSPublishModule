@@ -440,6 +440,24 @@ public sealed class DotNetRepositoryReleasePublishOrderTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void SortProjectsForPublish_WhatIfHonorsCancellation()
+    {
+        using var workspace = new PublishOrderWorkspace();
+        var shared = workspace.AddProject("Shared");
+        var app = workspace.AddProject("App", ["Shared"]);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            new DotNetRepositoryReleaseService(new NullLogger())
+                .SortProjectsForPublish(
+                    [app, shared],
+                    usePlannedProjectGraph: true,
+                    configuration: "Release",
+                    cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void SortProjectsForPublish_UsesOnlyRootPackageManifest()
     {
         using var workspace = new PublishOrderWorkspace();

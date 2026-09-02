@@ -18,8 +18,28 @@ public sealed partial class DotNetRepositoryReleaseService
         string? configuration = null,
         DotNetRepositoryPackStrategy packStrategy = DotNetRepositoryPackStrategy.PerProject,
         bool includeSymbols = false,
-        string? packageOutputPath = null)
-        => CreatePublishPlan(projects, usePlannedProjectGraph, configuration, packStrategy, includeSymbols, packageOutputPath).OrderedProjects;
+        string? packageOutputPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        var previousCancellationToken = ActiveCancellationToken.Value;
+        ActiveCancellationToken.Value = cancellationToken;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CreatePublishPlan(
+                projects,
+                usePlannedProjectGraph,
+                configuration,
+                packStrategy,
+                includeSymbols,
+                packageOutputPath,
+                cancellationToken: cancellationToken).OrderedProjects;
+        }
+        finally
+        {
+            ActiveCancellationToken.Value = previousCancellationToken;
+        }
+    }
 
     private PublishPlan CreatePublishPlan(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
@@ -27,7 +47,9 @@ public sealed partial class DotNetRepositoryReleaseService
         string? configuration,
         DotNetRepositoryPackStrategy packStrategy,
         bool includeSymbols,
-        string? packageOutputPath)
+        string? packageOutputPath,
+        IProjectBuildProgressReporter? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (projects is null)
             throw new ArgumentNullException(nameof(projects));
@@ -44,12 +66,23 @@ public sealed partial class DotNetRepositoryReleaseService
             packageId => packageId,
             _ => new SortedSet<string>(StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in byPackageId)
+        if (usePlannedProjectGraph)
         {
-            var selectedDependencies = usePlannedProjectGraph
-                ? ReadPlannedProjectDependencies(entry.Value, byPackageId, configuration, packStrategy, includeSymbols, packageOutputPath)
-                : ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId);
-            dependencies[entry.Key].UnionWith(selectedDependencies);
+            var plannedDependencies = ResolvePlannedProjectDependencies(
+                byPackageId,
+                configuration,
+                packStrategy,
+                includeSymbols,
+                packageOutputPath,
+                progress,
+                cancellationToken);
+            foreach (var entry in plannedDependencies)
+                dependencies[entry.Key].UnionWith(entry.Value);
+        }
+        else
+        {
+            foreach (var entry in byPackageId)
+                dependencies[entry.Key].UnionWith(ReadSelectedPackageDependencies(entry.Value, entry.Key, byPackageId));
         }
 
         return new PublishPlan(OrderProjects(byPackageId, dependencies), dependencies);
@@ -172,8 +205,10 @@ public sealed partial class DotNetRepositoryReleaseService
         string? configuration,
         DotNetRepositoryPackStrategy packStrategy,
         bool includeSymbols,
-        string? packageOutputPath)
+        string? packageOutputPath,
+        ILogger? logger = null)
     {
+        logger ??= _logger;
         if (string.IsNullOrWhiteSpace(project.CsprojPath) || !File.Exists(project.CsprojPath))
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its project file does not exist.");
 
@@ -193,7 +228,8 @@ public sealed partial class DotNetRepositoryReleaseService
             useMsBuildTraversal,
             includeSymbols,
             packageOutputPath,
-            applyPlannedVersionProperties: project.HasPendingVersionUpdate);
+            applyPlannedVersionProperties: project.HasPendingVersionUpdate,
+            logger);
         if (project.HasPendingVersionUpdate)
         {
             var currentDependencies = EvaluatePlannedDependencySet(
@@ -204,7 +240,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 useMsBuildTraversal,
                 includeSymbols,
                 packageOutputPath,
-                applyPlannedVersionProperties: false);
+                applyPlannedVersionProperties: false,
+                logger);
             if (!dependencies.SetEquals(currentDependencies))
                 throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order for '{GetEffectivePackageId(project)}' because its pending version update changes the evaluated package dependency graph. Apply the version update or build the packages, then use artifact-based ordering.");
         }
@@ -220,10 +257,11 @@ public sealed partial class DotNetRepositoryReleaseService
         bool useMsBuildTraversal,
         bool includeSymbols,
         string? packageOutputPath,
-        bool applyPlannedVersionProperties)
+        bool applyPlannedVersionProperties,
+        ILogger logger)
     {
         var dependencies = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties);
+        var outer = EvaluatePublishPlanningItems(project, targetFramework: null, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties, logger);
         ValidatePlanningContract(project, outer, validatePackageWideProperties: true);
         if (outer.DeclaredTargetFrameworks.Count == 0)
         {
@@ -233,7 +271,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             foreach (var targetFramework in outer.DeclaredTargetFrameworks)
             {
-                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties);
+                var evaluation = EvaluatePublishPlanningItems(project, targetFramework, configuration, useMsBuildTraversal, includeSymbols, packageOutputPath, applyPlannedVersionProperties, logger);
                 ValidatePlanningContract(project, evaluation, validatePackageWideProperties: false);
                 AddPlannedDependencies(project, evaluation, selectedPackages, selectedProjectPaths, dependencies);
             }
@@ -306,7 +344,8 @@ public sealed partial class DotNetRepositoryReleaseService
         bool useMsBuildTraversal,
         bool includeSymbols,
         string? packageOutputPath,
-        bool applyPlannedVersionProperties)
+        bool applyPlannedVersionProperties,
+        ILogger logger)
     {
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
@@ -362,12 +401,12 @@ public sealed partial class DotNetRepositoryReleaseService
 #endif
         var exitCode = RunProcessWithHeartbeat(
             startInfo,
-            _logger,
+            logger,
             elapsed => $"{project.ProjectName}: MSBuild publish planning still running ({FormatDuration(elapsed)} elapsed).",
             out var standardError,
             out var standardOutput,
             out _);
-        LogProcessOutput(_logger, project.ProjectName, "dotnet msbuild publish planning", standardOutput, standardError);
+        LogProcessOutput(logger, project.ProjectName, "dotnet msbuild publish planning", standardOutput, standardError);
         if (exitCode != 0)
             throw new InvalidOperationException($"Cannot determine a safe planned NuGet publish order because dotnet msbuild could not evaluate '{projectPath}' ({targetFramework ?? "outer build"}, exit {exitCode}): {SummarizeProcessFailureOutput(standardError, standardOutput)}");
 

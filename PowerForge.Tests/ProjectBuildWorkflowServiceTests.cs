@@ -41,6 +41,45 @@ public sealed class ProjectBuildWorkflowServiceTests
             progress.Events);
     }
 
+    [Fact]
+    public void Execute_reports_version_progress_while_preparing_the_plan()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            File.WriteAllText(
+                Path.Combine(projectDirectory.FullName, "Sample.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><Version>1.0.0</Version><IsPackable>true</IsPackable></PropertyGroup></Project>");
+            var progress = new RecordingProjectBuildProgress();
+            var workflow = new ProjectBuildWorkflowService(new NullLogger()).Execute(
+                new ProjectBuildConfiguration(),
+                root.FullName,
+                new ProjectBuildPreparedContext
+                {
+                    PlanOnly = false,
+                    RootPath = root.FullName,
+                    Spec = new DotNetRepositoryReleaseSpec
+                    {
+                        RootPath = root.FullName,
+                        Pack = false,
+                        Publish = false,
+                        UpdateVersions = false
+                    }
+                },
+                executeBuild: false,
+                progress: progress);
+
+            Assert.True(workflow.Result.Success, workflow.Result.ErrorMessage);
+            Assert.Contains("start:Versioning:1", progress.Events);
+            Assert.Contains("update:Versioning:1/1", progress.Events);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private sealed class RecordingProjectBuildProgress : IProjectBuildProgressReporterV2
     {
         public List<string> Events { get; } = new();
