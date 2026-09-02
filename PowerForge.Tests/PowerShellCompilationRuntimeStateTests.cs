@@ -327,6 +327,13 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         using var fixture = ArtifactFixture.Create(
             "function Test-CommandAvailability { param([string] $Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }",
             ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().Transpile(fixture.ScriptPath);
+
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.FeatureId == "command.get-command");
+        Assert.DoesNotContain("__invokePowerShellCapture", typed.SourceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Management.Automation", typed.SourceCode, StringComparison.Ordinal);
+
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -337,6 +344,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
         Assert.False(result.Succeeded);
         Assert.Null(result.ArtifactPath);
+        Assert.True(string.IsNullOrWhiteSpace(result.BuildOutput), result.BuildOutput);
+        Assert.Contains("No PowerShell functions were eligible", result.Error, StringComparison.Ordinal);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,

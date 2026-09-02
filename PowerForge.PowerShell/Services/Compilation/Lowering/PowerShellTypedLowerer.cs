@@ -502,6 +502,12 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(discovery.Name, functions, names, targetCapabilities),
                 discovery.ErrorAction,
                 discovery.Provider),
+            PowerShellBoundHostedBooleanCommandExpression hostedBoolean => new PowerShellLoweredHostedBooleanCommandExpression(
+                hostedBoolean.Span,
+                hostedBoolean.Provider,
+                hostedBoolean.Arguments.Select(argument => new PowerShellLoweredHostedCommandArgument(
+                    argument.ParameterName,
+                    argument.Value is null ? null : LowerExpression(argument.Value, functions, names, targetCapabilities))).ToArray()),
             PowerShellBoundParameterPresenceExpression presence => new PowerShellLoweredParameterPresenceExpression(presence.Span, presence.ParameterName),
             PowerShellBoundConversionExpression conversion => new PowerShellLoweredConversionExpression(
                 conversion.Span,

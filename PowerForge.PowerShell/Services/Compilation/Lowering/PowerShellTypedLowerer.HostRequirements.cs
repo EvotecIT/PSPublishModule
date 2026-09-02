@@ -73,6 +73,7 @@ internal sealed partial class PowerShellTypedLowerer
                 ExpressionContainsBoundParameterPresence(assignment.Value),
             PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionContainsBoundParameterPresence(returned.Expression),
             PowerShellBoundExpressionStatement expression => ExpressionContainsBoundParameterPresence(expression.Expression),
+            PowerShellBoundStreamWriteStatement stream => ExpressionContainsBoundParameterPresence(stream.Message),
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ExpressionContainsBoundParameterPresence(clause.Condition) || ContainsBoundParameterPresence(clause.Body)) || conditional.ElseBlock is not null && ContainsBoundParameterPresence(conditional.ElseBlock),
             PowerShellBoundWhileStatement loop => ExpressionContainsBoundParameterPresence(loop.Condition) || ContainsBoundParameterPresence(loop.Body),
             PowerShellBoundForStatement loop => (loop.Initializer is not null && ExpressionContainsBoundParameterPresence(loop.Initializer)) || (loop.Condition is not null && ExpressionContainsBoundParameterPresence(loop.Condition)) || (loop.Iterator is not null && ExpressionContainsBoundParameterPresence(loop.Iterator)) || ContainsBoundParameterPresence(loop.Body),
@@ -90,6 +91,10 @@ internal sealed partial class PowerShellTypedLowerer
         => expression switch
         {
             PowerShellBoundParameterPresenceExpression => true,
+            PowerShellBoundRuntimeStateExpression runtime => runtime.Arguments.Any(ExpressionContainsBoundParameterPresence),
+            PowerShellBoundCommandAvailabilityExpression discovery => ExpressionContainsBoundParameterPresence(discovery.Name),
+            PowerShellBoundHostedBooleanCommandExpression hostedBoolean => hostedBoolean.Arguments.Any(argument =>
+                argument.Value is not null && ExpressionContainsBoundParameterPresence(argument.Value)),
             PowerShellBoundConversionExpression conversion => ExpressionContainsBoundParameterPresence(conversion.Operand),
             PowerShellBoundBinaryExpression binary => ExpressionContainsBoundParameterPresence(binary.Left) || ExpressionContainsBoundParameterPresence(binary.Right),
             PowerShellBoundUnaryExpression unary => ExpressionContainsBoundParameterPresence(unary.Operand),
@@ -128,6 +133,7 @@ internal sealed partial class PowerShellTypedLowerer
                 ExpressionRequiresRuntimeStateHostBinding(assignment.Value),
             PowerShellBoundReturnStatement returned => returned.Expression is not null && ExpressionRequiresRuntimeStateHostBinding(returned.Expression),
             PowerShellBoundExpressionStatement expression => ExpressionRequiresRuntimeStateHostBinding(expression.Expression),
+            PowerShellBoundStreamWriteStatement stream => ExpressionRequiresRuntimeStateHostBinding(stream.Message),
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause =>
                     ExpressionRequiresRuntimeStateHostBinding(clause.Condition) || RequiresRuntimeStateHostBinding(clause.Body)) ||
                 (conditional.ElseBlock is not null && RequiresRuntimeStateHostBinding(conditional.ElseBlock)),
@@ -156,8 +162,11 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool ExpressionRequiresRuntimeStateHostBinding(PowerShellBoundExpression expression)
         => expression switch
         {
-            PowerShellBoundRuntimeStateExpression runtime => runtime.RequiresHostBinding,
+            PowerShellBoundRuntimeStateExpression runtime => runtime.RequiresHostBinding ||
+                runtime.Arguments.Any(ExpressionRequiresRuntimeStateHostBinding),
             PowerShellBoundCommandAvailabilityExpression discovery => ExpressionRequiresRuntimeStateHostBinding(discovery.Name),
+            PowerShellBoundHostedBooleanCommandExpression hostedBoolean => hostedBoolean.Arguments.Any(argument =>
+                argument.Value is not null && ExpressionRequiresRuntimeStateHostBinding(argument.Value)),
             PowerShellBoundConversionExpression conversion => ExpressionRequiresRuntimeStateHostBinding(conversion.Operand),
             PowerShellBoundBinaryExpression binary => ExpressionRequiresRuntimeStateHostBinding(binary.Left) || ExpressionRequiresRuntimeStateHostBinding(binary.Right),
             PowerShellBoundUnaryExpression unary => ExpressionRequiresRuntimeStateHostBinding(unary.Operand),
@@ -236,5 +245,5 @@ internal sealed partial class PowerShellTypedLowerer
            PowerShellSemanticAnalyzer.EnumerateStatements(block)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression);
+               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression or PowerShellBoundHostedBooleanCommandExpression);
 }

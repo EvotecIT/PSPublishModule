@@ -12,6 +12,7 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.Equal(7, (int)PowerShellCompilationCommandFamily.ExternalOperation);
         Assert.Equal(8, (int)PowerShellCompilationCommandFamily.CommandDiscovery);
         Assert.Equal(9, (int)PowerShellCompilationCommandFamily.ClrConstruction);
+        Assert.Equal(10, (int)PowerShellCompilationCommandFamily.HostedBooleanQuery);
     }
 
     [Theory]
@@ -22,6 +23,8 @@ public sealed class PowerShellCommandSemanticRegistryTests
     [InlineData("Get-Command", "powerforge.command.discovery.get-command")]
     [InlineData("gcm", "powerforge.command.discovery.get-command")]
     [InlineData("Microsoft.PowerShell.Core\\Get-Command", "powerforge.command.discovery.get-command")]
+    [InlineData("Test-Path", "powerforge.command.hosted-boolean.test-path")]
+    [InlineData("Microsoft.PowerShell.Management\\Test-Path", "powerforge.command.hosted-boolean.test-path")]
     [InlineData("New-Object", "powerforge.command.construction.new-object")]
     [InlineData("Microsoft.PowerShell.Utility\\New-Object", "powerforge.command.construction.new-object")]
     public void DefaultRegistryResolvesCanonicalAliasesAndModuleQualification(string commandName, string providerId)
@@ -33,6 +36,57 @@ public sealed class PowerShellCommandSemanticRegistryTests
         Assert.True(result.Contract.CompileTimeOnly);
         Assert.False(result.Contract.MayImportSourceModules);
         Assert.False(result.Contract.MayExecuteSource);
+    }
+
+    [Fact]
+    public void HostedTestPathContractUsesOnlyCrossProfileAliases()
+    {
+        var provider = PowerShellCommandSemanticRegistry.Default.Resolve("Test-Path").Contract!;
+        var literalPath = Assert.Single(provider.Parameters, static parameter => parameter.Name == "LiteralPath");
+        var errorAction = Assert.Single(provider.Parameters, static parameter => parameter.Name == "ErrorAction");
+
+        Assert.Equal(new[] { "PSPath" }, literalPath.Aliases);
+        Assert.Equal(new[] { "EA" }, errorAction.Aliases);
+        Assert.DoesNotContain(provider.Parameters, static parameter => parameter.Name == "Path");
+        Assert.Equal(PowerShellCompilationCommandErrors.None, provider.Errors);
+    }
+
+    [Fact]
+    public void NestedStreamMessagesExposeHostedProvidersToGenericWalkers()
+    {
+        var span = new SourceSpan("nested-stream", 0, 1, 1, 1, 1, 2);
+        var hostedProvider = PowerShellCommandSemanticRegistry.Default.Resolve("Test-Path").Contract!;
+        var streamProvider = PowerShellCommandSemanticRegistry.Default.Resolve("Write-Output").Contract!;
+        var stringType = new PowerShellTypeFact(
+            typeof(string),
+            PowerShellTypeFactProvenance.Literal,
+            "Synthetic traversal contract.");
+        var boundHosted = new PowerShellBoundHostedBooleanCommandExpression(
+            span,
+            hostedProvider,
+            new[]
+            {
+                new PowerShellBoundHostedCommandArgument("LiteralPath", new PowerShellBoundLiteralExpression(span, "FileSystem::proof", stringType, PowerShellValueState.Known)),
+                new PowerShellBoundHostedCommandArgument("ErrorAction", new PowerShellBoundLiteralExpression(span, "Ignore", stringType, PowerShellValueState.Known))
+            });
+        var boundStream = new PowerShellBoundStreamWriteStatement(span, PowerShellStreamCommandKind.Success, streamProvider, boundHosted);
+
+        Assert.Same(boundHosted, Assert.Single(PowerShellSemanticAnalyzer.EnumerateDirectExpressions(boundStream)));
+        Assert.Contains(PowerShellSemanticAnalyzer.EnumerateExpressions(boundHosted), static expression => expression is PowerShellBoundHostedBooleanCommandExpression);
+
+        var loweredHosted = new PowerShellLoweredHostedBooleanCommandExpression(
+            span,
+            hostedProvider,
+            new[]
+            {
+                new PowerShellLoweredHostedCommandArgument("LiteralPath", new PowerShellLoweredLiteralExpression(span, typeof(string), "FileSystem::proof")),
+                new PowerShellLoweredHostedCommandArgument("ErrorAction", new PowerShellLoweredLiteralExpression(span, typeof(string), "Ignore"))
+            });
+        var loweredStream = new PowerShellLoweredStreamWriteStatement(span, PowerShellStreamCommandKind.Success, streamProvider, loweredHosted);
+
+        Assert.Equal(
+            new[] { "powerforge.command.hosted-boolean.test-path", "powerforge.command.stream.output" },
+            PowerShellLoweredCommandProviderCollector.Collect(new[] { loweredStream }).Select(static provider => provider.ProviderId));
     }
 
     [Fact]

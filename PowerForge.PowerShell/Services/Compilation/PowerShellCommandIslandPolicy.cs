@@ -280,10 +280,52 @@ internal static class PowerShellCommandIslandPolicy
 
         return command.CommandElements
             .OfType<StringConstantExpressionAst>()
-            .Any(static element =>
-                element.Value.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase) &&
-                !element.Value.StartsWith("Variable:script:", StringComparison.OrdinalIgnoreCase) &&
-                !element.Value.StartsWith("Variable:global:", StringComparison.OrdinalIgnoreCase));
+            .Any(static element => IsLocalSessionStateProviderPath(element.Value));
+    }
+
+    internal static bool IsSafeHostedProviderPath(ExpressionAst path)
+        => IsExplicitFileSystemProviderPath(path);
+
+    private static bool IsExplicitFileSystemProviderPath(ExpressionAst path)
+        => path switch
+        {
+            StringConstantExpressionAst literal => literal.Value.StartsWith("FileSystem::", StringComparison.OrdinalIgnoreCase),
+            ExpandableStringExpressionAst expandable => expandable.Value.StartsWith("FileSystem::", StringComparison.OrdinalIgnoreCase),
+            BinaryExpressionAst binary when binary.Operator == TokenKind.Plus => IsExplicitFileSystemProviderPath(binary.Left),
+            ParenExpressionAst parenthesized when
+                parenthesized.Pipeline is PipelineAst pipeline &&
+                pipeline.PipelineElements.Count == 1 &&
+                pipeline.PipelineElements[0] is CommandExpressionAst commandExpression =>
+                IsExplicitFileSystemProviderPath(commandExpression.Expression),
+            _ => false
+        };
+
+    private static bool IsLocalSessionStateProviderPath(string value)
+    {
+        foreach (var provider in new[] { "Variable", "Function", "Alias" })
+        {
+            string? remainder = null;
+            var providerSeparator = value.IndexOf("::", StringComparison.Ordinal);
+            if (providerSeparator > 0)
+            {
+                var identity = value.Substring(0, providerSeparator);
+                var moduleSeparator = identity.LastIndexOf('\\');
+                var providerName = moduleSeparator >= 0 ? identity.Substring(moduleSeparator + 1) : identity;
+                if (providerName.Equals(provider, StringComparison.OrdinalIgnoreCase))
+                    remainder = value.Substring(providerSeparator + 2);
+            }
+            else
+            {
+                var prefix = provider + ":";
+                if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    remainder = value.Substring(prefix.Length);
+            }
+            if (remainder is null) continue;
+            remainder = remainder.TrimStart('\\', '/');
+            return !remainder.StartsWith("script:", StringComparison.OrdinalIgnoreCase) &&
+                   !remainder.StartsWith("global:", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     private static bool IsProviderPathCommand(string commandName)

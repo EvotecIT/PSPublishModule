@@ -8,6 +8,7 @@ internal static class PowerShellCommandDiscoverySemanticBinder
         CommandAst command,
         PowerShellCompilationCapability capabilities)
         => capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
            IsBooleanConsumption(command) &&
            TryGetShape(command, out _, out _);
 
@@ -22,7 +23,8 @@ internal static class PowerShellCommandDiscoverySemanticBinder
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
         if (contextualType != typeof(bool) ||
-            !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
+            !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 provider.FeatureId,

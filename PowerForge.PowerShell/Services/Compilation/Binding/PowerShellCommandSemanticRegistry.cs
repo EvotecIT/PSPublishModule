@@ -209,6 +209,34 @@ internal sealed class PowerShellCommandSemanticRegistry
         };
         yield return new PowerShellCompilationCommandProviderContract
         {
+            ProviderId = "powerforge.command.hosted-boolean.test-path",
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Test-Path"),
+            Family = PowerShellCompilationCommandFamily.HostedBooleanQuery,
+            CommandName = "Test-Path",
+            ModuleNames = new[] { "Microsoft.PowerShell.Management" },
+            Parameters = new[]
+            {
+                new PowerShellCompilationCommandParameterContract { Name = "LiteralPath", Aliases = new[] { "PSPath" }, Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "PathType", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "IsValid", Position = -1 },
+                new PowerShellCompilationCommandParameterContract { Name = "ErrorAction", Aliases = new[] { "EA" }, Position = -1 }
+            },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.None,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "InvokePowerShellBoolean",
+                SemanticProfile = "PowerShell.Hosted/1.0",
+                RuntimeFree = false,
+                AotCompatible = false,
+                Dependencies = new[] { "System.Management.Automation" }
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
             ProviderId = "powerforge.command.construction.new-object",
             ProviderVersion = "1.0",
             FeatureId = PowerShellCompilationFeatureIds.ForCommand("New-Object"),
@@ -333,6 +361,15 @@ internal sealed class PowerShellCommandSemanticRegistry
                 PowerShellCompilationProviderContractValidator.ValidateExecutableContractShape(
                     contract,
                     requireExecutableEntryPoint: false);
+            }
+            else if (contract.Family == PowerShellCompilationCommandFamily.HostedBooleanQuery &&
+                     (!contract.Adapter.Operation.Equals("InvokePowerShellBoolean", StringComparison.Ordinal) ||
+                      contract.Output != PowerShellCompilationCommandOutput.Projected ||
+                      contract.Cardinality != PowerShellCompilationCommandCardinality.Scalar ||
+                      !contract.Stream.Equals("Success", StringComparison.Ordinal) ||
+                      contract.Adapter.RuntimeFree))
+            {
+                throw new InvalidOperationException($"Hosted Boolean provider '{contract.ProviderId}' must declare the InvokePowerShellBoolean scalar success contract.");
             }
             else if (contract.Adapter.Dependencies.Any(static dependency =>
                          !dependency.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase)))

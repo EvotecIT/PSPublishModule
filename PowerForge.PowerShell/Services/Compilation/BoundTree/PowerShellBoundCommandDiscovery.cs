@@ -18,7 +18,9 @@ internal sealed class PowerShellBoundCommandAvailabilityExpression : PowerShellB
             new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "Bounded command discovery produces one Boolean availability result."),
             PowerShellValueState.Known,
             PowerShellSemanticEffect.Host | PowerShellSemanticEffect.NonSuccessStream | name.Effects,
-            PowerShellRequiredCapability.CommandRegion | name.Capabilities)
+            PowerShellRequiredCapability.CommandRegion |
+            PowerShellRequiredCapability.PowerShellHostTypes |
+            name.Capabilities)
     {
         Name = name;
         ErrorAction = errorAction;

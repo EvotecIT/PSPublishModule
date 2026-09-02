@@ -85,10 +85,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.AppendLine("        }").Append("    }");
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
         var hostedRegionSiteCount = CountHostedRegionSites(function.Statements);
-        var supportsBasicCommandDiscoverySurface =
+        var supportsBasicCommandQuerySurface =
             function.RequiresPowerShellCommandRegions &&
             !function.RequiresPowerShellStreams &&
-            !ContainsNonDiscoveryHostedBoundary(function.Statements) &&
+            !ContainsNonQueryHostedBoundary(function.Statements) &&
             commandProviders.Length > 0 &&
             commandProviders.All(static provider => provider.Family == PowerShellCompilationCommandFamily.CommandDiscovery);
         return new PowerShellCSharpMethodEmission(
@@ -121,7 +121,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 _ => "RuntimeDependent"
             },
             hostedRegionSiteCount: hostedRegionSiteCount,
-            supportsBasicCommandDiscoverySurface: supportsBasicCommandDiscoverySurface);
+            supportsBasicCommandQuerySurface: supportsBasicCommandQuerySurface);
     }
 
     private static void EmitStatement(
@@ -308,6 +308,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
+            PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => EmitHostedBooleanCommand(hostedBoolean),
             PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),

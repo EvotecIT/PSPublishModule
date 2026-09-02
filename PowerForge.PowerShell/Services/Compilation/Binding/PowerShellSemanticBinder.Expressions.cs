@@ -244,6 +244,20 @@ internal sealed partial class PowerShellSemanticBinder
                 _commandRegistry.Resolve(command.GetCommandName()) is
                 {
                     Status: PowerShellCommandResolutionStatus.Resolved,
+                    Contract.Family: PowerShellCompilationCommandFamily.HostedBooleanQuery
+                } hostedBoolean:
+                return PowerShellHostedBooleanCommandSemanticBinder.Bind(
+                    document,
+                    command,
+                    hostedBoolean.Contract!,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    contextualType,
+                    capabilities,
+                    diagnostics);
+            case CommandAst command when
+                _commandRegistry.Resolve(command.GetCommandName()) is
+                {
+                    Status: PowerShellCommandResolutionStatus.Resolved,
                     Contract.Family: PowerShellCompilationCommandFamily.ClrConstruction
                 } construction:
                 return PowerShellNewObjectSemanticBinder.Bind(

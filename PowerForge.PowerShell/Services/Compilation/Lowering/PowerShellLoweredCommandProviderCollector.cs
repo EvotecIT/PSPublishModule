@@ -38,6 +38,7 @@ internal static class PowerShellLoweredCommandProviderCollector
                     break;
                 case PowerShellLoweredStreamWriteStatement stream:
                     yield return stream.Provider;
+                    foreach (var provider in Enumerate(stream.Message)) yield return provider;
                     break;
                 case PowerShellLoweredCommandRegionStatement region:
                     foreach (var stage in region.Stages) yield return stage.Provider;
@@ -100,9 +101,20 @@ internal static class PowerShellLoweredCommandProviderCollector
     {
         switch (expression)
         {
+            case PowerShellLoweredRuntimeStateExpression runtime:
+                foreach (var argument in runtime.Arguments)
+                foreach (var provider in Enumerate(argument))
+                    yield return provider;
+                break;
             case PowerShellLoweredCommandAvailabilityExpression discovery:
                 yield return discovery.Provider;
                 foreach (var provider in Enumerate(discovery.Name)) yield return provider;
+                break;
+            case PowerShellLoweredHostedBooleanCommandExpression hostedBoolean:
+                yield return hostedBoolean.Provider;
+                foreach (var argument in hostedBoolean.Arguments.Where(static argument => argument.Value is not null))
+                foreach (var provider in Enumerate(argument.Value!))
+                    yield return provider;
                 break;
             case PowerShellLoweredConversionExpression conversion:
                 foreach (var provider in Enumerate(conversion.Operand)) yield return provider;

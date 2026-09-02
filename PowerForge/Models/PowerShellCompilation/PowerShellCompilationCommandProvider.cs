@@ -24,7 +24,9 @@ public enum PowerShellCompilationCommandFamily
     /// <summary>Read-only discovery against the current PowerShell command table.</summary>
     CommandDiscovery,
     /// <summary>Compiler-owned normalization of a bounded New-Object shape into exact CLR construction.</summary>
-    ClrConstruction
+    ClrConstruction,
+    /// <summary>A scalar Boolean query whose provider semantics remain owned by the current PowerShell host.</summary>
+    HostedBooleanQuery
 }
 
 /// <summary>Success-output shape produced by a command provider.</summary>

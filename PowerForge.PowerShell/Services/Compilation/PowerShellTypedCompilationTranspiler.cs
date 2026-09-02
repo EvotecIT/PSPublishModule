@@ -361,7 +361,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) ||
             PowerShellAdvancedFunctionPolicy.IsAdvanced(source.Function) ||
             !emitted.RequiresPowerShellStreams && !emitted.RequiresPowerShellCommandRegions ||
-            emitted.SupportsBasicCommandDiscoverySurface)
+            emitted.SupportsBasicCommandQuerySurface)
             return;
         throw new PowerShellCSharpEmissionException(
             source.Function,
@@ -553,7 +553,7 @@ internal sealed class PowerShellCSharpMethodEmission
         string? collectionElementType = null,
         string? outputScalarization = null,
         int hostedRegionSiteCount = 0,
-        bool supportsBasicCommandDiscoverySurface = false)
+        bool supportsBasicCommandQuerySurface = false)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -576,7 +576,7 @@ internal sealed class PowerShellCSharpMethodEmission
         CollectionElementType = collectionElementType ?? string.Empty;
         OutputScalarization = outputScalarization ?? string.Empty;
         HostedRegionSiteCount = hostedRegionSiteCount;
-        SupportsBasicCommandDiscoverySurface = supportsBasicCommandDiscoverySurface;
+        SupportsBasicCommandQuerySurface = supportsBasicCommandQuerySurface;
     }
 
     internal string GeneratedName { get; }
@@ -600,5 +600,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string CollectionElementType { get; }
     internal string OutputScalarization { get; }
     internal int HostedRegionSiteCount { get; }
-    internal bool SupportsBasicCommandDiscoverySurface { get; }
+    internal bool SupportsBasicCommandQuerySurface { get; }
 }

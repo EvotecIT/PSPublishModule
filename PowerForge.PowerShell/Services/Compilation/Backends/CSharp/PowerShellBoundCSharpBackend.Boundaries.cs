@@ -74,7 +74,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private static int CountHostedRegionSites(PowerShellLoweredExpression expression)
         => expression switch
         {
+            PowerShellLoweredRuntimeStateExpression runtime => runtime.Arguments.Sum(CountHostedRegionSites),
             PowerShellLoweredCommandAvailabilityExpression discovery => 1 + CountHostedRegionSites(discovery.Name),
+            PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => 1 + hostedBoolean.Arguments
+                .Where(static argument => argument.Value is not null)
+                .Sum(static argument => CountHostedRegionSites(argument.Value!)),
             PowerShellLoweredConversionExpression conversion => CountHostedRegionSites(conversion.Operand),
             PowerShellLoweredBinaryExpression binary => CountHostedRegionSites(binary.Left) + CountHostedRegionSites(binary.Right),
             PowerShellLoweredUnaryExpression unary => CountHostedRegionSites(unary.Operand),
@@ -112,10 +116,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             _ => 0
         };
 
-    private static bool ContainsNonDiscoveryHostedBoundary(IEnumerable<PowerShellLoweredStatement> statements)
-        => statements.Any(ContainsNonDiscoveryHostedBoundary);
+    private static bool ContainsNonQueryHostedBoundary(IEnumerable<PowerShellLoweredStatement> statements)
+        => statements.Any(ContainsNonQueryHostedBoundary);
 
-    private static bool ContainsNonDiscoveryHostedBoundary(PowerShellLoweredStatement statement)
+    private static bool ContainsNonQueryHostedBoundary(PowerShellLoweredStatement statement)
         => statement switch
         {
             PowerShellLoweredCommandRegionStatement or PowerShellLoweredCommandCaptureStatement => true,
@@ -132,36 +136,39 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredStreamWriteStatement stream => ContainsCommandRegionLocalInvocation(stream.Message),
             PowerShellLoweredIfStatement conditional =>
                 conditional.Clauses.Any(static clause =>
-                    ContainsCommandRegionLocalInvocation(clause.Condition) || ContainsNonDiscoveryHostedBoundary(clause.Statements)) ||
-                conditional.ElseStatements is not null && ContainsNonDiscoveryHostedBoundary(conditional.ElseStatements.Value),
+                    ContainsCommandRegionLocalInvocation(clause.Condition) || ContainsNonQueryHostedBoundary(clause.Statements)) ||
+                conditional.ElseStatements is not null && ContainsNonQueryHostedBoundary(conditional.ElseStatements.Value),
             PowerShellLoweredWhileStatement loop =>
-                ContainsCommandRegionLocalInvocation(loop.Condition) || ContainsNonDiscoveryHostedBoundary(loop.Statements),
+                ContainsCommandRegionLocalInvocation(loop.Condition) || ContainsNonQueryHostedBoundary(loop.Statements),
             PowerShellLoweredForStatement loop =>
                 loop.Initializer is not null && ContainsCommandRegionLocalInvocation(loop.Initializer) ||
                 loop.Condition is not null && ContainsCommandRegionLocalInvocation(loop.Condition) ||
                 loop.Iterator is not null && ContainsCommandRegionLocalInvocation(loop.Iterator) ||
-                ContainsNonDiscoveryHostedBoundary(loop.Statements),
+                ContainsNonQueryHostedBoundary(loop.Statements),
             PowerShellLoweredForEachStatement loop =>
                 ContainsCommandRegionLocalInvocation(loop.Collection) ||
                 loop.NullCollectionElement is not null && ContainsCommandRegionLocalInvocation(loop.NullCollectionElement) ||
-                ContainsNonDiscoveryHostedBoundary(loop.Statements),
+                ContainsNonQueryHostedBoundary(loop.Statements),
             PowerShellLoweredSwitchStatement selected =>
                 ContainsCommandRegionLocalInvocation(selected.Value) ||
                 selected.Clauses.Any(static clause =>
-                    ContainsCommandRegionLocalInvocation(clause.Value) || ContainsNonDiscoveryHostedBoundary(clause.Statements)) ||
-                selected.DefaultStatements is not null && ContainsNonDiscoveryHostedBoundary(selected.DefaultStatements.Value),
+                    ContainsCommandRegionLocalInvocation(clause.Value) || ContainsNonQueryHostedBoundary(clause.Statements)) ||
+                selected.DefaultStatements is not null && ContainsNonQueryHostedBoundary(selected.DefaultStatements.Value),
             PowerShellLoweredThrowStatement { Expression: not null } thrown => ContainsCommandRegionLocalInvocation(thrown.Expression),
             PowerShellLoweredTryStatement attempted =>
-                ContainsNonDiscoveryHostedBoundary(attempted.Statements) ||
-                attempted.Catches.Any(static clause => ContainsNonDiscoveryHostedBoundary(clause.Statements)) ||
-                attempted.FinallyStatements is not null && ContainsNonDiscoveryHostedBoundary(attempted.FinallyStatements.Value),
+                ContainsNonQueryHostedBoundary(attempted.Statements) ||
+                attempted.Catches.Any(static clause => ContainsNonQueryHostedBoundary(clause.Statements)) ||
+                attempted.FinallyStatements is not null && ContainsNonQueryHostedBoundary(attempted.FinallyStatements.Value),
             _ => false
         };
 
     private static bool ContainsCommandRegionLocalInvocation(PowerShellLoweredExpression expression)
         => expression switch
         {
+            PowerShellLoweredRuntimeStateExpression runtime => runtime.Arguments.Any(ContainsCommandRegionLocalInvocation),
             PowerShellLoweredCommandAvailabilityExpression discovery => ContainsCommandRegionLocalInvocation(discovery.Name),
+            PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => hostedBoolean.Arguments.Any(static argument =>
+                argument.Value is not null && ContainsCommandRegionLocalInvocation(argument.Value)),
             PowerShellLoweredConversionExpression conversion => ContainsCommandRegionLocalInvocation(conversion.Operand),
             PowerShellLoweredBinaryExpression binary =>
                 ContainsCommandRegionLocalInvocation(binary.Left) || ContainsCommandRegionLocalInvocation(binary.Right),
