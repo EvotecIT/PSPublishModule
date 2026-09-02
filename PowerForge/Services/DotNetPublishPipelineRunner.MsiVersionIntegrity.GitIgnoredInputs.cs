@@ -81,10 +81,8 @@ public sealed partial class DotNetPublishPipelineRunner
         out string repositoryRoot)
     {
         repositoryRoot = string.Empty;
-        string current = Path.GetFullPath(inputDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        string outerRoot = Path.GetFullPath(outerGitRoot)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string current = NormalizeBuildInputPathRoot(inputDirectory);
+        string outerRoot = NormalizeBuildInputPathRoot(outerGitRoot);
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -115,8 +113,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
 
-                resolvedRoot = Path.GetFullPath(resolvedRoot!)
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                resolvedRoot = NormalizeBuildInputPathRoot(resolvedRoot!);
                 if (!string.Equals(resolvedRoot, current, comparison))
                 {
                     CacheBuildInputRepositoryDirectories(repositoryByDirectory, traversed, null);

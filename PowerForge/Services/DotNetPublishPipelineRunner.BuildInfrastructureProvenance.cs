@@ -548,7 +548,10 @@ public sealed partial class DotNetPublishPipelineRunner
         return current;
     }
 
-    private static string NormalizeBuildInputPathRoot(string path)
+    /// <summary>
+    /// Normalizes a build-input root without trimming a filesystem root into an empty or drive-relative path.
+    /// </summary>
+    internal static string NormalizeBuildInputPathRoot(string path)
     {
         string fullPath = Path.GetFullPath(path);
         string trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

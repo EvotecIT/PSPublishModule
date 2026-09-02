@@ -273,6 +273,158 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SourceProvenance_RejectsNewUntrackedSourceAtCachedCheckpoint()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(projectDirectory, "Program.cs"), "internal static class Program { }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source\"");
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    buildProjectPaths: [projectPath],
+                    buildConfiguration: "Release");
+            Assert.False(provenance.Dirty);
+
+            File.WriteAllText(
+                Path.Combine(projectDirectory, "NewSource.cs"),
+                "internal static class NewSource { }");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                provenance.ValidateCurrentSource);
+            Assert.Contains("NewSource.cs", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SourceProvenance_RejectsHeadAdvanceAtCachedCheckpoint()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string sourcePath = Path.Combine(root, "Program.cs");
+            File.WriteAllText(sourcePath, "internal static class Program { }");
+            RunGit(root, "add Program.cs");
+            RunGit(root, "commit -m \"approved source\"");
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, sourceRootPaths: [root]);
+            Assert.False(provenance.Dirty);
+
+            File.AppendAllText(sourcePath, Environment.NewLine + "// later commit");
+            RunGit(root, "add Program.cs");
+            RunGit(root, "commit -m \"later source\"");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                provenance.ValidateCurrentSource);
+            Assert.Contains("revision changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void SourceProvenance_AllowsNewGeneratedOutputAtCachedCheckpoint()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "internal static class Program { }");
+            RunGit(root, "add Program.cs");
+            RunGit(root, "commit -m \"approved source\"");
+            string outputDirectory = Path.Combine(root, "Artifacts", "Publish");
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(
+                    root,
+                    generatedPaths: [outputDirectory],
+                    sourceRootPaths: [root]);
+            Assert.False(provenance.Dirty);
+
+            Directory.CreateDirectory(outputDirectory);
+            File.WriteAllText(Path.Combine(outputDirectory, "App.dll"), "published");
+
+            provenance.ValidateCurrentSource();
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void TryBuildManifestProvenance_PreservesSharedCachedCheckpoint()
+    {
+        int validationCount = 0;
+        var shared = new DotNetPublishPipelineRunner.SourceProvenance(
+            "approved-revision",
+            dirty: false,
+            validateCurrentSource: () => validationCount++);
+        DotNetPublishArtefactResult[] artefacts =
+        [
+            CreatePublishArtefact("win-x64"),
+            CreatePublishArtefact("linux-x64")
+        ];
+        var provenances = new Dictionary<string, DotNetPublishPipelineRunner.SourceProvenance>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["App|net8.0|win-x64|PortableCompat"] = shared,
+            ["App|net8.0|linux-x64|PortableCompat"] = shared
+        };
+
+        DotNetPublishPipelineRunner.SourceProvenance? result =
+            DotNetPublishPipelineRunner.TryBuildManifestProvenance(artefacts, provenances);
+
+        Assert.Same(shared, result);
+        result!.ValidateCurrentSource();
+        Assert.Equal(1, validationCount);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void NormalizeBuildInputPathRoot_PreservesFileSystemRoot()
+    {
+        string root = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
+
+        string normalized = DotNetPublishPipelineRunner.NormalizeBuildInputPathRoot(root);
+
+        Assert.Equal(root, normalized);
+    }
+
+    private static DotNetPublishArtefactResult CreatePublishArtefact(string runtime)
+        => new()
+        {
+            Category = DotNetPublishArtefactCategory.Publish,
+            Target = "App",
+            Framework = "net8.0",
+            Runtime = runtime,
+            Style = DotNetPublishStyle.PortableCompat
+        };
+
     private static string CreateFixtureFile(string root, params string[] parts)
     {
         string path = parts.Aggregate(root, Path.Combine);
