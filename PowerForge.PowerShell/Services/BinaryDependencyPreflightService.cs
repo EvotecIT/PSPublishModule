@@ -183,7 +183,7 @@ public sealed class BinaryDependencyPreflightService
             foreach (var reference in ReadAssemblyReferences(assemblyPath))
             {
                 if (string.IsNullOrWhiteSpace(reference.Name)) continue;
-                if (IsHostProvidedAssemblyReference(providedByHost, reference.Name)) continue;
+                if (IsHostProvidedAssemblyReference(providedByHost, reference)) continue;
 
                 var key = assemblyFileName + "->" + reference.Name;
                 if (!seen.Add(key)) continue;
@@ -264,7 +264,7 @@ public sealed class BinaryDependencyPreflightService
                     continue;
                 }
 
-                if (IsHostProvidedAssemblyReference(providedByHost, reference.Name)) continue;
+                if (IsHostProvidedAssemblyReference(providedByHost, reference)) continue;
 
                 var key = assemblyFileName + "->" + reference.Name;
                 if (!seenIssues.Add(key)) continue;
@@ -712,13 +712,17 @@ public sealed class BinaryDependencyPreflightService
         return set;
     }
 
-    private static bool IsHostProvidedAssemblyReference(ISet<string> providedByHost, string assemblyName)
+    private static bool IsHostProvidedAssemblyReference(ISet<string> providedByHost, AssemblyReferenceInfo reference)
     {
-        if (providedByHost.Contains(assemblyName))
+        if (providedByHost.Contains(reference.Name))
             return true;
 
-        return Path.DirectorySeparatorChar == '\\' && IsWindowsRuntimeContractAssemblyName(assemblyName);
+        return Path.DirectorySeparatorChar == '\\' && IsWindowsRuntimeContractReference(reference.Name, reference.Flags);
     }
+
+    internal static bool IsWindowsRuntimeContractReference(string? assemblyName, AssemblyFlags flags)
+        => IsWindowsRuntimeContractAssemblyName(assemblyName) &&
+           (flags & AssemblyFlags.ContentTypeMask) == AssemblyFlags.WindowsRuntime;
 
     internal static bool IsWindowsRuntimeContractAssemblyName(string? assemblyName)
     {
@@ -809,7 +813,7 @@ public sealed class BinaryDependencyPreflightService
                 var reference = reader.GetAssemblyReference(handle);
                 var name = reader.GetString(reference.Name);
                 if (string.IsNullOrWhiteSpace(name)) continue;
-                list.Add(new AssemblyReferenceInfo(name, reference.Version));
+                list.Add(new AssemblyReferenceInfo(name, reference.Version, reference.Flags));
             }
 
             return list;
@@ -824,11 +828,13 @@ public sealed class BinaryDependencyPreflightService
     {
         public string Name { get; }
         public Version? Version { get; }
+        public AssemblyFlags Flags { get; }
 
-        public AssemblyReferenceInfo(string name, Version? version)
+        public AssemblyReferenceInfo(string name, Version? version, AssemblyFlags flags)
         {
             Name = name;
             Version = version;
+            Flags = flags;
         }
     }
 

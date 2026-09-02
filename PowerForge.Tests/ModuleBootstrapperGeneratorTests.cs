@@ -363,10 +363,12 @@ public partial class ModuleBootstrapperGeneratorTests
     }
 
     [Theory]
-    [InlineData("Core")]
-    [InlineData("Standard")]
-    [InlineData("Default")]
-    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_GenericFolderKeepsDeclaredRuntime(string folderName)
+    [InlineData("Core", "net8.0")]
+    [InlineData("Standard", "netcoreapp3.1")]
+    [InlineData("Default", "net8.0")]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_UsesGenericFolderCompatibilityContract(
+        string folderName,
+        string expectedFramework)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-generic-" + Guid.NewGuid().ToString("N"));
         var payload = Directory.CreateDirectory(Path.Combine(root, folderName)).FullName;
@@ -377,7 +379,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 "net8.0",
                 new[] { payload });
 
-            Assert.Equal("net8.0", framework);
+            Assert.Equal(expectedFramework, framework);
         }
         finally
         {
@@ -726,7 +728,7 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public void Generate_WithAssemblyLoadContextAndUnmarkedPayloads_UsesDeclaredModernLoaderFramework()
+    public void Generate_WithAssemblyLoadContextAndUnmarkedPayloads_WritesPerPayloadCompatibleLoaders()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-standard-" + Guid.NewGuid().ToString("N"));
         var libStandard = Directory.CreateDirectory(Path.Combine(root, "Lib", "Standard")).FullName;
@@ -745,20 +747,18 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "netstandard2.0", "net8.0" });
 
-            foreach (var loaderPath in new[]
-                     {
-                         Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll"),
-                         Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll")
-                     })
-            {
-                Assert.True(File.Exists(loaderPath));
-                var targetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(loaderPath))
-                    .GetCustomAttributesData()
-                    .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
-                    .ConstructorArguments[0]
-                    .Value as string;
-                Assert.Equal(".NETCoreApp,Version=v8.0", targetFramework);
-            }
+            var standardLoaderPath = Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll");
+            var coreLoaderPath = Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll");
+            Assert.True(File.Exists(standardLoaderPath));
+            Assert.True(File.Exists(coreLoaderPath));
+            Assert.Contains(
+                ".NETCoreApp,Version=v3.1",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(standardLoaderPath)),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                ".NETCoreApp,Version=v8.0",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(coreLoaderPath)),
+                StringComparison.Ordinal);
         }
         finally
         {
