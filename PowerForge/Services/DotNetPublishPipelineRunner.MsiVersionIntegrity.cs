@@ -572,6 +572,10 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
+        yield return plan.Outputs.ManifestJsonPath ?? string.Empty;
+        yield return plan.Outputs.ManifestTextPath ?? string.Empty;
+        yield return plan.Outputs.ChecksumsPath ?? string.Empty;
+
         foreach (var statePath in EnumeratePlannedMsiVersionStatePaths(plan))
             yield return statePath;
 

@@ -302,7 +302,7 @@ public sealed partial class DotNetPublishPipelineRunner
         NoBuildPublishInputSnapshot? inputSnapshot,
         PublishProvenanceLease? provenanceLease,
         SourceProvenance? verifiedSourceProvenance,
-        IReadOnlyCollection<string> plannedPublishOutputDirectories,
+        IReadOnlyCollection<string> plannedPublishGeneratedPaths,
         out SourceProvenance? finalSourceProvenance)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
@@ -408,7 +408,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 signingProvenance = ReadPortableInventorySourceProvenance(
                     plan,
                     outputDir,
-                    plannedPublishOutputDirectories);
+                    plannedPublishGeneratedPaths);
                 provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                     signingProvenance.PublishInputFiles,
                     signingProvenance.NoBuildPublishInputs));

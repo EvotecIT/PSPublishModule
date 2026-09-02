@@ -8,7 +8,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void ResolvePlannedPublishOutputDirectories_ExcludesEveryPublishCombinationFromCachedSourceChecks()
+    public void ResolvePlannedPublishGeneratedPaths_ExcludesEveryPublishDirectoryAndZipFromCachedSourceChecks()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -32,7 +32,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         {
                             Framework = "net8.0",
                             Style = DotNetPublishStyle.FrameworkDependent,
-                            OutputPath = "Artifacts/{target}/{rid}/{framework}/{style}"
+                            OutputPath = "Artifacts/{target}/{rid}/{framework}/{style}",
+                            Zip = true
+                        }
+                    },
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "Tool",
+                        ProjectPath = Path.Combine(root, "Tool.csproj"),
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net8.0",
+                            Style = DotNetPublishStyle.FrameworkDependent,
+                            OutputPath = "Artifacts/{target}/{rid}/{framework}/{style}",
+                            Zip = true,
+                            ZipPath = "Artifacts/Archives/{rid}/tool.zip"
                         }
                     }
                 ],
@@ -53,11 +67,28 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         Framework = "net8.0",
                         Runtime = "linux-x64",
                         Style = DotNetPublishStyle.FrameworkDependent
+                    },
+                    new DotNetPublishStep
+                    {
+                        Kind = DotNetPublishStepKind.Publish,
+                        TargetName = "Tool",
+                        Framework = "net8.0",
+                        Runtime = "win-x64",
+                        Style = DotNetPublishStyle.FrameworkDependent
                     }
                 ]
             };
-            string[] outputs = DotNetPublishPipelineRunner.ResolvePlannedPublishOutputDirectories(plan);
-            Assert.Equal(2, outputs.Length);
+            string[] outputs = DotNetPublishPipelineRunner.ResolvePlannedPublishGeneratedPaths(plan);
+            Assert.Equal(6, outputs.Length);
+            Assert.Contains(outputs, path => path.EndsWith(
+                "App-net8.0-win-x64-FrameworkDependent.zip",
+                StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(outputs, path => path.EndsWith(
+                "App-net8.0-linux-x64-FrameworkDependent.zip",
+                StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(outputs, path => path.Replace('\\', '/').EndsWith(
+                "Artifacts/Archives/win-x64/tool.zip",
+                StringComparison.OrdinalIgnoreCase));
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(
                     root,
@@ -67,8 +98,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             foreach (string output in outputs)
             {
-                Directory.CreateDirectory(output);
-                File.WriteAllText(Path.Combine(output, "App.dll"), "published");
+                if (output.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                    File.WriteAllText(output, "archive");
+                }
+                else
+                {
+                    Directory.CreateDirectory(output);
+                    File.WriteAllText(Path.Combine(output, "App.dll"), "published");
+                }
             }
 
             provenance.ValidateCurrentSource();

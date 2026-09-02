@@ -66,7 +66,7 @@ public sealed partial class DotNetPublishPipelineRunner
         PublishProvenanceLease? manifestProvenanceLease = null;
         SourceProvenance? sharedPublishProvenance = null;
         var publishProvenanceByArtifact = new Dictionary<string, SourceProvenance>(StringComparer.OrdinalIgnoreCase);
-        string[] plannedPublishOutputDirectories = Array.Empty<string>();
+        string[] plannedPublishGeneratedPaths = Array.Empty<string>();
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState =
             new Dictionary<string, string>();
         string? manifestJson = null;
@@ -77,7 +77,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            plannedPublishOutputDirectories = ResolvePlannedPublishOutputDirectories(plan);
+            plannedPublishGeneratedPaths = ResolvePlannedPublishGeneratedPaths(plan);
             ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
             ValidateNativeAotEnvironmentVariables(plan);
             ValidateTrackedGeneratedProvenancePaths(plan);
@@ -143,7 +143,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                     SourceProvenance initialProvenance =
                                         ReadPortableInventorySourceProvenance(
                                             plan,
-                                            additionalGeneratedPaths: plannedPublishOutputDirectories);
+                                            additionalGeneratedPaths: plannedPublishGeneratedPaths);
                                     PublishProvenanceLease candidateLease = PublishProvenanceLease.Create(
                                         PublishProvenanceLease.BuildGuardedPaths(
                                             initialProvenance.PublishInputFiles,
@@ -153,7 +153,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         SourceProvenance confirmedProvenance =
                                             ReadPortableInventorySourceProvenance(
                                                 plan,
-                                                additionalGeneratedPaths: plannedPublishOutputDirectories);
+                                                additionalGeneratedPaths: plannedPublishGeneratedPaths);
                                         candidateLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                                             confirmedProvenance.PublishInputFiles,
                                             confirmedProvenance.NoBuildPublishInputs));
@@ -197,7 +197,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                 inputSnapshot,
                                 provenanceLease,
                                 publishProvenance,
-                                plannedPublishOutputDirectories,
+                                plannedPublishGeneratedPaths,
                                 out SourceProvenance? finalPublishProvenance);
                             artefacts.Add(publishedArtefact);
                             if (finalPublishProvenance is not null)
@@ -261,13 +261,22 @@ public sealed partial class DotNetPublishPipelineRunner
                                     msiReservationOwner,
                                 verifiedSourceProvenance:
                                     TryBuildManifestProvenance(artefacts, publishProvenanceByArtifact));
+                            IReadOnlyDictionary<string, string> trackedManifestOutputState =
+                                CaptureTrackedManifestOutputState(
+                                    plan.ProjectRoot,
+                                    cleanTrackedGeneratedProvenanceState,
+                                    manifestJson,
+                                    manifestText,
+                                    checksumsPath);
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
                                 sharedPublishProvenance,
                                 GetVerifiedMsiVersionStateWrites(
                                     plan.ProjectRoot,
                                     cleanTrackedGeneratedProvenanceState,
-                                    msiReservationOwner));
+                                    msiReservationOwner)
+                                .Concat(trackedManifestOutputState.Keys));
+                            ValidateTrackedManifestOutputState(trackedManifestOutputState);
                             break;
                         }
                     }
@@ -476,6 +485,48 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         provenanceLease?.ValidateUnchanged();
         provenance?.ValidateCurrentSource(additionalTrackedGeneratedPaths);
+    }
+
+    internal static IReadOnlyDictionary<string, string> CaptureTrackedManifestOutputState(
+        string projectRoot,
+        IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState,
+        params string?[] outputPaths)
+    {
+        StringComparer comparer = IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var outputState = new Dictionary<string, string>(comparer);
+        foreach (string outputPath in outputPaths
+                     .Where(static path => !string.IsNullOrWhiteSpace(path))
+                     .Select(path => Path.GetFullPath(
+                         Path.IsPathRooted(path)
+                             ? path!
+                             : Path.Combine(projectRoot, path!)))
+                     .Distinct(comparer))
+        {
+            if (!cleanTrackedGeneratedProvenanceState.ContainsKey(outputPath) || !File.Exists(outputPath))
+                continue;
+            using Stream stream = File.OpenRead(outputPath);
+            outputState[outputPath] = ComputeSha256Hex(stream);
+        }
+
+        return outputState;
+    }
+
+    internal static void ValidateTrackedManifestOutputState(
+        IReadOnlyDictionary<string, string> outputState)
+    {
+        foreach (KeyValuePair<string, string> output in outputState)
+        {
+            if (!File.Exists(output.Key))
+                throw new InvalidOperationException($"Generated manifest output disappeared during provenance validation: {output.Key}");
+            using Stream stream = File.OpenRead(output.Key);
+            if (!string.Equals(ComputeSha256Hex(stream), output.Value, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Generated manifest output changed during provenance validation: {output.Key}");
+            }
+        }
     }
 
     internal static SourceProvenance? TryBuildManifestProvenance(

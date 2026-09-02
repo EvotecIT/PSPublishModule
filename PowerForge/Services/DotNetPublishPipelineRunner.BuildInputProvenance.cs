@@ -1113,6 +1113,9 @@ public sealed partial class DotNetPublishPipelineRunner
             else if (RequiresControlledProjectReferenceResolution(
                          projectReferenceDeclarations,
                          trustedBuildInfrastructureRoots) ||
+                     RequiresControlledProjectReferenceFrameworkResolution(
+                         request,
+                         rawReferences.Values) ||
                      hasDynamicProjectReferenceTaskOutputs)
             {
                 if (!TryReadControlledResolvedProjectReferences(
@@ -1223,6 +1226,23 @@ public sealed partial class DotNetPublishPipelineRunner
                  outputShapingMetadata.Contains(
                      element.Name.LocalName,
                      StringComparer.OrdinalIgnoreCase))));
+    }
+
+    private static bool RequiresControlledProjectReferenceFrameworkResolution(
+        ProjectEvaluationRequest request,
+        IEnumerable<EvaluatedProjectReference> references)
+    {
+        if (string.IsNullOrWhiteSpace(request.TargetFramework))
+            return false;
+
+        return references.Any(reference =>
+            !reference.UndefineProperties.Contains(
+                "TargetFramework",
+                StringComparer.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(reference.TargetFramework) &&
+            string.IsNullOrWhiteSpace(ResolveNearestDeclaredTargetFrameworkUnconditionally(
+                reference.ProjectPath,
+                request.TargetFramework!)));
     }
 
     private static string? ResolveExistingCustomAfterTargets(string? value, string projectDirectory)
