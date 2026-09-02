@@ -300,7 +300,8 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStyle? styleOverride,
         string reservationOwner,
         NoBuildPublishInputSnapshot? inputSnapshot,
-        PublishProvenanceLease? provenanceLease)
+        PublishProvenanceLease? provenanceLease,
+        SourceProvenance? verifiedSourceProvenance)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
@@ -329,8 +330,12 @@ public sealed partial class DotNetPublishPipelineRunner
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
 
         string[] evidencePaths = Array.Empty<string>();
+        SourceProvenance? signingProvenance = null;
         if (target.Publish.Sign?.Enabled == true)
-            _ = ReadPortableInventorySourceProvenance(plan, outputDir);
+        {
+            signingProvenance = verifiedSourceProvenance ??
+                ReadPortableInventorySourceProvenance(plan, outputDir);
+        }
 
         EnsureOutputDirectoryUnlocked(
             plan,
@@ -435,7 +440,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         "when the signed product identity is supplied by imported or generated build properties.");
                 }
                 string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
-                SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
+                provenanceLease?.ValidateUnchanged();
+                SourceProvenance provenance = signingProvenance
+                    ?? throw new InvalidOperationException(
+                        $"Signed publish target '{target.Name}' has no verified source provenance.");
                 (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                     outputDir,
                     executable,

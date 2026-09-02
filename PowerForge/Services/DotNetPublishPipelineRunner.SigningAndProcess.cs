@@ -723,12 +723,27 @@ public sealed partial class DotNetPublishPipelineRunner
             expectedSha256 = sha256;
             if (ActiveToolSnapshotScope.Value)
             {
-                ActiveGitExecutablePath.Value = path;
-                ActiveGitExecutableSha256.Value = sha256;
+                PublishProvenanceLease gitExecutableLease = PublishProvenanceLease.Create(new[] { path });
+                try
+                {
+                    ValidateGitExecutableSnapshot(path, sha256);
+                    ActiveGitExecutablePath.Value = path;
+                    ActiveGitExecutableSha256.Value = sha256;
+                    ActiveGitExecutableLease.Value = gitExecutableLease;
+                }
+                catch
+                {
+                    gitExecutableLease.Dispose();
+                    throw;
+                }
             }
         }
         string resolvedPath = path!;
-        ValidateGitExecutableSnapshot(resolvedPath, expectedSha256);
+        PublishProvenanceLease? lease = ActiveGitExecutableLease.Value;
+        if (ActiveToolSnapshotScope.Value && lease is not null)
+            lease.ValidateUnchanged();
+        else
+            ValidateGitExecutableSnapshot(resolvedPath, expectedSha256);
         return resolvedPath;
     }
 

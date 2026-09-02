@@ -14,22 +14,24 @@ public sealed partial class DotNetPublishPipelineRunner
         string fullGitRoot = Path.GetFullPath(gitRoot);
         var inputsByRepository = new Dictionary<string, HashSet<string>>(comparer);
         var repositoryByDirectory = new Dictionary<string, string?>(comparer);
+        var verifiedRepositories = new HashSet<string>(comparer);
         foreach (string input in buildInputs)
         {
             string fullInput = Path.GetFullPath(input);
             string inputDirectory = Path.GetDirectoryName(fullInput)!;
-            if (!repositoryByDirectory.TryGetValue(inputDirectory, out string? repositoryRoot))
-            {
-                repositoryRoot = ReadGitText(inputDirectory, "rev-parse --show-toplevel");
-                repositoryByDirectory[inputDirectory] = repositoryRoot;
-            }
-            if (string.IsNullOrWhiteSpace(repositoryRoot))
+            if (!TryResolveBuildInputRepository(
+                    inputDirectory,
+                    fullGitRoot,
+                    repositoryByDirectory,
+                    out string repositoryRoot))
                 return null;
 
-            repositoryRoot = Path.GetFullPath(repositoryRoot!);
+            bool verifyRepository = verifiedRepositories.Add(repositoryRoot);
             if (!IsSameOrBelowBuildInputPath(repositoryRoot, fullGitRoot) ||
                 !IsSameOrBelowBuildInputPath(fullInput, repositoryRoot) ||
-                !IsRecordedNestedGitRepository(repositoryRoot, fullGitRoot))
+                (verifyRepository &&
+                 !comparer.Equals(repositoryRoot, fullGitRoot) &&
+                 !IsRecordedNestedGitRepository(repositoryRoot, fullGitRoot)))
             {
                 return null;
             }
@@ -72,6 +74,92 @@ public sealed partial class DotNetPublishPipelineRunner
         return ignoredInputs.ToArray();
     }
 
+    private static bool TryResolveBuildInputRepository(
+        string inputDirectory,
+        string outerGitRoot,
+        Dictionary<string, string?> repositoryByDirectory,
+        out string repositoryRoot)
+    {
+        repositoryRoot = string.Empty;
+        string current = Path.GetFullPath(inputDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string outerRoot = Path.GetFullPath(outerGitRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var traversed = new List<string>();
+
+        while (IsSameOrBelowBuildInputPath(current, outerRoot))
+        {
+            if (repositoryByDirectory.TryGetValue(current, out string? cachedRoot))
+            {
+                if (string.IsNullOrWhiteSpace(cachedRoot))
+                    return false;
+                repositoryRoot = cachedRoot!;
+                CacheBuildInputRepositoryDirectories(
+                    repositoryByDirectory,
+                    traversed,
+                    repositoryRoot);
+                return true;
+            }
+
+            traversed.Add(current);
+            string gitMarker = Path.Combine(current, ".git");
+            if (File.Exists(gitMarker) || Directory.Exists(gitMarker))
+            {
+                string? resolvedRoot = ReadGitText(current, "rev-parse --show-toplevel");
+                if (string.IsNullOrWhiteSpace(resolvedRoot))
+                {
+                    CacheBuildInputRepositoryDirectories(repositoryByDirectory, traversed, null);
+                    return false;
+                }
+
+                resolvedRoot = Path.GetFullPath(resolvedRoot!)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (!string.Equals(resolvedRoot, current, comparison))
+                {
+                    CacheBuildInputRepositoryDirectories(repositoryByDirectory, traversed, null);
+                    return false;
+                }
+
+                repositoryRoot = resolvedRoot;
+                CacheBuildInputRepositoryDirectories(
+                    repositoryByDirectory,
+                    traversed,
+                    repositoryRoot);
+                return true;
+            }
+
+            if (string.Equals(current, outerRoot, comparison))
+            {
+                repositoryRoot = outerRoot;
+                CacheBuildInputRepositoryDirectories(
+                    repositoryByDirectory,
+                    traversed,
+                    repositoryRoot);
+                return true;
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, comparison))
+                break;
+            current = parent;
+        }
+
+        CacheBuildInputRepositoryDirectories(repositoryByDirectory, traversed, null);
+        return false;
+    }
+
+    private static void CacheBuildInputRepositoryDirectories(
+        Dictionary<string, string?> repositoryByDirectory,
+        IEnumerable<string> directories,
+        string? repositoryRoot)
+    {
+        foreach (string directory in directories)
+            repositoryByDirectory[directory] = repositoryRoot;
+    }
+
     private static string? ReadIgnoredGitPaths(string gitRoot, IReadOnlyCollection<string> paths)
     {
         if (paths.Count == 0)
@@ -79,8 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            if (!TryResolveTrustedBuildTool("git", out string gitPath))
-                return null;
+            string gitPath = ResolveGitChildExecutable("git");
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo

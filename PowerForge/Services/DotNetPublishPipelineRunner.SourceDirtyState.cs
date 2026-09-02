@@ -33,7 +33,6 @@ public sealed partial class DotNetPublishPipelineRunner
         scope.BuildInputs = buildInputs;
         scope.SourceInputs = sourceInputs;
         scope.NoBuildPublishInputs = noBuildPublishInputs;
-
         foreach (string directory in projectDirectories)
             AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
         foreach (string path in buildInputs)

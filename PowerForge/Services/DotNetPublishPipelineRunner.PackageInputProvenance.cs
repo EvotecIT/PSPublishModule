@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
+using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Packaging.Signing;
 using NuGet.Versioning;
@@ -104,6 +105,46 @@ public sealed partial class DotNetPublishPipelineRunner
         catch
         {
             return false;
+        }
+    }
+
+    private static string? ResolveNearestDeclaredTargetFrameworkUnconditionally(
+        string projectPath,
+        string requestedFramework)
+    {
+        try
+        {
+            NuGetFramework requested = NuGetFramework.ParseFolder(requestedFramework);
+            if (requested.IsUnsupported)
+                return null;
+            (string Text, NuGetFramework Framework)[] declared = XDocument.Load(projectPath, LoadOptions.None)
+                .Descendants()
+                .Where(element =>
+                    (element.Name.LocalName.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
+                     element.Name.LocalName.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase)) &&
+                    !string.IsNullOrWhiteSpace(element.Value) &&
+                    !element.AncestorsAndSelf().Any(candidate => candidate.Attributes().Any(attribute =>
+                        attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(attribute.Value))))
+                .SelectMany(element => element.Value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                .Select(value => value.Trim())
+                .Where(value => value.Length > 0 && !value.Contains("$(", StringComparison.Ordinal))
+                .Select(value => (Text: value, Framework: NuGetFramework.ParseFolder(value)))
+                .Where(candidate => !candidate.Framework.IsUnsupported)
+                .ToArray();
+            if (declared.Length == 0)
+                return null;
+
+            NuGetFramework? nearest = new FrameworkReducer().GetNearest(
+                requested,
+                declared.Select(candidate => candidate.Framework));
+            return nearest is null
+                ? null
+                : declared.First(candidate => candidate.Framework.Equals(nearest)).Text;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -385,6 +426,8 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
+        internal IEnumerable<string> SdkManagedArchivePaths => _sdkManagedArchivePaths;
+
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,
@@ -403,6 +446,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 sdkManagedPackageKeys.Where(archivePathsByPackageKey.ContainsKey)
                     .Select(packageKey => archivePathsByPackageKey[packageKey]),
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        }
+
+        internal void InheritSdkManagedArchivePaths(IEnumerable<string> archivePaths)
+        {
+            var verifiedArchivePaths = new HashSet<string>(
+                _archivePathsByPackageKey.Values.Select(Path.GetFullPath),
+                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            _sdkManagedArchivePaths.UnionWith(
+                archivePaths.Select(Path.GetFullPath).Where(verifiedArchivePaths.Contains));
         }
 
         internal static bool TryCreate(
@@ -427,6 +479,25 @@ public sealed partial class DotNetPublishPipelineRunner
             VerifiedPackageArchiveCache archives,
             IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
             IReadOnlyDictionary<string, string?>? environmentVariables,
+            out VerifiedPackageInputCatalog? catalog)
+            => TryCreateForEvaluation(
+                projectPath,
+                properties,
+                packageRoots,
+                archives,
+                effectiveGlobalProperties,
+                environmentVariables,
+                includeSdkPackageEvidence: true,
+                out catalog);
+
+        internal static bool TryCreateForEvaluation(
+            string projectPath,
+            JsonElement properties,
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables,
+            bool includeSdkPackageEvidence,
             out VerifiedPackageInputCatalog? catalog)
         {
             catalog = null;
@@ -477,7 +548,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 StringComparer.OrdinalIgnoreCase);
             var sdkDownloadPackageHashes = new Dictionary<string, string>(
                 StringComparer.OrdinalIgnoreCase);
-            var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sdkManagedPackageKeys = new HashSet<string>(
+                sdkPackageLockHashes.Keys,
+                StringComparer.OrdinalIgnoreCase);
             if (!TryPrimeLockedPackageArchives(
                     allRoots,
                     committedPackageHashes,
@@ -486,16 +559,18 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
-            string? sdkEvidenceRoot = AddSdkManagedPackageHashes(
-                projectPath,
-                properties,
-                allRoots,
-                sdkDownloadPackageHashes,
-                sdkManagedPackageKeys,
-                effectiveGlobalProperties,
-                environmentVariables,
-                archivePathsByPackageKey,
-                archives);
+            string? sdkEvidenceRoot = includeSdkPackageEvidence
+                ? AddSdkManagedPackageHashes(
+                    projectPath,
+                    properties,
+                    allRoots,
+                    sdkDownloadPackageHashes,
+                    sdkManagedPackageKeys,
+                    effectiveGlobalProperties,
+                    environmentVariables,
+                    archivePathsByPackageKey,
+                    archives)
+                : null;
             try
             {
                 if (allRoots.Count == 0)

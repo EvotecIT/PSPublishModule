@@ -330,6 +330,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
         var trustedBuildInfrastructureRootsByEvaluation =
             new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var sdkManagedArchivePaths = new HashSet<string>(comparison);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
@@ -364,12 +365,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
+                        sdkManagedArchivePaths,
                         out EvaluatedProjectInputs? evaluation) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
                     return false;
                 }
-
                 foreach (string input in evaluation.BuildInputs)
                     buildInputs.Add(input);
                 foreach (string input in evaluation.SourceInputs)
@@ -722,6 +723,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
+        HashSet<string> knownSdkManagedArchivePaths,
         out EvaluatedProjectInputs? evaluation)
     {
         evaluation = null;
@@ -883,9 +885,17 @@ public sealed partial class DotNetPublishPipelineRunner
                         verifiedPackageArchives,
                         request.ReadEffectiveGlobalProperties(),
                         request.EnvironmentVariables,
+                        request.RequiresSdkPackageEvidence,
                         out verifiedPackages))
                 {
                     return false;
+                }
+                if (verifiedPackages is not null)
+                {
+                    if (request.RequiresSdkPackageEvidence)
+                        knownSdkManagedArchivePaths.UnionWith(verifiedPackages.SdkManagedArchivePaths);
+                    else
+                        verifiedPackages.InheritSdkManagedArchivePaths(knownSdkManagedArchivePaths);
                 }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
@@ -1100,16 +1110,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (EvaluatedProjectReference projectReference in rawReferences.Values)
                     references[BuildEvaluatedProjectReferenceKey(projectReference)] = projectReference;
             }
-            else if (rawReferences.Count > 0 ||
-                     projectReferenceDeclarations.Any(declaration =>
-                         declaration.IsTargetTime &&
-                         !IsTrustedExternalBuildInfrastructurePath(
-                             declaration.DefiningProjectPath,
-                             trustedBuildInfrastructureRoots) &&
-                         declaration.Element.Attributes().Any(attribute =>
-                             attribute.Name.LocalName.Equals(
-                                 "Include",
-                                 StringComparison.OrdinalIgnoreCase))) ||
+            else if (RequiresControlledProjectReferenceResolution(
+                         projectReferenceDeclarations,
+                         trustedBuildInfrastructureRoots) ||
                      hasDynamicProjectReferenceTaskOutputs)
             {
                 if (!TryReadControlledResolvedProjectReferences(
@@ -1162,6 +1165,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
             }
+            else
+            {
+                foreach (EvaluatedProjectReference projectReference in rawReferences.Values)
+                    references[BuildEvaluatedProjectReferenceKey(projectReference)] = projectReference;
+            }
 
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
@@ -1189,6 +1197,32 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static bool RequiresControlledProjectReferenceResolution(
+        IEnumerable<PreprocessedProjectReferenceDeclaration> declarations,
+        IReadOnlyCollection<string> trustedBuildInfrastructureRoots)
+    {
+        string[] outputShapingMetadata =
+        [
+            "OutputItemType",
+            "ReferenceOutputAssembly",
+            "Targets",
+            "BuildReference"
+        ];
+        return declarations.Any(declaration =>
+            !IsTrustedExternalBuildInfrastructurePath(
+                declaration.DefiningProjectPath,
+                trustedBuildInfrastructureRoots) &&
+            (declaration.IsTargetTime ||
+             declaration.Element.Attributes().Any(attribute =>
+                 outputShapingMetadata.Contains(
+                     attribute.Name.LocalName,
+                     StringComparer.OrdinalIgnoreCase)) ||
+             declaration.Element.Elements().Any(element =>
+                 outputShapingMetadata.Contains(
+                     element.Name.LocalName,
+                     StringComparer.OrdinalIgnoreCase))));
     }
 
     private static string? ResolveExistingCustomAfterTargets(string? value, string projectDirectory)

@@ -676,7 +676,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string? configuration,
             IReadOnlyDictionary<string, string>? globalProperties,
             IReadOnlyDictionary<string, string?>? environmentVariables,
-            IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null)
+            IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null,
+            bool requiresSdkPackageEvidence = true)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -689,6 +690,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
+            RequiresSdkPackageEvidence = requiresSdkPackageEvidence;
         }
 
         internal string ProjectPath { get; }
@@ -698,6 +700,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
         internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
+        internal bool RequiresSdkPackageEvidence { get; }
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {
@@ -726,7 +729,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 Configuration,
                 GlobalProperties,
                 EnvironmentVariables,
-                ControlledBuildEnvironmentVariableNames);
+                ControlledBuildEnvironmentVariableNames,
+                RequiresSdkPackageEvidence);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -751,7 +755,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     : Configuration;
             string? targetFramework = undefinesTargetFramework
                 ? null
-                : projectReference.TargetFramework;
+                : projectReference.TargetFramework ??
+                  (string.IsNullOrWhiteSpace(TargetFramework)
+                      ? null
+                      : ResolveNearestDeclaredTargetFrameworkUnconditionally(
+                          projectReference.ProjectPath,
+                          TargetFramework!));
             properties.Remove("Configuration");
             properties.Remove("TargetFramework");
             return new ProjectEvaluationRequest(
@@ -760,7 +769,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 configuration,
                 properties,
                 EnvironmentVariables,
-                ControlledBuildEnvironmentVariableNames);
+                ControlledBuildEnvironmentVariableNames,
+                requiresSdkPackageEvidence: false);
         }
 
         internal string BuildVisitKey()
@@ -797,6 +807,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 AppendProjectReferenceKeySegment(key, "ControlledEnvironment");
                 AppendProjectReferenceKeySegment(key, NormalizeEnvironmentIdentityName(name));
             }
+            AppendProjectReferenceKeySegment(key, "SdkPackageEvidence");
+            AppendProjectReferenceKeySegment(key, RequiresSdkPackageEvidence ? "Required" : "Inherited");
             return key.ToString();
         }
     }

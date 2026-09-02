@@ -354,6 +354,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 // Temporary controlled-reference cleanup is best effort.
             }
         }
+
     }
 
     private static bool TryMapControlledResolutionItems(
