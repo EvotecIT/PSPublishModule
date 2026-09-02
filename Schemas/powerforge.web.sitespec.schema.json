@@ -875,12 +875,30 @@
         "openApi": { "$ref": "#/$defs/AgentOpenApiSpec" },
         "WebMcp": { "type": "boolean" },
         "webMcp": { "type": "boolean" },
+        "WebMcpTools": { "type": "array", "items": { "$ref": "#/$defs/AgentWebMcpToolSpec" } },
+        "webMcpTools": { "type": "array", "items": { "$ref": "#/$defs/AgentWebMcpToolSpec" } },
         "MarkdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
         "markdownArtifacts": { "$ref": "#/$defs/AgentMarkdownArtifactsSpec" },
         "MarkdownNegotiation": { "type": "boolean" },
         "markdownNegotiation": { "type": "boolean" },
         "Apache": { "$ref": "#/$defs/AgentApacheSupportSpec" },
         "apache": { "$ref": "#/$defs/AgentApacheSupportSpec" }
+      }
+    },
+    "AgentWebMcpToolSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+        "Route": { "type": "string", "pattern": "^/" },
+        "route": { "type": "string", "pattern": "^/" },
+        "Description": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "Kind": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "ReadOnly": { "type": "boolean" },
+        "readOnly": { "type": "boolean" }
       }
     },
     "AgentMarkdownArtifactsSpec": {

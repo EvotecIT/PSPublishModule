@@ -1228,6 +1228,48 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
+    public void AgentReadyExpectedOutputsTrackConfiguredWebMcpRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-webmcp-cache-output-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "WebMCP Cache Output",
+                  "agentReadiness": {
+                    "enabled": true,
+                    "webMcp": true,
+                    "webMcpTools": [
+                      {
+                        "name": "search_site",
+                        "route": "/search/",
+                        "description": "Search public documentation.",
+                        "kind": "site-search",
+                        "readOnly": true
+                      }
+                    ]
+                  }
+                }
+                """);
+            var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "prepare", "config": "./site.json" }""").RootElement.Clone();
+            var method = typeof(WebPipelineRunner).GetMethod("GetExpectedStepOutputs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+            Assert.NotNull(method);
+            var outputs = Assert.IsType<string[]>(method.Invoke(null, new object[] { "agent-ready", step, root, siteRoot }));
+
+            Assert.Contains(Path.Combine(siteRoot, "assets", "powerforge", "webmcp-site-search.v1.js"), outputs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void AgentReadyScanStepsAreNotCacheable()
     {
         var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "scan", "url": "https://example.test" }""").RootElement.Clone();
@@ -1523,7 +1565,7 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
-    public void Verify_PassesWebMcpWhenDeclarativeToolAnnotationsExist()
+    public void Verify_PassesWebMcpWhenConfiguredRouteLoadsCurrentImperativeRegistration()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-webmcp-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1541,9 +1583,19 @@ public partial class WebAgentReadinessTests
                 <!doctype html>
                 <html lang="en">
                 <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
-                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><form tool-name="site-search" tool-description="Search public documentation"><input name="q" tool-param-description="Search query"></form></main><footer>Footer</footer></body>
+                <body><header><nav><a href="/search/">Search</a></nav></header><main><h1>Example?</h1></main><footer>Footer</footer></body>
                 </html>
                 """);
+            Directory.CreateDirectory(Path.Combine(root, "search"));
+            Directory.CreateDirectory(Path.Combine(root, "assets", "powerforge"));
+            File.WriteAllText(Path.Combine(root, "search", "index.html"),
+                """
+                <!doctype html><html><body><main data-webmcp-site-search data-webmcp-tool-name="search_site" data-webmcp-tool-description="Search public documentation." data-webmcp-search-index="/search/index.json"></main>
+                <script src="/assets/powerforge/webmcp-site-search.v1.js" data-powerforge-webmcp></script></body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "assets", "powerforge", "webmcp-site-search.v1.js"),
+                WebSiteBuilder.GetWebMcpSiteSearchAssetContent());
+            File.WriteAllText(Path.Combine(root, "search", "index.json"), "[]");
 
             var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
             {
@@ -1553,6 +1605,16 @@ public partial class WebAgentReadinessTests
                 {
                     Enabled = true,
                     WebMcp = true,
+                    WebMcpTools =
+                    [
+                        new AgentWebMcpToolSpec
+                        {
+                            Name = "search_site",
+                            Route = "/search/",
+                            Description = "Search public documentation.",
+                            Kind = "site-search"
+                        }
+                    ],
                     Robots = false,
                     LinkHeaders = false,
                     SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
@@ -1574,7 +1636,7 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
-    public void Verify_DoesNotPassWebMcpForCommentsOrDataAttributes()
+    public void Verify_DoesNotPassWebMcpForLegacyPrototypeOrUnmarkedDataAttributes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-webmcp-false-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1592,7 +1654,7 @@ public partial class WebAgentReadinessTests
                 <!doctype html>
                 <html lang="en">
                 <head><title>Example</title><meta name="robots" content="index,follow"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Example","sameAs":["https://example.test"],"dateModified":"2026-04-17"}</script></head>
-                <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example?</h1><!-- tool-name="site-search" --><button data-tool-name="copy">Copy</button></main><footer>Footer</footer></body>
+                <body><header><nav><a href="/">Home</a></nav></header><main data-webmcp-site-search data-webmcp-tool-name="search_site" data-webmcp-tool-description="Search public documentation." data-webmcp-search-index="/search/index.json"><h1>Example?</h1><!-- tool-name="site-search" --><button data-tool-name="copy">Copy</button></main><script data-powerforge-webmcp>navigator.modelContext.provideContext({ tools: [] });</script><footer>Footer</footer></body>
                 </html>
                 """);
 
@@ -1604,6 +1666,16 @@ public partial class WebAgentReadinessTests
                 {
                     Enabled = true,
                     WebMcp = true,
+                    WebMcpTools =
+                    [
+                        new AgentWebMcpToolSpec
+                        {
+                            Name = "search_site",
+                            Route = "/",
+                            Description = "Search public documentation.",
+                            Kind = "site-search"
+                        }
+                    ],
                     Robots = false,
                     LinkHeaders = false,
                     SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
@@ -1748,14 +1820,14 @@ public partial class WebAgentReadinessTests
     }
 
     [Theory]
-    [InlineData("<main><h1>Example</h1></main>", false)]
-    [InlineData("<main><button tool-name=\"lookup\" tool-description=\"Lookup\">Run</button></main>", true)]
+    [InlineData("<main data-webmcp-site-search data-webmcp-tool-name=\"lookup\" data-webmcp-tool-description=\"Look up public content.\" data-webmcp-search-index=\"/search/index.json\"><h1>Example</h1></main><script data-powerforge-webmcp>navigator.modelContext.provideContext({ tools: [] });</script>", false)]
+    [InlineData("<main data-webmcp-site-search data-webmcp-tool-name=\"lookup\" data-webmcp-tool-description=\"Look up public content.\" data-webmcp-search-index=\"/search/index.json\"><h1>Example</h1></main><script src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script>", true)]
     public async Task Scan_EnforcesConfiguredWebMcp(string body, bool expectedSuccess)
     {
         var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
         {
             BaseUrl = "https://example.test",
-            HttpMessageHandler = new AgentReadinessScanHandler(body),
+            HttpMessageHandler = new AgentReadinessScanHandler(body, includeWebMcpRuntime: expectedSuccess),
             AgentReadiness = new AgentReadinessSpec
             {
                 Enabled = true,
@@ -1767,7 +1839,17 @@ public partial class WebAgentReadinessTests
                 AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
                 AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
                 MarkdownNegotiation = false,
-                WebMcp = true
+                WebMcp = true,
+                WebMcpTools =
+                [
+                    new AgentWebMcpToolSpec
+                    {
+                        Name = "lookup",
+                        Route = "/",
+                        Description = "Look up public content.",
+                        Kind = "site-search"
+                    }
+                ]
             }
         });
 
@@ -2319,7 +2401,7 @@ public partial class WebAgentReadinessTests
         Assert.Contains("without path or URI syntax", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed class AgentReadinessScanHandler(string? body = null) : HttpMessageHandler
+    private sealed class AgentReadinessScanHandler(string? body = null, bool includeWebMcpRuntime = false) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -2330,18 +2412,25 @@ public partial class WebAgentReadinessTests
                     <!doctype html><html lang="en"><head><title>Example</title><meta name="robots" content="index,follow"></head>
                     <body><header><nav><a href="/">Home</a></nav></header><main><h1>Example</h1></main><footer>Footer</footer></body></html>
                     """;
-                return Task.FromResult(Response(HttpStatusCode.OK, html, "text/html"));
+                return Task.FromResult(Response(request, HttpStatusCode.OK, html, "text/html"));
             }
 
             if (path == "/sitemap.xml")
-                return Task.FromResult(Response(HttpStatusCode.OK, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.test/</loc></url></urlset>", "application/xml"));
+                return Task.FromResult(Response(request, HttpStatusCode.OK, "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.test/</loc></url></urlset>", "application/xml"));
 
-            return Task.FromResult(Response(HttpStatusCode.NotFound, "not found", "text/plain"));
+            if (path == WebSiteBuilder.WebMcpSiteSearchAssetRoute && includeWebMcpRuntime)
+                return Task.FromResult(Response(request, HttpStatusCode.OK, WebSiteBuilder.GetWebMcpSiteSearchAssetContent(), "text/javascript"));
+
+            if (path == "/search/index.json" && includeWebMcpRuntime)
+                return Task.FromResult(Response(request, HttpStatusCode.OK, "[]", "application/json"));
+
+            return Task.FromResult(Response(request, HttpStatusCode.NotFound, "not found", "text/plain"));
         }
 
-        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        private static HttpResponseMessage Response(HttpRequestMessage request, HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
         {
-            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType),
+            RequestMessage = request
         };
     }
 

@@ -31,12 +31,29 @@ public sealed class AgentReadinessSpec
     public AgentOpenApiSpec? OpenApi { get; set; }
     /// <summary>When true, verify that rendered HTML exposes WebMCP browser tools.</summary>
     public bool WebMcp { get; set; }
+    /// <summary>Route-scoped WebMCP tools expected to be available in rendered pages.</summary>
+    public AgentWebMcpToolSpec[] WebMcpTools { get; set; } = Array.Empty<AgentWebMcpToolSpec>();
     /// <summary>Optional static markdown artifacts generated from rendered HTML.</summary>
     public AgentMarkdownArtifactsSpec? MarkdownArtifacts { get; set; }
     /// <summary>When true, treat markdown negotiation as expected during remote scans.</summary>
     public bool MarkdownNegotiation { get; set; } = true;
     /// <summary>Optional Apache .htaccess support for Link headers and Markdown negotiation.</summary>
     public AgentApacheSupportSpec? Apache { get; set; }
+}
+
+/// <summary>A route-scoped WebMCP tool exposed by the rendered website.</summary>
+public sealed class AgentWebMcpToolSpec
+{
+    /// <summary>Stable WebMCP tool name.</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Top-level site route where the tool is registered.</summary>
+    public string Route { get; set; } = "/";
+    /// <summary>Short description presented to agents.</summary>
+    public string Description { get; set; } = string.Empty;
+    /// <summary>Implementation kind. PowerForge currently generates the site-search kind.</summary>
+    public string Kind { get; set; } = "custom";
+    /// <summary>Whether invoking the tool only reads state.</summary>
+    public bool ReadOnly { get; set; } = true;
 }
 
 /// <summary>Static markdown artifacts generated from rendered HTML for agent readers and edge negotiation.</summary>

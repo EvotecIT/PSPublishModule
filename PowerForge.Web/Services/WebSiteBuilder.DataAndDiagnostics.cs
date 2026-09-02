@@ -747,19 +747,39 @@ public static partial class WebSiteBuilder
             ["count"] = entries.Count(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
         }).ToArray();
 
+        var webMcpSearchTools = ResolveWebMcpSiteSearchTools(spec);
+        var searchPagePaths = webMcpSearchTools.Length == 0
+            ? new[] { "/search/" }
+            : webMcpSearchTools
+                .Select(static tool => WebAgentReadiness.NormalizeWebMcpRoute(tool.Route))
+                .ToArray();
         var manifest = new Dictionary<string, object?>
         {
             ["entryCount"] = entries.Count,
             ["searchIndexPath"] = "/search/index.json",
             ["languageShards"] = languageShards,
             ["collectionShards"] = collectionShards,
-            ["searchPagePath"] = "/search/"
+            ["searchPagePath"] = searchPagePaths[0],
+            ["searchPagePaths"] = searchPagePaths
         };
         var manifestPath = Path.Combine(searchDir, "manifest.json");
         WriteAllTextIfChanged(manifestPath, JsonSerializer.Serialize(manifest, WebJson.Options));
 
+        if (webMcpSearchTools.Length > 0)
+            EnsureWebMcpSiteSearchAsset(outputRoot);
+
         if (HasFeature(spec.Features, "search"))
-            EnsureSearchPage(outputRoot, entries);
+        {
+            if (webMcpSearchTools.Length == 0)
+            {
+                EnsureSearchPage(outputRoot, entries, webMcpTool: null);
+            }
+            else
+            {
+                foreach (var webMcpSearchTool in webMcpSearchTools)
+                    EnsureSearchPage(outputRoot, entries, webMcpSearchTool);
+            }
+        }
     }
 
     private static string[] ResolveSearchCategories(ContentItem item)
