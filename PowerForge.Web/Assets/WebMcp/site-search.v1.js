@@ -12,6 +12,7 @@
   var api = global.PowerForgeWebMcpSearch || {};
   var adapter = api.adapter || null;
   var registrationController = null;
+  var indexPromise = null;
 
   function boundedInteger(value, fallback, minimum, maximum) {
     var parsed = Number(value);
@@ -28,7 +29,7 @@
     if (typeof text.normalize === 'function') {
       text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     }
-    return text.replace(/[^a-z0-9]+/g, ' ').trim();
+    return text.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   }
 
   function toArray(value) {
@@ -108,19 +109,34 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  async function genericSearch(request) {
+  function loadIndex(signal) {
     var indexUrl = new URL(indexPath || '/search/index.json', document.baseURI);
     if (indexUrl.origin !== global.location.origin) {
       throw new Error('The WebMCP search index must be same-origin.');
     }
 
-    var response = await global.fetch(indexUrl.href, {
-      cache: 'no-cache',
-      credentials: 'same-origin',
-      signal: request.signal
-    });
-    if (!response.ok) throw new Error('Search index request failed with HTTP ' + response.status + '.');
-    var entries = await response.json();
+    if (!indexPromise) {
+      indexPromise = global.fetch(indexUrl.href, {
+        cache: 'no-cache',
+        credentials: 'same-origin',
+        signal: signal
+      }).then(function (response) {
+        if (!response.ok) throw new Error('Search index request failed with HTTP ' + response.status + '.');
+        return response.json();
+      }).then(function (entries) {
+        if (!Array.isArray(entries)) throw new Error('Search index response must be a JSON array.');
+        return entries;
+      }).catch(function (error) {
+        indexPromise = null;
+        throw error;
+      });
+    }
+
+    return indexPromise;
+  }
+
+  async function genericSearch(request) {
+    var entries = await loadIndex(request.signal);
     var result = searchEntries(entries, request.query, request.limit);
     syncVisibleSearch(request.query);
     return result;
@@ -163,6 +179,11 @@
     adapter = nextAdapter;
     api.adapter = nextAdapter;
   };
+  api.invalidateIndex = function () {
+    indexPromise = null;
+    if (adapter && typeof adapter.invalidateIndex === 'function') adapter.invalidateIndex();
+  };
+  api.normalizeText = normalizeText;
   api.searchEntries = searchEntries;
   api.dispose = function () {
     if (registrationController) registrationController.abort();

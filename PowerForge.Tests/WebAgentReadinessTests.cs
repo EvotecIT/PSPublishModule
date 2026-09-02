@@ -1228,6 +1228,48 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
+    public void AgentReadyExpectedOutputsTrackConfiguredWebMcpRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-webmcp-cache-output-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            File.WriteAllText(Path.Combine(root, "site.json"),
+                """
+                {
+                  "name": "WebMCP Cache Output",
+                  "agentReadiness": {
+                    "enabled": true,
+                    "webMcp": true,
+                    "webMcpTools": [
+                      {
+                        "name": "search_site",
+                        "route": "/search/",
+                        "description": "Search public documentation.",
+                        "kind": "site-search",
+                        "readOnly": true
+                      }
+                    ]
+                  }
+                }
+                """);
+            var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "prepare", "config": "./site.json" }""").RootElement.Clone();
+            var method = typeof(WebPipelineRunner).GetMethod("GetExpectedStepOutputs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+            Assert.NotNull(method);
+            var outputs = Assert.IsType<string[]>(method.Invoke(null, new object[] { "agent-ready", step, root, siteRoot }));
+
+            Assert.Contains(Path.Combine(siteRoot, "assets", "powerforge", "webmcp-site-search.v1.js"), outputs);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void AgentReadyScanStepsAreNotCacheable()
     {
         var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "scan", "url": "https://example.test" }""").RootElement.Clone();
@@ -1553,6 +1595,7 @@ public partial class WebAgentReadinessTests
                 """);
             File.WriteAllText(Path.Combine(root, "assets", "powerforge", "webmcp-site-search.v1.js"),
                 WebSiteBuilder.GetWebMcpSiteSearchAssetContent());
+            File.WriteAllText(Path.Combine(root, "search", "index.json"), "[]");
 
             var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
             {
@@ -2377,6 +2420,9 @@ public partial class WebAgentReadinessTests
 
             if (path == WebSiteBuilder.WebMcpSiteSearchAssetRoute && includeWebMcpRuntime)
                 return Task.FromResult(Response(request, HttpStatusCode.OK, WebSiteBuilder.GetWebMcpSiteSearchAssetContent(), "text/javascript"));
+
+            if (path == "/search/index.json" && includeWebMcpRuntime)
+                return Task.FromResult(Response(request, HttpStatusCode.OK, "[]", "application/json"));
 
             return Task.FromResult(Response(request, HttpStatusCode.NotFound, "not found", "text/plain"));
         }

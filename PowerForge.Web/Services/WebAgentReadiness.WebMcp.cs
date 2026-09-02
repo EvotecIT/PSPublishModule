@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using HtmlTinkerX;
@@ -15,7 +16,7 @@ public static partial class WebAgentReadiness
         if (!spec.WebMcp)
             return;
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seenRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var tool in spec.WebMcpTools ?? Array.Empty<AgentWebMcpToolSpec>())
         {
             if (tool is null)
@@ -33,9 +34,9 @@ public static partial class WebAgentReadiness
                 throw new ArgumentException($"WebMCP tool '{tool.Name}' uses the read-only 'site-search' implementation and cannot be declared writable.");
 
             ValidateWebMcpRoute(tool.Route, toolName);
-            var key = toolName + "\n" + NormalizeRoute(tool.Route);
-            if (!seen.Add(key))
-                throw new ArgumentException($"WebMCP tool '{tool.Name}' is configured more than once for route '{NormalizeRoute(tool.Route)}'.");
+            var normalizedRoute = NormalizeWebMcpRoute(tool.Route);
+            if (!seenRoutes.Add(normalizedRoute))
+                throw new ArgumentException($"Only one WebMCP site-search tool can be configured for route '{normalizedRoute}'.");
         }
     }
 
@@ -65,9 +66,13 @@ public static partial class WebAgentReadiness
         }
     }
 
-    private static void AddLocalWebMcpCheck(List<WebAgentReadinessCheck> checks, string siteRoot, AgentReadinessSpec spec)
+    private static void AddLocalWebMcpCheck(
+        List<WebAgentReadinessCheck> checks,
+        string siteRoot,
+        string? baseUrl,
+        AgentReadinessSpec spec)
     {
-        var evaluation = EvaluateLocalWebMcp(siteRoot, spec);
+        var evaluation = EvaluateLocalWebMcp(siteRoot, baseUrl, spec);
         AddCheck(
             checks,
             "webmcp",
@@ -78,25 +83,37 @@ public static partial class WebAgentReadiness
             evaluation.Target);
     }
 
-    private static WebMcpEvaluation EvaluateLocalWebMcp(string siteRoot, AgentReadinessSpec spec)
+    private static WebMcpEvaluation EvaluateLocalWebMcp(string siteRoot, string? baseUrl, AgentReadinessSpec spec)
     {
         if (!spec.WebMcp)
             return new WebMcpEvaluation(false, "WebMCP is disabled.", siteRoot);
         if (spec.WebMcpTools is null || spec.WebMcpTools.Length == 0)
             return new WebMcpEvaluation(false, "WebMCP is enabled but no route-scoped tools are configured.", siteRoot);
 
+        var siteBaseUri = ResolveLocalWebMcpSiteBaseUri(baseUrl);
         foreach (var tool in spec.WebMcpTools)
         {
-            var route = NormalizeRoute(tool.Route);
+            var route = NormalizeWebMcpRoute(tool.Route);
             var htmlPath = ResolveWebMcpHtmlPath(siteRoot, route);
             if (!File.Exists(htmlPath))
                 return new WebMcpEvaluation(false, $"WebMCP tool '{tool.Name}' route '{route}' was not rendered.", htmlPath);
 
             var html = File.ReadAllText(htmlPath);
-            if (!TryParseWebMcpPage(html, tool, route, out var scripts, out var parseMessage))
+            var pageUri = new Uri(siteBaseUri, NormalizeWebMcpDocumentRoute(route).TrimStart('/'));
+            if (!TryParseWebMcpPage(html, tool, pageUri, out var scripts, out var indexUri, out var parseMessage))
                 return new WebMcpEvaluation(false, $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {parseMessage}", htmlPath);
 
-            if (!ScriptsContainCanonicalSiteSearchRuntime(siteRoot, route, scripts))
+            if (!TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, indexUri, out var indexPath) ||
+                !File.Exists(indexPath) ||
+                !IsSearchIndexJsonArray(File.ReadAllText(indexPath)))
+            {
+                return new WebMcpEvaluation(
+                    false,
+                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference an existing JSON-array search index inside the rendered site.",
+                    indexPath ?? htmlPath);
+            }
+
+            if (!ScriptsContainCanonicalSiteSearchRuntime(siteRoot, siteBaseUri, pageUri, scripts))
             {
                 return new WebMcpEvaluation(
                     false,
@@ -126,7 +143,7 @@ public static partial class WebAgentReadiness
 
         foreach (var tool in spec.WebMcpTools)
         {
-            var route = NormalizeRoute(tool.Route);
+            var route = NormalizeWebMcpRoute(tool.Route);
             var routeUrl = CombineUrl(baseUrl, route);
             var page = route == "/"
                 ? homepage
@@ -147,14 +164,26 @@ public static partial class WebAgentReadiness
                 return;
             }
 
-            if (!TryParseWebMcpPage(page.Text, tool, route, out var scripts, out var parseMessage))
+            if (!TryParseWebMcpPage(page.Text, tool, finalPageUri, out var scripts, out var indexUri, out var parseMessage))
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
                     $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {parseMessage}", routeUrl);
                 return;
             }
 
-            if (!await RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(http, routeUrl, scripts, cancellationToken).ConfigureAwait(false))
+            var index = await TryGetTextAsync(http, indexUri.AbsoluteUri, null, cancellationToken).ConfigureAwait(false);
+            var finalIndexUri = index.Response?.RequestMessage?.RequestUri;
+            if (!index.Success ||
+                finalIndexUri is null ||
+                !HasSameOrigin(finalPageUri, finalIndexUri) ||
+                !IsSearchIndexJsonArray(index.Text))
+            {
+                AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
+                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference a usable same-origin JSON-array search index.", indexUri.AbsoluteUri);
+                return;
+            }
+
+            if (!await RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(http, finalPageUri, scripts, cancellationToken).ConfigureAwait(false))
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
                     $"WebMCP tool '{tool.Name}' at '{route}' does not load the canonical PowerForge site-search runtime from the same origin.", routeUrl);
@@ -170,11 +199,13 @@ public static partial class WebAgentReadiness
     private static bool TryParseWebMcpPage(
         string html,
         AgentWebMcpToolSpec tool,
-        string route,
+        Uri pageUri,
         out IElement[] markedScripts,
+        out Uri indexUri,
         out string message)
     {
         markedScripts = Array.Empty<IElement>();
+        indexUri = null!;
         if (string.IsNullOrWhiteSpace(html))
         {
             message = "the route returned empty HTML.";
@@ -184,32 +215,39 @@ public static partial class WebAgentReadiness
         try
         {
             var document = HtmlParser.ParseWithAngleSharp(html);
-            var surface = document.QuerySelector("[data-webmcp-site-search]");
-            if (surface is null)
+            var surfaces = document.QuerySelectorAll("[data-webmcp-site-search]").ToArray();
+            if (surfaces.Length == 0)
             {
                 message = "no data-webmcp-site-search surface is present.";
                 return false;
             }
+            if (surfaces.Length != 1)
+            {
+                message = "the route must contain exactly one active data-webmcp-site-search surface.";
+                return false;
+            }
+            var surface = surfaces[0];
             if (!string.Equals(surface.GetAttribute("data-webmcp-tool-name"), tool.Name, StringComparison.Ordinal))
             {
                 message = $"the active site-search surface does not declare '{tool.Name}'.";
                 return false;
             }
-            if (string.IsNullOrWhiteSpace(surface.GetAttribute("data-webmcp-tool-description")))
+            if (!string.Equals(surface.GetAttribute("data-webmcp-tool-description"), tool.Description, StringComparison.Ordinal))
             {
-                message = $"the active site-search surface for '{tool.Name}' has no description.";
+                message = $"the active site-search surface for '{tool.Name}' does not declare its configured description.";
                 return false;
             }
 
             var indexPath = surface.GetAttribute("data-webmcp-search-index");
-            var pageUri = new Uri(new Uri("https://powerforge.invalid"), route);
             if (string.IsNullOrWhiteSpace(indexPath) ||
-                !Uri.TryCreate(pageUri, indexPath, out var indexUri) ||
-                !HasSameOrigin(pageUri, indexUri))
+                !Uri.TryCreate(pageUri, indexPath, out var resolvedIndexUri) ||
+                resolvedIndexUri is null ||
+                !HasSameOrigin(pageUri, resolvedIndexUri))
             {
                 message = $"the active site-search surface for '{tool.Name}' has no same-origin search index.";
                 return false;
             }
+            indexUri = resolvedIndexUri;
 
             markedScripts = document.QuerySelectorAll("script[data-powerforge-webmcp]").ToArray();
             if (markedScripts.Length == 0)
@@ -228,9 +266,12 @@ public static partial class WebAgentReadiness
         }
     }
 
-    private static bool ScriptsContainCanonicalSiteSearchRuntime(string siteRoot, string route, IEnumerable<IElement> scripts)
+    private static bool ScriptsContainCanonicalSiteSearchRuntime(
+        string siteRoot,
+        Uri siteBaseUri,
+        Uri pageUri,
+        IEnumerable<IElement> scripts)
     {
-        var pageUri = new Uri(new Uri("https://powerforge.invalid"), route);
         var canonicalRuntime = WebSiteBuilder.GetWebMcpSiteSearchAssetContent();
         foreach (var script in scripts)
         {
@@ -244,8 +285,9 @@ public static partial class WebAgentReadiness
                 continue;
             }
 
-            var assetPath = ResolveSitePath(siteRoot, assetUri.AbsolutePath);
-            if (File.Exists(assetPath) && string.Equals(File.ReadAllText(assetPath), canonicalRuntime, StringComparison.Ordinal))
+            if (TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, assetUri, out var assetPath) &&
+                File.Exists(assetPath) &&
+                string.Equals(File.ReadAllText(assetPath), canonicalRuntime, StringComparison.Ordinal))
                 return true;
         }
 
@@ -254,11 +296,10 @@ public static partial class WebAgentReadiness
 
     private static async Task<bool> RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(
         HttpClient http,
-        string routeUrl,
+        Uri pageUri,
         IEnumerable<IElement> scripts,
         CancellationToken cancellationToken)
     {
-        var pageUri = new Uri(routeUrl, UriKind.Absolute);
         var canonicalRuntime = WebSiteBuilder.GetWebMcpSiteSearchAssetContent();
         foreach (var script in scripts)
         {
@@ -288,7 +329,21 @@ public static partial class WebAgentReadiness
         string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
         left.Port == right.Port;
 
-    private static string ResolveWebMcpHtmlPath(string siteRoot, string route)
+    internal static string NormalizeWebMcpRoute(string? route) => NormalizeRoute(route ?? string.Empty);
+
+    private static string NormalizeWebMcpDocumentRoute(string route)
+    {
+        if (route.EndsWith("/", StringComparison.Ordinal) ||
+            route.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+            route.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+        {
+            return route;
+        }
+
+        return route + "/";
+    }
+
+    internal static string ResolveWebMcpHtmlPath(string siteRoot, string route)
     {
         var path = route.TrimStart('/');
         if (string.IsNullOrWhiteSpace(path))
@@ -300,6 +355,58 @@ public static partial class WebAgentReadiness
             path += "/index.html";
 
         return ResolveSitePath(siteRoot, path);
+    }
+
+    private static Uri ResolveLocalWebMcpSiteBaseUri(string? baseUrl)
+    {
+        var normalized = NormalizeBaseUrl(baseUrl);
+        if (!string.IsNullOrWhiteSpace(normalized) &&
+            TryCreateAbsoluteHttpUri(normalized + "/", out var configured))
+        {
+            return configured;
+        }
+
+        return new Uri("https://powerforge.invalid/", UriKind.Absolute);
+    }
+
+    private static bool TryResolveLocalWebMcpResourcePath(
+        string siteRoot,
+        Uri siteBaseUri,
+        Uri resourceUri,
+        out string? resourcePath)
+    {
+        resourcePath = null;
+        if (!HasSameOrigin(siteBaseUri, resourceUri))
+            return false;
+
+        var basePath = siteBaseUri.AbsolutePath;
+        if (!basePath.EndsWith("/", StringComparison.Ordinal))
+            basePath += "/";
+        var absolutePath = resourceUri.AbsolutePath;
+        if (basePath != "/" && !absolutePath.StartsWith(basePath, StringComparison.Ordinal))
+            return false;
+
+        var relativePath = basePath == "/"
+            ? absolutePath.TrimStart('/')
+            : absolutePath[basePath.Length..];
+        resourcePath = ResolveSitePath(siteRoot, relativePath);
+        return true;
+    }
+
+    private static bool IsSearchIndexJsonArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private sealed record WebMcpEvaluation(bool Success, string Message, string Target);

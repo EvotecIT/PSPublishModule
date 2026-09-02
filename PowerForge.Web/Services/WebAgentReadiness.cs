@@ -296,7 +296,7 @@ public static partial class WebAgentReadiness
             options.BaseUrl);
 
         if (spec.WebMcp)
-            AddLocalWebMcpCheck(checks, siteRoot, spec);
+            AddLocalWebMcpCheck(checks, siteRoot, options.BaseUrl, spec);
 
         return new WebAgentReadinessResult
         {
@@ -984,7 +984,7 @@ public static partial class WebAgentReadiness
             ["a2aAgentCard"] = spec.A2AAgentCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json")) : null
         };
 
-        var webMcp = EvaluateLocalWebMcp(siteRoot, spec);
+        var webMcp = EvaluateLocalWebMcp(siteRoot, baseUrl, spec);
         var webMcpTools = new JsonArray();
         if (webMcp.Success)
         {

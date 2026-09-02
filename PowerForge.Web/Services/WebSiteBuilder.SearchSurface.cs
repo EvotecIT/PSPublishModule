@@ -6,6 +6,8 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private const string GeneratedSearchFallbackMarker = "data-powerforge-generated-search-fallback";
+
     private static bool HasFeature(string[]? features, string feature)
     {
         if (features is null || features.Length == 0 || string.IsNullOrWhiteSpace(feature))
@@ -77,17 +79,48 @@ public static partial class WebSiteBuilder
         if (entries.Count == 0)
             return;
 
-        var searchPath = Path.Combine(outputRoot, "search", "index.html");
-        if (File.Exists(searchPath))
+        var route = webMcpTool is null ? "/search/" : WebAgentReadiness.NormalizeWebMcpRoute(webMcpTool.Route);
+        var searchPath = WebAgentReadiness.ResolveWebMcpHtmlPath(outputRoot, route);
+        if (File.Exists(searchPath) && !IsGeneratedSearchFallback(searchPath))
             return;
 
-        var cssHref = TryResolveSearchSurfaceCssHref(outputRoot);
-        var html = BuildSearchSurfaceHtml(cssHref, webMcpTool);
+        var cssHref = TryResolveSearchSurfaceCssHref(outputRoot, searchPath);
+        var searchIndexHref = ToPageRelativeHref(searchPath, Path.Combine(outputRoot, "search", "index.json"));
+        var runtimeHref = webMcpTool is null
+            ? null
+            : ToPageRelativeHref(searchPath, GetWebMcpSiteSearchAssetPath(outputRoot));
+        var html = BuildSearchSurfaceHtml(cssHref, webMcpTool, searchIndexHref, runtimeHref);
         Directory.CreateDirectory(Path.GetDirectoryName(searchPath) ?? outputRoot);
         WriteAllTextIfChanged(searchPath, html);
     }
 
-    private static string? TryResolveSearchSurfaceCssHref(string outputRoot)
+    private static bool IsGeneratedSearchFallback(string path)
+    {
+        try
+        {
+            var html = File.ReadAllText(path);
+            return html.Contains(GeneratedSearchFallbackMarker, StringComparison.Ordinal) ||
+                   (html.Contains("class=\"pf-search-wrap\"", StringComparison.Ordinal) &&
+                    html.Contains("id=\"pf-search-query\"", StringComparison.Ordinal) &&
+                    html.Contains("id=\"pf-search-results\"", StringComparison.Ordinal) &&
+                    html.Contains("Loading search index...", StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning($"Failed to inspect generated search fallback '{path}': {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static string ToPageRelativeHref(string pagePath, string targetPath)
+    {
+        var pageDirectory = Path.GetDirectoryName(pagePath)
+            ?? throw new InvalidOperationException($"Search page '{pagePath}' has no parent directory.");
+        var relative = Path.GetRelativePath(pageDirectory, targetPath).Replace('\\', '/');
+        return relative.StartsWith(".", StringComparison.Ordinal) ? relative : "./" + relative;
+    }
+
+    private static string? TryResolveSearchSurfaceCssHref(string outputRoot, string searchPath)
     {
         var specPath = Path.Combine(outputRoot, "_powerforge", "site-spec.json");
         if (File.Exists(specPath))
@@ -108,8 +141,7 @@ public static partial class WebSiteBuilder
                     {
                         if (!File.Exists(cssPath))
                             continue;
-                        var relative = Path.GetRelativePath(outputRoot, cssPath).Replace('\\', '/');
-                        return "/" + relative.TrimStart('/');
+                        return ToPageRelativeHref(searchPath, cssPath);
                     }
 
                     if (Directory.Exists(Path.Combine(themeRoot, "assets")))
@@ -120,8 +152,7 @@ public static partial class WebSiteBuilder
                             .FirstOrDefault();
                         if (!string.IsNullOrWhiteSpace(firstThemeCss))
                         {
-                            var relative = Path.GetRelativePath(outputRoot, firstThemeCss).Replace('\\', '/');
-                            return "/" + relative.TrimStart('/');
+                            return ToPageRelativeHref(searchPath, firstThemeCss);
                         }
                     }
                 }
@@ -141,25 +172,28 @@ public static partial class WebSiteBuilder
         {
             if (!File.Exists(candidate))
                 continue;
-            var relative = Path.GetRelativePath(outputRoot, candidate).Replace('\\', '/');
-            return "/" + relative.TrimStart('/');
+            return ToPageRelativeHref(searchPath, candidate);
         }
 
         return null;
     }
 
-    private static string BuildSearchSurfaceHtml(string? cssHref, AgentWebMcpToolSpec? webMcpTool)
+    private static string BuildSearchSurfaceHtml(
+        string? cssHref,
+        AgentWebMcpToolSpec? webMcpTool,
+        string searchIndexHref,
+        string? runtimeHref)
     {
         var cssLink = string.IsNullOrWhiteSpace(cssHref)
             ? string.Empty
             : $"  <link rel=\"stylesheet\" href=\"{System.Web.HttpUtility.HtmlEncode(cssHref)}\" />{Environment.NewLine}";
         var webMcpAttributes = webMcpTool is null
             ? string.Empty
-            : $" data-webmcp-site-search data-webmcp-tool-name=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Name)}\" data-webmcp-tool-description=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Description)}\" data-webmcp-search-index=\"/search/index.json\"";
+            : $" data-webmcp-site-search data-webmcp-tool-name=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Name)}\" data-webmcp-tool-description=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Description)}\" data-webmcp-search-index=\"{System.Web.HttpUtility.HtmlAttributeEncode(searchIndexHref)}\"";
 
         var sb = new StringBuilder();
         sb.AppendLine("<!doctype html>");
-        sb.AppendLine("<html lang=\"en\">");
+        sb.Append("<html lang=\"en\" ").Append(GeneratedSearchFallbackMarker).AppendLine(">");
         sb.AppendLine("<head>");
         sb.AppendLine("  <meta charset=\"utf-8\" />");
         sb.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />");
@@ -221,14 +255,7 @@ public static partial class WebSiteBuilder
         sb.AppendLine("      }");
         sb.AppendLine("      let entries = [];");
         sb.AppendLine("      try {");
-        sb.AppendLine("        const manifestRes = await fetch('./manifest.json', { cache: 'no-cache' });");
-        sb.AppendLine("        let indexPath = './index.json';");
-        sb.AppendLine("        if (manifestRes.ok){");
-        sb.AppendLine("          const manifest = await manifestRes.json();");
-        sb.AppendLine("          if (manifest && typeof manifest.searchIndexPath === 'string' && manifest.searchIndexPath.trim())");
-        sb.AppendLine("            indexPath = manifest.searchIndexPath;");
-        sb.AppendLine("        }");
-        sb.AppendLine("        const indexRes = await fetch(indexPath, { cache: 'no-cache' });");
+        sb.Append("        const indexRes = await fetch('").Append(EscapeJavaScriptSingleQuoted(searchIndexHref)).AppendLine("', { cache: 'no-cache', credentials: 'same-origin' });");
         sb.AppendLine("        if (!indexRes.ok) throw new Error('Failed to load search index: ' + indexRes.status);");
         sb.AppendLine("        entries = await indexRes.json();");
         sb.AppendLine("      } catch (error){");
@@ -250,10 +277,16 @@ public static partial class WebSiteBuilder
         sb.AppendLine("      run();");
         sb.AppendLine("    })();");
         sb.AppendLine("  </script>");
-        if (webMcpTool is not null)
-            sb.Append("  <script src=\"").Append(WebMcpSiteSearchAssetRoute).AppendLine("\" defer data-powerforge-webmcp></script>");
+        if (webMcpTool is not null && !string.IsNullOrWhiteSpace(runtimeHref))
+            sb.Append("  <script src=\"").Append(System.Web.HttpUtility.HtmlAttributeEncode(runtimeHref)).AppendLine("\" defer data-powerforge-webmcp></script>");
         sb.AppendLine("</body>");
         sb.AppendLine("</html>");
         return sb.ToString();
     }
+
+    private static string EscapeJavaScriptSingleQuoted(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
 }

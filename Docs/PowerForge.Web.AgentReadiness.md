@@ -81,7 +81,7 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - local HTML, JSON-LD, and semantic checks aligned with AI-readiness scanners
 - route-scoped WebMCP verification for the current imperative API, including
   the exact canonical engine runtime, same-origin page/index/runtime URLs, and
-  exact configured tool names
+  exact configured tool names and descriptions
 - a reusable, read-only `site-search` WebMCP runtime backed by the generated
   search index
 - remote scan of live headers and well-known URLs
@@ -191,8 +191,9 @@ contract. PowerForge verifies that the route declares the configured tool with
 `data-powerforge-webmcp`. The script must be byte-for-byte the canonical embedded
 PowerForge runtime; comments, legacy `navigator.modelContext` prototypes,
 declarative HTML attributes, or unrelated tool registrations do not satisfy this
-check. Remote verification also rejects cross-origin redirects for either the page
-or runtime asset.
+check. The declared search index must exist and contain a JSON array. Remote
+verification resolves relative resources against the final page URL and rejects
+cross-origin redirects for the page, index, or runtime asset.
 
 Phase 1 intentionally supports only the read-only `site-search` kind. It emits
 `/assets/powerforge/webmcp-site-search.v1.js`. A theme search page should expose
@@ -213,8 +214,12 @@ The runtime registers a read-only tool with bounded `query` and `limit` input,
 returns a small structured result set, and uses only a same-origin search index.
 Themes with richer ranking can call `PowerForgeWebMcpSearch.bindAdapter(...)` to
 reuse their visible search implementation. If no adapter is bound, the runtime
-uses the generated index directly. Browsers without WebMCP continue to use the
-normal search page.
+loads and reuses the generated index for the lifetime of the page;
+`PowerForgeWebMcpSearch.invalidateIndex()` explicitly clears that cache. Browsers
+without WebMCP continue to use the normal search page. Engine-generated fallback
+pages use route-relative index/runtime URLs so sites hosted below an origin path
+remain functional; theme-owned pages should do the same or include the deployed
+base path explicitly.
 
 Generated `agents.json` reports `capabilities.webMcp: true` and lists
 `webMcpTools` only after the rendered routes and registration runtime pass local

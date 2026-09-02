@@ -6,24 +6,28 @@ public static partial class WebSiteBuilder
     private const string WebMcpSiteSearchResourceName = "PowerForge.Web.Assets.WebMcp.site-search.v1.js";
     private static readonly Lazy<string> WebMcpSiteSearchAssetContent = new(ReadWebMcpSiteSearchAsset);
 
-    private static AgentWebMcpToolSpec? ResolveWebMcpSiteSearchTool(SiteSpec spec)
+    private static AgentWebMcpToolSpec[] ResolveWebMcpSiteSearchTools(SiteSpec spec)
     {
         var readiness = spec.AgentReadiness;
         if (readiness?.Enabled != true || !readiness.WebMcp)
-            return null;
+            return Array.Empty<AgentWebMcpToolSpec>();
 
         WebAgentReadiness.ValidateWebMcpConfiguration(readiness);
         return (readiness.WebMcpTools ?? Array.Empty<AgentWebMcpToolSpec>())
-            .FirstOrDefault(static tool => string.Equals(tool.Kind, "site-search", StringComparison.OrdinalIgnoreCase));
+            .Where(static tool => string.Equals(tool.Kind, "site-search", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
     }
 
     internal static string EnsureWebMcpSiteSearchAsset(string outputRoot)
     {
-        var target = Path.Combine(outputRoot, WebMcpSiteSearchAssetRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        var target = GetWebMcpSiteSearchAssetPath(outputRoot);
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         WriteAllTextIfChanged(target, GetWebMcpSiteSearchAssetContent());
         return target;
     }
+
+    private static string GetWebMcpSiteSearchAssetPath(string outputRoot) =>
+        Path.Combine(outputRoot, WebMcpSiteSearchAssetRoute.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 
     internal static string GetWebMcpSiteSearchAssetContent() => WebMcpSiteSearchAssetContent.Value;
 
