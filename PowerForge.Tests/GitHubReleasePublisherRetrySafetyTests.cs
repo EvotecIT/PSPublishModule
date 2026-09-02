@@ -51,7 +51,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
                 await NextRequest(),
                 "{\"message\":\"rate limited\"}",
                 429,
-                retryAfter: "30");
+                retryAfter: "120");
 
             var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
             await Respond(await NextRequest(), uploadedAsset);
@@ -80,7 +80,7 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.True(result.Succeeded);
-            Assert.Equal(TimeSpan.FromSeconds(30), Assert.Single(delays));
+            Assert.Equal(TimeSpan.FromMinutes(2), Assert.Single(delays));
         }
         finally
         {

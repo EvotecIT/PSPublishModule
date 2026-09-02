@@ -349,11 +349,11 @@ public sealed partial class GitHubReleasePublisher {
     private static TimeSpan? GetAssetRetryAfterDelay(HttpResponseMessage? response) {
         var retryAfter = response?.Headers.RetryAfter;
         if (retryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
-            return delta > TimeSpan.FromSeconds(30) ? TimeSpan.FromSeconds(30) : delta;
+            return delta;
         if (retryAfter?.Date is DateTimeOffset date) {
             var until = date - DateTimeOffset.UtcNow;
             if (until > TimeSpan.Zero)
-                return until > TimeSpan.FromSeconds(30) ? TimeSpan.FromSeconds(30) : until;
+                return until;
         }
 
         return null;
