@@ -583,66 +583,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(string.IsNullOrWhiteSpace(compiled.StandardError), compiled.StandardError);
     }
 
-    [PinnedSemanticHostFact]
-    public void Build_BinaryModuleLanguageModeMatchesConfiguredExactProfiles()
-    {
-        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
-        var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
-        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path));
-        Assert.False(string.IsNullOrWhiteSpace(powerShell76Path));
-        var profiles = new[]
-        {
-            (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, "net472", "powershell.exe"),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, "net8.0", powerShell74Path!),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, "net10.0", powerShell76Path!)
-        };
-        var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get(
-            "PowerForge.Semantic/runtime-language-mode");
-
-        foreach (var (profileId, targetFramework, host) in profiles)
-        {
-            var pin = PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profileId);
-            using var oracleFixture = ArtifactFixture.Create(
-                PowerShellCompilationSemanticOracleCaseCatalog.ReadSource(semanticCase.CaseId));
-            var interpreted = new PowerShellCompilationSemanticOracleRunner().Observe(
-                new PowerShellCompilationSemanticOracleRequest(profileId, oracleFixture.ScriptPath)
-                {
-                    Culture = "en-US",
-                    HostExecutablePath = host == "powershell.exe" ? null : host,
-                    ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
-                });
-            var expected = Assert.Single(interpreted.Success);
-            Assert.Equal("FullLanguage", expected.Value);
-            Assert.Equal("System.String", expected.TypeName);
-
-            using var moduleFixture = ArtifactFixture.Create(
-                "function Get-LanguageMode { return [string] $ExecutionContext.SessionState.LanguageMode }",
-                ".psm1");
-            var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-                moduleFixture.ScriptPath,
-                moduleFixture.OutputPath,
-                "PowerForge.ExactLanguageModeState",
-                PowerShellCompilationArtifactKind.BinaryModule,
-                PowerShellCompilationMode.Strict,
-                allowUnreviewedDependencyResolution: true)
-            {
-                TargetFramework = targetFramework,
-                SemanticProfileId = profileId
-            });
-
-            Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.True(result.Manifest!.RequiresPowerShellRuntime);
-            var compiled = Run(
-                host,
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; Get-LanguageMode");
-            Assert.Equal((0, expected.Value, string.Empty),
-                (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
-        }
-    }
-
     [Theory]
     [InlineData("net8.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]

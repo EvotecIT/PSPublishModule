@@ -48,7 +48,7 @@ internal sealed partial class PowerShellTypedLowerer
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSL1002",
-                    "PowerShell wildcard or membership semantics require the PowerShell language-operator target capability.",
+                    "PowerShell comparison, wildcard, or membership semantics require the PowerShell language-operator target capability.",
                     function.Symbol.Declaration));
                 continue;
             }

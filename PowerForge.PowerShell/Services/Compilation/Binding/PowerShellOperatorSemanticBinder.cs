@@ -132,6 +132,22 @@ internal static class PowerShellOperatorSemanticBinder
             }
             if (leftType.IsArray || rightType.IsArray)
                 return Reject(diagnostics, span, "PSB2208", "PowerShell array comparison is element-wise and is not supported by the scalar typed compiler.");
+            if (equality && leftType.IsEnum && rightType == typeof(string))
+            {
+                var hostedOperation = operation switch
+                {
+                    "Ieq" => PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase,
+                    "Ine" => PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase,
+                    "Ceq" => PowerShellBoundBinaryOperator.PowerShellEqualCaseSensitive,
+                    _ => PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive
+                };
+                return Binary(
+                    span,
+                    hostedOperation,
+                    left,
+                    right,
+                    typeof(bool));
+            }
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);
             var leftNumericType = Nullable.GetUnderlyingType(leftType) ?? leftType;
             if (leftType != rightType &&
@@ -426,8 +442,22 @@ internal static class PowerShellOperatorSemanticBinder
         return null;
     }
 
-    private static PowerShellBoundExpression Binary(SourceSpan span, PowerShellBoundBinaryOperator operation, PowerShellBoundExpression left, PowerShellBoundExpression right, Type type)
-        => new PowerShellBoundBinaryExpression(span, operation, left, right, Fact(type, $"Operator '{operation}' selects a direct CLR operation."));
+    private static PowerShellBoundExpression Binary(
+        SourceSpan span,
+        PowerShellBoundBinaryOperator operation,
+        PowerShellBoundExpression left,
+        PowerShellBoundExpression right,
+        Type type)
+        => new PowerShellBoundBinaryExpression(
+            span,
+            operation,
+            left,
+            right,
+            Fact(
+                type,
+                PowerShellBoundBinaryExpression.RequiresPowerShellLanguageRuntime(operation)
+                    ? $"Operator '{operation}' selects the public PowerShell language-operator runtime."
+                    : $"Operator '{operation}' selects a direct CLR operation."));
 
     private static PowerShellBoundExpression Unary(SourceSpan span, PowerShellBoundUnaryOperator operation, PowerShellBoundExpression operand, Type type)
         => new PowerShellBoundUnaryExpression(span, operation, operand, Fact(type, $"Operator '{operation}' selects a direct CLR operation."));

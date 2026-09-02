@@ -15,6 +15,10 @@ internal enum PowerShellBoundBinaryOperator
     NotEqualIgnoreCase,
     EqualCaseSensitive,
     NotEqualCaseSensitive,
+    PowerShellEqualIgnoreCase,
+    PowerShellNotEqualIgnoreCase,
+    PowerShellEqualCaseSensitive,
+    PowerShellNotEqualCaseSensitive,
     LessThan,
     LessThanOrEqual,
     GreaterThan,
@@ -48,7 +52,12 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown, left.Effects | right.Effects, left.Capabilities | right.Capabilities)
+        : base(
+            span,
+            type,
+            PowerShellValueState.Unknown,
+            left.Effects | right.Effects,
+            left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation))
     {
         Operation = operation;
         Left = left;
@@ -58,6 +67,17 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
     internal PowerShellBoundBinaryOperator Operation { get; }
     internal PowerShellBoundExpression Left { get; }
     internal PowerShellBoundExpression Right { get; }
+
+    internal static bool RequiresPowerShellLanguageRuntime(PowerShellBoundBinaryOperator operation)
+        => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);
+
+    private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellBoundBinaryOperator operation)
+        => operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
+            PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or
+            PowerShellBoundBinaryOperator.PowerShellEqualCaseSensitive or
+            PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive
+                ? PowerShellRequiredCapability.PowerShellLanguageOperators
+                : PowerShellRequiredCapability.None;
 }
 
 internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression

@@ -679,6 +679,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 ? $"!({comparison})"
                 : comparison;
         }
+        if (expression.Operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or
+            PowerShellBoundBinaryOperator.PowerShellEqualCaseSensitive or PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive)
+        {
+            var ignoreCase = expression.Operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase
+                ? "true"
+                : "false";
+            var comparison = $"global::System.Management.Automation.LanguagePrimitives.Equals((object?)({left}), (object?)({right}), {ignoreCase}, global::System.Globalization.CultureInfo.InvariantCulture)";
+            return expression.Operation is PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive
+                ? $"!({comparison})"
+                : comparison;
+        }
         var symbol = expression.Operation switch
         {
             PowerShellBoundBinaryOperator.Add => "+",
