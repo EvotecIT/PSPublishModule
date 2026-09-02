@@ -384,7 +384,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.CommandBinding.IsAdvancedFunction,
             emitted.CommandBinding,
             emitted.RequiresPowerShellRuntimeState,
-            emitted.DeclaredOutputType?.FullName ?? string.Empty,
+            emitted.DeclaredOutputTypeName,
             emitted.SourceSpan.StartColumn,
             emitted.SourceSpan.EndLine,
             emitted.SourceSpan.EndColumn,
@@ -397,6 +397,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.HostedRegionSiteCount,
             emitted.RequiresProviderCancellation);
         method.DocumentId = emitted.SourceSpan.DocumentId;
+        method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -541,6 +542,7 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellRuntimeState = false,
         Type? declaredOutputType = null,
+        string? declaredOutputTypeName = null,
         PowerShellCompilationHelp? help = null,
         string[]? aliases = null,
         PowerShellCompilationCommandBinding? commandBinding = null,
@@ -563,6 +565,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         DeclaredOutputType = declaredOutputType;
+        DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
         Help = help;
         Aliases = aliases ?? Array.Empty<string>();
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
@@ -586,6 +589,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
     internal Type? DeclaredOutputType { get; }
+    internal string DeclaredOutputTypeName { get; }
     internal PowerShellCompilationHelp? Help { get; }
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }

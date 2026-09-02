@@ -300,11 +300,13 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine(GenerateCmdletAttribute(cmdlet));
-        var outputType = string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType)
-            ? GetCmdletOutputTypeName(cmdlet.Method.ReturnType)
-            : cmdlet.Method.DeclaredOutputType;
-        if (outputType is not null)
-            builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(outputType)}))]");
+        if (cmdlet.Method.DeclaredOutputTypeIsSemanticContract &&
+            !string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType))
+            builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(cmdlet.Method.DeclaredOutputType)}))]");
+        else if (!string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType))
+            builder.AppendLine($"[OutputType({PowerShellCSharpLiteral.QuoteString(cmdlet.Method.DeclaredOutputType)})]");
+        else if (GetCmdletOutputTypeName(cmdlet.Method.ReturnType) is { } inferredOutputType)
+            builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(inferredOutputType)}))]");
         var requiresProviderCancellation = cmdlet.Method.RequiresProviderCancellation;
         var implementsDisposable = requiresProviderCancellation ||
             cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline;

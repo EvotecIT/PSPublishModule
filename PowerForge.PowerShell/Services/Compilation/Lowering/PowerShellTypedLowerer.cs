@@ -167,6 +167,7 @@ internal sealed partial class PowerShellTypedLowerer
                 function.Aliases.ToArray(),
                 function.CommandBinding,
                 function.DeclaredOutputType,
+                function.DeclaredOutputTypeName,
                 boundParameterBindings.Contains(function.Symbol.StableKey),
                 streamBindings.Contains(function.Symbol.StableKey),
                 function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeProviderOperations),

@@ -17,10 +17,10 @@ internal static class PowerShellRecursiveFunctionPolicy
                 function.Body,
                 targetFramework,
                 capabilities,
-                out var declared,
+                out var outputTypeContract,
                 out _,
                 out _) ||
-            declared is null ||
+            outputTypeContract.SemanticType is not { } declared ||
             unit.Parameters.Any(static parameter => parameter.DefaultValue is not null || parameter.Validations.Length > 0))
             return false;
 

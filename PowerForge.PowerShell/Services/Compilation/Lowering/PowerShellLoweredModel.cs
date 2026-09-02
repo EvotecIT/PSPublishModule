@@ -179,6 +179,7 @@ internal sealed class PowerShellLoweredFunction
         string[] aliases,
         PowerShellCompilationCommandBinding commandBinding,
         Type? declaredOutputType,
+        string declaredOutputTypeName,
         bool requiresPowerShellBoundParameters,
         bool requiresPowerShellStreams,
         bool requiresRuntimeFreeProviderOperations,
@@ -201,6 +202,7 @@ internal sealed class PowerShellLoweredFunction
         Aliases = aliases ?? Array.Empty<string>();
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
+        DeclaredOutputTypeName = declaredOutputTypeName ?? string.Empty;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresRuntimeFreeProviderOperations = requiresRuntimeFreeProviderOperations;
@@ -224,6 +226,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellImmutableArray<string> Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
+    internal string DeclaredOutputTypeName { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresRuntimeFreeProviderOperations { get; }

@@ -96,6 +96,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
+            declaredOutputTypeName: function.DeclaredOutputTypeName,
             aliases: function.Aliases.ToArray(),
             commandBinding: function.CommandBinding,
             sourceMap: sourceMap.ToArray(),

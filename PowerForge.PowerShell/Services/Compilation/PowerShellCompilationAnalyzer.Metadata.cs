@@ -19,11 +19,13 @@ public sealed partial class PowerShellCompilationAnalyzer
             return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count > 0 &&
                    attribute.PositionalArguments.All(static argument => argument is StringConstantExpressionAst { Value.Length: > 0 });
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "OutputType"))
-            return attribute.NamedArguments.Count == 0 && attribute.PositionalArguments.Count == 1 &&
-                   attribute.PositionalArguments[0] is TypeExpressionAst outputType &&
-                   outputType.TypeName.GetReflectionType() is { } declaredOutputType &&
-                   (declaredOutputType == typeof(void) ||
-                    PowerShellCompilationParameterTypePolicy.CanUseInMethod(declaredOutputType, targetFramework, capabilities));
+            return PowerShellOutputTypeSemanticPolicy.TryResolve(
+                attribute,
+                targetFramework,
+                capabilities,
+                out _,
+                out _,
+                out _);
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

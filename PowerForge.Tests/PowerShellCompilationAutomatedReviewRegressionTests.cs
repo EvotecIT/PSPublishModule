@@ -97,6 +97,7 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var method = typed.Methods[0];
         Assert.Equal(typeof(string[]).FullName, method.DeclaredOutputType);
+        Assert.True(method.DeclaredOutputTypeIsSemanticContract);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -109,6 +110,100 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{path}' -Force; (Get-Command Get-DeclaredValue).OutputType[0].Type.FullName");
         Assert.Equal((0, typeof(string[]).FullName, string.Empty), Normalize(run));
+    }
+
+    [Theory]
+    [InlineData("net8.0", "pwsh")]
+    [InlineData("net472", "powershell")]
+    public void Build_BinaryModulePreservesResolvedAdvisoryOutputTypeNameWithoutAClrSignatureReference(
+        string targetFramework,
+        string host)
+    {
+        const string advisoryTypeName = "System.Management.Automation.ErrorRecord";
+        using var fixture = Fixture.Create(
+            $"function Get-DeclaredValue {{ [OutputType([{advisoryTypeName}])] param() return 'Ada' }}; Export-ModuleMember -Function Get-DeclaredValue",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.AdvisoryOutput", "CompiledPowerShell", targetFramework);
+
+        Assert.True(
+            typed.Methods.Length == 1,
+            string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var method = typed.Methods[0];
+        Assert.Equal(advisoryTypeName, method.DeclaredOutputType);
+        Assert.False(method.DeclaredOutputTypeIsSemanticContract);
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.AdvisoryOutput",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        };
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{path}' -Force; " +
+            "$command = Get-Command Get-DeclaredValue; " +
+            "[Console]::Write(\"$($command.OutputType[0].Name)|$($command.OutputType[0].Type.FullName)|$(Get-DeclaredValue)\")");
+
+        Assert.Equal((0, $"{advisoryTypeName}|{advisoryTypeName}|Ada", string.Empty), Normalize(run));
+    }
+
+    [Fact]
+    public void Build_Net472BinaryModulePreservesPortableGenericSemanticOutputType()
+    {
+        using var fixture = Fixture.Create(
+            "function Get-DeclaredValue { [OutputType([System.Collections.Generic.List[string]])] param() return 'Ada' }; Export-ModuleMember -Function Get-DeclaredValue",
+            ".psm1");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.GenericOutput",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = "net472"
+        };
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var path = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = Run("powershell", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{path}' -Force; " +
+            "$type = (Get-Command Get-DeclaredValue).OutputType[0].Type; " +
+            "[Console]::Write(\"$($type.GetGenericTypeDefinition().FullName)|$($type.GenericTypeArguments[0].FullName)\")");
+
+        Assert.Equal((0, "System.Collections.Generic.List`1|System.String", string.Empty), Normalize(run));
+    }
+
+    [Fact]
+    public void Analyze_AdvisoryOutputTypeNameRequiresGeneratedCommandHost()
+    {
+        using var fixture = Fixture.Create(
+            "function Get-DeclaredValue { [OutputType([System.Management.Automation.ErrorRecord])] param() return 'Ada' }",
+            ".psm1");
+        var binary = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        var executable = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: "net8.0",
+            capabilities: PowerShellCompilationCapabilities.TypedExecutable));
+
+        var binaryUnit = Assert.Single(Assert.Single(binary.Files).Units);
+        Assert.True(
+            binaryUnit.IsCompilable,
+            string.Join(Environment.NewLine, binaryUnit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        Assert.False(Assert.Single(Assert.Single(executable.Files).Units).IsCompilable);
     }
 
     [Theory]

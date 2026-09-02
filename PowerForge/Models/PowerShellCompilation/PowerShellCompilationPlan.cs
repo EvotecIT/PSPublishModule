@@ -56,7 +56,10 @@ public enum PowerShellCompilationCapability
     RuntimeFreeProviderOperations = 1024,
 
     /// <summary>Generated PowerShell hosts may preserve an untyped parameter as an object-valued binding contract.</summary>
-    UntypedObjectParameters = 2048
+    UntypedObjectParameters = 2048,
+
+    /// <summary>Generated command hosts may preserve a statically resolved output type name as advisory metadata without using it in a CLR signature.</summary>
+    AdvisoryOutputTypeMetadata = 4096
 }
 
 /// <summary>
@@ -412,7 +415,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
-                              PowerShellCompilationCapability.UntypedObjectParameters)) != 0)
+                              PowerShellCompilationCapability.UntypedObjectParameters |
+                              PowerShellCompilationCapability.AdvisoryOutputTypeMetadata)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

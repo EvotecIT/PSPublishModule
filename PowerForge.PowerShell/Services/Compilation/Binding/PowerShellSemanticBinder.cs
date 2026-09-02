@@ -46,7 +46,7 @@ internal sealed partial class PowerShellSemanticBinder
                 function.Body,
                 targetFramework,
                 capabilities,
-                out var declaredOutputType,
+                out var outputTypeContract,
                 out var outputTypeErrorNode,
                 out var outputTypeError))
         {
@@ -76,7 +76,8 @@ internal sealed partial class PowerShellSemanticBinder
                 diagnostics,
                 targetFramework,
                 bindingCapabilities,
-                declaredOutputType,
+                outputTypeContract.SemanticType,
+                outputTypeContract.MetadataTypeName,
                 symbols,
                 parameters,
                 pipelineParameter,
@@ -160,7 +161,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellCommentHelpBinder.Bind(function),
             PowerShellAdvancedFunctionPolicy.GetAliases(function),
             PowerShellAdvancedFunctionPolicy.GetBinding(function.Body.ParamBlock),
-            declaredOutputType,
+            outputTypeContract.SemanticType,
+            outputTypeContract.MetadataTypeName,
             body,
             PowerShellTypeFact.Unknown,
             PowerShellOutputCardinality.Unknown,

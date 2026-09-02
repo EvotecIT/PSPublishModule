@@ -188,7 +188,7 @@ internal static class PowerShellTypedExecutableCompiler
             isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,
             commandBinding: function.CommandBinding,
             requiresPowerShellRuntimeState: method.RequiresPowerShellRuntimeState,
-            declaredOutputType: method.DeclaredOutputType?.FullName,
+            declaredOutputType: method.DeclaredOutputTypeName,
             sourceColumn: method.SourceSpan.StartColumn,
             sourceEndLine: method.SourceSpan.EndLine,
             sourceEndColumn: method.SourceSpan.EndColumn,
@@ -201,6 +201,7 @@ internal static class PowerShellTypedExecutableCompiler
             hostedRegionSiteCount: method.HostedRegionSiteCount,
             requiresProviderCancellation: method.RequiresProviderCancellation);
         description.DocumentId = function.Symbol.DocumentId;
+        description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
         return description;
     }
 

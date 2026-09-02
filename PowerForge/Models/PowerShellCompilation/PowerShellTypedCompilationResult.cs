@@ -177,6 +177,7 @@ public sealed class PowerShellCompiledMethod
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding(isAdvancedFunction);
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         DeclaredOutputType = declaredOutputType ?? string.Empty;
+        DeclaredOutputTypeIsSemanticContract = !string.IsNullOrWhiteSpace(declaredOutputType);
     }
 
     /// <summary>Original PowerShell function name.</summary>
@@ -190,6 +191,9 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
     public string DeclaredOutputType { get; }
+
+    /// <summary>Whether the authored output type is also a target-compatible CLR semantic contract.</summary>
+    internal bool DeclaredOutputTypeIsSemanticContract { get; set; }
 
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
