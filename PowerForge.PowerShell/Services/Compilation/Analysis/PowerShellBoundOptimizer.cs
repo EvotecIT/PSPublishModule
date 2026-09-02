@@ -218,6 +218,13 @@ internal sealed class PowerShellBoundOptimizer
         value = null;
         try
         {
+            if (operation is PowerShellBoundBinaryOperator.NullEqual or PowerShellBoundBinaryOperator.NullNotEqual)
+            {
+                value = operation == PowerShellBoundBinaryOperator.NullEqual
+                    ? ReferenceEquals(left, right)
+                    : !ReferenceEquals(left, right);
+                return true;
+            }
             if (left is bool leftBoolean && right is bool rightBoolean)
             {
                 value = operation switch

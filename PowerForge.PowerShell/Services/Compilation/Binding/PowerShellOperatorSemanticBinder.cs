@@ -112,13 +112,26 @@ internal static class PowerShellOperatorSemanticBinder
 
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge")
         {
-            if (leftType.IsArray || rightType.IsArray)
-                return Reject(diagnostics, span, "PSB2208", "PowerShell array comparison is element-wise and is not supported by the scalar typed compiler.");
             if ((left.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
                 (right.ValueState == PowerShellValueState.Null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
                 return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
             var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
+            if (equality && (left.ValueState == PowerShellValueState.Null || right.ValueState == PowerShellValueState.Null))
+            {
+                var comparedValue = left.ValueState == PowerShellValueState.Null ? right : left;
+                var comparedValueIsLeft = right.ValueState == PowerShellValueState.Null;
+                if (!PowerShellNullComparisonSemanticPolicy.IsScalar(comparedValue.Type.ClrType, comparedValueIsLeft))
+                    return Reject(diagnostics, span, "PSB2208", "PowerShell comparison can become element-wise when the left operand's runtime value is a collection; this statically typed left operand is not proven scalar.");
+                return Binary(
+                    span,
+                    operation is "Ieq" or "Ceq" ? PowerShellBoundBinaryOperator.NullEqual : PowerShellBoundBinaryOperator.NullNotEqual,
+                    left,
+                    right,
+                    typeof(bool));
+            }
+            if (leftType.IsArray || rightType.IsArray)
+                return Reject(diagnostics, span, "PSB2208", "PowerShell array comparison is element-wise and is not supported by the scalar typed compiler.");
             if (relational && (Nullable.GetUnderlyingType(leftType) is not null || Nullable.GetUnderlyingType(rightType) is not null))
                 return Reject(diagnostics, span, "PSB2217", "Relational comparison involving a nullable CLR value requires PowerShell's sign-sensitive null ordering and is not supported by the typed compiler.");
             var liftedEquality = equality && IsNullableUnderlyingPair(leftType, rightType);

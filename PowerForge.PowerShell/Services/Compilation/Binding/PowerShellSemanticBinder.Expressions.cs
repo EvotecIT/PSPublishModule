@@ -146,10 +146,18 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities,
                     diagnostics);
             case BinaryExpressionAst binary:
+                var rightOperandSymbols = RefineShortCircuitRightOperandSymbols(binary, symbols);
                 return PowerShellOperatorSemanticBinder.BindBinary(
                     binary,
                     span,
-                    operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities),
+                    operand => BindExpression(
+                        document,
+                        operand,
+                        ReferenceEquals(operand, binary.Right) ? rightOperandSymbols : symbols,
+                        functions,
+                        diagnostics,
+                        targetFramework: targetFramework,
+                        capabilities: capabilities),
                     diagnostics,
                     targetFramework,
                     capabilities);

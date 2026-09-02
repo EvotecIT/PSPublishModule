@@ -643,6 +643,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (expression.Operation is PowerShellBoundBinaryOperator.NullEqual or PowerShellBoundBinaryOperator.NullNotEqual)
+        {
+            var comparison = $"global::System.Object.ReferenceEquals({left}, {right})";
+            return expression.Operation == PowerShellBoundBinaryOperator.NullNotEqual
+                ? $"!({comparison})"
+                : comparison;
+        }
         if (expression.Operation is PowerShellBoundBinaryOperator.EqualIgnoreCase or PowerShellBoundBinaryOperator.NotEqualIgnoreCase or
             PowerShellBoundBinaryOperator.EqualCaseSensitive or PowerShellBoundBinaryOperator.NotEqualCaseSensitive)
         {

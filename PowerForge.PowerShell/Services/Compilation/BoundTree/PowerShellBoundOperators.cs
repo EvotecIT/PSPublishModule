@@ -9,6 +9,8 @@ internal enum PowerShellBoundBinaryOperator
     Remainder,
     Equal,
     NotEqual,
+    NullEqual,
+    NullNotEqual,
     EqualIgnoreCase,
     NotEqualIgnoreCase,
     EqualCaseSensitive,
