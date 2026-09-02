@@ -181,6 +181,92 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
     }
 
     [Fact]
+    public async Task PublishRelease_RevalidatesProvenanceBeforeRetriedUpload()
+    {
+        using var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "provenance-upload-retry");
+        const string marker = "<!-- trusted-release -->";
+        var requests = new List<string>();
+        var delays = new List<TimeSpan>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(
+            HttpListenerContext context,
+            string json,
+            int statusCode = 200,
+            string? retryAfter = null)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            if (!string.IsNullOrWhiteSpace(retryAfter))
+                context.Response.Headers["Retry-After"] = retryAfter;
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var stableRelease = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"{{marker}}"}""";
+        var changedRelease = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"foreign"}""";
+        var server = Task.Run(async () =>
+        {
+            await Respond(await NextRequest(), stableRelease);
+            await Respond(await NextRequest(), stableRelease);
+            await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503, retryAfter: "30");
+            await Respond(await NextRequest(), "[]");
+            await Respond(await NextRequest(), changedRelease);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(
+                    new NullLogger(),
+                    (delay, cancellationToken) =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        delays.Add(delay);
+                    })
+                .PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        ReuseExistingReleaseOnConflict = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        ExpectedReleaseBodyMarker = marker,
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("no longer contains", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(TimeSpan.FromSeconds(30), Assert.Single(delays));
+            Assert.Single(requests, request => request == "POST /uploads");
+        }
+        finally
+        {
+            listener.Stop();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
     public async Task PublishRelease_RetriesReplacementInventoryAndAmbiguousDelete()
     {
         using var listener = new HttpListener();
@@ -258,6 +344,98 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
             Assert.Equal([TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(30)], delays);
             Assert.Equal(assetName, Assert.Single(result.ReplacedExistingAssets));
             Assert.Equal(assetName, Assert.Single(result.UploadedAssets));
+        }
+        finally
+        {
+            listener.Stop();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RevalidatesProvenanceBeforeRetriedDelete()
+    {
+        using var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "provenance-delete-retry");
+        var assetName = Path.GetFileName(assetPath);
+        const string marker = "<!-- trusted-release -->";
+        var requests = new List<string>();
+        var delays = new List<TimeSpan>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(
+            HttpListenerContext context,
+            string json,
+            int statusCode = 200,
+            string? retryAfter = null)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            if (!string.IsNullOrWhiteSpace(retryAfter))
+                context.Response.Headers["Retry-After"] = retryAfter;
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var stableRelease = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"{{marker}}"}""";
+        var changedRelease = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","body":"foreign"}""";
+        var existingAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"uploaded"}]""";
+        var server = Task.Run(async () =>
+        {
+            await Respond(await NextRequest(), stableRelease);
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), stableRelease);
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), stableRelease);
+            await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503, retryAfter: "30");
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), changedRelease);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(
+                    new NullLogger(),
+                    (delay, cancellationToken) =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        delays.Add(delay);
+                    })
+                .PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        ReuseExistingReleaseOnConflict = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        ExpectedReleaseBodyMarker = marker,
+                        ReplaceExistingAssets = true,
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("no longer contains", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(TimeSpan.FromSeconds(30), Assert.Single(delays));
+            Assert.Single(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
         }
         finally
         {

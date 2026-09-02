@@ -413,7 +413,18 @@ public sealed partial class GitHubReleasePublisher
                     fileName,
                     expectedAssetId,
                     requiredState: null,
-                    cancellationToken))
+                    validateReleaseBeforeDelete: () => ValidateReleaseBeforeAssetMutation(
+                        owner,
+                        repo,
+                        token,
+                        apiBaseUrl,
+                        releaseId,
+                        tagName,
+                        expectedReleaseBodyMarker,
+                        expectedTagCommitSha,
+                        requirePublishedStableRelease,
+                        cancellationToken),
+                    cancellationToken: cancellationToken))
                 {
                     replacedExistingAssets.Add(fileName);
                     deletedExistingAsset = true;
@@ -459,6 +470,18 @@ public sealed partial class GitHubReleasePublisher
                     GitHubReleaseAssetProgressState.Uploading,
                     transferred,
                     total),
+                () => ValidateReleaseBeforeAssetMutationWithRetry(
+                    $"GitHub pre-retry verification for '{fileName}'",
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    tagName,
+                    expectedReleaseBodyMarker,
+                    expectedTagCommitSha,
+                    requirePublishedStableRelease,
+                    cancellationToken),
                 () => ReconcileReleaseAssetAfterUploadFailure(
                     owner,
                     repo,

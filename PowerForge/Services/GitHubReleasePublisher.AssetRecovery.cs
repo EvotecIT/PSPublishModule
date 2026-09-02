@@ -86,7 +86,10 @@ public sealed partial class GitHubReleasePublisher {
         string fileName,
         long expectedAssetId,
         string? requiredState,
+        Action validateReleaseBeforeDelete,
         CancellationToken cancellationToken) {
+        if (validateReleaseBeforeDelete is null)
+            throw new ArgumentNullException(nameof(validateReleaseBeforeDelete));
         var deleteMayHaveSucceeded = false;
         for (var attempt = 1; attempt <= MaximumAssetUploadAttempts; attempt++) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -120,6 +123,7 @@ public sealed partial class GitHubReleasePublisher {
             }
 
             try {
+                validateReleaseBeforeDelete();
                 var uri = BuildApiUri(apiBaseUrl, $"/repos/{owner}/{repo}/releases/assets/{expectedAssetId}");
                 using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

@@ -174,12 +174,16 @@ public sealed partial class GitHubReleasePublisher {
         string fileName,
         string token,
         Action<long, long>? reportProgress,
+        Action validateReleaseBeforeRetry,
         Func<AssetUploadReconciliationState> reconcileUpload,
         CancellationToken cancellationToken) {
+        if (validateReleaseBeforeRetry is null) throw new ArgumentNullException(nameof(validateReleaseBeforeRetry));
         if (reconcileUpload is null) throw new ArgumentNullException(nameof(reconcileUpload));
         var sawTransientFailure = false;
         for (var attempt = 1; ; attempt++) {
             cancellationToken.ThrowIfCancellationRequested();
+            if (attempt > 1)
+                validateReleaseBeforeRetry();
             HttpResponseMessage response;
             try {
                 response = UploadAssetOnce(

@@ -439,6 +439,8 @@ public sealed class GitHubReleasePublisherTests
             await Respond(await listener.GetContextAsync(), releaseJson);
             await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond(await listener.GetContextAsync(), $"[{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\"}}]");
+            await Respond(await listener.GetContextAsync(), releaseJson);
+            await Respond(await listener.GetContextAsync(), $"{{\"object\":{{\"sha\":\"{commit}\",\"type\":\"commit\"}}}}");
             await Respond(await listener.GetContextAsync(), string.Empty, 204);
             await Respond(await listener.GetContextAsync(), "[]");
             await Respond(await listener.GetContextAsync(), releaseJson);
@@ -484,6 +486,8 @@ public sealed class GitHubReleasePublisherTests
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
+                    "GET /repos/EvotecIT/example/git/ref/tags/v1.2.3",
                     "DELETE /repos/EvotecIT/example/releases/assets/99",
                     "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/tags/v1.2.3",
