@@ -125,7 +125,8 @@ public sealed partial class GitHubReleasePublisher {
             if (!response.IsSuccessStatusCode)
                 throw new GitHubApiRequestException(
                     $"GitHub tag provenance check failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
-                    response.StatusCode);
+                    response.StatusCode,
+                    GetAssetRetryAfterDelay(response));
         }
 
         var parsed = Deserialize<GitHubGitObjectEnvelope>(responseText);

@@ -317,7 +317,8 @@ public sealed partial class GitHubReleasePublisher
         if (!response.IsSuccessStatusCode)
             throw new GitHubApiRequestException(
                 $"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
-                response.StatusCode);
+                response.StatusCode,
+                GetAssetRetryAfterDelay(response));
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
         var html = parsed.HtmlUrl ?? string.Empty;
@@ -450,7 +451,7 @@ public sealed partial class GitHubReleasePublisher
                     GitHubReleaseAssetProgressState.Uploading,
                     transferred,
                     total),
-                () => ReconcileReleaseAssetAfterUploadFailure(
+                reconciliationContext => ReconcileReleaseAssetAfterUploadFailure(
                     owner,
                     repo,
                     token,
@@ -461,6 +462,7 @@ public sealed partial class GitHubReleasePublisher
                     expectedTagCommitSha,
                     requirePublishedStableRelease,
                     fileName,
+                    reconciliationContext,
                     cancellationToken),
                 cancellationToken);
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
