@@ -66,6 +66,7 @@ public sealed partial class DotNetPublishPipelineRunner
         PublishProvenanceLease? manifestProvenanceLease = null;
         SourceProvenance? sharedPublishProvenance = null;
         var publishProvenanceByArtifact = new Dictionary<string, SourceProvenance>(StringComparer.OrdinalIgnoreCase);
+        string[] plannedPublishOutputDirectories = Array.Empty<string>();
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState =
             new Dictionary<string, string>();
         string? manifestJson = null;
@@ -76,6 +77,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
+            plannedPublishOutputDirectories = ResolvePlannedPublishOutputDirectories(plan);
             ValidateExplicitDotNetEnvironmentVariables(plan.EnvironmentVariables);
             ValidateNativeAotEnvironmentVariables(plan);
             ValidateTrackedGeneratedProvenancePaths(plan);
@@ -139,7 +141,9 @@ public sealed partial class DotNetPublishPipelineRunner
                                 if (sharedPublishProvenance is null)
                                 {
                                     SourceProvenance initialProvenance =
-                                        ReadPortableInventorySourceProvenance(plan);
+                                        ReadPortableInventorySourceProvenance(
+                                            plan,
+                                            additionalGeneratedPaths: plannedPublishOutputDirectories);
                                     PublishProvenanceLease candidateLease = PublishProvenanceLease.Create(
                                         PublishProvenanceLease.BuildGuardedPaths(
                                             initialProvenance.PublishInputFiles,
@@ -147,7 +151,9 @@ public sealed partial class DotNetPublishPipelineRunner
                                     try
                                     {
                                         SourceProvenance confirmedProvenance =
-                                            ReadPortableInventorySourceProvenance(plan);
+                                            ReadPortableInventorySourceProvenance(
+                                                plan,
+                                                additionalGeneratedPaths: plannedPublishOutputDirectories);
                                         candidateLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                                             confirmedProvenance.PublishInputFiles,
                                             confirmedProvenance.NoBuildPublishInputs));
@@ -190,13 +196,15 @@ public sealed partial class DotNetPublishPipelineRunner
                                 msiReservationOwner,
                                 inputSnapshot,
                                 provenanceLease,
-                                publishProvenance);
+                                publishProvenance,
+                                plannedPublishOutputDirectories,
+                                out SourceProvenance? finalPublishProvenance);
                             artefacts.Add(publishedArtefact);
-                            if (publishProvenance is not null)
+                            if (finalPublishProvenance is not null)
                             {
                                 publishProvenanceByArtifact.Add(
                                     BuildArtifactProvenanceKey(publishedArtefact),
-                                    publishProvenance);
+                                    finalPublishProvenance);
                             }
                             break;
                         }
@@ -228,11 +236,19 @@ public sealed partial class DotNetPublishPipelineRunner
                         {
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
-                                sharedPublishProvenance);
+                                sharedPublishProvenance,
+                                GetVerifiedMsiVersionStateWrites(
+                                    plan.ProjectRoot,
+                                    cleanTrackedGeneratedProvenanceState,
+                                    msiReservationOwner));
                             FinalizePortableEvidence(plan, artefacts, publishProvenanceByArtifact);
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
-                                sharedPublishProvenance);
+                                sharedPublishProvenance,
+                                GetVerifiedMsiVersionStateWrites(
+                                    plan.ProjectRoot,
+                                    cleanTrackedGeneratedProvenanceState,
+                                    msiReservationOwner));
                             (manifestJson, manifestText, checksumsPath) = WriteManifestsWithProvenance(
                                 plan,
                                 artefacts,
@@ -247,7 +263,11 @@ public sealed partial class DotNetPublishPipelineRunner
                                     TryBuildManifestProvenance(artefacts, publishProvenanceByArtifact));
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
-                                sharedPublishProvenance);
+                                sharedPublishProvenance,
+                                GetVerifiedMsiVersionStateWrites(
+                                    plan.ProjectRoot,
+                                    cleanTrackedGeneratedProvenanceState,
+                                    msiReservationOwner));
                             break;
                         }
                     }
@@ -451,10 +471,11 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static void ValidateManifestProvenance(
         PublishProvenanceLease? provenanceLease,
-        SourceProvenance? provenance)
+        SourceProvenance? provenance,
+        IEnumerable<string>? additionalTrackedGeneratedPaths = null)
     {
         provenanceLease?.ValidateUnchanged();
-        provenance?.ValidateCurrentSource();
+        provenance?.ValidateCurrentSource(additionalTrackedGeneratedPaths);
     }
 
     internal static SourceProvenance? TryBuildManifestProvenance(
@@ -506,7 +527,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray(),
             provenances.SelectMany(static provenance => provenance.PublishInputFiles)
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            validateCurrentSourceWithTrackedGeneratedPaths: additionalTrackedGeneratedPaths =>
+            {
+                foreach (SourceProvenance provenance in provenances)
+                    provenance.ValidateCurrentSource(additionalTrackedGeneratedPaths);
+            });
     }
 
 }

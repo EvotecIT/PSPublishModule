@@ -190,23 +190,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             using DotNetPublishPipelineRunner.TrustedDotNetInstallationSnapshot snapshot =
                 DotNetPublishPipelineRunner.TrustedDotNetInstallationSnapshot.Create(executablePath, root);
 
-            File.WriteAllText(sdkAssembly, "replaced-sdk");
+            File.AppendAllText(sdkAssembly, "-replaced");
 
-            bool rejected = SpinWait.SpinUntil(
-                () =>
-                {
-                    try
-                    {
-                        snapshot.ValidateUnchanged(verifyHashes: false);
-                        return false;
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        return true;
-                    }
-                },
-                TimeSpan.FromSeconds(5));
-            Assert.True(rejected, "The SDK mutation watcher did not reject the replacement.");
+            Assert.Throws<InvalidOperationException>(() =>
+                snapshot.ValidateUnchanged(verifyHashes: false));
         }
         finally
         {

@@ -773,7 +773,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
-                requiresSdkPackageEvidence: false);
+                requiresSdkPackageEvidence: true);
         }
 
         internal string BuildVisitKey()

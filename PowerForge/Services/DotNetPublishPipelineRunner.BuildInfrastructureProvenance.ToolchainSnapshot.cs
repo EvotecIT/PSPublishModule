@@ -111,8 +111,6 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (Volatile.Read(ref _changed) != 0)
                 ThrowChanged();
-            if (!verifyHashes)
-                return;
 
             string[] currentFiles = EnumerateCapturedFiles(_capturedRoots).ToArray();
             if (currentFiles.Length != _files.Count || currentFiles.Any(path => !_files.ContainsKey(path)))
@@ -124,7 +122,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!info.Exists ||
                     info.Length != expected.Length ||
                     info.LastWriteTimeUtc != expected.LastWriteTimeUtc ||
-                    !string.Equals(ComputeFileSha256(path), expected.Sha256, StringComparison.OrdinalIgnoreCase))
+                    (verifyHashes &&
+                     !string.Equals(ComputeFileSha256(path), expected.Sha256, StringComparison.OrdinalIgnoreCase)))
                 {
                     ThrowChanged();
                 }
