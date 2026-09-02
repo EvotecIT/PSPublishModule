@@ -15,8 +15,7 @@ internal static class PowerShellControlFlowBindingPolicy
     }
 
     internal static bool HasBreakableAncestor(Ast syntax)
-        => HasAncestor<WhileStatementAst>(syntax) || HasAncestor<ForStatementAst>(syntax) ||
-           HasAncestor<ForEachStatementAst>(syntax) || HasAncestor<SwitchStatementAst>(syntax);
+        => HasAncestor<LoopStatementAst>(syntax) || HasAncestor<SwitchStatementAst>(syntax);
 
     internal static bool HasContinuableAncestor(Ast syntax) => HasBreakableAncestor(syntax);
 }

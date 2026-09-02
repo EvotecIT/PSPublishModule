@@ -36,6 +36,8 @@ public static class PowerShellCompilationFeatureIds
     public const string AutomaticVariableAssignment = "assignment.automatic-variable";
     /// <summary>Switch matching flags.</summary>
     public const string SwitchFlags = "control-flow.switch-flags";
+    /// <summary>Post-test do/while and do/until loop semantics.</summary>
+    public const string PostTestLoop = "control-flow.post-test-loop";
     /// <summary>Typed catch-filter resolution.</summary>
     public const string CatchFilter = "exception.catch-filter";
     /// <summary>PowerShell begin/process/clean pipeline lifecycle blocks.</summary>

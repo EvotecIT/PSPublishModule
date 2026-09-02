@@ -357,7 +357,11 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement is IfStatementAst ifStatement)
             return BindIfStatement(document, ifStatement, symbols, functions, diagnostics, targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
         if (statement is WhileStatementAst whileStatement)
-            return BindWhileStatement(document, whileStatement, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindWhileStatement(document, whileStatement, PowerShellBoundLoopKind.While, symbols, functions, diagnostics, targetFramework, capabilities);
+        if (statement is DoWhileStatementAst doWhileStatement)
+            return BindWhileStatement(document, doWhileStatement, PowerShellBoundLoopKind.DoWhile, symbols, functions, diagnostics, targetFramework, capabilities);
+        if (statement is DoUntilStatementAst doUntilStatement)
+            return BindWhileStatement(document, doUntilStatement, PowerShellBoundLoopKind.DoUntil, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ForStatementAst forStatement)
             return BindForStatement(document, forStatement, symbols, functions, diagnostics, targetFramework, capabilities);
         if (statement is ForEachStatementAst forEachStatement)

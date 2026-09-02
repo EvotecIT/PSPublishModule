@@ -479,7 +479,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         => ReferenceEquals(candidate, unitRoot) || candidate is
             NamedBlockAst or StatementBlockAst or ParamBlockAst or ParameterAst or TypeConstraintAst or
             PipelineAst or CommandExpressionAst or AssignmentStatementAst or IfStatementAst or
-            SwitchStatementAst or ForStatementAst or WhileStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
+            SwitchStatementAst or ForStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst or ForEachStatementAst or TryStatementAst or CatchClauseAst or ReturnStatementAst or
             ThrowStatementAst or BreakStatementAst or ContinueStatementAst or BinaryExpressionAst or UnaryExpressionAst or
             ParenExpressionAst or ConvertExpressionAst or ConstantExpressionAst or StringConstantExpressionAst or ExpandableStringExpressionAst or
             VariableExpressionAst or ArrayLiteralAst or ArrayExpressionAst or HashtableAst or TypeExpressionAst or MemberExpressionAst or

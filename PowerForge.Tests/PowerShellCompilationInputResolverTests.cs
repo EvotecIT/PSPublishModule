@@ -222,6 +222,23 @@ public sealed class PowerShellCompilationInputResolverTests
         Assert.Equal(new[] { conditional, direct, local, root }.OrderBy(static path => path), resolved.SourceFiles.OrderBy(static path => path));
     }
 
+    [Theory]
+    [InlineData("do { $Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1) } while ($false)")]
+    [InlineData("do { $Files = @(Get-ChildItem -Path $PSScriptRoot\\Public\\*.ps1) } until ($true)")]
+    public void Resolve_DoesNotTreatPostTestLoopProducerAsTopLevelDiscovery(string producer)
+    {
+        using var fixture = ResolverFixture.Create("PostTestDiscoveryModule");
+        fixture.Write("PostTestDiscoveryModule.psd1", "@{ RootModule = 'PostTestDiscoveryModule.psm1' }");
+        fixture.Write(
+            "PostTestDiscoveryModule.psm1",
+            producer + "; foreach ($File in $Files) { . $File.FullName }");
+        fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 42 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Resolve_ConventionalModuleLoaderDiscoversAuthoredPowerShellGlobsWithoutExecutingModuleCode()
     {

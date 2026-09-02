@@ -375,6 +375,13 @@ internal sealed partial class PowerShellTypedLowerer
                 conditional.ElseBlock is null ? null : LowerStatements(conditional.ElseBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundWhileStatement loop => new PowerShellLoweredWhileStatement(
                 loop.Span,
+                loop.Kind switch
+                {
+                    PowerShellBoundLoopKind.While => PowerShellLoweredLoopKind.While,
+                    PowerShellBoundLoopKind.DoWhile => PowerShellLoweredLoopKind.DoWhile,
+                    PowerShellBoundLoopKind.DoUntil => PowerShellLoweredLoopKind.DoUntil,
+                    _ => throw new InvalidOperationException($"Unsupported bound loop kind '{loop.Kind}'.")
+                },
                 LowerExpression(loop.Condition, functions, names, targetCapabilities),
                 LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),

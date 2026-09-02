@@ -47,8 +47,20 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             }
             if (statement is PowerShellBoundWhileStatement loop)
             {
-                ReportReads(loop.Condition, assigned, locals, diagnostics);
-                Analyze(loop.Body, assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
+                var loopState = assigned.ToHashSet(StringComparer.Ordinal);
+                if (loop.Kind == PowerShellBoundLoopKind.While)
+                    ReportReads(loop.Condition, assigned, locals, diagnostics);
+                Analyze(loop.Body, loopState, locals, diagnostics);
+                if (loop.Kind != PowerShellBoundLoopKind.While)
+                {
+                    var hasFlowTransfer = HasFlowTransfer(loop.Body);
+                    ReportReads(loop.Condition, hasFlowTransfer ? assigned : loopState, locals, diagnostics);
+                    if (!hasFlowTransfer)
+                    {
+                        assigned.Clear();
+                        assigned.UnionWith(loopState);
+                    }
+                }
                 continue;
             }
             if (statement is PowerShellBoundForStatement forLoop)
@@ -145,6 +157,11 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
         assigned.Clear();
         assigned.UnionWith(definitelyAssigned);
     }
+
+    private static bool HasFlowTransfer(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block).Any(static statement =>
+            statement is PowerShellBoundBreakStatement or PowerShellBoundContinueStatement or
+                PowerShellBoundReturnStatement or PowerShellBoundThrowStatement);
 
     private static void ReportReads(
         PowerShellBoundExpression expression,

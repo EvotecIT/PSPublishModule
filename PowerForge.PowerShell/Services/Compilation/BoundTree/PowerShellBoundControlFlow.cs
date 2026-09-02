@@ -28,15 +28,24 @@ internal sealed class PowerShellBoundIfStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock? ElseBlock { get; }
 }
 
+internal enum PowerShellBoundLoopKind
+{
+    While,
+    DoWhile,
+    DoUntil
+}
+
 internal sealed class PowerShellBoundWhileStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundWhileStatement(SourceSpan span, PowerShellBoundExpression condition, PowerShellBoundBlock body)
+    internal PowerShellBoundWhileStatement(SourceSpan span, PowerShellBoundLoopKind kind, PowerShellBoundExpression condition, PowerShellBoundBlock body)
         : base(span, condition.Effects | body.Effects, condition.Capabilities | body.Capabilities)
     {
+        Kind = kind;
         Condition = condition;
         Body = body;
     }
 
+    internal PowerShellBoundLoopKind Kind { get; }
     internal PowerShellBoundExpression Condition { get; }
     internal PowerShellBoundBlock Body { get; }
 }

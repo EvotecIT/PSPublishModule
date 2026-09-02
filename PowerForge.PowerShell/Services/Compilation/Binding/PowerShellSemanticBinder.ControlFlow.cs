@@ -66,7 +66,8 @@ internal sealed partial class PowerShellSemanticBinder
 
     private PowerShellBoundStatement? BindWhileStatement(
         ParsedSourceDocument document,
-        WhileStatementAst statement,
+        LoopStatementAst statement,
+        PowerShellBoundLoopKind kind,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
@@ -75,15 +76,41 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
-        var condition = BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
+        PowerShellBoundExpression? condition;
+        PowerShellBoundBlock? body;
+        if (kind == PowerShellBoundLoopKind.While)
+        {
+            condition = BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
+            if (condition is null) return null;
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            if (condition is null) return null;
+            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+        }
+        else
+        {
+            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+            if (body is null) return null;
+            var conditionSymbols = CloneSymbols(loopSymbols);
+            if (HasPostTestFlowTransfer(statement.Body))
+                MergeSymbolValueStates(conditionSymbols, baselineSymbols, loopSymbols);
+            condition = BindExpression(document, statement.Condition, conditionSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
+            if (condition is null) return null;
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+        }
         if (condition is null) return null;
-        condition = BindConditionTruthiness(condition, capabilities, diagnostics);
-        if (condition is null) return null;
-        var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
-        MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
-        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), condition, body);
+        if (kind == PowerShellBoundLoopKind.While || HasPostTestFlowTransfer(statement.Body))
+            MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
+        else
+            MergeSymbolValueStates(symbols, loopSymbols);
+        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body);
     }
+
+    private static bool HasPostTestFlowTransfer(StatementBlockAst body)
+        => body.FindAll(
+                static node => node is BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst,
+                searchNestedScriptBlocks: false)
+            .Any();
 
     private PowerShellBoundStatement? BindForStatement(
         ParsedSourceDocument document,

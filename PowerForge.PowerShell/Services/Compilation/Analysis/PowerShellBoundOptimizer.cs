@@ -74,12 +74,14 @@ internal sealed class PowerShellBoundOptimizer
             {
                 var condition = OptimizeExpression(loop.Condition);
                 var body = OptimizeBlock(loop.Body);
-                if (TryGetBoolean(condition, out var execute) && !execute)
+                if (loop.Kind == PowerShellBoundLoopKind.While &&
+                    TryGetBoolean(condition, out var execute) &&
+                    !execute)
                 {
                     _deadBranchesRemoved++;
                     continue;
                 }
-                statements.Add(new PowerShellBoundWhileStatement(loop.Span, condition, body));
+                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body));
                 continue;
             }
             statements.Add(OptimizeStatement(statement));

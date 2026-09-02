@@ -94,6 +94,8 @@ internal static class PowerShellCommandDiscoverySemanticBinder
             if (current.Parent is ConvertExpressionAst conversion && conversion.StaticType == typeof(bool)) return true;
             if (current.Parent is IfStatementAst conditional && conditional.Clauses.Any(clause => ReferenceEquals(clause.Item1, current))) return true;
             if (current.Parent is WhileStatementAst loop && ReferenceEquals(loop.Condition, current)) return true;
+            if (current.Parent is DoWhileStatementAst doWhile && ReferenceEquals(doWhile.Condition, current)) return true;
+            if (current.Parent is DoUntilStatementAst doUntil && ReferenceEquals(doUntil.Condition, current)) return true;
             if (current.Parent is ForStatementAst forLoop && ReferenceEquals(forLoop.Condition, current)) return true;
             if (current.Parent is PipelineAst or CommandExpressionAst or ParenExpressionAst) continue;
             return false;

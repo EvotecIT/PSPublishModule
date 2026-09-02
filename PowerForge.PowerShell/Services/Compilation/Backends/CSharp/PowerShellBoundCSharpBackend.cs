@@ -215,8 +215,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 }
                 return;
             case PowerShellLoweredWhileStatement loop:
-                builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                if (loop.Kind == PowerShellLoweredLoopKind.While)
+                {
+                    builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                }
+                else
+                {
+                    builder.Append(prefix).AppendLine("do");
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, sourceMap);
+                    builder.Append(prefix).Append("while (");
+                    if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
+                    builder.Append(EmitExpression(loop.Condition));
+                    if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append(')');
+                    builder.AppendLine(");");
+                }
                 return;
             case PowerShellLoweredForStatement loop:
                 var initializer = loop.Initializer is null

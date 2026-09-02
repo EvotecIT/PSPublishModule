@@ -25,15 +25,24 @@ internal sealed class PowerShellLoweredIfStatement : PowerShellLoweredStatement
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? ElseStatements { get; }
 }
 
+internal enum PowerShellLoweredLoopKind
+{
+    While,
+    DoWhile,
+    DoUntil
+}
+
 internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements)
+    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredLoopKind kind, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements)
         : base(span)
     {
+        Kind = kind;
         Condition = condition;
         Statements = statements;
     }
 
+    internal PowerShellLoweredLoopKind Kind { get; }
     internal PowerShellLoweredExpression Condition { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
 }
