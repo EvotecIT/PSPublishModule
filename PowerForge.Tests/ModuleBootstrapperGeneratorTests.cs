@@ -81,7 +81,10 @@ public partial class ModuleBootstrapperGeneratorTests
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-lib-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
         Directory.CreateDirectory(Path.Combine(root, "Public"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core", "DemoModule.dll"),
+            overwrite: true);
         File.WriteAllText(Path.Combine(root, "Public", "Get-Demo.ps1"), "function Get-Demo { 'demo' }");
 
         try
@@ -98,7 +101,7 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("# DemoModule.Libraries.ps1", libraries);
             Assert.Contains("Lib\\Core\\DemoModule.dll", libraries);
             Assert.Contains("$L -split '[\\\\/]'", libraries);
-            Assert.Contains("[System.Reflection.AssemblyName]::GetAssemblyName($LibraryPath)", libraries);
+            Assert.Contains("Add-Type -Path $LibraryPath -ErrorAction Stop", libraries);
 
             var bootstrapper = File.ReadAllText(bootstrapperPath);
             Assert.Contains("# DemoModule bootstrapper", bootstrapper);
@@ -144,8 +147,14 @@ public partial class ModuleBootstrapperGeneratorTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ignore-native-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "Dependency.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "Dependency.dll"),
+            overwrite: true);
         File.WriteAllText(Path.Combine(root, "Lib", "Default", "libgcc_s_seh-1.dll"), string.Empty);
 
         try
@@ -353,6 +362,32 @@ public partial class ModuleBootstrapperGeneratorTests
         }
     }
 
+    [Theory]
+    [InlineData("Core", "net8.0")]
+    [InlineData("Standard", "netcoreapp3.1")]
+    [InlineData("Default", "net8.0")]
+    public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_UsesGenericFolderCompatibilityContract(
+        string folderName,
+        string expectedFramework)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-generic-" + Guid.NewGuid().ToString("N"));
+        var payload = Directory.CreateDirectory(Path.Combine(root, folderName)).FullName;
+
+        try
+        {
+            var framework = ModuleBootstrapperGenerator.ResolveAssemblyLoadContextTargetFrameworkForPayloads(
+                "net8.0",
+                new[] { payload });
+
+            Assert.Equal(expectedFramework, framework);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void ResolveAssemblyLoadContextTargetFrameworkForPayloads_InfersPrebuiltCompatibleFloors()
     {
@@ -393,9 +428,18 @@ public partial class ModuleBootstrapperGeneratorTests
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Core-net10.0"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
-        File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"), string.Empty);
-        File.WriteAllText(Path.Combine(root, "Lib", "Default", "DemoModule.dll"), string.Empty);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Core-net10.0", "DemoModule.dll"),
+            overwrite: true);
+        File.Copy(
+            typeof(ModuleBootstrapperGeneratorTests).Assembly.Location,
+            Path.Combine(root, "Lib", "Default", "DemoModule.dll"),
+            overwrite: true);
 
         try
         {
@@ -590,7 +634,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
                 .ConstructorArguments[0]
                 .Value as string;
-            Assert.Equal(".NETCoreApp,Version=v3.1", coreLoaderTargetFramework);
+            Assert.Equal(".NETCoreApp,Version=v8.0", coreLoaderTargetFramework);
             Assert.True(File.Exists(Path.Combine(root, "DemoModule.Libraries.ps1")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
@@ -684,7 +728,7 @@ public partial class ModuleBootstrapperGeneratorTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public void Generate_WithAssemblyLoadContextAndStandardFallback_BuildsPowerShell70CompatibleLoader()
+    public void Generate_WithAssemblyLoadContextAndUnmarkedPayloads_WritesPerPayloadCompatibleLoaders()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-standard-" + Guid.NewGuid().ToString("N"));
         var libStandard = Directory.CreateDirectory(Path.Combine(root, "Lib", "Standard")).FullName;
@@ -703,20 +747,18 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "netstandard2.0", "net8.0" });
 
-            foreach (var loaderPath in new[]
-                     {
-                         Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll"),
-                         Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll")
-                     })
-            {
-                Assert.True(File.Exists(loaderPath));
-                var targetFramework = System.Reflection.Assembly.Load(File.ReadAllBytes(loaderPath))
-                    .GetCustomAttributesData()
-                    .Single(attribute => attribute.AttributeType == typeof(System.Runtime.Versioning.TargetFrameworkAttribute))
-                    .ConstructorArguments[0]
-                    .Value as string;
-                Assert.Equal(".NETCoreApp,Version=v3.1", targetFramework);
-            }
+            var standardLoaderPath = Path.Combine(libStandard, "DemoModule.ModuleLoadContext.dll");
+            var coreLoaderPath = Path.Combine(libCore, "DemoModule.ModuleLoadContext.dll");
+            Assert.True(File.Exists(standardLoaderPath));
+            Assert.True(File.Exists(coreLoaderPath));
+            Assert.Contains(
+                ".NETCoreApp,Version=v3.1",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(standardLoaderPath)),
+                StringComparison.Ordinal);
+            Assert.Contains(
+                ".NETCoreApp,Version=v8.0",
+                System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(coreLoaderPath)),
+                StringComparison.Ordinal);
         }
         finally
         {
