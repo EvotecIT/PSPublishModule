@@ -19,12 +19,25 @@ namespace PowerForge;
 public sealed partial class GitHubReleasePublisher
 {
     private readonly ILogger _logger;
+    private readonly Action<TimeSpan, CancellationToken> _assetRetryDelay;
     private static readonly HttpClient SharedClient = CreateSharedClient();
 
     /// <summary>
     /// Creates a new publisher using the provided logger.
     /// </summary>
-    public GitHubReleasePublisher(ILogger logger) => _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    public GitHubReleasePublisher(ILogger logger)
+        : this(logger, assetRetryDelay: null)
+    {
+    }
+
+    internal GitHubReleasePublisher(
+        ILogger logger,
+        Action<TimeSpan, CancellationToken>? assetRetryDelay)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _assetRetryDelay = assetRetryDelay ?? ((delay, cancellationToken) =>
+            Task.Delay(delay, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult());
+    }
 
     /// <summary>
     /// Creates a GitHub release and uploads assets.
@@ -302,7 +315,9 @@ public sealed partial class GitHubReleasePublisher
         var response = SharedClient.SendAsync(request, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
+            throw new GitHubApiRequestException(
+                $"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
+                response.StatusCode);
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
         var html = parsed.HtmlUrl ?? string.Empty;
@@ -356,7 +371,8 @@ public sealed partial class GitHubReleasePublisher
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
             var assetSize = new FileInfo(assetPath).Length;
 
-            ValidateReleaseBeforeAssetMutation(
+            ValidateReleaseBeforeAssetMutationWithRetry(
+                $"GitHub pre-upload verification for '{fileName}'",
                 owner,
                 repo,
                 token,
@@ -397,7 +413,8 @@ public sealed partial class GitHubReleasePublisher
 
             if (deletedExistingAsset)
             {
-                ValidateReleaseBeforeAssetMutation(
+                ValidateReleaseBeforeAssetMutationWithRetry(
+                    $"GitHub post-replacement verification for '{fileName}'",
                     owner,
                     repo,
                     token,
@@ -514,7 +531,8 @@ public sealed partial class GitHubReleasePublisher
             }
 
             var uploadedAssetId = ReadUploadedAssetId(fileName, respText);
-            ValidateReleaseBeforeAssetMutation(
+            ValidateUploadedAssetWithRetry(
+                $"GitHub post-upload verification for '{fileName}'",
                 owner,
                 repo,
                 token,
@@ -524,13 +542,6 @@ public sealed partial class GitHubReleasePublisher
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
-                cancellationToken);
-            ValidateCurrentAssetIdentity(
-                owner,
-                repo,
-                token,
-                apiBaseUrl,
-                releaseId,
                 fileName,
                 uploadedAssetId,
                 cancellationToken);
@@ -551,7 +562,8 @@ public sealed partial class GitHubReleasePublisher
 
         if (replaceExistingAssets || uploadedAssetIds.Count == assets.Length)
         {
-            ValidateReleaseBeforeAssetMutation(
+            ValidateFinalAssetSetWithRetry(
+                "GitHub final release asset verification",
                 owner,
                 repo,
                 token,
@@ -561,25 +573,7 @@ public sealed partial class GitHubReleasePublisher
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
-                cancellationToken);
-            ValidateFinalAssetSet(
-                owner,
-                repo,
-                token,
-                apiBaseUrl,
-                releaseId,
                 uploadedAssetIds,
-                cancellationToken);
-            ValidateReleaseBeforeAssetMutation(
-                owner,
-                repo,
-                token,
-                apiBaseUrl,
-                releaseId,
-                tagName,
-                expectedReleaseBodyMarker,
-                expectedTagCommitSha,
-                requirePublishedStableRelease,
                 cancellationToken);
         }
 

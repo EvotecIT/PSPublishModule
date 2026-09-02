@@ -123,7 +123,9 @@ public sealed partial class GitHubReleasePublisher {
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         using (response) {
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"GitHub tag provenance check failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
+                throw new GitHubApiRequestException(
+                    $"GitHub tag provenance check failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}",
+                    response.StatusCode);
         }
 
         var parsed = Deserialize<GitHubGitObjectEnvelope>(responseText);
