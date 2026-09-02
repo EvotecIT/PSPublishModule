@@ -144,21 +144,16 @@ public sealed partial class GitHubReleasePublisher {
                         GetAssetRetryAfterDelay(response, responseText));
                 }
 
-                var remainingAsset = FindUniqueReleaseAsset(
-                    ListReleaseAssetsWithRetry(
-                        $"{operation} post-delete verification",
-                        owner,
-                        repo,
-                        token,
-                        apiBaseUrl,
-                        releaseId,
-                        cancellationToken),
-                    fileName);
-                if (remainingAsset is not null) {
-                    ValidateExpectedAssetId(fileName, expectedAssetId, remainingAsset.Id);
-                    throw new InvalidOperationException(
-                        $"GitHub release asset '{fileName}' remained present after deletion of id {expectedAssetId}.");
-                }
+                VerifyExpectedAssetDeletedWithRetry(
+                    operation,
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    fileName,
+                    expectedAssetId,
+                    cancellationToken);
 
                 _logger.Info($"Deleted existing GitHub release asset before replacement: {fileName}");
                 return true;
@@ -180,5 +175,44 @@ public sealed partial class GitHubReleasePublisher {
         }
 
         throw new InvalidOperationException($"{operation} did not complete.");
+    }
+
+    private void VerifyExpectedAssetDeletedWithRetry(
+        string operation,
+        string owner,
+        string repo,
+        string token,
+        string apiBaseUrl,
+        long releaseId,
+        string fileName,
+        long expectedAssetId,
+        CancellationToken cancellationToken) {
+        for (var attempt = 1; attempt <= MaximumAssetUploadAttempts; attempt++) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var remainingAsset = FindUniqueReleaseAsset(
+                ListReleaseAssetsWithRetry(
+                    $"{operation} post-delete verification",
+                    owner,
+                    repo,
+                    token,
+                    apiBaseUrl,
+                    releaseId,
+                    cancellationToken),
+                fileName);
+            if (remainingAsset is null)
+                return;
+
+            ValidateExpectedAssetId(fileName, expectedAssetId, remainingAsset.Id);
+            if (attempt >= MaximumAssetUploadAttempts) {
+                throw new InvalidOperationException(
+                    $"GitHub release asset '{fileName}' remained present after deletion of id {expectedAssetId}.");
+            }
+
+            var delay = GetAssetUploadExponentialDelay(attempt);
+            _logger.Warn(
+                $"GitHub release asset '{fileName}' remained visible after deletion of id {expectedAssetId}; " +
+                $"retrying verification {attempt + 1}/{MaximumAssetUploadAttempts} in {FormatRetryDelay(delay)}.");
+            WaitBeforeAssetUploadRetry(delay, cancellationToken);
+        }
     }
 }

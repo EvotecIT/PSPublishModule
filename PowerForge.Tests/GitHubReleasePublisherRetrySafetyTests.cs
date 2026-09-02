@@ -190,6 +190,86 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
     }
 
     [Fact]
+    public async Task PublishRelease_DoesNotWaitOrReconcileAfterTerminalRateLimitResponse()
+    {
+        using var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "terminal-rate-limit");
+        var requests = new List<string>();
+        var delays = new List<TimeSpan>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(
+                await NextRequest(),
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""",
+                201);
+            for (var attempt = 1; attempt < 4; attempt++)
+            {
+                await Respond(await NextRequest(), "{\"message\":\"rate limited\"}", 429);
+                await Respond(await NextRequest(), "[]");
+            }
+            await Respond(await NextRequest(), "{\"message\":\"rate limited\"}", 429);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                new GitHubReleasePublisher(
+                    new NullLogger(),
+                    (delay, cancellationToken) =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        delays.Add(delay);
+                    })
+                .PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("429", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(3, delays.Count);
+            Assert.All(delays, delay => Assert.Equal(TimeSpan.FromMinutes(1), delay));
+            Assert.Equal(4, requests.Count(request => request == "POST /uploads"));
+            Assert.Equal(3, requests.Count(request => request == "GET /repos/EvotecIT/example/releases/42/assets"));
+        }
+        finally
+        {
+            listener.Stop();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
     public async Task PublishRelease_RevalidatesProvenanceBeforeRetriedUpload()
     {
         using var listener = new HttpListener();
@@ -601,6 +681,92 @@ public sealed class GitHubReleasePublisherRetrySafetyTests
             Assert.Contains("disappeared before deletion", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(TimeSpan.FromSeconds(15), Assert.Single(delays));
             Assert.DoesNotContain(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
+        }
+        finally
+        {
+            listener.Stop();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RetriesStalePostDeleteInventoryWithoutDeletingAgain()
+    {
+        using var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "stale-post-delete-inventory");
+        var assetName = Path.GetFileName(assetPath);
+        var requests = new List<string>();
+        var delays = new List<TimeSpan>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var release = $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""";
+        var existingAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"uploaded"}]""";
+        var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
+        var server = Task.Run(async () =>
+        {
+            await Respond(await NextRequest(), release);
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), "{}", 204);
+            await Respond(await NextRequest(), existingAsset);
+            await Respond(await NextRequest(), "[]");
+            await Respond(await NextRequest(), $$"""{"id":99,"name":"{{assetName}}"}""", 201);
+            await Respond(await NextRequest(), uploadedAsset);
+            await Respond(await NextRequest(), uploadedAsset);
+        });
+
+        try
+        {
+            var result = new GitHubReleasePublisher(
+                    new NullLogger(),
+                    (delay, cancellationToken) =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        delays.Add(delay);
+                    })
+                .PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        ReuseExistingReleaseOnConflict = true,
+                        RequireExpectedExistingRelease = true,
+                        ExpectedExistingReleaseId = 42,
+                        ReplaceExistingAssets = true,
+                        AssetFilePaths = [assetPath]
+                    });
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(result.Succeeded);
+            Assert.Equal(TimeSpan.FromSeconds(2), Assert.Single(delays));
+            Assert.Single(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
+            Assert.Equal(assetName, Assert.Single(result.ReplacedExistingAssets));
+            Assert.Equal(assetName, Assert.Single(result.UploadedAssets));
         }
         finally
         {

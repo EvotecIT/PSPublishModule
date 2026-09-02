@@ -222,12 +222,14 @@ public sealed partial class GitHubReleasePublisher {
                 var statusCode = response.StatusCode;
                 var reasonPhrase = response.ReasonPhrase;
                 var terminalAttempt = attempt >= MaximumAssetUploadAttempts;
-                if (!terminalAttempt)
-                    response.Dispose();
-
                 var waitBeforeReconciliation = serverDelay.HasValue ||
                                                (int)statusCode == 429 ||
                                                statusCode == HttpStatusCode.Forbidden;
+                if (terminalAttempt && waitBeforeReconciliation)
+                    return response;
+
+                if (!terminalAttempt)
+                    response.Dispose();
                 if (waitBeforeReconciliation) {
                     _logger.Warn(
                         $"GitHub release asset upload for '{fileName}' returned " +
