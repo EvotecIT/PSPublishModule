@@ -6,19 +6,16 @@ internal sealed partial class AppleReleaseSourceTrustService
     {
         internal TrackedRepositoryProof(
             Dictionary<string, TrackedIndexEntry> indexEntries,
-            Dictionary<string, string> headBlobIds,
-            Dictionary<string, string> filterAttributes)
+            Dictionary<string, string> headBlobIds)
         {
             IndexEntries = indexEntries;
             HeadBlobIds = headBlobIds;
-            FilterAttributes = filterAttributes;
         }
 
         internal Dictionary<string, TrackedIndexEntry> IndexEntries { get; }
 
         internal Dictionary<string, string> HeadBlobIds { get; }
 
-        internal Dictionary<string, string> FilterAttributes { get; }
     }
 
     private sealed class TrackedIndexEntry
@@ -39,12 +36,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 
     private void EnsureNoCustomGitFilter(string repositoryRoot, string relativePath, string name)
         => EnsureNoCustomGitFilters(repositoryRoot, new[] { relativePath }, name);
-
-    private static void EnsureNoCustomGitFilter(
-        TrackedRepositoryProof repositoryProof,
-        string relativePath,
-        string name)
-        => EnsureNoCustomGitFilters(repositoryProof, new[] { relativePath }, name);
 
     internal void EnsureNoCustomGitFilters(
         string repositoryRoot,
@@ -94,26 +85,35 @@ internal sealed partial class AppleReleaseSourceTrustService
         }
     }
 
-    private static void EnsureNoCustomGitFilters(
-        TrackedRepositoryProof repositoryProof,
-        IEnumerable<string> relativePaths,
-        string name)
+    private void TrackGitFilterPath(string repositoryRoot, string relativePath)
+        => TrackGitFilterPaths(repositoryRoot, new[] { relativePath });
+
+    private void TrackGitFilterPaths(
+        string repositoryRoot,
+        IEnumerable<string> relativePaths)
     {
-        foreach (var relativePath in relativePaths.Distinct(GetPathComparer()))
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_pendingGitFilterPaths.TryGetValue(root, out var pending))
         {
-            if (!repositoryProof.FilterAttributes.TryGetValue(relativePath, out var value))
-            {
-                throw new InvalidOperationException(
-                    $"{name} Git filter attributes did not include exact-source path: {relativePath}.");
-            }
-            if (!value.Equals("unspecified", StringComparison.Ordinal) &&
-                !value.Equals("unset", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"{name} uses custom Git filter '{value}' and cannot be attested to the exact source commit: {relativePath}. " +
-                    "Exact Apple source inputs may use Git text/EOL normalization but not repository-configuration-dependent clean or smudge filters.");
-            }
+            pending = new HashSet<string>(GetPathComparer());
+            _pendingGitFilterPaths.Add(root, pending);
         }
+        pending.UnionWith(relativePaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
+    }
+
+    internal void ValidatePendingGitFilters()
+    {
+        foreach (var repositoryRoot in _pendingGitFilterPaths.Keys.ToArray())
+            ValidatePendingGitFilters(repositoryRoot);
+    }
+
+    private void ValidatePendingGitFilters(string repositoryRoot)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_pendingGitFilterPaths.TryGetValue(root, out var pending))
+            return;
+        EnsureNoCustomGitFilters(root, pending.ToArray(), "Apple exact-source input");
+        _pendingGitFilterPaths.Remove(root);
     }
 
     private TrackedRepositoryProof ReadTrackedRepositoryProof(string repositoryRoot)
@@ -124,7 +124,6 @@ internal sealed partial class AppleReleaseSourceTrustService
 
         var comparer = GetPathComparer();
         var indexEntries = new Dictionary<string, TrackedIndexEntry>(comparer);
-        var relativePaths = new List<string>();
         var stagedEntries = RunGit(root, "ls-files", "--stage", "-v", "-z")
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var stagedEntry in stagedEntries)
@@ -144,14 +143,14 @@ internal sealed partial class AppleReleaseSourceTrustService
 
             var relativePath = stagedEntry.Substring(tab + 1);
             var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
-            if (!indexEntries.TryAdd(
-                    fullPath,
-                    new TrackedIndexEntry(fullPath, relativePath, stagedEntry.Substring(0, 1))))
+            if (indexEntries.ContainsKey(fullPath))
             {
                 throw new InvalidOperationException(
                     $"Tracked Apple source inputs contain duplicate Git index entries for: {relativePath}");
             }
-            relativePaths.Add(relativePath);
+            indexEntries.Add(
+                fullPath,
+                new TrackedIndexEntry(fullPath, relativePath, stagedEntry.Substring(0, 1)));
         }
 
         var headBlobIds = new Dictionary<string, string>(comparer);
@@ -169,48 +168,9 @@ internal sealed partial class AppleReleaseSourceTrustService
             headBlobIds[fullPath] = metadata[2];
         }
 
-        var filterAttributes = ReadGitFilterAttributes(root, relativePaths);
-        var proof = new TrackedRepositoryProof(indexEntries, headBlobIds, filterAttributes);
+        var proof = new TrackedRepositoryProof(indexEntries, headBlobIds);
         _trackedRepositoryProofs[root] = proof;
         return proof;
-    }
-
-    private Dictionary<string, string> ReadGitFilterAttributes(
-        string repositoryRoot,
-        IReadOnlyList<string> relativePaths)
-    {
-        const int maximumPathsPerInvocation = 256;
-        var result = new Dictionary<string, string>(GetPathComparer());
-        for (var offset = 0; offset < relativePaths.Count; offset += maximumPathsPerInvocation)
-        {
-            var batch = relativePaths.Skip(offset).Take(maximumPathsPerInvocation).ToArray();
-            var arguments = new List<string> { "check-attr", "-z", "filter", "--" };
-            arguments.AddRange(batch);
-            var attributes = RunGit(repositoryRoot, arguments.ToArray())
-                .StdOut.Split(new[] { '\0' }, StringSplitOptions.None);
-            var valueCount = attributes.Length > 0 && attributes[attributes.Length - 1].Length == 0
-                ? attributes.Length - 1
-                : attributes.Length;
-            if (valueCount != batch.Length * 3)
-            {
-                throw new InvalidOperationException(
-                    $"Git filter attributes could not be parsed safely for {batch.Length} tracked Apple source input(s).");
-            }
-            for (var index = 0; index < valueCount; index += 3)
-            {
-                var path = attributes[index];
-                var attribute = attributes[index + 1];
-                var value = attributes[index + 2];
-                if (!attribute.Equals("filter", StringComparison.Ordinal) ||
-                    !batch.Contains(path, GetPathComparer()))
-                {
-                    throw new InvalidOperationException(
-                        $"Git filter attributes returned an unexpected tracked Apple source path: {path}.");
-                }
-                result[path] = value;
-            }
-        }
-        return result;
     }
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)

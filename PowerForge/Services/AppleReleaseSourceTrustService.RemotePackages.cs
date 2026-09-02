@@ -106,6 +106,7 @@ internal sealed partial class AppleReleaseSourceTrustService
             locks,
             new HashSet<string>(GetPathComparer()),
             validateRemoteDependencies);
+        ValidatePendingGitFilters(checkoutPath);
         _git.EnsureClean(checkoutPath);
         var headAfter = RunGit(checkoutPath, "rev-parse", "HEAD").StdOut.Trim();
         if (!headAfter.Equals(revision, StringComparison.OrdinalIgnoreCase))

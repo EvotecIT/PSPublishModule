@@ -544,12 +544,11 @@ internal sealed partial class AppleReleaseSourceTrustService
             .Where(File.Exists)
             .Select(Path.GetFullPath)
             .ToArray();
-        EnsureNoCustomGitFilters(
-            repositoryProof,
+        TrackGitFilterPaths(
+            repositoryRoot,
             trackedFiles.Select(file => FrameworkCompatibility
                 .GetRelativePath(repositoryRoot, file)
-                .Replace('\\', '/')),
-            name);
+                .Replace('\\', '/')));
         foreach (var entry in entries)
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
