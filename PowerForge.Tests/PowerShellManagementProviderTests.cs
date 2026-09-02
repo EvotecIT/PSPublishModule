@@ -58,7 +58,7 @@ public sealed class PowerShellManagementProviderTests
         Assert.Throws<XmlException>(() => new PowerShellCdxmlMetadataReader().Read(fixture.Path));
     }
 
-    [Fact]
+    [WindowsFact]
     public void TypedCimAdapterQueriesLocalProviderAndReturnsPortableProperties()
     {
         using var result = new PowerShellManagementProviderAdapter().Execute(new PowerShellManagementRequest
@@ -96,7 +96,7 @@ public sealed class PowerShellManagementProviderTests
             cancellation.Token));
     }
 
-    [Fact]
+    [WindowsFact]
     public void TypedCimAdapterReusesCallerSessionWithoutDisposingItAndBoundsEnumeration()
     {
         using var session = Microsoft.Management.Infrastructure.CimSession.Create(null);
@@ -123,7 +123,7 @@ public sealed class PowerShellManagementProviderTests
         Assert.Single(reuse.Instances);
     }
 
-    [Fact]
+    [WindowsFact]
     public void TypedCimAdapterDisposesTransferredInstancesWhenEnumerationOrInputProjectionFails()
     {
         using var session = Microsoft.Management.Infrastructure.CimSession.Create(null);

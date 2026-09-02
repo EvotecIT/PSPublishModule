@@ -7,7 +7,7 @@ namespace PowerForge.Tests;
 [Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationInteropCleanTargetTests
 {
-    [Fact]
+    [WindowsFact]
     public void HybridNet472ExecutesLegacyWmiOnlyInWindowsPowerShellHost()
     {
         using var fixture = ModuleFixture.Create("""
@@ -26,7 +26,7 @@ Export-ModuleMember -Function Get-LegacyManagementCaption
         Assert.False(string.IsNullOrWhiteSpace(output));
     }
 
-    [Fact]
+    [WindowsFact]
     public void HybridExecutesCimBackedCommandFromCleanPowerShell7Host()
     {
         using var fixture = ModuleFixture.Create("""
@@ -44,7 +44,7 @@ Export-ModuleMember -Function Get-ModernManagementCaption
         Assert.False(string.IsNullOrWhiteSpace(output));
     }
 
-    [Fact]
+    [WindowsFact]
     public void HybridPackagesCdxmlAndExecutesGeneratedManagementCommand()
     {
         using var fixture = ModuleFixture.Create("""
@@ -81,7 +81,7 @@ Export-ModuleMember -Function Get-CdxmlManagementCaption
         Assert.False(string.IsNullOrWhiteSpace(output));
     }
 
-    [Fact]
+    [WindowsFact]
     public void HybridExecutesExternalProcessAndPreservesExitAndOutput()
     {
         using var fixture = ModuleFixture.Create("""
@@ -99,7 +99,7 @@ Export-ModuleMember -Function Invoke-GenericProcess
         Assert.Equal("process-proof", Run("pwsh", result.ArtifactPath!, "Invoke-GenericProcess"));
     }
 
-    [Fact]
+    [WindowsFact]
     public void HybridExecutesNativeInteropAndCleansGeneratedTypeScopeOnProcessExit()
     {
         using var fixture = ModuleFixture.Create("""
@@ -125,7 +125,7 @@ Export-ModuleMember -Function Get-GenericNativeTick
         Assert.True(ticks > 0);
     }
 
-    [Fact]
+    [WindowsFact]
     public void HybridNet472ExecutesComAndReleasesRuntimeCallableWrapper()
     {
         using var fixture = ModuleFixture.Create("""
