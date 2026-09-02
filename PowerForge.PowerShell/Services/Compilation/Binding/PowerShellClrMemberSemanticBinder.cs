@@ -166,8 +166,19 @@ internal static class PowerShellClrMemberSemanticBinder
         }
         if (!target.IsStatic && target.Type == typeof(PSObject))
             return Reject(diagnostics, "PSB2612", "PSCustomObject reads are compiled only for a statically known note-property shape; other members require preservation of adapted-object identity.", span);
+        if (!target.IsStatic && IsClrArray(target.Type) && name.Equals("Count", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PowerShellBoundClrMemberExpression(
+                span,
+                target.Type,
+                nameof(Array.Length),
+                false,
+                target.Receiver,
+                PowerShellClrReceiverBehavior.NormalizeNullCount,
+                new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Inferred, "PowerShell's adapted Count member on a statically typed CLR array is its total CLR Length, normalized to zero for a null receiver."));
+        }
         if (!target.IsStatic && target.Type.IsArray && !name.Equals("Length", StringComparison.OrdinalIgnoreCase))
-            return Reject(diagnostics, "PSB2601", $"CLR array member '{name}' does not preserve PowerShell null-member semantics; only Length is eligible.", span);
+            return Reject(diagnostics, "PSB2601", $"CLR array member '{name}' does not preserve PowerShell null-member semantics; only Length and the adapted Count member are eligible.", span);
 
         if (members.Length == 0 &&
             !target.IsStatic &&
@@ -450,6 +461,9 @@ internal static class PowerShellClrMemberSemanticBinder
             return PowerShellClrReceiverBehavior.NormalizeNullCount;
         return PowerShellClrReceiverBehavior.PropagateNull;
     }
+
+    private static bool IsClrArray(Type type)
+        => type == typeof(Array) || type.IsArray;
 
     private static bool TrySelectInvocationBehavior(Target target, bool allowPowerShellRuntimeErrors, out PowerShellClrReceiverBehavior behavior)
     {
