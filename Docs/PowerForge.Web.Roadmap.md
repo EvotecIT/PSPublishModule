@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-18
+Last updated: 2026-09-02
 
 This document is the single source of truth for:
 
@@ -73,7 +73,10 @@ Legend:
 
 - **Have**: Search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
-- **Partial**: Search UI/UX is theme responsibility; no canonical “search surface” renderer contract yet.
+- **Have**: A fallback search surface and a reusable read-only WebMCP `site-search` runtime, with route-scoped readiness verification and truthful `agents.json` reporting.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.SearchSurface.cs`, `PowerForge.Web/Services/WebSiteBuilder.WebMcp.cs`, `PowerForge.Web/Services/WebAgentReadiness.WebMcp.cs`
+  - Docs: `Docs/PowerForge.Web.AgentReadiness.md`
+- **Partial**: Rich search UI/UX remains theme-owned; themes can bind their ranking and visible interaction through `PowerForgeWebMcpSearch.bindAdapter(...)`.
 
 ### SEO + Discovery
 

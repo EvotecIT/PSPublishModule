@@ -79,9 +79,11 @@ PowerForge.Web can prepare and verify the common static-site subset:
 - optional MCP server card
 - OpenAPI detection/configuration
 - local HTML, JSON-LD, and semantic checks aligned with AI-readiness scanners
-- local WebMCP smoke detection for imperative `navigator.modelContext` calls
-  and exact declarative HTML tool attributes such as `tool-name` and
-  `tool-description`
+- route-scoped WebMCP verification for the current imperative API, including
+  the exact canonical engine runtime, same-origin page/index/runtime URLs, and
+  exact configured tool names
+- a reusable, read-only `site-search` WebMCP runtime backed by the generated
+  search index
 - remote scan of live headers and well-known URLs
 
 Cloudflare Markdown for Agents is a host-level feature. PowerForge verifies it
@@ -137,6 +139,16 @@ Add an `agentReadiness` block to `site.json`:
     "agentsJson": {
       "enabled": true
     },
+    "webMcp": true,
+    "webMcpTools": [
+      {
+        "name": "search_site",
+        "route": "/search/",
+        "description": "Search this website's public content.",
+        "kind": "site-search",
+        "readOnly": true
+      }
+    ],
     "markdownArtifacts": {
       "enabled": true,
       "extension": ".md",
@@ -172,6 +184,41 @@ Skills Discovery index.
 Optional discovery documents such as Agent Skills and `agents.json` are reported
 as informational when disabled or absent. They become required checks only when
 the matching generator is enabled in `site.json`.
+
+When `webMcp` is enabled, every entry in `webMcpTools` is a route-scoped
+contract. PowerForge verifies that the route declares the configured tool with
+`data-webmcp-tool-name`, and loads a same-origin external script marked with
+`data-powerforge-webmcp`. The script must be byte-for-byte the canonical embedded
+PowerForge runtime; comments, legacy `navigator.modelContext` prototypes,
+declarative HTML attributes, or unrelated tool registrations do not satisfy this
+check. Remote verification also rejects cross-origin redirects for either the page
+or runtime asset.
+
+Phase 1 intentionally supports only the read-only `site-search` kind. It emits
+`/assets/powerforge/webmcp-site-search.v1.js`. A theme search page should expose
+the tool name, description, and index route on its existing search surface:
+
+```html
+<main data-webmcp-site-search
+      data-webmcp-tool-name="search_site"
+      data-webmcp-tool-description="Search this website's public content."
+      data-webmcp-search-index="/search/index.json">
+  <!-- Keep the normal visible search form here. -->
+</main>
+<script src="/assets/powerforge/webmcp-site-search.v1.js"
+        data-powerforge-webmcp defer></script>
+```
+
+The runtime registers a read-only tool with bounded `query` and `limit` input,
+returns a small structured result set, and uses only a same-origin search index.
+Themes with richer ranking can call `PowerForgeWebMcpSearch.bindAdapter(...)` to
+reuse their visible search implementation. If no adapter is bound, the runtime
+uses the generated index directly. Browsers without WebMCP continue to use the
+normal search page.
+
+Generated `agents.json` reports `capabilities.webMcp: true` and lists
+`webMcpTools` only after the rendered routes and registration runtime pass local
+verification. Configuration alone is not advertised as support.
 
 If `apiCatalog.entries` is empty but `_site/api/index.json` exists, PowerForge
 infers a basic API documentation entry. For public programmable APIs, prefer

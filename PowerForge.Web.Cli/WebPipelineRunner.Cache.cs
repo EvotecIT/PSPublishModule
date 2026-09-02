@@ -1417,6 +1417,7 @@ internal static partial class WebPipelineRunner
             McpServerCard = spec.McpServerCard,
             OpenApi = spec.OpenApi,
             WebMcp = spec.WebMcp,
+            WebMcpTools = spec.WebMcpTools,
             MarkdownArtifacts = spec.MarkdownArtifacts,
             MarkdownNegotiation = spec.MarkdownNegotiation,
             Apache = spec.Apache

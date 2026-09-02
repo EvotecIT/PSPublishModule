@@ -69,7 +69,10 @@ public static partial class WebSiteBuilder
         return weight;
     }
 
-    private static void EnsureSearchPage(string outputRoot, IReadOnlyList<SearchIndexEntry> entries)
+    private static void EnsureSearchPage(
+        string outputRoot,
+        IReadOnlyList<SearchIndexEntry> entries,
+        AgentWebMcpToolSpec? webMcpTool)
     {
         if (entries.Count == 0)
             return;
@@ -79,7 +82,7 @@ public static partial class WebSiteBuilder
             return;
 
         var cssHref = TryResolveSearchSurfaceCssHref(outputRoot);
-        var html = BuildSearchSurfaceHtml(cssHref);
+        var html = BuildSearchSurfaceHtml(cssHref, webMcpTool);
         Directory.CreateDirectory(Path.GetDirectoryName(searchPath) ?? outputRoot);
         WriteAllTextIfChanged(searchPath, html);
     }
@@ -145,11 +148,14 @@ public static partial class WebSiteBuilder
         return null;
     }
 
-    private static string BuildSearchSurfaceHtml(string? cssHref)
+    private static string BuildSearchSurfaceHtml(string? cssHref, AgentWebMcpToolSpec? webMcpTool)
     {
         var cssLink = string.IsNullOrWhiteSpace(cssHref)
             ? string.Empty
             : $"  <link rel=\"stylesheet\" href=\"{System.Web.HttpUtility.HtmlEncode(cssHref)}\" />{Environment.NewLine}";
+        var webMcpAttributes = webMcpTool is null
+            ? string.Empty
+            : $" data-webmcp-site-search data-webmcp-tool-name=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Name)}\" data-webmcp-tool-description=\"{System.Web.HttpUtility.HtmlAttributeEncode(webMcpTool.Description)}\" data-webmcp-search-index=\"/search/index.json\"";
 
         var sb = new StringBuilder();
         sb.AppendLine("<!doctype html>");
@@ -175,7 +181,7 @@ public static partial class WebSiteBuilder
         sb.AppendLine("  </style>");
         sb.AppendLine("</head>");
         sb.AppendLine("<body>");
-        sb.AppendLine("  <main class=\"pf-search-wrap\">");
+        sb.Append("  <main class=\"pf-search-wrap\"").Append(webMcpAttributes).AppendLine(">");
         sb.AppendLine("    <h1>Search</h1>");
         sb.AppendLine("    <input id=\"pf-search-query\" class=\"pf-search-box\" type=\"search\" autocomplete=\"off\" placeholder=\"Search docs, blogs, news, pages...\" />");
         sb.AppendLine("    <div id=\"pf-search-meta\" class=\"pf-search-meta\">Loading search index...</div>");
@@ -244,6 +250,8 @@ public static partial class WebSiteBuilder
         sb.AppendLine("      run();");
         sb.AppendLine("    })();");
         sb.AppendLine("  </script>");
+        if (webMcpTool is not null)
+            sb.Append("  <script src=\"").Append(WebMcpSiteSearchAssetRoute).AppendLine("\" defer data-powerforge-webmcp></script>");
         sb.AppendLine("</body>");
         sb.AppendLine("</html>");
         return sb.ToString();

@@ -758,8 +758,12 @@ public static partial class WebSiteBuilder
         var manifestPath = Path.Combine(searchDir, "manifest.json");
         WriteAllTextIfChanged(manifestPath, JsonSerializer.Serialize(manifest, WebJson.Options));
 
+        var webMcpSearchTool = ResolveWebMcpSiteSearchTool(spec);
+        if (webMcpSearchTool is not null)
+            EnsureWebMcpSiteSearchAsset(outputRoot);
+
         if (HasFeature(spec.Features, "search"))
-            EnsureSearchPage(outputRoot, entries);
+            EnsureSearchPage(outputRoot, entries, webMcpSearchTool);
     }
 
     private static string[] ResolveSearchCategories(ContentItem item)
