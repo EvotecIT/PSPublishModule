@@ -24,6 +24,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly AsyncLocal<TrustedNativeAotPathSnapshot?> ActiveNativeAotPathSnapshot = new();
     private static readonly AsyncLocal<string?> ActiveGitExecutablePath = new();
     private static readonly AsyncLocal<string?> ActiveGitExecutableSha256 = new();
+    private static readonly AsyncLocal<PublishProvenanceLease?> ActiveGitExecutableLease = new();
     private static readonly AsyncLocal<bool> ActiveNativeAotPublish = new();
     private static readonly AsyncLocal<bool> ActiveStrictDotNetEnvironment = new();
     private static readonly AsyncLocal<bool> ActiveToolSnapshotScope = new();

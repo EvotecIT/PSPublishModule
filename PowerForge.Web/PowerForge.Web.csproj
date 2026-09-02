@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>3.0.128</VersionPrefix>
+    <VersionPrefix>3.0.131</VersionPrefix>
     <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
     <Description>PowerForge.Web static-site engine and reusable website build components.</Description>
@@ -48,6 +48,7 @@
     <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
     <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
     <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
+    <EmbeddedResource Include="Assets\WebMcp\site-search.v1.js" />
     <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
     <EmbeddedResource Include="Assets\SitemapProtocol\siteindex.xsd" />
   </ItemGroup>

@@ -65,6 +65,9 @@ public static partial class WebAgentReadiness
         if (spec.Robots)
             written.Add(UpdateRobots(siteRoot, baseUrl, spec));
 
+        if (spec.WebMcp && spec.WebMcpTools.Length > 0)
+            written.Add(WebSiteBuilder.EnsureWebMcpSiteSearchAsset(siteRoot));
+
         if (spec.ApiCatalog?.Enabled == true)
         {
             var apiCatalogPath = WriteApiCatalog(siteRoot, baseUrl, spec.ApiCatalog, warnings);
@@ -293,15 +296,7 @@ public static partial class WebAgentReadiness
             options.BaseUrl);
 
         if (spec.WebMcp)
-        {
-            var hasWebMcp = Directory.Exists(siteRoot) &&
-                            Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
-                                .Take(500)
-                                .Any(file => HtmlContainsWebMcpSignal(File.ReadAllText(file)));
-            AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", hasWebMcp ? "pass" : "fail",
-                hasWebMcp ? "Rendered HTML includes WebMCP tool registration or declarative tool annotations." : "No WebMCP browser tool registration or declarative tool annotations found.",
-                siteRoot);
-        }
+            AddLocalWebMcpCheck(checks, siteRoot, options.BaseUrl, spec);
 
         return new WebAgentReadinessResult
         {
@@ -356,22 +351,10 @@ public static partial class WebAgentReadiness
         if (rootText.Success)
         {
             AddHtmlSemanticsChecks(checks, rootText.Text, baseUrl);
-            if (spec.WebMcp)
-            {
-                var hasWebMcp = HtmlContainsWebMcpSignal(rootText.Text);
-                AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", hasWebMcp ? "pass" : "fail",
-                    hasWebMcp
-                        ? "Homepage HTML includes WebMCP tool registration or declarative tool annotations."
-                        : "Homepage HTML does not include WebMCP tool registration or declarative tool annotations.",
-                    baseUrl);
-            }
         }
-        else if (spec.WebMcp)
-        {
-            AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
-                $"Homepage HTML could not be inspected for WebMCP: {rootText.Message}",
-                baseUrl);
-        }
+
+        if (spec.WebMcp)
+            await AddRemoteWebMcpCheckAsync(checks, http, baseUrl, spec, rootText, cancellationToken).ConfigureAwait(false);
 
         var robots = await TryGetTextAsync(http, CombineUrl(baseUrl, "/robots.txt"), null, cancellationToken).ConfigureAwait(false);
         AddCheck(checks, "robots-txt", "discoverability", "robots.txt",
@@ -547,6 +530,14 @@ public static partial class WebAgentReadiness
                 McpServerCard = spec.McpServerCard,
                 OpenApi = spec.OpenApi,
                 WebMcp = spec.WebMcp,
+                WebMcpTools = spec.WebMcpTools?.Select(static tool => new AgentWebMcpToolSpec
+                {
+                    Name = tool.Name,
+                    Route = tool.Route,
+                    Description = tool.Description,
+                    Kind = tool.Kind?.Trim() ?? string.Empty,
+                    ReadOnly = tool.ReadOnly
+                }).ToArray() ?? Array.Empty<AgentWebMcpToolSpec>(),
                 MarkdownArtifacts = spec.MarkdownArtifacts,
                 MarkdownNegotiation = spec.MarkdownNegotiation,
                 Apache = spec.Apache
@@ -560,6 +551,7 @@ public static partial class WebAgentReadiness
                 resolved.AgentSkills ??= new AgentSkillsDiscoverySpec();
                 resolved.AgentsJson ??= new AgentDiscoveryDocumentSpec();
                 ValidateDiscoveryOutputPaths(resolved);
+                ValidateWebMcpConfiguration(resolved);
                 if (resolved.MarkdownArtifacts?.Enabled == true)
                     _ = NormalizeMarkdownExtension(resolved.MarkdownArtifacts.Extension);
             }
@@ -992,6 +984,23 @@ public static partial class WebAgentReadiness
             ["a2aAgentCard"] = spec.A2AAgentCard?.Enabled == true ? ToAbsoluteUrl(baseUrl, ResolveSiteRoute(siteRoot, spec.A2AAgentCard.OutputPath, ".well-known/agent-card.json")) : null
         };
 
+        var webMcp = EvaluateLocalWebMcp(siteRoot, baseUrl, spec);
+        var webMcpTools = new JsonArray();
+        if (webMcp.Success)
+        {
+            foreach (var tool in spec.WebMcpTools)
+            {
+                webMcpTools.Add(new JsonObject
+                {
+                    ["name"] = tool.Name,
+                    ["route"] = NormalizeRoute(tool.Route),
+                    ["description"] = tool.Description,
+                    ["kind"] = tool.Kind.Trim(),
+                    ["readOnly"] = tool.ReadOnly
+                });
+            }
+        }
+
         var root = new JsonObject
         {
             ["name"] = siteName,
@@ -1005,7 +1014,8 @@ public static partial class WebAgentReadiness
                 ["contentNegotiation"] = spec.MarkdownNegotiation ? "text/markdown" : null,
                 ["markdownArtifacts"] = spec.MarkdownArtifacts?.Enabled == true,
                 ["contentSignals"] = spec.ContentSignals?.Enabled == true,
-                ["webMcp"] = spec.WebMcp
+                ["webMcp"] = webMcp.Success,
+                ["webMcpTools"] = webMcpTools
             }
         };
 
@@ -1349,31 +1359,6 @@ public static partial class WebAgentReadiness
 
     private static string EscapeMarkdownLinkText(string text)
         => text.Replace("[", "\\[", StringComparison.Ordinal).Replace("]", "\\]", StringComparison.Ordinal);
-
-    private static bool HtmlContainsWebMcpSignal(string html)
-    {
-        if (string.IsNullOrWhiteSpace(html))
-            return false;
-
-        if (html.Contains("navigator.modelContext.provideContext", StringComparison.Ordinal))
-            return true;
-
-        if (!html.Contains("tool-name", StringComparison.OrdinalIgnoreCase) &&
-            !html.Contains("tool-description", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        try
-        {
-            var doc = HtmlParser.ParseWithAngleSharp(html);
-            return doc.QuerySelector("[tool-name],[tool-description]") is not null;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return false;
-        }
-    }
 
     private static bool ShouldWriteHeaders(AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
         => spec.SecurityHeaders?.Enabled == true ||

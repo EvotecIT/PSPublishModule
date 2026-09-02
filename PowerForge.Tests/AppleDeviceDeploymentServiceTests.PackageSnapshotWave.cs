@@ -90,14 +90,318 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             Assert.Equal(
                 ReadArgumentValue(resolve, "-clonedSourcePackagesDirPath"),
                 ReadArgumentValue(build, "-clonedSourcePackagesDirPath"));
-            var productRoot = build.Arguments.Single(argument =>
-                    argument.StartsWith("CONFIGURATION_BUILD_DIR=", StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            Assert.Contains(
+                "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)",
+                build.Arguments);
+            var productRoot = AppleDeploymentTestFixture
+                .TryResolvePrivateProductRoot(build);
+            Assert.NotNull(productRoot);
+            var productDirectory = AppleDeploymentTestFixture
+                .TryResolveConfiguredBuildProductDirectory(build)
+                ?? throw new InvalidOperationException("Private build product directory was not configured.");
+            Assert.EndsWith(
+                Path.Combine("Debug-iphoneos"),
+                productDirectory,
+                StringComparison.Ordinal);
             Assert.False(Directory.Exists(productRoot));
             Assert.False(Directory.Exists(runner.SourcePackagesRoot));
         }
         finally
         {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task DeployAsync_resolves_packages_from_the_build_mirror()
+    {
+        if (!File.Exists("/usr/bin/rsync"))
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var mirrorPath = ExternalOutputPath(
+            new DirectoryInfo(fixture.RootPath),
+            "BuildMirror");
+        try
+        {
+            var runner = new LocalPackageBuildRunner(
+                fixture.RemoteRoot,
+                fixture.RemoteUrl,
+                mutateDuringBuild: false,
+                executeRsync: true);
+
+            var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
+                new AppleAppDeviceDeploymentRequest
+                {
+                    ProjectPath = fixture.ProjectPath,
+                    BuildRoot = fixture.RootPath,
+                    BuildMirrorPath = mirrorPath,
+                    UseBuildMirror = true,
+                    RsyncExecutable = "/usr/bin/rsync",
+                    Scheme = "CasaRay",
+                    ProductName = "CasaRay",
+                    DerivedDataPath = fixture.DerivedDataPath,
+                    DeviceIdentifier = "device-1",
+                    BundleIdentifier = "com.evotecit.casaray",
+                    Launch = false,
+                    XcodeBuildExecutable = "/usr/bin/xcodebuild",
+                    XcrunExecutable = "/usr/bin/xcrun"
+                });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(4, runner.Requests.Count);
+            var resolve = runner.Requests[1];
+            var build = runner.Requests[2];
+            var mirroredProjectPath = Path.Combine(
+                mirrorPath,
+                Path.GetRelativePath(fixture.RootPath, fixture.ProjectPath));
+            Assert.Equal(
+                AppleReleaseArtifactService.ResolvePhysicalPath(mirroredProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(resolve, "-project")));
+            Assert.Equal(
+                AppleReleaseArtifactService.ResolvePhysicalPath(mirroredProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(build, "-project")));
+            Assert.NotEqual(
+                AppleReleaseArtifactService.ResolvePhysicalPath(fixture.ProjectPath),
+                AppleReleaseArtifactService.ResolvePhysicalPath(
+                    ReadArgumentValue(resolve, "-project")));
+        }
+        finally
+        {
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Materialized_package_validation_accepts_an_owned_mirror_through_a_path_alias()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var snapshotRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.PackageMirrorSnapshot",
+            Guid.NewGuid().ToString("N")));
+        var aliasRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.PackageMirrorAlias",
+            Guid.NewGuid().ToString("N")));
+        var sourcePackages = Directory.CreateDirectory(Path.Combine(
+            snapshotRoot.FullName,
+            "SourcePackages"));
+        var aliasPath = Path.Combine(aliasRoot.FullName, "SnapshotAlias");
+        try
+        {
+            var repositories = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "repositories"));
+            var mirror = Path.Combine(repositories.FullName, "Shared-96812fe1");
+            RunGit(
+                repositories.FullName,
+                "clone",
+                "--mirror",
+                "--quiet",
+                "--no-hardlinks",
+                fixture.RemoteRoot,
+                mirror);
+            RunGit(mirror, "remote", "set-url", "origin", fixture.RemoteUrl);
+
+            Directory.CreateSymbolicLink(aliasPath, snapshotRoot.FullName);
+            var checkouts = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "checkouts"));
+            var checkout = Path.Combine(checkouts.FullName, "Shared");
+            var aliasedMirror = Path.Combine(
+                aliasPath,
+                "SourcePackages",
+                "repositories",
+                Path.GetFileName(mirror));
+            RunGit(
+                checkouts.FullName,
+                "clone",
+                "--quiet",
+                "--no-hardlinks",
+                aliasedMirror,
+                checkout);
+
+            var materializedOrigin = ReadGit(
+                checkout,
+                "remote",
+                "get-url",
+                "origin").Trim();
+            Assert.StartsWith(aliasPath, materializedOrigin, StringComparison.Ordinal);
+            var revision = ReadGit(checkout, "rev-parse", "HEAD").Trim();
+
+            new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                sourcePackages.FullName,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [fixture.RemoteUrl[..^4]] = revision
+                });
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(aliasPath))
+                    Directory.Delete(aliasPath);
+            }
+            catch
+            {
+                // Best effort fixture cleanup.
+            }
+            try { aliasRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Materialized_package_validation_rejects_a_linked_repositories_directory()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var snapshotRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LinkedPackageRepositories",
+            Guid.NewGuid().ToString("N")));
+        var externalRepositories = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.ExternalPackageRepositories",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sourcePackages = Directory.CreateDirectory(Path.Combine(
+                snapshotRoot.FullName,
+                "SourcePackages"));
+            var linkedRepositories = Path.Combine(
+                sourcePackages.FullName,
+                "repositories");
+            Directory.CreateSymbolicLink(
+                linkedRepositories,
+                externalRepositories.FullName);
+            var mirror = Path.Combine(
+                linkedRepositories,
+                "Shared-96812fe1");
+            RunGit(
+                linkedRepositories,
+                "clone",
+                "--mirror",
+                "--quiet",
+                "--no-hardlinks",
+                fixture.RemoteRoot,
+                mirror);
+            RunGit(mirror, "remote", "set-url", "origin", fixture.RemoteUrl);
+
+            var checkouts = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "checkouts"));
+            var checkout = Path.Combine(checkouts.FullName, "Shared");
+            RunGit(
+                checkouts.FullName,
+                "clone",
+                "--quiet",
+                "--no-hardlinks",
+                mirror,
+                checkout);
+            var revision = ReadGit(checkout, "rev-parse", "HEAD").Trim();
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                    sourcePackages.FullName,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [fixture.RemoteUrl[..^4]] = revision
+                    }));
+
+            Assert.Contains(
+                "must not traverse a symbolic link or reparse point",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
+            try { externalRepositories.Delete(recursive: true); } catch { /* best effort */ }
+            fixture.Dispose();
+        }
+    }
+
+    [Fact]
+    public void Materialized_package_validation_rejects_a_linked_mirror_entry()
+    {
+        if (Path.DirectorySeparatorChar == '\\')
+            return;
+
+        var fixture = CreateLocalPackageBuildFixture();
+        var snapshotRoot = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.LinkedPackageMirror",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var sourcePackages = Directory.CreateDirectory(Path.Combine(
+                snapshotRoot.FullName,
+                "SourcePackages"));
+            var repositories = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "repositories"));
+            var physicalMirror = Path.Combine(
+                repositories.FullName,
+                "Physical-96812fe1");
+            RunGit(
+                repositories.FullName,
+                "clone",
+                "--mirror",
+                "--quiet",
+                "--no-hardlinks",
+                fixture.RemoteRoot,
+                physicalMirror);
+            RunGit(
+                physicalMirror,
+                "remote",
+                "set-url",
+                "origin",
+                fixture.RemoteUrl);
+            var linkedMirror = Path.Combine(
+                repositories.FullName,
+                "Shared-96812fe1");
+            Directory.CreateSymbolicLink(linkedMirror, physicalMirror);
+
+            var checkouts = Directory.CreateDirectory(Path.Combine(
+                sourcePackages.FullName,
+                "checkouts"));
+            var checkout = Path.Combine(checkouts.FullName, "Shared");
+            RunGit(
+                checkouts.FullName,
+                "clone",
+                "--quiet",
+                "--no-hardlinks",
+                linkedMirror,
+                checkout);
+            var revision = ReadGit(checkout, "rev-parse", "HEAD").Trim();
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new AppleReleaseSourceTrustService().ValidateMaterializedPackageCheckouts(
+                    sourcePackages.FullName,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [fixture.RemoteUrl[..^4]] = revision
+                    }));
+
+            Assert.Contains(
+                "must not traverse a symbolic link or reparse point",
+                error.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { snapshotRoot.Delete(recursive: true); } catch { /* best effort */ }
             fixture.Dispose();
         }
     }
@@ -377,17 +681,20 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         private readonly string _remoteUrl;
         private readonly bool _mutateDuringBuild;
         private readonly bool _replaceSnapshotRootDuringBuild;
+        private readonly bool _executeRsync;
 
         internal LocalPackageBuildRunner(
             string remoteRoot,
             string remoteUrl,
             bool mutateDuringBuild,
-            bool replaceSnapshotRootDuringBuild = false)
+            bool replaceSnapshotRootDuringBuild = false,
+            bool executeRsync = false)
         {
             _remoteRoot = remoteRoot;
             _remoteUrl = remoteUrl;
             _mutateDuringBuild = mutateDuringBuild;
             _replaceSnapshotRootDuringBuild = replaceSnapshotRootDuringBuild;
+            _executeRsync = executeRsync;
         }
 
         internal List<ProcessRunRequest> Requests { get; } = new();
@@ -399,6 +706,12 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
+            if (_executeRsync &&
+                request.FileName.Equals("/usr/bin/rsync", StringComparison.Ordinal))
+            {
+                return new ProcessRunner().RunAsync(request, cancellationToken);
+            }
+
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
             if (request.Arguments.Contains("-resolvePackageDependencies"))

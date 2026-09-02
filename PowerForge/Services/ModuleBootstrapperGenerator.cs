@@ -446,46 +446,60 @@ internal static partial class ModuleBootstrapperGenerator
 
         EnsureDotNetSdkAvailable(moduleRoot);
 
-        targetFramework = ResolveAssemblyLoadContextTargetFrameworkForPayloads(targetFramework, targetDirectories);
-
         var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
-        var outputRoot = Path.Combine(buildRoot, "out");
 
         try
         {
             Directory.CreateDirectory(buildRoot);
-            Directory.CreateDirectory(outputRoot);
 
-            var projectPath = Path.Combine(buildRoot, identity.AssemblyName + ".csproj");
-            File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetFramework), Encoding.UTF8);
-            File.WriteAllText(Path.Combine(buildRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
+            var targetGroups = targetDirectories
+                .Select(directory => new
+                {
+                    Directory = directory,
+                    TargetFramework = ResolveAssemblyLoadContextTargetFrameworkForPayload(targetFramework, directory)
+                })
+                .GroupBy(static target => target.TargetFramework, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
-            log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetFramework}.");
-            var result = RunProcess(
-                "dotnet",
-                buildRoot,
-                // Disable MSBuild node reuse so short-lived helper builds exit cleanly in CI and tests.
-                new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal", "-nr:false" },
-                AssemblyLoadContextLoaderBuildTimeout);
-            if (result.ExitCode != 0)
+            for (var groupIndex = 0; groupIndex < targetGroups.Length; groupIndex++)
             {
-                var message = string.Join(
-                    Environment.NewLine,
-                    new[]
-                    {
-                        $"Failed to build module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' (exit {result.ExitCode}).",
-                        result.StdOut,
-                        result.StdErr
-                    }.Where(static line => !string.IsNullOrWhiteSpace(line)));
-                throw new InvalidOperationException(message);
+                var targetGroup = targetGroups[groupIndex];
+                var groupRoot = Path.Combine(buildRoot, "target-" + groupIndex);
+                var outputRoot = Path.Combine(groupRoot, "out");
+                Directory.CreateDirectory(groupRoot);
+                Directory.CreateDirectory(outputRoot);
+
+                var projectPath = Path.Combine(groupRoot, identity.AssemblyName + ".csproj");
+                File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetGroup.Key), Encoding.UTF8);
+                File.WriteAllText(Path.Combine(groupRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
+
+                log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetGroup.Key}.");
+                var result = RunProcess(
+                    "dotnet",
+                    groupRoot,
+                    // Disable MSBuild node reuse so short-lived helper builds exit cleanly in CI and tests.
+                    new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal", "-nr:false" },
+                    AssemblyLoadContextLoaderBuildTimeout);
+                if (result.ExitCode != 0)
+                {
+                    var message = string.Join(
+                        Environment.NewLine,
+                        new[]
+                        {
+                            $"Failed to build module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetGroup.Key} (exit {result.ExitCode}).",
+                            result.StdOut,
+                            result.StdErr
+                        }.Where(static line => !string.IsNullOrWhiteSpace(line)));
+                    throw new InvalidOperationException(message);
+                }
+
+                var loaderPath = Path.Combine(outputRoot, identity.AssemblyName + ".dll");
+                if (!File.Exists(loaderPath))
+                    throw new FileNotFoundException("Module-scoped AssemblyLoadContext loader build did not produce the expected DLL.", loaderPath);
+
+                foreach (var target in targetGroup)
+                    File.Copy(loaderPath, Path.Combine(target.Directory, identity.AssemblyName + ".dll"), overwrite: true);
             }
-
-            var loaderPath = Path.Combine(outputRoot, identity.AssemblyName + ".dll");
-            if (!File.Exists(loaderPath))
-                throw new FileNotFoundException("Module-scoped AssemblyLoadContext loader build did not produce the expected DLL.", loaderPath);
-
-            foreach (var directory in targetDirectories)
-                File.Copy(loaderPath, Path.Combine(directory, identity.AssemblyName + ".dll"), overwrite: true);
         }
         finally
         {
@@ -620,14 +634,32 @@ internal static partial class ModuleBootstrapperGenerator
         string targetFramework,
         IReadOnlyList<string>? targetDirectories)
     {
-        var candidates = new[] { targetFramework }
-            .Concat((targetDirectories ?? Array.Empty<string>()).Select(ResolvePayloadAssemblyLoadContextTargetFramework))
-            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
-            .Select(static framework => framework!)
+        var candidates = (targetDirectories ?? Array.Empty<string>())
+            .Select(directory => ResolveAssemblyLoadContextTargetFrameworkForPayload(targetFramework, directory))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static framework => GetNetTfmVersion(framework), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
             .ToArray();
         return candidates.FirstOrDefault() ?? targetFramework;
+    }
+
+    internal static string ResolveAssemblyLoadContextTargetFrameworkForPayload(string targetFramework, string directory)
+    {
+        var payloadFramework = ResolvePayloadAssemblyLoadContextTargetFramework(directory);
+        if (!string.IsNullOrWhiteSpace(payloadFramework))
+        {
+            // The helper only needs to meet the lower of the module's declared runtime floor and
+            // the payload floor. This also keeps future-TFM payload folders buildable by today's SDK.
+            return new[] { targetFramework, payloadFramework! }
+                .OrderBy(static framework => GetNetTfmVersion(framework), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
+                .First();
+        }
+
+        // The generic Standard folder is the compatibility fallback selected by older PowerShell 7
+        // hosts when a generic Core payload cannot be proven compatible. Keep its loader at the
+        // PowerShell 7.0 runtime floor while allowing modern Core payloads to use their declared TFM.
+        return string.Equals(Path.GetFileName(directory), "Standard", StringComparison.OrdinalIgnoreCase)
+            ? PowerShell70AssemblyLoadContextTargetFramework
+            : targetFramework;
     }
 
     private static string? ResolvePayloadAssemblyLoadContextTargetFramework(string directory)
@@ -654,11 +686,8 @@ internal static partial class ModuleBootstrapperGenerator
                 return NormalizePayloadAssemblyLoadContextTargetFramework(folderName.Substring(prefix.Length));
         }
 
-        return folderName.Equals("Core", StringComparison.OrdinalIgnoreCase) ||
-               folderName.Equals("Standard", StringComparison.OrdinalIgnoreCase) ||
-               folderName.Equals("Default", StringComparison.OrdinalIgnoreCase)
-            ? PowerShell70AssemblyLoadContextTargetFramework
-            : null;
+        // Generic payload folder names are resolved against their selection contract by the caller.
+        return null;
     }
 
     private static string? NormalizePayloadAssemblyLoadContextTargetFramework(string? framework)

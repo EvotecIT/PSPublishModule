@@ -300,37 +300,26 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishStyle? styleOverride,
         string reservationOwner,
         NoBuildPublishInputSnapshot? inputSnapshot,
-        PublishProvenanceLease? provenanceLease)
+        PublishProvenanceLease? provenanceLease,
+        SourceProvenance? verifiedSourceProvenance,
+        IReadOnlyCollection<string> plannedPublishGeneratedPaths,
+        out SourceProvenance? finalSourceProvenance)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
 
-        var cfg = plan.Configuration;
         var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
         var style = styleOverride ?? target.Publish.Style;
-        string releaseVersion = ResolvePublishReleaseVersion(plan, target.Name, tfm, rid, style) ?? string.Empty;
-
-        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["target"] = target.Name,
-            ["rid"] = rid,
-            ["framework"] = tfm,
-            ["style"] = style.ToString(),
-            ["configuration"] = cfg,
-            ["version"] = releaseVersion
-        };
-
-        var outputDirTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
-            ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
-            : target.Publish.OutputPath!;
-
-        var outputDir = ResolvePath(plan.ProjectRoot, ApplyTemplate(outputDirTemplate, tokens));
-        if (!plan.AllowOutputOutsideProjectRoot)
-            EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Target '{target.Name}' output path");
+        var tokens = BuildPublishOutputTokens(plan, target, tfm, rid, style);
+        string outputDir = ResolvePublishOutputDirectory(plan, target, tfm, rid, style);
 
         string[] evidencePaths = Array.Empty<string>();
+        SourceProvenance? signingProvenance = null;
         if (target.Publish.Sign?.Enabled == true)
-            _ = ReadPortableInventorySourceProvenance(plan, outputDir);
+        {
+            signingProvenance = verifiedSourceProvenance ??
+                ReadPortableInventorySourceProvenance(plan, outputDir);
+        }
 
         EnsureOutputDirectoryUnlocked(
             plan,
@@ -416,6 +405,14 @@ public sealed partial class DotNetPublishPipelineRunner
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
             if (signedFilePaths.Length > 0)
             {
+                signingProvenance = ReadPortableInventorySourceProvenance(
+                    plan,
+                    outputDir,
+                    plannedPublishGeneratedPaths);
+                provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
+                    signingProvenance.PublishInputFiles,
+                    signingProvenance.NoBuildPublishInputs));
+                provenanceLease?.ValidateUnchanged();
                 string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
                     ?? throw new InvalidOperationException(
                         "Signed portable output does not contain a primary executable matching the configured project identity.");
@@ -435,7 +432,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         "when the signed product identity is supplied by imported or generated build properties.");
                 }
                 string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
-                SourceProvenance provenance = ReadPortableInventorySourceProvenance(plan, outputDir);
+                provenanceLease?.ValidateUnchanged();
+                SourceProvenance provenance = signingProvenance
+                    ?? throw new InvalidOperationException(
+                        $"Signed publish target '{target.Name}' has no verified source provenance.");
                 (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                     outputDir,
                     executable,
@@ -490,6 +490,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? primaryExecutable = Directory.Exists(outputDir)
             ? ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
             : null;
+        finalSourceProvenance = signingProvenance ?? verifiedSourceProvenance;
         return new DotNetPublishArtefactResult
         {
             Target = target.Name,

@@ -70,7 +70,9 @@ internal sealed partial class AppleReleaseSourceTrustService
                             localPackageRoots);
                     }
                 }
-                return ReadApprovedTrackedPackageRevisions(root, packageLocks);
+                var revisions = ReadApprovedTrackedPackageRevisions(root, packageLocks);
+                ValidatePendingGitFilters();
+                return revisions;
             }
             finally
             {
@@ -135,6 +137,7 @@ internal sealed partial class AppleReleaseSourceTrustService
                         metadataPaths,
                         Array.Empty<string>());
                 }
+                ValidatePendingGitFilters();
             }
             finally
             {

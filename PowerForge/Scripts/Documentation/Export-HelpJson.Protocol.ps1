@@ -184,7 +184,13 @@ function GetDocumentationParameterNames(
     'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable',
     'WhatIf','Confirm','ProgressAction')
   $names = @()
-  try { $names = @($command.Parameters.Keys) } catch { $names = @() }
+  try {
+    $names = @(
+      foreach ($entry in $command.Parameters.GetEnumerator()) {
+        [string]$entry.Key
+      }
+    )
+  } catch { $names = @() }
   foreach ($helpParameter in @($helpParameters)) {
     try { $names += [string]$helpParameter.Name } catch { }
   }

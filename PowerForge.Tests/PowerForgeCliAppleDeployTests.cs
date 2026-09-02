@@ -6,6 +6,316 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliAppleDeployTests
 {
     [Fact]
+    public void AppleDeploy_diagnostic_redacts_credentials_before_truncation()
+    {
+        var cliAssembly = System.Reflection.Assembly.LoadFrom(
+            GetCliPath(FindRepositoryRoot()));
+        var program = cliAssembly.GetType("Program", throwOnError: true)!;
+        var formatter = program.GetMethod(
+            "ResolveAppleDeployDiagnostic",
+            System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Static)
+            ?? throw new MissingMethodException(
+                "Program.ResolveAppleDeployDiagnostic was not found.");
+        const string credential = "credential-sensitive-value";
+        var failure = new ProcessRunResult(
+            1,
+            credential + new string('x', 1980),
+            string.Empty,
+            "xcodebuild",
+            TimeSpan.FromSeconds(1),
+            timedOut: false);
+
+        var diagnostic = (string?)formatter.Invoke(
+            null,
+            new object[]
+            {
+                new[] { credential },
+                new ProcessRunResult?[] { failure }
+            });
+
+        Assert.NotNull(diagnostic);
+        Assert.Contains("[REDACTED]", diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "sensitive-value",
+            diagnostic,
+            StringComparison.Ordinal);
+        Assert.True(diagnostic.Length <= 2000);
+    }
+
+    [Fact]
+    public async Task AppleDeploy_plan_uses_nonempty_alias_credentials_when_primary_environment_values_are_empty()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        var credentialRoot = tempRoot + ".credentials";
+        Directory.CreateDirectory(tempRoot);
+        Directory.CreateDirectory(credentialRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var keyPath = Path.Combine(credentialRoot, "AuthKey_ALIAS.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json",
+                new Dictionary<string, string>
+                {
+                    ["APP_STORE_CONNECT_PRIVATE_KEY_PATH"] = "",
+                    ["APP_STORE_CONNECT_KEY_ID"] = "",
+                    ["APP_STORE_CONNECT_ISSUER_ID"] = "",
+                    ["ASC_PRIVATE_KEY_PATH"] = keyPath,
+                    ["ASC_KEY_ID"] = "ALIASKEY123",
+                    ["ASC_ISSUER_ID"] = "alias-issuer-id"
+                });
+
+            Assert.Equal(0, result.ExitCode);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+            if (Directory.Exists(credentialRoot))
+                Directory.Delete(credentialRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleDeploy_plan_redacts_configured_authentication_metadata_from_errors()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var missingKeyPath = Path.Combine(
+                Path.GetTempPath(),
+                "private-signing",
+                "AuthKey_DO_NOT_PRINT.p8");
+            var keyId = "DO_NOT_PRINT_KEY_ID";
+            var issuerId = "do-not-print-issuer-id";
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, $$"""
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "AppStoreConnectApiKeyPath": "{{missingKeyPath}}",
+                "AppStoreConnectApiKeyId": "{{keyId}}",
+                "AppStoreConnectApiIssuerId": "{{issuerId}}",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            var output = result.StdOut + result.StdErr;
+            Assert.DoesNotContain(missingKeyPath, output, StringComparison.Ordinal);
+            Assert.DoesNotContain(keyId, output, StringComparison.Ordinal);
+            Assert.DoesNotContain(issuerId, output, StringComparison.Ordinal);
+            Assert.Contains("[REDACTED]", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleDeploy_plan_redacts_resolved_relative_environment_key_paths()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+            const string relativeKeyPath = "../private-signing/AuthKey_ENV.p8";
+            var resolvedKeyPath = Path.GetFullPath(Path.Combine(
+                tempRoot,
+                relativeKeyPath));
+            const string keyId = "ENV_DO_NOT_PRINT_KEY_ID";
+            const string issuerId = "env-do-not-print-issuer-id";
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json",
+                new Dictionary<string, string>
+                {
+                    ["APP_STORE_CONNECT_PRIVATE_KEY_PATH"] = relativeKeyPath,
+                    ["APP_STORE_CONNECT_KEY_ID"] = keyId,
+                    ["APP_STORE_CONNECT_ISSUER_ID"] = issuerId,
+                    ["ASC_PRIVATE_KEY_PATH"] = "",
+                    ["ASC_KEY_ID"] = "",
+                    ["ASC_ISSUER_ID"] = ""
+                });
+
+            Assert.Equal(1, result.ExitCode);
+            var output = result.StdOut + result.StdErr;
+            Assert.DoesNotContain(relativeKeyPath, output, StringComparison.Ordinal);
+            Assert.DoesNotContain(resolvedKeyPath, output, StringComparison.Ordinal);
+            Assert.DoesNotContain(keyId, output, StringComparison.Ordinal);
+            Assert.DoesNotContain(issuerId, output, StringComparison.Ordinal);
+            Assert.Contains("[REDACTED]", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppleDeploy_plan_preserves_json_errors_for_malformed_credential_paths()
+    {
+        var repoRoot = FindRepositoryRoot();
+        var tempRoot = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForgeCliAppleDeploy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(
+                tempRoot,
+                "Sample.xcodeproj"));
+            File.WriteAllText(
+                Path.Combine(project.FullName, "project.pbxproj"),
+                string.Empty);
+            var configPath = Path.Combine(tempRoot, "powerforge.release.json");
+            File.WriteAllText(configPath, """
+            {
+              "SchemaVersion": 1,
+              "AppleApps": {
+                "ProjectRoot": ".",
+                "AppStoreConnectApiKeyPath": "\u0000bad-path",
+                "AppStoreConnectApiKeyId": "MALFORMEDKEY",
+                "AppStoreConnectApiIssuerId": "malformed-issuer",
+                "LocalDeployment": {
+                  "DefaultPlatform": "iOS",
+                  "DefaultDevice": "EvoPhone"
+                },
+                "Apps": [
+                  {
+                    "Name": "Sample iOS",
+                    "BundleId": "com.example.sample",
+                    "Platform": "iOS",
+                    "ProjectPath": "Sample.xcodeproj",
+                    "Scheme": "Sample"
+                  }
+                ]
+              }
+            }
+            """);
+            InitializeGitRepository(tempRoot);
+
+            var result = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
+
+            Assert.Equal(1, result.ExitCode);
+            using var document = JsonDocument.Parse(result.StdOut);
+            Assert.False(document.RootElement.GetProperty("success").GetBoolean());
+            Assert.Equal(1, document.RootElement.GetProperty("exitCode").GetInt32());
+            Assert.False(string.IsNullOrWhiteSpace(
+                document.RootElement.GetProperty("error").GetString()));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AppleDeploy_plan_rejects_a_configured_xcode_wrapper()
     {
         var repoRoot = FindRepositoryRoot();

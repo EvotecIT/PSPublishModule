@@ -38,7 +38,12 @@ public sealed partial class DotNetRepositoryReleaseService {
         }
     }
 
-    private string ResolvePackageId(string csprojPath, string fallbackProjectName, DotNetRepositoryReleaseSpec spec) {
+    private string ResolvePackageId(
+        string csprojPath,
+        string fallbackProjectName,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger? logger = null) {
+        logger ??= _logger;
         var projectDirectory = Path.GetDirectoryName(csprojPath) ?? spec.RootPath;
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var packProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
@@ -64,7 +69,7 @@ public sealed partial class DotNetRepositoryReleaseService {
             packProperties,
             propertyName: "PackageId",
             fallbackProjectName,
-            _logger,
+            logger,
             out var packageId,
             out var stdErr,
             out var stdOut,

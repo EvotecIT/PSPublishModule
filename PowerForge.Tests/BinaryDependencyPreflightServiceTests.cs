@@ -431,6 +431,73 @@ public sealed class BinaryDependencyPreflightServiceTests
             Assert.DoesNotContain(hostAssemblies, name => string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("Windows.Foundation.FoundationContract")]
+    [InlineData("Windows.Foundation.UniversalApiContract")]
+    [InlineData("Windows.Networking.Connectivity.WwanContract")]
+    public void WindowsRuntimeContractNames_AreRecognizedAsHostContracts(string assemblyName)
+    {
+        Assert.True(BinaryDependencyPreflightService.IsWindowsRuntimeContractAssemblyName(assemblyName));
+    }
+
+    [Theory]
+    [InlineData("WindowsBase")]
+    [InlineData("Windows.Foundation")]
+    [InlineData("Contoso.Foundation.UniversalApiContract")]
+    public void NonContractAssemblyNames_AreNotRecognizedAsWindowsRuntimeContracts(string assemblyName)
+    {
+        Assert.False(BinaryDependencyPreflightService.IsWindowsRuntimeContractAssemblyName(assemblyName));
+    }
+
+    [Fact]
+    public void WindowsRuntimeContractReference_RequiresWindowsRuntimeMetadata()
+    {
+        const string assemblyName = "Windows.Contoso.UniversalApiContract";
+
+        Assert.False(BinaryDependencyPreflightService.IsWindowsRuntimeContractReference(
+            assemblyName,
+            (System.Reflection.AssemblyFlags)0));
+        Assert.True(BinaryDependencyPreflightService.IsWindowsRuntimeContractReference(
+            assemblyName,
+            System.Reflection.AssemblyFlags.WindowsRuntime));
+    }
+
+    [Fact]
+    public void Analyze_DoesNotSuppressManagedAssemblyThatOnlyLooksLikeAWindowsContract()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string dependencyName = "Windows.Contoso.UniversalApiContract";
+            var paths = CreateDependencyFixture(root.FullName, dependencyName);
+            BuildProject(paths.ConsumerProjectPath);
+
+            var moduleRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var libCore = Directory.CreateDirectory(Path.Combine(moduleRoot.FullName, "Lib", "Core"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(libCore.FullName, "Consumer.dll"), overwrite: true);
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(moduleRoot.FullName, "Core");
+
+            Assert.Contains(result.Issues, issue =>
+                string.Equals(issue.MissingDependencyName, dependencyName, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void DesktopHostBaseline_IncludesWindowsRuntimeFacadeOnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var hostAssemblies = GetHostProvidedAssemblyNamesForTest("Desktop");
+
+        Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Runtime.WindowsRuntime", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void CoreHostBaseline_IncludesKnownPowerShellRuntimeAssemblies()
     {
@@ -461,17 +528,18 @@ public sealed class BinaryDependencyPreflightServiceTests
         return (System.Collections.Generic.IReadOnlyCollection<string>)field.GetValue(null)!;
     }
 
-    private static DependencyFixture CreateDependencyFixture(string rootPath)
+    private static DependencyFixture CreateDependencyFixture(string rootPath, string dependencyAssemblyName = "Dependency")
     {
         var dependencyRoot = Directory.CreateDirectory(Path.Combine(rootPath, "Dependency"));
         var consumerRoot = Directory.CreateDirectory(Path.Combine(rootPath, "Consumer"));
 
-        File.WriteAllText(Path.Combine(dependencyRoot.FullName, "Dependency.csproj"), """
+        File.WriteAllText(Path.Combine(dependencyRoot.FullName, "Dependency.csproj"), $"""
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>{dependencyAssemblyName}</AssemblyName>
   </PropertyGroup>
 </Project>
 """);
@@ -509,7 +577,7 @@ public sealed class ConsumerMarker
         return new DependencyFixture(
             Path.Combine(consumerRoot.FullName, "Consumer.csproj"),
             Path.Combine(consumerRoot.FullName, "bin", "Release", "net8.0", "Consumer.dll"),
-            Path.Combine(dependencyRoot.FullName, "bin", "Release", "net8.0", "Dependency.dll"));
+            Path.Combine(dependencyRoot.FullName, "bin", "Release", "net8.0", dependencyAssemblyName + ".dll"));
     }
 
     private static DependencyFixture CreateTransitiveDependencyFixture(string rootPath)

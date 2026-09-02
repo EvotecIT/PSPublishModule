@@ -71,6 +71,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             var expectedMap = BuildExpectedVersionMap(spec.ExpectedVersionsByProject);
             var projects = new List<DotNetRepositoryProjectResult>();
+            var candidateMetadata = ResolveProjectMetadata(candidates, spec, cancellationToken, progress);
 
             foreach (var group in candidates.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
             {
@@ -79,12 +80,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     var dupPaths = string.Join("; ", group.Select(g => g.Path));
                     foreach (var item in group)
                     {
+                        var duplicateMetadata = candidateMetadata[item.Path];
                         projects.Add(new DotNetRepositoryProjectResult
                         {
                             ProjectName = item.Name,
                             CsprojPath = item.Path,
-                            PackageId = ResolvePackageId(item.Path, item.Name, spec),
-                            IsPackable = IsPackable(item.Path),
+                            PackageId = duplicateMetadata.PackageId,
+                            IsPackable = duplicateMetadata.IsPackable,
                             ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
                         });
                     }
@@ -94,12 +96,13 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 var entry = group.First();
+                var projectMetadata = candidateMetadata[entry.Path];
                 projects.Add(new DotNetRepositoryProjectResult
                 {
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
-                    PackageId = ResolvePackageId(entry.Path, entry.Name, spec),
-                    IsPackable = IsPackable(entry.Path)
+                    PackageId = projectMetadata.PackageId,
+                    IsPackable = projectMetadata.IsPackable
                 });
             }
 
@@ -615,7 +618,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
             }
 
-            if (spec.Publish && ExecuteNuGetPublishing(spec, result, packable, root, progress, detailedProgress))
+            if (spec.Publish && ExecuteNuGetPublishing(spec, result, packable, root, progress, detailedProgress, cancellationToken))
             {
                 return result;
             }

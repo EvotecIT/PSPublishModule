@@ -111,6 +111,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (Volatile.Read(ref _changed) != 0)
                 ThrowChanged();
+
             string[] currentFiles = EnumerateCapturedFiles(_capturedRoots).ToArray();
             if (currentFiles.Length != _files.Count || currentFiles.Any(path => !_files.ContainsKey(path)))
                 ThrowChanged();

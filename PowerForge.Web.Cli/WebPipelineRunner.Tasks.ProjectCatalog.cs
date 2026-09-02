@@ -2865,9 +2865,6 @@ internal static partial class WebPipelineRunner
         ProjectCatalogEntry project,
         bool includeProductPresentation)
     {
-        if (!string.IsNullOrWhiteSpace(project.ContentMode))
-            WriteMetaString(lines, "meta.project_content_mode", project.ContentMode);
-
         if (includeProductPresentation)
             AppendProductFrontMatterExtensions(lines, project);
 

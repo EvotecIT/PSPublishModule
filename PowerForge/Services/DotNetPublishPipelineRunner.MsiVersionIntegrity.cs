@@ -166,8 +166,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 path,
                 hookDeclaredOutputs,
                 hookGeneratedOutputs));
-        IEnumerable<string> allGeneratedPaths = (generatedPaths ?? Array.Empty<string>())
-            .Concat(hookGeneratedOutputs);
+        string[] allGeneratedPaths = (generatedPaths ?? Array.Empty<string>())
+            .Concat(hookGeneratedOutputs)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+        string[] trackedGeneratedPathArray = (trackedGeneratedPaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
         SourceDirtyScope dirtyScope = BuildSourceDirtyScope(
             projectRoot,
             gitRoot!,
@@ -194,7 +199,7 @@ public sealed partial class DotNetPublishPipelineRunner
             projectRoot,
             gitRoot!,
             postEvaluationTrackedStatus,
-            trackedGeneratedPaths,
+            trackedGeneratedPathArray,
             dirtyScope);
         string[] untrackedSourceFiles = FindUntrackedSourceFiles(
             projectRoot,
@@ -283,7 +288,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray(),
             dirtyReasons.ToArray(),
             dirtyScope.NoBuildPublishInputs,
-            publishInputFiles);
+            publishInputFiles,
+            validateCurrentSourceWithTrackedGeneratedPaths: additionalTrackedGeneratedPaths =>
+                ValidateCurrentSourceProvenance(
+                    projectRoot,
+                    gitRoot!,
+                    postEvaluationRevision!,
+                    postEvaluationUntrackedOutput!,
+                    allGeneratedPaths,
+                    trackedGeneratedPathArray.Concat(
+                        additionalTrackedGeneratedPaths ?? Array.Empty<string>()),
+                    dirtyScope));
     }
 
     private static bool HasGeneratedOutputInputOverlap(
@@ -557,6 +572,10 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         IEnumerable<DotNetPublishMsiBuildResult> msiBuilds)
     {
+        yield return plan.Outputs.ManifestJsonPath ?? string.Empty;
+        yield return plan.Outputs.ManifestTextPath ?? string.Empty;
+        yield return plan.Outputs.ChecksumsPath ?? string.Empty;
+
         foreach (var statePath in EnumeratePlannedMsiVersionStatePaths(plan))
             yield return statePath;
 
@@ -967,7 +986,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string[]? dirtyPaths = null,
             string[]? dirtyReasons = null,
             NoBuildPublishInput[]? noBuildPublishInputs = null,
-            string[]? publishInputFiles = null)
+            string[]? publishInputFiles = null,
+            Action? validateCurrentSource = null,
+            Action<IEnumerable<string>?>? validateCurrentSourceWithTrackedGeneratedPaths = null)
         {
             Revision = revision;
             Dirty = dirty;
@@ -975,6 +996,9 @@ public sealed partial class DotNetPublishPipelineRunner
             DirtyReasons = dirtyReasons ?? Array.Empty<string>();
             NoBuildPublishInputs = noBuildPublishInputs ?? Array.Empty<NoBuildPublishInput>();
             PublishInputFiles = publishInputFiles ?? Array.Empty<string>();
+            _validateCurrentSource = validateCurrentSource;
+            _validateCurrentSourceWithTrackedGeneratedPaths =
+                validateCurrentSourceWithTrackedGeneratedPaths;
         }
 
         public string? Revision { get; }
@@ -988,6 +1012,23 @@ public sealed partial class DotNetPublishPipelineRunner
         internal NoBuildPublishInput[] NoBuildPublishInputs { get; }
 
         internal string[] PublishInputFiles { get; }
+
+        private readonly Action? _validateCurrentSource;
+
+        private readonly Action<IEnumerable<string>?>? _validateCurrentSourceWithTrackedGeneratedPaths;
+
+        internal void ValidateCurrentSource()
+            => ValidateCurrentSource(additionalTrackedGeneratedPaths: null);
+
+        internal void ValidateCurrentSource(IEnumerable<string>? additionalTrackedGeneratedPaths)
+        {
+            if (_validateCurrentSourceWithTrackedGeneratedPaths is not null)
+            {
+                _validateCurrentSourceWithTrackedGeneratedPaths(additionalTrackedGeneratedPaths);
+                return;
+            }
+            _validateCurrentSource?.Invoke();
+        }
     }
 
     private sealed class MsiVersionStateWrite

@@ -1343,6 +1343,9 @@ internal static partial class WebPipelineRunner
         if (spec.McpServerCard?.Enabled == true && !string.IsNullOrWhiteSpace(spec.McpServerCard.Endpoint))
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.McpServerCard.OutputPath) ? ".well-known/mcp/server-card.json" : spec.McpServerCard.OutputPath!));
 
+        if (spec.WebMcp && spec.WebMcpTools?.Length > 0)
+            outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, WebSiteBuilder.WebMcpSiteSearchAssetRoute));
+
         if (spec.MarkdownArtifacts?.Enabled == true)
         {
             var extension = string.IsNullOrWhiteSpace(spec.MarkdownArtifacts.Extension) ? ".md" : spec.MarkdownArtifacts.Extension!.Trim();
@@ -1417,6 +1420,7 @@ internal static partial class WebPipelineRunner
             McpServerCard = spec.McpServerCard,
             OpenApi = spec.OpenApi,
             WebMcp = spec.WebMcp,
+            WebMcpTools = spec.WebMcpTools,
             MarkdownArtifacts = spec.MarkdownArtifacts,
             MarkdownNegotiation = spec.MarkdownNegotiation,
             Apache = spec.Apache

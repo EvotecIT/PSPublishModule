@@ -460,8 +460,16 @@ public class WebPipelineRunnerProjectCatalogTests
 
             var overview = File.ReadAllText(overviewPath);
             Assert.Contains("meta.project_content_mode: \"hybrid\"", overview, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(
+                1,
+                overview.Split("meta.project_content_mode:", StringSplitOptions.None).Length - 1);
             Assert.Contains("meta.project_surface_examples: true", overview, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("meta.project_artifact_examples: \"https://example.invalid/alpha-examples.zip\"", overview, StringComparison.OrdinalIgnoreCase);
+
+            var examplesSection = File.ReadAllText(examplesSectionPath);
+            Assert.Equal(
+                1,
+                examplesSection.Split("meta.project_content_mode:", StringSplitOptions.None).Length - 1);
         }
         finally
         {

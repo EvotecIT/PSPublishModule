@@ -33,7 +33,6 @@ public sealed partial class DotNetPublishPipelineRunner
         scope.BuildInputs = buildInputs;
         scope.SourceInputs = sourceInputs;
         scope.NoBuildPublishInputs = noBuildPublishInputs;
-
         foreach (string directory in projectDirectories)
             AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
         foreach (string path in buildInputs)
@@ -170,6 +169,12 @@ public sealed partial class DotNetPublishPipelineRunner
             Array.Empty<NoBuildPublishInput>();
 
         internal bool IsScoped => DirectoryPaths.Count > 0 || ProjectDirectoryPaths.Count > 0;
+
+        internal bool IsWithinProjectDirectory(string path, StringComparison comparison)
+            => ProjectDirectoryPaths.Any(directory =>
+                directory.Length == 0 ||
+                string.Equals(path, directory, comparison) ||
+                path.StartsWith(directory + "/", comparison));
 
         internal bool Contains(string path, string gitRoot, StringComparison comparison)
         {

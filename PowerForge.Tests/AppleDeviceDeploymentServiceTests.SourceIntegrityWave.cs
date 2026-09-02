@@ -215,7 +215,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
     }
 
     [Fact]
-    public async Task BuildAsync_rejects_tracked_inputs_hidden_by_root_mirror_exclusions()
+    public async Task BuildAsync_preserves_tracked_inputs_under_generated_named_roots()
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -230,7 +230,70 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var build = Directory.CreateDirectory(Path.Combine(root.FullName, "build"));
             File.WriteAllText(Path.Combine(build.FullName, "schema.json"), "{}");
             InitializeGitRepository(root.FullName);
-            var runner = new CapturingProcessRunner(_ => Success("unexpected"));
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+                {
+                    Directory.CreateDirectory(Path.Combine(
+                        request.WorkingDirectory,
+                        ".swiftpm",
+                        "xcode",
+                        "xcuserdata"));
+                }
+                return Success("ok");
+            });
+
+            var result = await new AppleDeviceDeploymentService(runner).BuildAsync(
+                new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                    UseBuildMirror = true
+                });
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(2, runner.Requests.Count);
+            Assert.Equal("/usr/bin/rsync", runner.Requests[0].FileName);
+            Assert.DoesNotContain("/build", runner.Requests[0].Arguments);
+            Assert.Contains("/.build", runner.Requests[0].Arguments);
+            Assert.Contains("/.swiftpm", runner.Requests[0].Arguments);
+            Assert.Contains("/DerivedData", runner.Requests[0].Arguments);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_file_injection_under_an_excluded_generated_mirror_root()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+                {
+                    var swiftPackageState = Directory.CreateDirectory(Path.Combine(
+                        request.WorkingDirectory,
+                        ".swiftpm"));
+                    File.WriteAllText(
+                        Path.Combine(swiftPackageState.FullName, "configuration.json"),
+                        "{}");
+                }
+                return Success("ok");
+            });
 
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
@@ -243,9 +306,113 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                     UseBuildMirror = true
                 }));
 
-            Assert.Contains("build/schema.json", error.Message, StringComparison.Ordinal);
-            Assert.Contains("disable the build mirror", error.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Empty(runner.Requests);
+            Assert.Contains("local Apple build mirror changed", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".swiftpm", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_rejects_a_generated_mirror_root_symlink_injection()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        var outside = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests.Outside",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+                {
+                    Directory.CreateSymbolicLink(
+                        Path.Combine(request.WorkingDirectory, ".swiftpm"),
+                        outside.FullName);
+                }
+                return Success("ok");
+            });
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("local Apple build mirror changed", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".swiftpm", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteExternalOutputs(root);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+            try { outside.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_does_not_ignore_case_aliases_of_excluded_generated_roots()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            Guid.NewGuid().ToString("N")));
+        try
+        {
+            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) !=
+                StringComparison.OrdinalIgnoreCase)
+            {
+                return;
+            }
+
+            var project = Directory.CreateDirectory(Path.Combine(root.FullName, "CasaRay.xcodeproj"));
+            File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"), string.Empty);
+            var build = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
+            File.WriteAllText(Path.Combine(build.FullName, "schema.json"), "{}");
+            InitializeGitRepository(root.FullName);
+            var runner = new CapturingProcessRunner(request =>
+            {
+                if (request.FileName.Equals("/usr/bin/xcodebuild", StringComparison.Ordinal))
+                {
+                    Directory.CreateDirectory(Path.Combine(request.WorkingDirectory, "Build"));
+                    File.WriteAllText(
+                        Path.Combine(request.WorkingDirectory, "Build", "schema.json"),
+                        "changed");
+                }
+                return Success("ok");
+            });
+
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
+                {
+                    ProjectPath = project.FullName,
+                    BuildRoot = root.FullName,
+                    Scheme = "CasaRay",
+                    Destination = "id=device-1",
+                    DerivedDataPath = ExternalOutputPath(root, "DerivedData"),
+                    UseBuildMirror = true
+                }));
+
+            Assert.Contains("local Apple build mirror changed", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Build", error.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -666,11 +833,9 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            var productRoot = request.Arguments.Single(argument =>
-                    argument.StartsWith(
-                        "CONFIGURATION_BUILD_DIR=",
-                        StringComparison.Ordinal))
-                .Substring("CONFIGURATION_BUILD_DIR=".Length);
+            var productRoot = AppleDeploymentTestFixture
+                .TryResolvePrivateProductRoot(request)
+                ?? throw new InvalidOperationException("Private product root was not configured.");
             ProductRoot = productRoot;
             Directory.Delete(productRoot, recursive: true);
             Directory.CreateSymbolicLink(productRoot, _redirectRoot);

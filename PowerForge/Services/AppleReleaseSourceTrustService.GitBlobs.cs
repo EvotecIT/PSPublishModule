@@ -2,6 +2,44 @@ namespace PowerForge;
 
 internal sealed partial class AppleReleaseSourceTrustService
 {
+    private sealed class TrackedRepositoryProof
+    {
+        internal TrackedRepositoryProof(IEqualityComparer<string> comparer)
+        {
+            IndexEntries = new Dictionary<string, TrackedIndexEntry>(comparer);
+            HeadBlobIds = new Dictionary<string, string>(comparer);
+            LoadedFilePaths = new HashSet<string>(comparer);
+            LoadedDirectoryPaths = new HashSet<string>(comparer);
+            FileProbeCountsByDirectory = new Dictionary<string, int>(comparer);
+        }
+
+        internal Dictionary<string, TrackedIndexEntry> IndexEntries { get; }
+
+        internal Dictionary<string, string> HeadBlobIds { get; }
+
+        internal HashSet<string> LoadedFilePaths { get; }
+
+        internal HashSet<string> LoadedDirectoryPaths { get; }
+
+        internal Dictionary<string, int> FileProbeCountsByDirectory { get; }
+    }
+
+    private sealed class TrackedIndexEntry
+    {
+        internal TrackedIndexEntry(string fullPath, string relativePath, string tag)
+        {
+            FullPath = fullPath;
+            RelativePath = relativePath;
+            Tag = tag;
+        }
+
+        internal string FullPath { get; }
+
+        internal string RelativePath { get; }
+
+        internal string Tag { get; }
+    }
+
     private void EnsureNoCustomGitFilter(string repositoryRoot, string relativePath, string name)
         => EnsureNoCustomGitFilters(repositoryRoot, new[] { relativePath }, name);
 
@@ -51,6 +89,128 @@ internal sealed partial class AppleReleaseSourceTrustService
                 }
             }
         }
+    }
+
+    private void TrackGitFilterPath(string repositoryRoot, string relativePath)
+        => TrackGitFilterPaths(repositoryRoot, new[] { relativePath });
+
+    private void TrackGitFilterPaths(
+        string repositoryRoot,
+        IEnumerable<string> relativePaths)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_pendingGitFilterPaths.TryGetValue(root, out var pending))
+        {
+            pending = new HashSet<string>(GetPathComparer());
+            _pendingGitFilterPaths.Add(root, pending);
+        }
+        pending.UnionWith(relativePaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
+    }
+
+    internal void ValidatePendingGitFilters()
+    {
+        foreach (var repositoryRoot in _pendingGitFilterPaths.Keys.ToArray())
+            ValidatePendingGitFilters(repositoryRoot);
+    }
+
+    private void ValidatePendingGitFilters(string repositoryRoot)
+    {
+        var root = Path.GetFullPath(repositoryRoot);
+        if (!_pendingGitFilterPaths.TryGetValue(root, out var pending))
+            return;
+        EnsureNoCustomGitFilters(root, pending.ToArray(), "Apple exact-source input");
+        _pendingGitFilterPaths.Remove(root);
+    }
+
+    private TrackedRepositoryProof ReadTrackedRepositoryProof(
+        string repositoryRoot,
+        string requestedPath,
+        bool recursive)
+    {
+        const int directoryExpansionThreshold = 4;
+        var root = Path.GetFullPath(repositoryRoot);
+        var comparer = GetPathComparer();
+        if (!_trackedRepositoryProofs.TryGetValue(root, out var proof))
+        {
+            proof = new TrackedRepositoryProof(comparer);
+            _trackedRepositoryProofs.Add(root, proof);
+        }
+
+        var requested = Path.GetFullPath(requestedPath);
+        if (proof.LoadedDirectoryPaths.Any(directory => IsPathAtOrWithin(requested, directory)) ||
+            (!recursive && proof.LoadedFilePaths.Contains(requested)))
+        {
+            return proof;
+        }
+
+        var scope = requested;
+        var loadDirectory = recursive;
+        if (!recursive)
+        {
+            var directory = Path.GetDirectoryName(requested) ?? root;
+            proof.FileProbeCountsByDirectory.TryGetValue(directory, out var probes);
+            probes++;
+            proof.FileProbeCountsByDirectory[directory] = probes;
+            // Keep small graphs exact-path scoped, then amortize repeated sibling
+            // lookups without ever expanding root-level files to the whole repository.
+            if (!comparer.Equals(directory, root) && probes >= directoryExpansionThreshold)
+            {
+                scope = directory;
+                loadDirectory = true;
+            }
+        }
+
+        var relativeScope = FrameworkCompatibility.GetRelativePath(root, scope).Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(relativeScope))
+            relativeScope = ".";
+        var stagedEntries = RunGit(root, "--literal-pathspecs", "ls-files", "--stage", "-v", "-z", "--", relativeScope)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var seenIndexEntries = new HashSet<string>(comparer);
+        foreach (var stagedEntry in stagedEntries)
+        {
+            var tab = stagedEntry.IndexOf('\t');
+            var metadata = tab > 2
+                ? stagedEntry.Substring(2, tab - 2).Split(
+                    new[] { ' ' },
+                    StringSplitOptions.RemoveEmptyEntries)
+                : Array.Empty<string>();
+            if (stagedEntry.Length < 3 || stagedEntry[1] != ' ' ||
+                metadata.Length != 3 || !metadata[2].Equals("0", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Tracked Apple source inputs contain an unexpected or unmerged Git index entry.");
+            }
+
+            var relativePath = stagedEntry.Substring(tab + 1);
+            var fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+            if (!seenIndexEntries.Add(fullPath))
+            {
+                throw new InvalidOperationException(
+                    $"Tracked Apple source inputs contain duplicate Git index entries for: {relativePath}");
+            }
+            proof.IndexEntries[fullPath] =
+                new TrackedIndexEntry(fullPath, relativePath, stagedEntry.Substring(0, 1));
+        }
+
+        var headEntries = RunGit(root, "--literal-pathspecs", "ls-tree", "-r", "-z", "HEAD", "--", relativeScope)
+            .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var headEntry in headEntries)
+        {
+            var tab = headEntry.IndexOf('\t');
+            if (tab < 0)
+                continue;
+            var metadata = headEntry.Substring(0, tab).Split(' ');
+            if (metadata.Length != 3 || !metadata[1].Equals("blob", StringComparison.Ordinal))
+                continue;
+            var fullPath = Path.GetFullPath(Path.Combine(root, headEntry.Substring(tab + 1)));
+            proof.HeadBlobIds[fullPath] = metadata[2];
+        }
+
+        if (loadDirectory)
+            proof.LoadedDirectoryPaths.Add(scope);
+        else
+            proof.LoadedFilePaths.Add(requested);
+        return proof;
     }
 
     private string ComputeRawGitBlobId(string repositoryRoot, string filePath)

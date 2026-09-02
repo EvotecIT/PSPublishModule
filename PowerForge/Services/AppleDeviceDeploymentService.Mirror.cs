@@ -7,6 +7,7 @@ public sealed partial class AppleDeviceDeploymentService
         AppleAppBuildRequest request,
         string rsyncExecutable,
         StringComparison sourcePathComparison,
+        IReadOnlyCollection<string> excludedGeneratedRootPaths,
         CancellationToken cancellationToken)
     {
         var sourceRoot = ResolveBuildRoot(projectPath, request.BuildRoot);
@@ -41,7 +42,11 @@ public sealed partial class AppleDeviceDeploymentService
             "local Apple build mirror",
             "xcodebuild",
             "Discard the product and rebuild the mirror.",
-            enableImmediately: false);
+            enableImmediately: false,
+            ignoredMutation: args => IsExpectedGeneratedMirrorDirectoryMutation(
+                args,
+                mirrorPath,
+                excludedGeneratedRootPaths));
 
         try
         {
@@ -52,17 +57,14 @@ public sealed partial class AppleDeviceDeploymentService
                 "--delete-excluded",
                 "--exclude",
                 "/.git",
-                "--exclude",
-                "/.build",
-                "--exclude",
-                "/.swiftpm",
-                "--exclude",
-                "/build",
-                "--exclude",
-                "/DerivedData",
-                normalizedSourceRoot,
-                normalizedMirrorPath
             };
+            foreach (var excludedRootPath in excludedGeneratedRootPaths)
+            {
+                args.Add("--exclude");
+                args.Add("/" + excludedRootPath);
+            }
+            args.Add(normalizedSourceRoot);
+            args.Add(normalizedMirrorPath);
 
             var processRequest = AppleTrustedExecutionEnvironment.CreateProcessRequest(
                 rsyncExecutable,
@@ -146,6 +148,36 @@ public sealed partial class AppleDeviceDeploymentService
             fullCandidate.StartsWith(
                 EnsureTrailingDirectorySeparator(fullRoot),
                 comparison);
+    }
+
+    private static bool IsExpectedGeneratedMirrorDirectoryMutation(
+        FileSystemEventArgs args,
+        string mirrorPath,
+        IReadOnlyCollection<string> excludedGeneratedRootPaths)
+    {
+        if (args.ChangeType != WatcherChangeTypes.Created &&
+            args.ChangeType != WatcherChangeTypes.Changed)
+            return false;
+        if (!excludedGeneratedRootPaths.Any(rootPath =>
+                IsSameOrDescendant(
+                    args.FullPath,
+                    Path.Combine(mirrorPath, rootPath),
+                    StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        try
+        {
+            var attributes = File.GetAttributes(args.FullPath);
+            return (attributes & FileAttributes.Directory) != 0 &&
+                   (attributes & FileAttributes.ReparsePoint) == 0;
+        }
+        catch
+        {
+            // If the event target disappeared or cannot be inspected, fail closed.
+            return false;
+        }
     }
 
     private static void ValidatePhysicalMirrorBoundary(
