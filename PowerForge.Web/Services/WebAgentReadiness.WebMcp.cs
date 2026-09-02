@@ -299,7 +299,8 @@ public static partial class WebAgentReadiness
 
     private static bool IsExecutableWebMcpScript(IElement script)
     {
-        if (script.HasAttribute("nomodule"))
+        if (script.HasAttribute("nomodule") ||
+            !string.IsNullOrWhiteSpace(script.GetAttribute("integrity")))
             return false;
 
         var type = script.GetAttribute("type")?.Trim();
