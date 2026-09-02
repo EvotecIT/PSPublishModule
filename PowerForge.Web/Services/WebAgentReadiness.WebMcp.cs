@@ -42,17 +42,18 @@ public static partial class WebAgentReadiness
 
     private static void ValidateWebMcpRoute(string? route, string toolName)
     {
-        if (string.IsNullOrWhiteSpace(route) || !route.Trim().StartsWith("/", StringComparison.Ordinal))
+        var trimmedRoute = route?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedRoute) ||
+            !trimmedRoute.StartsWith("/", StringComparison.Ordinal) ||
+            trimmedRoute.StartsWith("//", StringComparison.Ordinal))
             throw new ArgumentException($"WebMCP tool '{toolName}' route must be a root-relative site route.");
-        if (route.Contains('?', StringComparison.Ordinal) || route.Contains('#', StringComparison.Ordinal))
+        if (trimmedRoute.Contains('?', StringComparison.Ordinal) || trimmedRoute.Contains('#', StringComparison.Ordinal))
             throw new ArgumentException($"WebMCP tool '{toolName}' route cannot contain a query string or fragment.");
-        if (Uri.TryCreate(route, UriKind.Absolute, out _))
-            throw new ArgumentException($"WebMCP tool '{toolName}' route must not be an absolute URL.");
 
         string decoded;
         try
         {
-            decoded = Uri.UnescapeDataString(route);
+            decoded = Uri.UnescapeDataString(trimmedRoute);
         }
         catch (UriFormatException ex)
         {
@@ -100,7 +101,7 @@ public static partial class WebAgentReadiness
 
             var html = File.ReadAllText(htmlPath);
             var pageUri = new Uri(siteBaseUri, NormalizeWebMcpDocumentRoute(route).TrimStart('/'));
-            if (!TryParseWebMcpPage(html, tool, pageUri, out var scripts, out var indexUri, out var parseMessage))
+            if (!TryParseWebMcpPage(html, tool, pageUri, out var scripts, out var documentBaseUri, out var indexUri, out var parseMessage))
                 return new WebMcpEvaluation(false, $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {parseMessage}", htmlPath);
 
             if (!TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, indexUri, out var indexPath) ||
@@ -113,7 +114,7 @@ public static partial class WebAgentReadiness
                     indexPath ?? htmlPath);
             }
 
-            if (!ScriptsContainCanonicalSiteSearchRuntime(siteRoot, siteBaseUri, pageUri, scripts))
+            if (!ScriptsContainCanonicalSiteSearchRuntime(siteRoot, siteBaseUri, pageUri, documentBaseUri, scripts))
             {
                 return new WebMcpEvaluation(
                     false,
@@ -164,7 +165,7 @@ public static partial class WebAgentReadiness
                 return;
             }
 
-            if (!TryParseWebMcpPage(page.Text, tool, finalPageUri, out var scripts, out var indexUri, out var parseMessage))
+            if (!TryParseWebMcpPage(page.Text, tool, finalPageUri, out var scripts, out var documentBaseUri, out var indexUri, out var parseMessage))
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
                     $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {parseMessage}", routeUrl);
@@ -183,7 +184,7 @@ public static partial class WebAgentReadiness
                 return;
             }
 
-            if (!await RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(http, finalPageUri, scripts, cancellationToken).ConfigureAwait(false))
+            if (!await RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(http, finalPageUri, documentBaseUri, scripts, cancellationToken).ConfigureAwait(false))
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
                     $"WebMCP tool '{tool.Name}' at '{route}' does not load the canonical PowerForge site-search runtime from the same origin.", routeUrl);
@@ -201,10 +202,12 @@ public static partial class WebAgentReadiness
         AgentWebMcpToolSpec tool,
         Uri pageUri,
         out IElement[] markedScripts,
+        out Uri documentBaseUri,
         out Uri indexUri,
         out string message)
     {
         markedScripts = Array.Empty<IElement>();
+        documentBaseUri = pageUri;
         indexUri = null!;
         if (string.IsNullOrWhiteSpace(html))
         {
@@ -215,6 +218,7 @@ public static partial class WebAgentReadiness
         try
         {
             var document = HtmlParser.ParseWithAngleSharp(html);
+            documentBaseUri = ResolveWebMcpDocumentBase(document, pageUri);
             var surfaces = document.QuerySelectorAll("[data-webmcp-site-search]").ToArray();
             if (surfaces.Length == 0)
             {
@@ -240,7 +244,7 @@ public static partial class WebAgentReadiness
 
             var indexPath = surface.GetAttribute("data-webmcp-search-index");
             if (string.IsNullOrWhiteSpace(indexPath) ||
-                !Uri.TryCreate(pageUri, indexPath, out var resolvedIndexUri) ||
+                !Uri.TryCreate(documentBaseUri, indexPath, out var resolvedIndexUri) ||
                 resolvedIndexUri is null ||
                 !HasSameOrigin(pageUri, resolvedIndexUri))
             {
@@ -279,6 +283,9 @@ public static partial class WebAgentReadiness
 
     private static bool CanExecuteAfterSurface(IElement script, IElement[] documentElements, int surfaceIndex)
     {
+        if (!IsExecutableWebMcpScript(script))
+            return false;
+
         var scriptIndex = Array.IndexOf(documentElements, script);
         if (surfaceIndex >= 0 && scriptIndex > surfaceIndex)
             return true;
@@ -290,10 +297,47 @@ public static partial class WebAgentReadiness
         return script.HasAttribute("defer") || string.Equals(type, "module", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsExecutableWebMcpScript(IElement script)
+    {
+        if (script.HasAttribute("nomodule"))
+            return false;
+
+        var type = script.GetAttribute("type")?.Trim();
+        if (string.IsNullOrEmpty(type))
+            return true;
+        if (string.Equals(type, "module", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var separator = type.IndexOf(';');
+        var mimeType = (separator >= 0 ? type[..separator] : type).Trim();
+        return mimeType.ToLowerInvariant() switch
+        {
+            "text/javascript" or
+            "application/javascript" or
+            "text/ecmascript" or
+            "application/ecmascript" or
+            "application/x-javascript" => true,
+            _ => false
+        };
+    }
+
+    private static Uri ResolveWebMcpDocumentBase(IDocument document, Uri pageUri)
+    {
+        foreach (var element in document.QuerySelectorAll("base[href]"))
+        {
+            var href = element.GetAttribute("href");
+            if (!string.IsNullOrWhiteSpace(href) && Uri.TryCreate(pageUri, href, out var resolved) && resolved is not null)
+                return resolved;
+        }
+
+        return pageUri;
+    }
+
     private static bool ScriptsContainCanonicalSiteSearchRuntime(
         string siteRoot,
         Uri siteBaseUri,
         Uri pageUri,
+        Uri documentBaseUri,
         IEnumerable<IElement> scripts)
     {
         var canonicalRuntime = WebSiteBuilder.GetWebMcpSiteSearchAssetContent();
@@ -303,7 +347,7 @@ public static partial class WebAgentReadiness
             if (string.IsNullOrWhiteSpace(source))
                 continue;
 
-            if (!Uri.TryCreate(pageUri, source, out var assetUri) ||
+            if (!Uri.TryCreate(documentBaseUri, source, out var assetUri) ||
                 !HasSameOrigin(pageUri, assetUri))
             {
                 continue;
@@ -321,6 +365,7 @@ public static partial class WebAgentReadiness
     private static async Task<bool> RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(
         HttpClient http,
         Uri pageUri,
+        Uri documentBaseUri,
         IEnumerable<IElement> scripts,
         CancellationToken cancellationToken)
     {
@@ -331,7 +376,7 @@ public static partial class WebAgentReadiness
             if (string.IsNullOrWhiteSpace(source))
                 continue;
 
-            if (!Uri.TryCreate(pageUri, source, out var assetUri) || !HasSameOrigin(pageUri, assetUri))
+            if (!Uri.TryCreate(documentBaseUri, source, out var assetUri) || !HasSameOrigin(pageUri, assetUri))
                 continue;
 
             var asset = await TryGetTextAsync(http, assetUri.AbsoluteUri, null, cancellationToken).ConfigureAwait(false);

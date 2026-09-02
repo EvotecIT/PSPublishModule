@@ -204,9 +204,44 @@ public partial class WebAgentReadinessTests
         Assert.DoesNotContain("/webmcp-site-search.v1.js", handler.Requests);
     }
 
+    [Fact]
+    public async Task Scan_ResolvesRelativeResourcesAgainstDocumentBaseUrl()
+    {
+        var handler = new WebMcpDocumentBaseScanHandler();
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = WebMcpOnlySpec(agentsJson: false)
+        });
+
+        Assert.Contains(result.Checks, check => check.Id == "webmcp" && check.Status == "pass");
+        Assert.Contains("/alternate/index.json", handler.Requests);
+        Assert.Contains("/alternate/webmcp-site-search.v1.js", handler.Requests);
+        Assert.DoesNotContain("/search/index.json", handler.Requests);
+    }
+
+    [Fact]
+    public async Task Scan_RejectsRelativeResourcesWithCrossOriginDocumentBaseUrl()
+    {
+        var handler = new WebMcpDocumentBaseScanHandler("https://other.test/alternate/");
+
+        var result = await WebAgentReadiness.ScanAsync(new WebAgentReadinessScanOptions
+        {
+            BaseUrl = "https://example.test",
+            HttpMessageHandler = handler,
+            AgentReadiness = WebMcpOnlySpec(agentsJson: false)
+        });
+
+        Assert.Contains(result.Checks, check => check.Id == "webmcp" && check.Status == "fail");
+        Assert.DoesNotContain("/alternate/index.json", handler.Requests);
+    }
+
     [Theory]
     [InlineData("bad name", "/search/", "name")]
     [InlineData("search_site", "https://other.test/search/", "root-relative")]
+    [InlineData("search_site", "//other.test/search/", "root-relative")]
     [InlineData("search_site", "/safe/%2e%2e/private/", "site root")]
     public void Prepare_RejectsUnsafeWebMcpToolConfiguration(string name, string route, string expectedMessage)
     {
@@ -358,6 +393,9 @@ public partial class WebAgentReadinessTests
     [InlineData("<head><script defer src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", true)]
     [InlineData("<head><script async defer src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", false)]
     [InlineData("<head><script type=\"module\" src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main></body>", true)]
+    [InlineData("<body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main><script type=\"application/json\" src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></body>", false)]
+    [InlineData("<body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main><script nomodule src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></body>", false)]
+    [InlineData("<body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"/search/index.json\"></main><script type=\"text/javascript; charset=utf-8\" src=\"/assets/powerforge/webmcp-site-search.v1.js\" data-powerforge-webmcp></script></body>", true)]
     public void Verify_RequiresRuntimeToExecuteAfterItsSurface(string markup, bool expectedPass)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webmcp-script-order-" + Guid.NewGuid().ToString("N"));
@@ -760,6 +798,39 @@ public partial class WebAgentReadinessTests
             response.RequestMessage = path == "/search"
                 ? new HttpRequestMessage(HttpMethod.Get, "https://example.test/search/")
                 : request;
+            return Task.FromResult(response);
+        }
+
+        private static HttpResponseMessage Response(HttpStatusCode statusCode, string content, string mediaType) => new(statusCode)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
+    }
+
+    private sealed class WebMcpDocumentBaseScanHandler(string documentBase = "/alternate/") : HttpMessageHandler
+    {
+        internal List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            Requests.Add(path);
+            var response = path switch
+            {
+                "/" => Response(HttpStatusCode.OK,
+                    "<!doctype html><html><body><main><h1>Example</h1></main></body></html>",
+                    "text/html"),
+                "/sitemap.xml" => Response(HttpStatusCode.OK, "<urlset></urlset>", "application/xml"),
+                "/search/" => Response(HttpStatusCode.OK,
+                    $"<!doctype html><html><head><base href=\"{documentBase}\"></head><body><main data-webmcp-site-search data-webmcp-tool-name=\"search_site\" data-webmcp-tool-description=\"Search public documentation.\" data-webmcp-search-index=\"index.json\"></main><script src=\"webmcp-site-search.v1.js\" data-powerforge-webmcp></script></body></html>",
+                    "text/html"),
+                "/alternate/index.json" => Response(HttpStatusCode.OK, "[]", "application/json"),
+                "/alternate/webmcp-site-search.v1.js" => Response(HttpStatusCode.OK,
+                    WebSiteBuilder.GetWebMcpSiteSearchAssetContent(),
+                    "text/javascript"),
+                _ => Response(HttpStatusCode.NotFound, "not found", "text/plain")
+            };
+            response.RequestMessage = request;
             return Task.FromResult(response);
         }
 
