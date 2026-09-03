@@ -221,6 +221,10 @@ pages use route-relative index/runtime URLs so sites hosted below an origin path
 remain functional; theme-owned pages should do the same or include the deployed
 base path explicitly.
 
+See `Docs/PowerForge.Web.WebMcpRollout.md` for the Phase 2 site eligibility
+rules, Phase 3 safety contract, and the distinction between public documentation
+tools and authenticated product actions.
+
 Generated `agents.json` reports `capabilities.webMcp: true` and lists
 `webMcpTools` only after the rendered routes and registration runtime pass local
 verification. Configuration alone is not advertised as support.

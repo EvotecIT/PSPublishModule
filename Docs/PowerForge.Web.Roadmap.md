@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 This document is the single source of truth for:
 
@@ -15,6 +15,8 @@ Companion private gallery plan:
 - `Docs/PowerForge.Web.PrivateGallery.md`
 Companion SEO parity plan (Yoast-informed capability mapping):
 - `Docs/PowerForge.Web.SeoParityPlan.md`
+Companion WebMCP rollout and safety policy:
+- `Docs/PowerForge.Web.WebMcpRollout.md`
 
 ## How This Roadmap Is Verified (Avoid "We Think")
 
@@ -75,8 +77,9 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
 - **Have**: A fallback search surface and a reusable read-only WebMCP `site-search` runtime, with route-scoped readiness verification and truthful `agents.json` reporting.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.SearchSurface.cs`, `PowerForge.Web/Services/WebSiteBuilder.WebMcp.cs`, `PowerForge.Web/Services/WebAgentReadiness.WebMcp.cs`
-  - Docs: `Docs/PowerForge.Web.AgentReadiness.md`
+  - Docs: `Docs/PowerForge.Web.AgentReadiness.md`, `Docs/PowerForge.Web.WebMcpRollout.md`
 - **Partial**: Rich search UI/UX remains theme-owned; themes can bind their ranking and visible interaction through `PowerForgeWebMcpSearch.bindAdapter(...)`.
+- **Partial**: Phase 2 portfolio deployment is limited to established public documentation sites. Authenticated and state-changing Phase 3 tools require a product-specific task and safety contract before engine expansion.
 
 ### SEO + Discovery
 
