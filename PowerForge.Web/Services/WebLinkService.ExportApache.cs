@@ -40,9 +40,15 @@ public static partial class WebLinkService
             .ThenBy(static rule => rule.SourceQueryParameter ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var ruleCount = 0;
+        var mapEntries = BuildApacheShortlinkMapEntries(rules, options);
+        if (mapEntries.Length > 0)
+            AppendApacheShortlinkMapRules(lines, mapEntries, options);
+
+        var ruleCount = mapEntries.Length;
         foreach (var rule in rules)
         {
+            if (IsApacheShortlinkMapRule(rule, options))
+                continue;
             if (!TryAppendApacheRule(lines, rule, options.LanguageRootHosts))
                 continue;
             ruleCount++;
@@ -52,12 +58,15 @@ public static partial class WebLinkService
         if (!string.IsNullOrWhiteSpace(outputDirectory))
             Directory.CreateDirectory(outputDirectory);
 
+        var shortlinkMapOutputPath = WriteApacheShortlinkMap(mapEntries, options);
         File.WriteAllText(options.OutputPath, string.Join(Environment.NewLine, lines), Utf8NoBom);
 
         return new WebLinkApacheExportResult
         {
             OutputPath = Path.GetFullPath(options.OutputPath),
-            RuleCount = ruleCount
+            ShortlinkMapOutputPath = shortlinkMapOutputPath,
+            RuleCount = ruleCount,
+            ShortlinkMapEntryCount = mapEntries.Length
         };
     }
 

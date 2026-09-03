@@ -592,6 +592,105 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ExportApache_EmitsIndexedMapForFiftyThousandExactShortlinks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-scale-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var shortlinks = Enumerable.Range(1, 50_000)
+                .Select(index => new LinkShortlinkRule
+                {
+                    Slug = $"scale-{index:D5}",
+                    Host = "evo.yt",
+                    TargetUrl = $"https://example.test/items/{index}",
+                    Status = index % 2 == 0 ? 302 : 307,
+                    Owner = "scale-test",
+                    AllowExternal = true
+                })
+                .ToArray();
+
+            var result = WebLinkService.ExportApache(new WebLinkDataSet { Shortlinks = shortlinks }, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath,
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/evotec-share/publisher/maps/current/shortlinks.map",
+                Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["short"] = "evo.yt" }
+            });
+
+            Assert.Equal(50_000, result.RuleCount);
+            Assert.Equal(50_000, result.ShortlinkMapEntryCount);
+            Assert.Equal(Path.GetFullPath(mapPath), result.ShortlinkMapOutputPath);
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains("RewriteMap powerforge_shortlinks \"dbm:/var/lib/evotec-share/publisher/maps/current/shortlinks.map\"", apache, StringComparison.Ordinal);
+            Assert.Equal(2, apache.Split('\n').Count(static line => line.StartsWith("RewriteRule ", StringComparison.Ordinal)));
+            Assert.DoesNotContain("RewriteRule ^/?scale-", apache, StringComparison.Ordinal);
+            var mapLines = File.ReadAllLines(mapPath);
+            Assert.Equal(50_000, mapLines.Length);
+            Assert.Contains("302:evo.yt:scale-50000 https://example.test/items/50000", mapLines);
+            Assert.Contains("307:evo.yt:scale-00001 https://example.test/items/1", mapLines);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_RequiresBothIndexedMapPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-options-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() => WebLinkService.ExportApache(
+                new WebLinkDataSet(),
+                new WebLinkApacheExportOptions
+                {
+                    OutputPath = Path.Combine(root, "links.conf"),
+                    ShortlinkMapOutputPath = Path.Combine(root, "shortlinks.txt")
+                }));
+            Assert.Contains("both output and runtime paths", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_WritesEmptyIndexedMapForEmptyCatalog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-empty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var result = WebLinkService.ExportApache(new WebLinkDataSet(), new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath,
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/evotec-share/publisher/maps/current/shortlinks.map"
+            });
+
+            Assert.Equal(0, result.ShortlinkMapEntryCount);
+            Assert.Equal(Path.GetFullPath(mapPath), result.ShortlinkMapOutputPath);
+            Assert.Empty(File.ReadAllText(mapPath));
+            Assert.DoesNotContain("RewriteMap powerforge_shortlinks", File.ReadAllText(outPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void ExportApache_EscapesExactSourceRegexCharacters()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-export-escape-" + Guid.NewGuid().ToString("N"));
