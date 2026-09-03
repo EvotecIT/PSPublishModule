@@ -670,17 +670,61 @@ public sealed class WebLinkServiceTests
 
         try
         {
-            var sharedPath = Path.Combine(root, "shared.out");
+            var configurationPath = Path.Combine(root, "Shared.out");
+            var mapPath = Path.Combine(root, "shared.out");
             var exception = Assert.Throws<InvalidOperationException>(() => WebLinkService.ExportApache(
                 new WebLinkDataSet(),
                 new WebLinkApacheExportOptions
                 {
-                    OutputPath = sharedPath,
-                    ShortlinkMapOutputPath = sharedPath,
+                    OutputPath = configurationPath,
+                    ShortlinkMapOutputPath = mapPath,
                     ShortlinkMapRuntimePath = "/var/lib/powerforge/maps/shortlinks.map"
                 }));
             Assert.Contains("different paths", exception.Message, StringComparison.Ordinal);
-            Assert.False(File.Exists(sharedPath));
+            Assert.False(File.Exists(configurationPath));
+            Assert.False(File.Exists(mapPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_KeepsMapUnsafeShortlinkOnOrdinaryRulePath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var result = WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Shortlinks =
+                [
+                    new LinkShortlinkRule
+                    {
+                        Slug = "campaign:v2",
+                        Host = "evo.yt",
+                        TargetUrl = "https://example.test/campaign-v2",
+                        Status = 302,
+                        Owner = "test",
+                        AllowExternal = true
+                    }
+                ]
+            }, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath,
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/powerforge/maps/shortlinks.map",
+                Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["short"] = "evo.yt" }
+            });
+
+            Assert.Equal(0, result.ShortlinkMapEntryCount);
+            Assert.Empty(File.ReadAllText(mapPath));
+            Assert.Contains("RewriteRule ^/?campaign:v2/?$ https://example.test/campaign-v2 [R=302,L,QSD]", File.ReadAllText(outPath), StringComparison.Ordinal);
         }
         finally
         {

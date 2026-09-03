@@ -58,10 +58,16 @@ public static partial class WebLinkService
             string.IsNullOrWhiteSpace(options.ShortlinkMapRuntimePath))
             return false;
 
-        return string.Equals(rule.Source, "shortlink", StringComparison.Ordinal) &&
+        var host = rule.SourceHost?.Trim() ?? string.Empty;
+        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var mapSafe = host.Length > 0 && path.Length > 0 &&
+                      !host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') &&
+                      !path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':');
+
+        return mapSafe &&
+               string.Equals(rule.Source, "shortlink", StringComparison.Ordinal) &&
                rule.MatchType == LinkRedirectMatchType.Exact &&
-               !string.IsNullOrWhiteSpace(rule.SourceHost) &&
-               !string.Equals(rule.SourceHost.Trim(), "*", StringComparison.Ordinal) &&
+               !string.Equals(host, "*", StringComparison.Ordinal) &&
                string.IsNullOrWhiteSpace(rule.SourceQuery) &&
                string.IsNullOrWhiteSpace(rule.SourceQueryParameter) &&
                !rule.PreserveQuery &&
@@ -79,10 +85,9 @@ public static partial class WebLinkService
 
         var configurationOutputPath = Path.GetFullPath(options.OutputPath);
         var mapOutputPath = Path.GetFullPath(options.ShortlinkMapOutputPath!);
-        var pathComparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (string.Equals(configurationOutputPath, mapOutputPath, pathComparison))
+        // A build directory can live on a case-insensitive volume regardless of
+        // the host OS. Conservatively reject case-only differences everywhere.
+        if (string.Equals(configurationOutputPath, mapOutputPath, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Apache configuration and shortlink-map outputs must use different paths.");
 
         var runtimePath = options.ShortlinkMapRuntimePath!.Trim();
