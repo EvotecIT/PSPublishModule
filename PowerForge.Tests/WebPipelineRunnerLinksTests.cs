@@ -145,7 +145,9 @@ public sealed class WebPipelineRunnerLinksTests
                   "steps": [
                     {
                       "task": "links-export-apache",
-                      "config": "./site.json"
+                      "config": "./site.json",
+                      "shortlinkMapOut": "./Build/cached-shortlinks.txt",
+                      "shortlinkMapRuntimePath": "/var/lib/powerforge/maps/cache-test/shortlinks.map"
                     }
                   ]
                 }
@@ -156,6 +158,15 @@ public sealed class WebPipelineRunnerLinksTests
             Assert.True(cacheFirst.Success);
             Assert.True(cacheSecond.Success);
             Assert.True(cacheSecond.Steps[0].Cached);
+
+            var cachedMapPath = Path.Combine(root, "Build", "cached-shortlinks.txt");
+            Assert.True(File.Exists(cachedMapPath));
+            File.Delete(cachedMapPath);
+
+            var cacheAfterMapCleanup = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
+            Assert.True(cacheAfterMapCleanup.Success);
+            Assert.False(cacheAfterMapCleanup.Steps[0].Cached);
+            Assert.True(File.Exists(cachedMapPath));
 
             File.WriteAllText(Path.Combine(root, "data", "links", "managed-shortlinks.json"),
                 """
@@ -174,7 +185,7 @@ public sealed class WebPipelineRunnerLinksTests
             var cacheAfterOverlayChange = WebPipelineRunner.RunPipeline(cachePipelinePath, logger: null);
             Assert.True(cacheAfterOverlayChange.Success);
             Assert.False(cacheAfterOverlayChange.Steps[0].Cached);
-            Assert.Contains("https://evotec.xyz/releases/updated/", File.ReadAllText(outputPath), StringComparison.Ordinal);
+            Assert.Contains("https://evotec.xyz/releases/updated/", File.ReadAllText(cachedMapPath), StringComparison.Ordinal);
         }
         finally
         {

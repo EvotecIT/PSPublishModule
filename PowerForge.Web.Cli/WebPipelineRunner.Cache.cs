@@ -1033,6 +1033,9 @@ internal static partial class WebPipelineRunner
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "reportPath") ??
                     GetString(step, "report-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "duplicateReportPath") ??
+                    GetString(step, "duplicate-report-path")));
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1059,6 +1062,14 @@ internal static partial class WebPipelineRunner
                 outputs.AddRange(ResolveOutputCandidates(baseDir,
                     GetString(step, "reportPath") ??
                     GetString(step, "report-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "duplicateReportPath") ??
+                    GetString(step, "duplicate-report-path")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "shortlinkMapOut") ??
+                    GetString(step, "shortlink-map-out") ??
+                    GetString(step, "shortlinkMapOutputPath") ??
+                    GetString(step, "shortlink-map-output-path")));
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)
