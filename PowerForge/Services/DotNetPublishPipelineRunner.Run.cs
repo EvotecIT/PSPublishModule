@@ -275,6 +275,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                     plan.ProjectRoot,
                                     cleanTrackedGeneratedProvenanceState,
                                     msiReservationOwner));
+                            ValidatePublishProvenanceEntries(publishProvenanceByArtifact);
                             FinalizePortableEvidence(plan, artefacts, publishProvenanceByArtifact);
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
@@ -591,6 +592,19 @@ public sealed partial class DotNetPublishPipelineRunner
         if (provenances.All(provenance => ReferenceEquals(provenance, sharedProvenance)))
             return sharedProvenance;
 
+        return CombineSourceProvenances(provenances);
+    }
+
+    internal static SourceProvenance CombineSourceProvenances(
+        IReadOnlyCollection<SourceProvenance> provenances)
+    {
+        if (provenances.Count == 0)
+            throw new ArgumentException("At least one source provenance is required.", nameof(provenances));
+
+        SourceProvenance sharedProvenance = provenances.First();
+        if (provenances.All(provenance => ReferenceEquals(provenance, sharedProvenance)))
+            return sharedProvenance;
+
         string?[] revisions = provenances
             .Select(static provenance => provenance.Revision)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -626,6 +640,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (SourceProvenance provenance in provenances)
                     provenance.ValidateCurrentSource(additionalTrackedGeneratedPaths);
             });
+    }
+
+    internal static void ValidatePublishProvenanceEntries(
+        IReadOnlyDictionary<string, SourceProvenance> publishProvenanceByArtifact)
+    {
+        foreach (SourceProvenance provenance in publishProvenanceByArtifact.Values.Distinct())
+            provenance.ValidateCurrentSource();
     }
 
 }

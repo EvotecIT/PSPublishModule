@@ -118,8 +118,69 @@ public sealed class ProjectBuildPublishHostService
             GitHubPrimaryProject = TrimOrNull(config.GitHubPrimaryProject),
             GitHubTagConflictPolicy = TrimOrNull(config.GitHubTagConflictPolicy),
             PublishFailFast = config.PublishFailFast ?? true,
-            SkipDuplicate = config.SkipDuplicate ?? true
+            SkipDuplicate = config.SkipDuplicate ?? true,
+            IncludeSymbols = config.IncludeSymbols ?? false
         };
+    }
+
+    /// <summary>
+    /// Publishes the exact package files recorded in an existing release result without rebuilding them.
+    /// </summary>
+    internal NuGetPackagePublishResult PublishNuGet(
+        ProjectBuildPublishHostConfiguration configuration,
+        DotNetRepositoryReleaseResult release,
+        string? repositoryRoot = null,
+        Action? remotePublishAttempted = null,
+        IProjectBuildProgressReporter? progress = null)
+    {
+        FrameworkCompatibility.NotNull(configuration, nameof(configuration));
+        FrameworkCompatibility.NotNull(release, nameof(release));
+        if (!configuration.PublishNuget)
+            throw new InvalidOperationException("NuGet publishing is not enabled for this package lane.");
+        if (string.IsNullOrWhiteSpace(configuration.PublishApiKey))
+            throw new InvalidOperationException("PublishApiKey is required when package NuGet publishing is enabled.");
+
+        var configDirectory = Path.GetDirectoryName(configuration.ConfigPath);
+        if (string.IsNullOrWhiteSpace(configDirectory))
+            throw new InvalidOperationException($"Unable to resolve the configuration directory for '{configuration.ConfigPath}'.");
+        var source = DotNetRepositoryReleaseService.ResolvePublishSource(
+            configuration.PublishSource,
+            string.IsNullOrWhiteSpace(repositoryRoot) ? configDirectory : repositoryRoot!,
+            nuGetConfigSearchRoot: configDirectory);
+        release.PublishSource = source;
+        var publishSymbolsSeparately = configuration.IncludeSymbols &&
+            DotNetRepositoryReleaseService.IsLocalPublishSource(source);
+        var packages = DotNetRepositoryReleaseService.GetPackagesForPublish(
+            release.Projects,
+            includeSymbolPackages: publishSymbolsSeparately);
+        if (packages.Length == 0)
+            throw new InvalidOperationException("The package release checkpoint contains no package artifacts to publish.");
+
+        _logger.Info($"Publishing {packages.Length} existing package(s) from the staged release checkpoint.");
+        var publish = new NuGetPackagePublishService(
+            _logger,
+            workingDirectory: configDirectory).ExecutePackages(
+            packages,
+            configuration.PublishApiKey!,
+            source,
+            configuration.SkipDuplicate,
+            configuration.PublishFailFast,
+            suppressCompanionSymbols: !configuration.IncludeSymbols || publishSymbolsSeparately,
+            remotePublishAttempted: remotePublishAttempted,
+            progress: progress);
+
+        DotNetRepositoryReleaseService.ApplyPublishedNuGetArtifactOutcomes(
+            release,
+            publish,
+            publishSymbolsSeparately,
+            configuration.SkipDuplicate);
+        if (!publish.Success)
+        {
+            release.Success = false;
+            release.ErrorMessage = publish.ErrorMessage ?? "One or more packages failed to publish.";
+        }
+
+        return publish;
     }
 
     /// <summary>

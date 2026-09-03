@@ -476,6 +476,140 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_ValidatesStagedReleaseBeforeDeferredModulePublication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var validationPath = Path.Combine(root, "Test-Release.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(validationPath, "# validation");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var toolCompleted = false;
+            var validationCalls = 0;
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                onToolExecution: () => toolCompleted = true,
+                runReleaseValidation: (_, context, _, _) =>
+                {
+                    validationCalls++;
+                    Assert.True(toolCompleted);
+                    Assert.Single(moduleCalls);
+                    Assert.True(File.Exists(context.ReleaseManifestPath), context.ReleaseManifestPath);
+                    Assert.Equal("1.2.3", context.ResolvedVersion);
+                    return new PowerForgeReleaseValidationResult
+                    {
+                        Name = "release",
+                        Succeeded = true,
+                        ExitCode = 0
+                    };
+                });
+            var spec = CreateReleaseSpec(root, scriptPath);
+            spec.Module!.ModuleVersion = "1.2.3";
+            spec.Outputs.Staging = new PowerForgeReleaseStagingOptions
+            {
+                RootPath = Path.Combine(root, "staged")
+            };
+            spec.Validation = new PowerForgeReleaseValidationOptions
+            {
+                AfterStaging =
+                [
+                    new PowerForgeReleaseValidationAction
+                    {
+                        Name = "release",
+                        FilePath = validationPath
+                    }
+                ]
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    ModuleVersion = "1.2.3"
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, validationCalls);
+            Assert.Equal(2, moduleCalls.Count);
+            Assert.Single(result.ReleaseValidations);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_FailedStagedReleaseValidationBlocksDeferredPublication()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var scriptPath = Path.Combine(root, "Build-Module.ps1");
+            var validationPath = Path.Combine(root, "Test-Release.ps1");
+            var releasePath = Path.Combine(root, "release.json");
+            File.WriteAllText(scriptPath, "# module build");
+            File.WriteAllText(validationPath, "# validation");
+            File.WriteAllText(releasePath, "{}");
+            var moduleCalls = new List<ModuleExecutionSnapshot>();
+            var service = CreateReleaseService(
+                root,
+                moduleCalls,
+                new PowerForgeToolReleaseResult { Success = true },
+                runReleaseValidation: (_, _, _, _) => new PowerForgeReleaseValidationResult
+                {
+                    Name = "release",
+                    Succeeded = false,
+                    ExitCode = 17,
+                    StdErr = "release contract failed"
+                });
+            var spec = CreateReleaseSpec(root, scriptPath);
+            spec.Module!.ModuleVersion = "1.2.3";
+            spec.Outputs.Staging = new PowerForgeReleaseStagingOptions
+            {
+                RootPath = Path.Combine(root, "staged")
+            };
+            spec.Validation = new PowerForgeReleaseValidationOptions
+            {
+                AfterStaging =
+                [
+                    new PowerForgeReleaseValidationAction
+                    {
+                        Name = "release",
+                        FilePath = validationPath
+                    }
+                ]
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ModuleRunMode = ConfigurationGateMode.Publish,
+                    ModuleVersion = "1.2.3"
+                });
+
+            Assert.False(result.Success);
+            Assert.Contains("release contract failed", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Single(moduleCalls);
+            Assert.Null(result.ModulePublication);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void Execute_does_not_publish_module_after_tool_build_failure()
     {
         var root = CreateSandbox();
@@ -1104,7 +1238,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
         Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null,
         Action? onToolExecution = null,
-        Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult>? executePackages = null)
+        Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult>? executePackages = null,
+        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
         => new(
             new NullLogger(),
             executePackages: executePackages ?? ((_, _, _) =>
@@ -1134,6 +1269,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             restorePublishedNuGetAssets: restorePublishedNuGetAssets,
             restorePublishedModuleAssets: restorePublishedModuleAssets,
             publishVirusTotalMonitor: publishVirusTotalMonitor,
+            runReleaseValidation: runReleaseValidation,
             executeModuleBuild: (request, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();

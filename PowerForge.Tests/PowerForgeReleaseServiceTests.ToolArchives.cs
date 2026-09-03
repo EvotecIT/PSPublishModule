@@ -74,6 +74,20 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void DotNetPublishArchive_RenamedExecutableIdentityIsRetained()
+    {
+        var target = new DotNetPublishTargetPlan
+        {
+            ExecutableIdentities = new[] { "OriginalName" },
+            Publish = new DotNetPublishPublishOptions { RenameTo = "renamed-tool" }
+        };
+
+        Assert.Equal(
+            new[] { "OriginalName", "renamed-tool" },
+            DotNetPublishPipelineRunner.EnumerateEffectiveExecutableIdentities(target));
+    }
+
+    [Fact]
     public void ToolArchive_UnixExecutablesPreserveLaunchPermissions()
     {
         var root = CreateSandbox();

@@ -470,13 +470,17 @@ public sealed class ModuleBuildHostService
         if (request.NoSign)
             arguments.Add("$buildScriptArguments['NoSign'] = $true");
 
-        if (request.SignModule)
+        if (request.SignModule || request.SignModuleWasSpecified)
         {
-            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments['SignModule'] = $true }");
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) {{ $buildScriptArguments['SignModule'] = ${request.SignModule.ToString().ToLowerInvariant()} }}");
         }
 
         arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeProjectPackages')) {{ $buildScriptArguments['IncludeProjectPackages'] = ${request.IncludeProjectPackages.ToString().ToLowerInvariant()} }}");
         arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeModulePublishing')) {{ $buildScriptArguments['IncludeModulePublishing'] = ${request.IncludeModulePublishing.ToString().ToLowerInvariant()} }}");
+        if (request.ReuseStaging)
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('ReuseStaging')) { $buildScriptArguments['ReuseStaging'] = $true }");
+        if (request.SkipInstall)
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SkipInstall')) { $buildScriptArguments['SkipInstall'] = $true }");
 
         AddOptionalStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
         AddOptionalSwitchArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);

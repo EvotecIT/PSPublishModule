@@ -281,7 +281,9 @@ public sealed class ModuleBuildHostServiceTests
             ScriptPath = @"C:\repo\Build\Build-Module.ps1",
             ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
             NoDotnetBuild = true,
-            SignModule = true
+            SignModule = true,
+            ReuseStaging = true,
+            SkipInstall = true
         });
 
         Assert.NotNull(captured);
@@ -289,8 +291,37 @@ public sealed class ModuleBuildHostServiceTests
         Assert.Contains("$buildScriptArguments['NoDotnetBuild'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains("$buildScriptArguments['SignModule'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('ReuseStaging')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['ReuseStaging'] = $true", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SkipInstall')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SkipInstall'] = $true", captured.CommandText!, StringComparison.Ordinal);
         Assert.DoesNotContain("$buildScriptArguments += '-SignModule'", captured.CommandText!, StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_ForwardsExplicitSignModuleFalseToLegacyScript()
+    {
+        PowerShellRunRequest? captured = null;
+        var service = new ModuleBuildHostService(new StubPowerShellRunner(request =>
+        {
+            captured = request;
+            return new PowerShellRunResult(0, "ok", string.Empty, "pwsh");
+        }));
+
+        var result = await service.ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+        {
+            RepositoryRoot = @"C:\repo",
+            ScriptPath = @"C:\repo\Build\Build-Module.ps1",
+            ModulePath = @"C:\repo\Module\PSPublishModule.psd1",
+            SignModule = false,
+            SignModuleWasSpecified = true
+        });
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(captured);
+        Assert.Contains("$buildScriptCommand.Parameters.ContainsKey('SignModule')", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("$buildScriptArguments['SignModule'] = $false", captured.CommandText!, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -245,7 +245,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 outputDir,
                 rid,
                 zipPath,
-                target.ExecutableIdentities);
+                EnumerateEffectiveExecutableIdentities(target));
             return zipPath;
         }
         catch (Exception ex)
@@ -281,6 +281,15 @@ public sealed partial class DotNetPublishPipelineRunner
             archivePath,
             executablePath);
     }
+
+    internal static IEnumerable<string> EnumerateEffectiveExecutableIdentities(
+        DotNetPublishTargetPlan target)
+        => (target.ExecutableIdentities ?? Array.Empty<string>())
+            .Concat(string.IsNullOrWhiteSpace(target.Publish?.RenameTo)
+                ? Array.Empty<string>()
+                : new[] { target.Publish!.RenameTo! })
+            .Where(static identity => !string.IsNullOrWhiteSpace(identity))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     internal static string? ResolvePrimaryExecutable(
         string root,

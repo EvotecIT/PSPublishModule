@@ -57,6 +57,7 @@ internal sealed partial class PowerForgeReleaseService
     private readonly Func<PowerForgeToolReleaseSpec, string, (DotNetPublishSpec Spec, string SourceConfigPath)> _loadDotNetToolsSpec;
     private readonly Func<DotNetPublishSpec, string, PowerForgeReleaseRequest, ISet<PowerForgeReleaseToolOutputKind>, DotNetPublishPlan> _planDotNetTools;
     private readonly Func<DotNetPublishPlan, IDotNetPublishProgressReporter?, CancellationToken, DotNetPublishResult> _runDotNetTools;
+    private readonly Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult> _runReleaseValidation;
     private readonly Func<GitHubReleasePublishRequest, CancellationToken, GitHubReleasePublishResult> _publishGitHubRelease;
     private readonly Func<string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedNuGetAssets;
     private readonly Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? _restorePublishedModuleAssets;
@@ -186,7 +187,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
         Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
-        Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null)
+        Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null,
+        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -244,6 +246,13 @@ internal sealed partial class PowerForgeReleaseService
                 .PublishAsync(publishRequest, cancellationToken)
                 .GetAwaiter()
                 .GetResult());
+        _runReleaseValidation = runReleaseValidation
+            ?? ((action, context, configurationDirectory, cancellationToken) =>
+                new PowerForgeReleaseValidationService(_logger).Run(
+                    action,
+                    context,
+                    configurationDirectory,
+                    cancellationToken));
     }
 
     /// <summary>
@@ -303,6 +312,7 @@ internal sealed partial class PowerForgeReleaseService
         ApplyAppleAction(spec.AppleApps, request);
         var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
+        ValidateReleaseValidationConfiguration(spec.Validation, spec.Outputs, configDirectory);
         ValidateVirusTotalConfiguration(spec.VirusTotal);
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var selectedTargets = NormalizeStrings(request.Targets);
@@ -532,7 +542,8 @@ internal sealed partial class PowerForgeReleaseService
                 request,
                 runPackages,
                 willRunTools,
-                willRunAppleApps);
+                willRunAppleApps,
+                HasAfterStagingValidation(spec));
             if (deferModulePublishing)
             {
                 if (!request.PlanOnly &&
@@ -949,6 +960,68 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
+        if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
+        {
+            ValidatePostBuildSourceState(request);
+            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
+            result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
+            GenerateWingetOutputs(spec, request, configDirectory, result);
+            IncludeWingetOutputsInReleaseAssets(result);
+            RewriteReleaseSummaryFiles(result);
+            if (!ExecuteAfterStagingValidations(
+                    spec,
+                    request,
+                    configDirectory,
+                    result,
+                    sharedReleaseVersion))
+            {
+                return result;
+            }
+        }
+
+        if (deferredModulePublishRequest is not null &&
+            request.PublishNuget != false &&
+            result.ModulePlan?.IncludesProjectPackages == true &&
+            !request.PlanOnly &&
+            !request.ValidateOnly)
+        {
+            if (result.ModulePackagePlans.Length == 0)
+            {
+                result.Success = false;
+                result.ErrorMessage =
+                    "Deferred publication of module-owned NuGet packages requires Module.ConfigPath so PowerForge can publish the exact validated package checkpoint without rebuilding it.";
+                return result;
+            }
+
+            request.Progress?.PhaseStarted(
+                PowerForgeReleaseProgressPhase.Packages,
+                result.ModulePackagePlans.Length,
+                "Publishing validated module-owned NuGet packages");
+            try
+            {
+                result.ModulePackagePublications = new ModulePackageReleaseCheckpointService(logger: _logger)
+                    .PublishNuGet(
+                        configPath,
+                        spec,
+                        result.ModulePackagePlans,
+                        result.ReleaseAssetEntries,
+                        requireStagedAssets: HasAfterStagingValidation(spec),
+                        remotePublishAttempted: () => ValidatePostBuildSourceState(request),
+                        progress: null,
+                        cancellationToken: request.CancellationToken);
+                request.Progress?.PhaseCompleted(
+                    PowerForgeReleaseProgressPhase.Packages,
+                    $"{result.ModulePackagePublications.Length} module package lane(s) published");
+            }
+            catch (Exception exception)
+            {
+                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Packages, exception.Message);
+                result.Success = false;
+                result.ErrorMessage = exception.Message;
+                return result;
+            }
+        }
+
         if (deferredModulePublishRequest is not null &&
             !request.PlanOnly &&
             !request.ValidateOnly)
@@ -997,12 +1070,6 @@ internal sealed partial class PowerForgeReleaseService
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
-            ValidatePostBuildSourceState(request);
-            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
-            result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
-            GenerateWingetOutputs(spec, request, configDirectory, result);
-            IncludeWingetOutputsInReleaseAssets(result);
-            RewriteReleaseSummaryFiles(result);
             if (publishUnifiedGitHub)
             {
                 ValidatePostBuildSourceState(request);
@@ -2637,7 +2704,9 @@ internal sealed partial class PowerForgeReleaseService
                 if (uploadMutationMonitor is not null && uploadSnapshot is not null)
                 {
                     uploadMutationMonitor.ValidateNoChanges(
-                        () => uploadSnapshot.ValidateUnchanged(approvedArchiveSha256!));
+                        () => uploadSnapshot.ValidateUnchanged(
+                            approvedArchiveSha256!,
+                            allowExpectedScratchDirectoryMutation: true));
                 }
                 else
                 {

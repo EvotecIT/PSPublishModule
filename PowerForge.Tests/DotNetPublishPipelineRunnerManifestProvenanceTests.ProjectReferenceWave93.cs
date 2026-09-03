@@ -36,13 +36,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 """);
             File.WriteAllText(middleProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFrameworks>netstandard2.1;net8.0-windows</TargetFrameworks></PropertyGroup>
+                  <PropertyGroup><TargetFrameworks>net8.0;net8.0-windows</TargetFrameworks></PropertyGroup>
                   <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(libraryProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFrameworks>netstandard2.1;net8.0-windows</TargetFrameworks></PropertyGroup>
+                  <PropertyGroup><TargetFrameworks>net8.0;net8.0-windows</TargetFrameworks></PropertyGroup>
                 </Project>
                 """);
             File.WriteAllText(
@@ -54,6 +54,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(
                 Path.Combine(libraryDirectory, "Library.cs"),
                 "public static class Library { public const int Value = 1; }");
+            File.WriteAllText(
+                Path.Combine(root, "Directory.Build.targets"),
+                """
+                <Project>
+                  <Target Name="RemovePathDependentCompilerPropertyForGraphTest"
+                          BeforeTargets="GenerateMSBuildEditorConfigFileCore">
+                    <ItemGroup><CompilerVisibleProperty Remove="ProjectDir" /></ItemGroup>
+                  </Target>
+                </Project>
+                """);
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
             RunDotNet(
                 root,
@@ -61,13 +71,17 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "-p:SelfContained=false");
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved source and lock\"");
+            string revision = RunGit(root, "rev-parse HEAD").Trim();
             RunDotNet(
                 root,
-                $"build \"{appProject}\" -c Release -f net10.0 -r win-x64 --no-restore --nologo");
+                $"build \"{appProject}\" -c Release -f net10.0 -r win-x64 --no-restore --nologo " +
+                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
+                "/p:ContinuousIntegrationBuild=true");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
                 Configuration = "Release",
+                SourceRevision = revision,
                 NoBuildInPublish = true,
                 NoRestoreInPublish = true,
                 Targets =

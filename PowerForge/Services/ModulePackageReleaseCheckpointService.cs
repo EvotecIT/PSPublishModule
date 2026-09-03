@@ -6,10 +6,14 @@ namespace PowerForge;
 internal sealed class ModulePackageReleaseCheckpointService
 {
     private readonly ProjectBuildHostService _projectBuildHostService;
+    private readonly ILogger _logger;
 
-    internal ModulePackageReleaseCheckpointService(ProjectBuildHostService? projectBuildHostService = null)
+    internal ModulePackageReleaseCheckpointService(
+        ProjectBuildHostService? projectBuildHostService = null,
+        ILogger? logger = null)
     {
         _projectBuildHostService = projectBuildHostService ?? new ProjectBuildHostService();
+        _logger = logger ?? new NullLogger();
     }
 
     internal PowerForgeModulePackageReleaseCheckpoint[] Capture(
@@ -60,6 +64,141 @@ internal sealed class ModulePackageReleaseCheckpointService
 
         return checkpoints.ToArray();
     }
+
+    internal PowerForgeModulePackagePublicationResult[] PublishNuGet(
+        string releaseConfigPath,
+        PowerForgeReleaseSpec spec,
+        IEnumerable<PowerForgeModulePackageReleaseCheckpoint>? checkpoints,
+        IEnumerable<PowerForgeReleaseAssetEntry>? releaseAssets,
+        bool requireStagedAssets,
+        Action? remotePublishAttempted,
+        IProjectBuildProgressReporter? progress,
+        CancellationToken cancellationToken)
+    {
+        var lanes = ResolveLanes(releaseConfigPath, spec)
+            .Where(static lane => lane.PublishNuget)
+            .ToArray();
+        var publisher = new ProjectBuildPublishHostService(_logger);
+        var publications = new List<PowerForgeModulePackagePublicationResult>(lanes.Length);
+        foreach (var lane in lanes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var checkpoint = Restore(lane, checkpoints);
+            var configuration = lane.Reference is not null
+                ? publisher.LoadConfiguration(lane.Reference, lane.ConfigPath)
+                : publisher.LoadConfiguration(lane.Inline!, lane.ConfigPath);
+            var release = CreatePublicationRelease(
+                checkpoint.Release,
+                releaseAssets,
+                requireStagedAssets);
+            var publish = publisher.PublishNuGet(
+                configuration,
+                release,
+                repositoryRoot: ResolveRepositoryRoot(releaseConfigPath, spec),
+                remotePublishAttempted: remotePublishAttempted,
+                progress: progress);
+            var result = new PowerForgeModulePackagePublicationResult
+            {
+                Name = checkpoint.Name,
+                Success = publish.Success,
+                ErrorMessage = publish.ErrorMessage,
+                PublishSource = release.PublishSource,
+                PublishedPackages = release.PublishedPackages.ToArray(),
+                SkippedDuplicatePackages = release.SkippedDuplicatePackages.ToArray(),
+                FailedPackages = release.FailedPackages.ToArray()
+            };
+            publications.Add(result);
+            if (!result.Success)
+                throw new InvalidOperationException(result.ErrorMessage ?? $"NuGet publication failed for module package lane '{checkpoint.Name}'.");
+        }
+
+        return publications.ToArray();
+    }
+
+    internal static DotNetRepositoryReleaseResult CreatePublicationRelease(
+        DotNetRepositoryReleaseResult source,
+        IEnumerable<PowerForgeReleaseAssetEntry>? releaseAssets,
+        bool requireStagedAssets)
+    {
+        if (source is null)
+            throw new ArgumentNullException(nameof(source));
+        if (!source.Success)
+            throw new InvalidOperationException(source.ErrorMessage ?? "The module package release checkpoint was not successful.");
+
+        var stagedBySource = (releaseAssets ?? Array.Empty<PowerForgeReleaseAssetEntry>())
+            .Where(static asset =>
+                asset.Category == PowerForgeReleaseAssetCategory.Package &&
+                asset.IsFinalPackageOutput &&
+                !string.IsNullOrWhiteSpace(asset.Path) &&
+                !string.IsNullOrWhiteSpace(asset.StagedPath))
+            .GroupBy(asset => Path.GetFullPath(asset.Path), PathComparer)
+            .ToDictionary(
+                static group => group.Key,
+                static group => Path.GetFullPath(group.Single().StagedPath!),
+                PathComparer);
+        var clone = new DotNetRepositoryReleaseResult
+        {
+            Success = source.Success,
+            ErrorMessage = source.ErrorMessage,
+            ResolvedVersion = source.ResolvedVersion,
+            Projects = source.Projects.Select(project => new DotNetRepositoryProjectResult
+            {
+                ProjectName = project.ProjectName,
+                CsprojPath = project.CsprojPath,
+                PackageId = project.PackageId,
+                IsPackable = project.IsPackable,
+                OldVersion = project.OldVersion,
+                NewVersion = project.NewVersion,
+                Packages = project.Packages
+                    .Select(path => ResolvePublicationPackagePath(path, stagedBySource, requireStagedAssets))
+                    .ToList(),
+                SymbolPackages = project.SymbolPackages
+                    .Select(path => ResolvePublicationPackagePath(path, stagedBySource, requireStagedAssets))
+                    .ToList(),
+                ReleaseZipPath = project.ReleaseZipPath,
+                PackageBuildDuration = project.PackageBuildDuration,
+                ErrorMessage = project.ErrorMessage
+            }).ToList()
+        };
+        foreach (var version in source.ResolvedVersionsByProject)
+            clone.ResolvedVersionsByProject[version.Key] = version.Value;
+        return clone;
+    }
+
+    private static string ResolvePublicationPackagePath(
+        string path,
+        IReadOnlyDictionary<string, string> stagedBySource,
+        bool requireStagedAssets)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (stagedBySource.TryGetValue(fullPath, out var stagedPath))
+        {
+            if (!File.Exists(stagedPath))
+                throw new FileNotFoundException($"The staged package artifact was not found: {stagedPath}", stagedPath);
+            return stagedPath;
+        }
+
+        if (requireStagedAssets)
+        {
+            throw new InvalidOperationException(
+                $"The validated staged release does not contain package artifact '{fullPath}'.");
+        }
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"The package artifact was not found: {fullPath}", fullPath);
+        return fullPath;
+    }
+
+    private static string ResolveRepositoryRoot(string releaseConfigPath, PowerForgeReleaseSpec spec)
+    {
+        var releaseDirectory = Path.GetDirectoryName(releaseConfigPath) ?? Directory.GetCurrentDirectory();
+        return string.IsNullOrWhiteSpace(spec.Module?.RepositoryRoot)
+            ? releaseDirectory
+            : PathTokenProtection.GetFullPath(releaseDirectory, spec.Module!.RepositoryRoot!);
+    }
+
+    private static StringComparer PathComparer => Path.DirectorySeparatorChar == '\\'
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 
     internal static PowerForgeModulePackageReleaseCheckpoint Restore(
         ModulePackageReleaseLane lane,

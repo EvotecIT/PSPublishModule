@@ -411,6 +411,43 @@ The same model supports:
 - generated `Build/release.json` for CI if the repo wants checked-in JSON
 - pure `Build-Module.ps1` for repos that prefer PowerShell DSL only
 
+## Validate The Complete Staged Release
+
+Use the top-level `Validation.AfterStaging` action when a repository needs to prove that its module, NuGet packages,
+CLI archives, manifest, and checksums work together before any registry or GitHub publication. This action belongs in
+`powerforge.release.json`, not in a module `BeforePublish` hook, because only the release engine sees the complete asset
+set.
+
+```json
+{
+  "Outputs": {
+    "Staging": {
+      "RootPath": "../Artefacts/UploadReady/Release"
+    }
+  },
+  "Validation": {
+    "AfterStaging": [
+      {
+        "Name": "Validate release artifacts",
+        "FilePath": "Test-ReleaseReady.ps1",
+        "WorkingDirectory": "..",
+        "TimeoutSeconds": 1800
+      }
+    ]
+  }
+}
+```
+
+PowerForge passes a JSON context file through `POWERFORGE_CONTEXT`. The context includes the resolved version,
+module staging path, release manifest and checksums paths, staging root, and the final staged asset paths. Convenience
+environment variables expose the same primary values, including `POWERFORGE_RELEASE_VERSION`,
+`POWERFORGE_RELEASE_MANIFEST`, and `POWERFORGE_MODULE_STAGING_PATH`.
+
+The action runs in both Build and Publish modes. Build mode creates and validates the release without publishing it.
+Publish mode continues only after every enabled action succeeds, and publishes the exact validated package and module
+checkpoints without rebuilding them. A missing script, invalid timeout, non-zero exit code, cancellation, or timeout
+fails the release before NuGet, PowerShell Gallery, or GitHub is changed.
+
 ## Naming
 
 Use "release" only for the coordinated top-level artifact set, usually the thing that gets a GitHub tag,
@@ -497,11 +534,11 @@ The release runtime executes these phases:
 3. Plan packages and module before doing any destructive or publishing work.
 4. If the module needs packages from this same release, build packages to a local staging feed first.
 5. Build the module against either project references or the staged local package feed.
-6. Validate module import and package outputs.
-7. Publish NuGet packages.
-8. Publish the module to PSGallery or configured private gallery.
-9. Stage all release assets into one upload-ready folder.
-10. Write `release-manifest.json` and `SHA256SUMS.txt`.
+6. Stage all module, package, tool, installer, and other selected assets into one upload-ready folder.
+7. Write `release-manifest.json` and `SHA256SUMS.txt` for that staged set.
+8. Run every enabled `Validation.AfterStaging` action against the complete staged release.
+9. Publish the validated NuGet package files.
+10. Publish the checkpointed module to PSGallery or the configured private gallery without rebuilding it.
 11. Publish one GitHub release from the staged asset list, with visible per-asset byte progress and an explicit created-versus-recovery result.
 
 This keeps publication fail-fast while avoiding a half-published release where NuGet is updated before the

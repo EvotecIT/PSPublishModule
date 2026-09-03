@@ -4,6 +4,7 @@ namespace PowerForge;
 internal sealed class AppleArchiveUploadSnapshot : IDisposable
 {
     private readonly SnapshotIdentity _identity;
+    private long _expectedScratchActivityUntilUtcTicks;
     private bool _disposed;
 
     private AppleArchiveUploadSnapshot(
@@ -67,7 +68,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             "Discard the upload/export result and inspect remote state before retrying.",
             ignoredMutation: IsExpectedXcodeExportMutation);
 
-    internal void ValidateUnchanged(string expectedSha256)
+    internal void ValidateUnchanged(
+        string expectedSha256,
+        bool allowExpectedScratchDirectoryMutation = false)
     {
         var current = CaptureCompleteIdentity(ArchivePath);
         if (!current.Sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
@@ -76,7 +79,13 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
                 $"The private Apple upload snapshot changed while xcodebuild was reading it. Expected '{expectedSha256}', received '{current.Sha256}'. Discard the upload/export result and inspect remote state before retrying.");
         }
 
-        if (!_identity.MutationDigest.Equals(current.MutationDigest, StringComparison.Ordinal))
+        var expectedMutationDigest = allowExpectedScratchDirectoryMutation
+            ? _identity.ApprovedFileMutationDigest
+            : _identity.MutationDigest;
+        var currentMutationDigest = allowExpectedScratchDirectoryMutation
+            ? current.ApprovedFileMutationDigest
+            : current.MutationDigest;
+        if (!expectedMutationDigest.Equals(currentMutationDigest, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 "The private Apple upload archive snapshot file identity changed while xcodebuild was reading it. " +
@@ -128,11 +137,27 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             return new SnapshotIdentity(
                 sha256,
                 ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description),
+                ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description),
                 new HashSet<string>(GetPathComparer(archivePath)));
         }
         var identities = CaptureFileMutationIdentities(archivePath, description);
+        var digest = ComputeMutationDigest(identities, includeRoot: true);
+        var approvedFileMutationDigest = ComputeMutationDigest(identities, includeRoot: false);
+        return new SnapshotIdentity(
+            sha256,
+            digest,
+            approvedFileMutationDigest,
+            new HashSet<string>(identities.Keys, GetPathComparer(archivePath)));
+    }
+
+    private static string ComputeMutationDigest(
+        IReadOnlyDictionary<string, string> identities,
+        bool includeRoot)
+    {
         var canonical = new System.Text.StringBuilder();
-        foreach (var pair in identities.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+        foreach (var pair in identities
+                     .Where(pair => includeRoot || !string.Equals(pair.Key, ".", StringComparison.Ordinal))
+                     .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             canonical.Append(pair.Key.Length).Append(':').Append(pair.Key);
             canonical.Append(pair.Value.Length).Append(':').Append(pair.Value);
@@ -141,10 +166,7 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         var digest = BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonical.ToString())))
             .Replace("-", string.Empty)
             .ToLowerInvariant();
-        return new SnapshotIdentity(
-            sha256,
-            digest,
-            new HashSet<string>(identities.Keys, GetPathComparer(archivePath)));
+        return digest;
     }
 
     internal bool IsExpectedXcodeExportMutation(FileSystemEventArgs args)
@@ -172,8 +194,41 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             return true;
         }
 
-        return IsExpectedXcodeExportScratchPath(path);
+        if (IsExpectedXcodeExportScratchPath(path))
+        {
+            MarkExpectedScratchActivity();
+            return true;
+        }
+
+        if ((args.ChangeType == WatcherChangeTypes.Changed ||
+             args.ChangeType == WatcherChangeTypes.Created ||
+             args.ChangeType == WatcherChangeTypes.Deleted) &&
+            path.Equals(
+                Path.GetFullPath(ArchivePath),
+                Path.DirectorySeparatorChar == '\\'
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal) &&
+            (HasExpectedXcodeExportScratchPath() ||
+             DateTime.UtcNow.Ticks <= Interlocked.Read(ref _expectedScratchActivityUntilUtcTicks)))
+        {
+            // Creating and deleting the approved sandbox scratch file also changes the archive
+            // directory metadata. Accept that companion signal only while recognized scratch
+            // activity is present or has just been observed; unrelated directory changes remain fatal.
+            return true;
+        }
+
+        return false;
     }
+
+    private bool HasExpectedXcodeExportScratchPath()
+        => Directory.Exists(ArchivePath) &&
+           Directory.EnumerateFiles(ArchivePath, "*", SearchOption.TopDirectoryOnly)
+               .Any(IsExpectedXcodeExportScratchPath);
+
+    private void MarkExpectedScratchActivity()
+        => Interlocked.Exchange(
+            ref _expectedScratchActivityUntilUtcTicks,
+            DateTime.UtcNow.AddSeconds(2).Ticks);
 
     private bool IsExpectedXcodeExportScratchPath(string path)
     {
@@ -297,16 +352,20 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         internal SnapshotIdentity(
             string sha256,
             string mutationDigest,
+            string approvedFileMutationDigest,
             HashSet<string> approvedFiles)
         {
             Sha256 = sha256;
             MutationDigest = mutationDigest;
+            ApprovedFileMutationDigest = approvedFileMutationDigest;
             ApprovedFiles = approvedFiles;
         }
 
         internal string Sha256 { get; }
 
         internal string MutationDigest { get; }
+
+        internal string ApprovedFileMutationDigest { get; }
 
         internal HashSet<string> ApprovedFiles { get; }
 

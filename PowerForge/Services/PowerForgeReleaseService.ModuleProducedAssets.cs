@@ -29,7 +29,10 @@ internal sealed partial class PowerForgeReleaseService
                 Target = packageId,
                 PackageId = packageId,
                 Version = packageVersion ?? releaseVersion,
-                IsFinalPackageOutput = hasIdentity && versionMatches && !isSymbolsPackage
+                IsFinalPackageOutput = producedArtifactPaths?.Contains(fullPath) == true &&
+                                       hasIdentity &&
+                                       versionMatches &&
+                                       !isSymbolsPackage
             };
         }
 

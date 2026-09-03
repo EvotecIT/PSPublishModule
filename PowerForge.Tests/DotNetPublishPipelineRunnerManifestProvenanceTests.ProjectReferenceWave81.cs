@@ -276,7 +276,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             root,
             $"build \"{projectPath}\" -c Release -f net8.0 --no-restore --nologo " +
             $"/p:SourceRevisionId={revision} " +
-            "/p:IncludeSourceRevisionInInformationalVersion=true");
+            "/p:IncludeSourceRevisionInInformationalVersion=true " +
+            "/p:ContinuousIntegrationBuild=true");
         provenAppBytes = File.ReadAllBytes(Path.Combine(root, "bin", "Release", "net8.0", "App.dll"));
         var plan = new DotNetPublishPlan
         {

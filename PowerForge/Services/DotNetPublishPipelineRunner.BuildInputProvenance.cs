@@ -508,6 +508,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 publishInputs
                     .Where(input => IsFinalPublishInputRetained(
                         input.FullPath,
+                        input.RelativePath,
                         request,
                         buildPlan,
                         buildStep))
@@ -698,6 +699,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsFinalPublishInputRetained(
         string path,
+        string? relativePath,
         ProjectEvaluationRequest request,
         DotNetPublishPlan? buildPlan,
         DotNetPublishStep? buildStep)
@@ -721,14 +723,27 @@ public sealed partial class DotNetPublishPipelineRunner
 
         bool keepSymbols = targets.Any(target => target.Publish?.KeepSymbols == true);
         bool keepDocs = targets.Any(target => target.Publish?.KeepDocs == true);
-        return IsFinalPublishInputRetained(path, keepSymbols, keepDocs);
+        return IsFinalPublishInputRetained(path, relativePath, keepSymbols, keepDocs);
     }
 
     internal static bool IsFinalPublishInputRetained(
         string path,
         bool keepSymbols,
         bool keepDocs)
+        => IsFinalPublishInputRetained(path, Path.GetFileName(path), keepSymbols, keepDocs);
+
+    internal static bool IsFinalPublishInputRetained(
+        string path,
+        string? relativePath,
+        bool keepSymbols,
+        bool keepDocs)
     {
+        if (!string.IsNullOrWhiteSpace(relativePath) &&
+            relativePath!.IndexOfAny(new[] { '/', '\\' }) >= 0)
+        {
+            return true;
+        }
+
         string extension = Path.GetExtension(path);
         if (!keepSymbols && extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase))
             return false;

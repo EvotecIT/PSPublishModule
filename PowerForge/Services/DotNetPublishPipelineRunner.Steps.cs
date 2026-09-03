@@ -434,7 +434,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     signingProvenance.PublishInputFiles,
                     signingProvenance.NoBuildPublishInputs));
                 provenanceLease?.ValidateUnchanged();
-                string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+                string executable = ResolvePrimaryExecutable(
+                    outputDir,
+                    rid,
+                    EnumerateEffectiveExecutableIdentities(target))
                     ?? throw new InvalidOperationException(
                         "Signed portable output does not contain a primary executable matching the configured project identity.");
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);

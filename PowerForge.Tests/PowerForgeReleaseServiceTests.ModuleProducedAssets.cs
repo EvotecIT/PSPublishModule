@@ -29,7 +29,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             PowerForgeReleaseAssetEntry entry = Assert.Single(
                 PowerForgeReleaseService.CreateModuleAssetEntries(
                     packagePath,
-                    new PowerForgeModuleReleasePlanSummary { ModuleVersion = "4.0.0" }));
+                    new PowerForgeModuleReleasePlanSummary { ModuleVersion = "4.0.0" },
+                    new[] { packagePath }));
 
             Assert.Equal(PowerForgeReleaseAssetCategory.Package, entry.Category);
             Assert.Equal("ModuleProjectBuild", entry.Source);
@@ -37,6 +38,34 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("Company.Library", entry.PackageId);
             Assert.Equal("4.0.0", entry.Version);
             Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void CreateModuleAssetEntries_ExistingNuGetPackageWithoutCurrentRunProofIsNotFinal()
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string packagePath = Path.Combine(root, "Company.Library.4.0.0.nupkg");
+            using (ZipArchive archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry nuspec = archive.CreateEntry("Company.Library.nuspec");
+                using var writer = new StreamWriter(nuspec.Open());
+                writer.Write("<package><metadata><id>Company.Library</id><version>4.0.0</version></metadata></package>");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    packagePath,
+                    new PowerForgeModuleReleasePlanSummary { ModuleVersion = "4.0.0" },
+                    producedArtifactPaths: Array.Empty<string>()));
+
+            Assert.False(entry.IsFinalPackageOutput);
         }
         finally
         {

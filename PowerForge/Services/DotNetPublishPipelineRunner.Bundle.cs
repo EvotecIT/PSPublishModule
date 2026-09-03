@@ -53,17 +53,30 @@ public sealed partial class DotNetPublishPipelineRunner
         var sourceTargetPlan = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .FirstOrDefault(entry => string.Equals(entry.Name, sourceArtefact.Target, StringComparison.OrdinalIgnoreCase));
         DotNetPublishSignOptions? sign = sourceTargetPlan?.Publish?.Sign;
+        DotNetPublishStep[] bundleProvenanceSteps = ResolveBundleProvenanceSteps(
+            plan,
+            artefacts,
+            bundle,
+            sourceArtefact,
+            framework,
+            runtime,
+            style.Value);
 
         var outputDir = Path.GetFullPath(step.BundleOutputPath!);
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputDir, $"Bundle '{bundleId}' output path");
 
         if (sign?.Enabled == true)
-            _ = ReadPortableInventorySourceProvenance(
-                plan,
-                outputDir,
-                EnumerateBundleGeneratedArtefactPaths(artefacts),
-                step);
+        {
+            foreach (DotNetPublishStep provenanceStep in bundleProvenanceSteps)
+            {
+                _ = ReadPortableInventorySourceProvenance(
+                    plan,
+                    outputDir,
+                    EnumerateBundleGeneratedArtefactPaths(artefacts),
+                    provenanceStep);
+            }
+        }
 
         string outputBoundary = plan.AllowOutputOutsideProjectRoot
             ? outputDir
@@ -88,6 +101,8 @@ public sealed partial class DotNetPublishPipelineRunner
         Directory.CreateDirectory(primaryDestination);
         DirectoryCopy(sourceArtefact.OutputDir, primaryDestination, outputDir);
         RemoveCopiedPortableEvidence(plan, sourceArtefact, primaryDestination);
+        var bundleExecutables = new List<(string Runtime, string Path)>();
+        AddCopiedBundleExecutable(plan, sourceArtefact, primaryDestination, bundleExecutables);
 
         foreach (var include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
         {
@@ -126,6 +141,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(includeDestination);
             DirectoryCopy(includeArtefact.OutputDir, includeDestination, outputDir);
             RemoveCopiedPortableEvidence(plan, includeArtefact, includeDestination);
+            AddCopiedBundleExecutable(plan, includeArtefact, includeDestination, bundleExecutables);
         }
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -195,11 +211,14 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
-            SourceProvenance provenance = ReadPortableInventorySourceProvenance(
-                plan,
-                outputDir,
-                EnumerateBundleGeneratedArtefactPaths(artefacts),
-                step);
+            SourceProvenance provenance = CombineSourceProvenances(
+                bundleProvenanceSteps
+                    .Select(provenanceStep => ReadPortableInventorySourceProvenance(
+                        plan,
+                        outputDir,
+                        EnumerateBundleGeneratedArtefactPaths(artefacts),
+                        provenanceStep))
+                    .ToArray());
             (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                 outputDir,
                 primaryExecutable,
@@ -240,7 +259,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
         string? zipPath = null;
         if (bundle.Zip)
+        {
             zipPath = CreateBundleZip(plan, bundle, outputDir, step.BundleZipPath);
+            if (!string.IsNullOrWhiteSpace(zipPath))
+            {
+                foreach (IGrouping<string, (string Runtime, string Path)> runtimeGroup in
+                         bundleExecutables.GroupBy(entry => entry.Runtime, StringComparer.OrdinalIgnoreCase))
+                {
+                    PowerForgeToolReleaseService.ApplyArchiveExecutablePermissions(
+                        runtimeGroup.Key,
+                        outputDir,
+                        zipPath!,
+                        runtimeGroup.Select(entry => entry.Path).ToArray());
+                }
+            }
+        }
 
         var summary = SummarizeDirectory(outputDir, runtime);
         primaryExecutable ??= ResolvePrimaryExecutable(
@@ -331,6 +364,87 @@ public sealed partial class DotNetPublishPipelineRunner
             })
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path!);
+
+    internal static DotNetPublishStep[] ResolveBundleProvenanceSteps(
+        DotNetPublishPlan plan,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        DotNetPublishBundlePlan bundle,
+        DotNetPublishArtefactResult sourceArtefact,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        var steps = new List<DotNetPublishStep>
+        {
+            CreateBundleProvenanceStep(sourceArtefact)
+        };
+        foreach (DotNetPublishBundleIncludePlan include in bundle.Includes ?? Array.Empty<DotNetPublishBundleIncludePlan>())
+        {
+            string includeFramework = string.IsNullOrWhiteSpace(include.Framework) ? framework : include.Framework!.Trim();
+            string includeRuntime = string.IsNullOrWhiteSpace(include.Runtime) ? runtime : include.Runtime!.Trim();
+            DotNetPublishStyle includeStyle = include.Style ?? style;
+            DotNetPublishArtefactResult? includeArtefact = ResolveBundleSourceArtefact(
+                artefacts,
+                include.Target,
+                includeFramework,
+                includeRuntime,
+                includeStyle,
+                bundleId: null);
+            if (includeArtefact is null)
+            {
+                if (include.Required)
+                {
+                    throw new InvalidOperationException(
+                        $"Bundle '{bundle.Id}' include '{include.Target}' has no matching publish artefact for " +
+                        $"framework='{includeFramework}', runtime='{includeRuntime}', style='{includeStyle}'.");
+                }
+                continue;
+            }
+            steps.Add(CreateBundleProvenanceStep(includeArtefact));
+        }
+
+        return steps
+            .GroupBy(BuildPublishProvenanceScopeKey, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+    }
+
+    private static DotNetPublishStep CreateBundleProvenanceStep(DotNetPublishArtefactResult artefact)
+        => new()
+        {
+            TargetName = artefact.Target,
+            Framework = artefact.Framework,
+            Runtime = artefact.Runtime,
+            Style = artefact.Style
+        };
+
+    private static void AddCopiedBundleExecutable(
+        DotNetPublishPlan plan,
+        DotNetPublishArtefactResult artefact,
+        string destinationRoot,
+        ICollection<(string Runtime, string Path)> executablePaths)
+    {
+        DotNetPublishTargetPlan? target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .FirstOrDefault(entry => string.Equals(entry.Name, artefact.Target, StringComparison.OrdinalIgnoreCase));
+        if (target is null)
+            return;
+
+        string? sourceExecutable = !string.IsNullOrWhiteSpace(artefact.ExePath) && File.Exists(artefact.ExePath)
+            ? Path.GetFullPath(artefact.ExePath)
+            : ResolvePrimaryExecutable(
+                artefact.OutputDir,
+                artefact.Runtime,
+                EnumerateEffectiveExecutableIdentities(target));
+        if (string.IsNullOrWhiteSpace(sourceExecutable))
+            return;
+
+        string relativePath = FrameworkCompatibility.GetRelativePath(
+            Path.GetFullPath(artefact.OutputDir),
+            sourceExecutable!);
+        string destinationPath = Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
+        if (File.Exists(destinationPath))
+            executablePaths.Add((artefact.Runtime, destinationPath));
+    }
 
     private static DotNetPublishArtefactResult? ResolveBundleSourceArtefact(
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,

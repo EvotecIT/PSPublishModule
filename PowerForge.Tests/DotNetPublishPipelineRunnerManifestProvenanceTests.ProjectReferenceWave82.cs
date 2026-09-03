@@ -219,7 +219,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(
                 root,
                 $"build \"{projectPath}\" -c Release -f net8.0 --no-restore --nologo " +
-                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true");
+                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
+                "/p:ContinuousIntegrationBuild=true");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
