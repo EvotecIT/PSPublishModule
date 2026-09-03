@@ -1,0 +1,144 @@
+using PowerForge;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
+{
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_BuildPublishIgnoresPreexistingProjectReferenceOutputFromAnotherVersionContext()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            RunGit(root, "init");
+            RunGit(root, "config user.name \"PowerForge Tests\"");
+            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
+            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
+            string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "Library")).FullName;
+            string appProject = Path.Combine(appDirectory, "App.csproj");
+            string libraryProject = Path.Combine(libraryDirectory, "Library.csproj");
+            File.WriteAllText(appProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType>
+                    <TargetFramework>net8.0</TargetFramework>
+                  </PropertyGroup>
+                  <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(libraryProject, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(
+                Path.Combine(appDirectory, "Program.cs"),
+                "internal static class Program { private static void Main() { _ = Library.Value; } }");
+            File.WriteAllText(
+                Path.Combine(libraryDirectory, "Library.cs"),
+                "public static class Library { public const int Value = 1; }");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
+            RunGit(root, "add .");
+            RunGit(root, "commit -m \"approved source and dependency locks\"");
+            RunDotNet(
+                root,
+                $"build \"{appProject}\" -c Release --no-restore --nologo -p:Version=0.1.0");
+
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                NoBuildInPublish = false,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        Name = "App",
+                        ProjectPath = appProject,
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Sign = new DotNetPublishSignOptions { Enabled = true },
+                            MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["Version"] = "27.0.9742"
+                            }
+                        },
+                        Combinations =
+                        [
+                            new DotNetPublishTargetCombination
+                            {
+                                Framework = "net8.0",
+                                Style = DotNetPublishStyle.FrameworkDependent
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            DotNetPublishPipelineRunner.SourceProvenance provenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            Assert.Empty(provenance.DirtyPaths);
+            Assert.True(File.Exists(Path.Combine(
+                libraryDirectory,
+                "bin",
+                "Release",
+                "net8.0",
+                "Library.dll")));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void GeneratedProjectReferenceOutputProofs_RunOnlyWhenPublishConsumesPrebuiltOutputs()
+    {
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "App",
+            ProjectPath = Path.GetFullPath(Path.Combine("src", "App", "App.csproj")),
+            Publish = new DotNetPublishPublishOptions
+            {
+                Sign = new DotNetPublishSignOptions { Enabled = true }
+            }
+        };
+        var combination = new DotNetPublishTargetCombination
+        {
+            Framework = "net8.0",
+            Runtime = "win-x64",
+            Style = DotNetPublishStyle.FrameworkDependent
+        };
+        var plan = new DotNetPublishPlan
+        {
+            NoBuildInPublish = false
+        };
+
+        Assert.False(DotNetPublishPipelineRunner.PublishConsumesPrebuiltProjectReferenceOutputs(
+            plan,
+            target,
+            combination));
+        Assert.False(DotNetPublishPipelineRunner.RequiresPrebuiltProjectReferenceOutputProof(
+            plan,
+            target,
+            combination));
+
+        plan.NoBuildInPublish = true;
+
+        Assert.True(DotNetPublishPipelineRunner.PublishConsumesPrebuiltProjectReferenceOutputs(
+            plan,
+            target,
+            combination));
+        Assert.True(DotNetPublishPipelineRunner.RequiresPrebuiltProjectReferenceOutputProof(
+            plan,
+            target,
+            combination));
+    }
+
+}

@@ -395,8 +395,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluationsByEvaluation[visitKey] = evaluation;
                 trustedBuildInfrastructureRootsByEvaluation[visitKey] =
                     evaluation.TrustedBuildInfrastructureRoots;
-                generatedProjectReferenceOutputs.AddRange(
-                    evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
+                if (request.RequiresPrebuiltProjectReferenceOutputProof)
+                {
+                    generatedProjectReferenceOutputs.AddRange(
+                        evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
+                }
                 if (string.IsNullOrEmpty(request.TargetFramework))
                 {
                     if (evaluation.TargetFrameworks.Length > 0)
@@ -648,7 +651,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         effectiveConfiguration,
                         globalProperties: null,
                         buildPlan!.EnvironmentVariables,
-                        buildPlan.ControlledBuildEnvironmentVariableNames);
+                        buildPlan.ControlledBuildEnvironmentVariableNames,
+                        requiresPrebuiltProjectReferenceOutputProof:
+                            buildPlan.NoBuildInPublish || target.Publish?.Sign?.Enabled != true);
                     continue;
                 }
 
@@ -664,7 +669,12 @@ public sealed partial class DotNetPublishPipelineRunner
                         effectiveConfiguration,
                         properties,
                         buildPlan!.EnvironmentVariables,
-                        buildPlan.ControlledBuildEnvironmentVariableNames);
+                        buildPlan.ControlledBuildEnvironmentVariableNames,
+                        requiresPrebuiltProjectReferenceOutputProof:
+                            RequiresPrebuiltProjectReferenceOutputProof(
+                                buildPlan,
+                                target,
+                                combination));
                 }
             }
 
@@ -680,9 +690,35 @@ public sealed partial class DotNetPublishPipelineRunner
                 targetFramework: null,
                 effectiveConfiguration,
                 globalProperties: null,
-                environmentVariables: null);
+                environmentVariables: null,
+                requiresPrebuiltProjectReferenceOutputProof: true);
         }
     }
+
+    internal static bool PublishConsumesPrebuiltProjectReferenceOutputs(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishTargetCombination combination)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (combination is null) throw new ArgumentNullException(nameof(combination));
+
+        return plan.NoBuildInPublish &&
+               !TargetUsesPublishMsiVersionProperties(
+                   plan,
+                   target.Name,
+                   combination.Framework,
+                   combination.Runtime,
+                   combination.Style);
+    }
+
+    internal static bool RequiresPrebuiltProjectReferenceOutputProof(
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        DotNetPublishTargetCombination combination)
+        => PublishConsumesPrebuiltProjectReferenceOutputs(plan, target, combination) ||
+           target.Publish?.Sign?.Enabled != true;
 
     private static Dictionary<string, string> BuildPublishEvaluationProperties(
         DotNetPublishPlan plan,

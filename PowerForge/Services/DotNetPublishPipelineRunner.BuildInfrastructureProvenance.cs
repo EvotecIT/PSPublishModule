@@ -680,7 +680,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string>? globalProperties,
             IReadOnlyDictionary<string, string?>? environmentVariables,
             IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null,
-            bool requiresSdkPackageEvidence = true)
+            bool requiresSdkPackageEvidence = true,
+            bool requiresPrebuiltProjectReferenceOutputProof = true)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -694,6 +695,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
             RequiresSdkPackageEvidence = requiresSdkPackageEvidence;
+            RequiresPrebuiltProjectReferenceOutputProof = requiresPrebuiltProjectReferenceOutputProof;
         }
 
         internal string ProjectPath { get; }
@@ -704,6 +706,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
         internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
         internal bool RequiresSdkPackageEvidence { get; }
+        internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {
@@ -733,7 +736,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 GlobalProperties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
-                RequiresSdkPackageEvidence);
+                RequiresSdkPackageEvidence,
+                RequiresPrebuiltProjectReferenceOutputProof);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -773,7 +777,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
-                requiresSdkPackageEvidence: true);
+                requiresSdkPackageEvidence: true,
+                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof);
         }
 
         internal string BuildVisitKey()
@@ -812,6 +817,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             AppendProjectReferenceKeySegment(key, "SdkPackageEvidence");
             AppendProjectReferenceKeySegment(key, RequiresSdkPackageEvidence ? "Required" : "Inherited");
+            AppendProjectReferenceKeySegment(key, "PrebuiltProjectReferenceOutputProof");
+            AppendProjectReferenceKeySegment(
+                key,
+                RequiresPrebuiltProjectReferenceOutputProof ? "Required" : "NotRequired");
             return key.ToString();
         }
     }
