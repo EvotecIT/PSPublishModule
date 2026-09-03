@@ -1195,8 +1195,9 @@ public sealed partial class DotNetPublishPipelineRunner
                      RequiresControlledProjectReferenceFrameworkResolution(
                          request,
                          rawReferences.Values) ||
-                     request.DisablesProjectReferenceBuilds ||
-                     evaluatedBuildProjectReferencesDisabled ||
+                     (rawReferences.Count > 0 &&
+                      (request.DisablesProjectReferenceBuilds ||
+                       evaluatedBuildProjectReferencesDisabled)) ||
                      hasDynamicProjectReferenceTaskOutputs)
             {
                 if (!TryReadControlledResolvedProjectReferences(
