@@ -90,4 +90,46 @@ public sealed class PowerForgeReleaseValidationServiceTests
             try { root.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void Run_TimeoutTerminatesValidationProcessTree()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge.Tests",
+            "release-validation-tree-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var markerPath = Path.Combine(root.FullName, "child-survived.txt");
+            var childScriptPath = Path.Combine(root.FullName, "Child.ps1");
+            var parentScriptPath = Path.Combine(root.FullName, "Parent.ps1");
+            File.WriteAllText(
+                childScriptPath,
+                $"Start-Sleep -Seconds 3{Environment.NewLine}[IO.File]::WriteAllText('{markerPath.Replace("'", "''")}', 'alive')");
+            File.WriteAllText(
+                parentScriptPath,
+                $"Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile', '-File', '{childScriptPath.Replace("'", "''")}') | Out-Null{Environment.NewLine}Start-Sleep -Seconds 30");
+
+            var result = new PowerForgeReleaseValidationService(new NullLogger()).Run(
+                new PowerForgeReleaseValidationAction
+                {
+                    Name = "process tree timeout",
+                    FilePath = parentScriptPath,
+                    WorkingDirectory = root.FullName,
+                    TimeoutSeconds = 1
+                },
+                new PowerForgeReleaseValidationContext(),
+                root.FullName,
+                CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.True(result.TimedOut);
+            Thread.Sleep(TimeSpan.FromSeconds(4));
+            Assert.False(File.Exists(markerPath), "The validation child process survived the timeout boundary.");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
 }

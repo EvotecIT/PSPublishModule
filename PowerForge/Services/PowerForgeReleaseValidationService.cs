@@ -104,14 +104,7 @@ internal sealed class PowerForgeReleaseValidationService
                 ?? throw new InvalidOperationException($"Unable to start staged-release validation '{actionName}'.");
             using var cancellationRegistration = cancellationToken.Register(() =>
             {
-                try
-                {
-#if NET472
-                    process.Kill();
-#else
-                    process.Kill(entireProcessTree: true);
-#endif
-                }
+                try { KillProcessTree(process); }
                 catch { }
             });
             var standardOutput = process.StandardOutput.ReadToEndAsync();
@@ -125,7 +118,7 @@ internal sealed class PowerForgeReleaseValidationService
                     continue;
 
                 timedOut = true;
-                try { process.Kill(); } catch { }
+                try { KillProcessTree(process); } catch { }
                 process.WaitForExit();
                 break;
             }
@@ -161,6 +154,31 @@ internal sealed class PowerForgeReleaseValidationService
             startInfo.EnvironmentVariables.Remove(name);
         else
             startInfo.EnvironmentVariables[name] = value;
+    }
+
+    private static void KillProcessTree(Process process)
+    {
+        if (process.HasExited)
+            return;
+
+#if NET472
+        if (Path.DirectorySeparatorChar == '\\')
+        {
+            using var taskKill = Process.Start(new ProcessStartInfo
+            {
+                FileName = "taskkill.exe",
+                Arguments = $"/PID {process.Id} /T /F",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            taskKill?.WaitForExit();
+            return;
+        }
+
+        process.Kill();
+#else
+        process.Kill(entireProcessTree: true);
+#endif
     }
 
     private static string ResolvePowerShellExecutable(bool preferWindowsPowerShell)

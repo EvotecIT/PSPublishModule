@@ -19,8 +19,6 @@ internal sealed partial class PowerForgeReleaseService
             string? releaseVersion = ResolveModuleReleaseVersion(plan);
             bool versionMatches = string.IsNullOrWhiteSpace(releaseVersion) ||
                                   string.Equals(packageVersion, releaseVersion, StringComparison.OrdinalIgnoreCase);
-            bool isSymbolsPackage = fullPath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase) ||
-                                    fullPath.EndsWith(".symbols.nupkg", StringComparison.OrdinalIgnoreCase);
             return new PowerForgeReleaseAssetEntry
             {
                 Path = fullPath,
@@ -31,8 +29,7 @@ internal sealed partial class PowerForgeReleaseService
                 Version = packageVersion ?? releaseVersion,
                 IsFinalPackageOutput = producedArtifactPaths?.Contains(fullPath) == true &&
                                        hasIdentity &&
-                                       versionMatches &&
-                                       !isSymbolsPackage
+                                       versionMatches
             };
         }
 

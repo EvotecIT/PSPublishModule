@@ -5,12 +5,14 @@ internal sealed partial class PowerForgeReleaseService
     private static void ValidateReleaseValidationConfiguration(
         PowerForgeReleaseValidationOptions? validation,
         PowerForgeReleaseOutputsOptions outputs,
+        PowerForgeReleaseRequest request,
         string configurationDirectory)
     {
         var actions = GetAfterStagingValidationActions(validation);
         if (actions.Length == 0)
             return;
-        if (outputs?.Staging is null || string.IsNullOrWhiteSpace(outputs.Staging.RootPath))
+        if (string.IsNullOrWhiteSpace(request.StageRoot) &&
+            (outputs?.Staging is null || string.IsNullOrWhiteSpace(outputs.Staging.RootPath)))
         {
             throw new InvalidOperationException(
                 "Validation.AfterStaging requires Outputs.Staging.RootPath so the complete release can be inspected before publication.");
@@ -63,7 +65,7 @@ internal sealed partial class PowerForgeReleaseService
                 ResolvedVersion = resolvedVersion ?? result.ModulePlan?.ModuleVersion ?? string.Empty,
                 ReleaseManifestPath = result.ReleaseManifestPath,
                 ReleaseChecksumsPath = result.ReleaseChecksumsPath,
-                StagingRoot = ResolveValidationStagingRoot(spec, configurationDirectory),
+                StagingRoot = ResolveConfiguredStageRoot(spec, request, configurationDirectory),
                 ModuleStagingPath = result.ModulePlan?.StagingPath,
                 ReleaseAssets = result.ReleaseAssets.ToArray(),
                 StagedAssets = result.ReleaseAssetEntries
@@ -110,6 +112,47 @@ internal sealed partial class PowerForgeReleaseService
             : summary + Environment.NewLine + detail;
     }
 
+    private bool PublishToolGitHubAfterStaging(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        string configurationDirectory,
+        PowerForgeReleaseResult result,
+        string? resolvedVersion)
+    {
+        if (spec.Tools is null || !(request.PublishToolGitHub ?? spec.Tools.GitHub.Publish))
+            return true;
+
+        ValidatePostBuildSourceState(request);
+        request.CancellationToken.ThrowIfCancellationRequested();
+        if (result.DotNetToolPlan is not null && result.DotNetTools is not null)
+        {
+            result.ToolGitHubReleases = PublishDotNetToolGitHubReleases(
+                spec,
+                configurationDirectory,
+                result.DotNetToolPlan,
+                result.DotNetTools,
+                resolvedVersion,
+                request.CancellationToken);
+        }
+        else if (result.Tools is not null)
+        {
+            result.ToolGitHubReleases = PublishLegacyToolGitHubReleases(
+                spec,
+                configurationDirectory,
+                result.Tools,
+                request.CancellationToken);
+        }
+
+        var failure = result.ToolGitHubReleases.FirstOrDefault(static release => !release.Success);
+        if (failure is null)
+            return true;
+
+        request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, failure.ErrorMessage);
+        result.Success = false;
+        result.ErrorMessage = failure.ErrorMessage ?? "Tool GitHub release publishing failed.";
+        return false;
+    }
+
     private static PowerForgeReleaseValidationAction[] GetAfterStagingValidationActions(
         PowerForgeReleaseValidationOptions? validation)
         => (validation?.AfterStaging ?? Array.Empty<PowerForgeReleaseValidationAction>())
@@ -125,11 +168,6 @@ internal sealed partial class PowerForgeReleaseService
         => string.IsNullOrWhiteSpace(spec.Module?.RepositoryRoot)
             ? configurationDirectory
             : ResolveValidationPath(configurationDirectory, spec.Module!.RepositoryRoot!);
-
-    private static string ResolveValidationStagingRoot(
-        PowerForgeReleaseSpec spec,
-        string configurationDirectory)
-        => ResolveValidationPath(configurationDirectory, spec.Outputs.Staging!.RootPath!);
 
     private static string ResolveValidationPath(string baseDirectory, string path)
         => Path.GetFullPath(Path.IsPathRooted(path)

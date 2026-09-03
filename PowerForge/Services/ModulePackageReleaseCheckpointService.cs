@@ -38,7 +38,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                 ExecuteBuild = false,
                 PlanOnly = true,
                 UpdateVersions = false,
-                Build = false,
+                Build = true,
                 PublishNuget = false,
                 PublishGitHub = false
             };
@@ -87,25 +87,33 @@ internal sealed class ModulePackageReleaseCheckpointService
             var configuration = lane.Reference is not null
                 ? publisher.LoadConfiguration(lane.Reference, lane.ConfigPath)
                 : publisher.LoadConfiguration(lane.Inline!, lane.ConfigPath);
-            var release = CreatePublicationRelease(
+            var stagedRelease = CreatePublicationRelease(
                 checkpoint.Release,
                 releaseAssets,
                 requireStagedAssets);
+            using var publicationSnapshot = ModulePackagePublicationSnapshot.Create(stagedRelease);
+            var release = publicationSnapshot.Release;
             var publish = publisher.PublishNuGet(
                 configuration,
                 release,
                 repositoryRoot: ResolveRepositoryRoot(releaseConfigPath, spec),
-                remotePublishAttempted: remotePublishAttempted,
-                progress: progress);
+                remotePublishAttempted: () =>
+                {
+                    publicationSnapshot.ValidateUnchanged();
+                    remotePublishAttempted?.Invoke();
+                },
+                progress: progress,
+                cancellationToken: cancellationToken);
+            publicationSnapshot.ValidateUnchanged();
             var result = new PowerForgeModulePackagePublicationResult
             {
                 Name = checkpoint.Name,
                 Success = publish.Success,
                 ErrorMessage = publish.ErrorMessage,
                 PublishSource = release.PublishSource,
-                PublishedPackages = release.PublishedPackages.ToArray(),
-                SkippedDuplicatePackages = release.SkippedDuplicatePackages.ToArray(),
-                FailedPackages = release.FailedPackages.ToArray()
+                PublishedPackages = publicationSnapshot.ResolveOriginalPaths(release.PublishedPackages),
+                SkippedDuplicatePackages = publicationSnapshot.ResolveOriginalPaths(release.SkippedDuplicatePackages),
+                FailedPackages = publicationSnapshot.ResolveOriginalPaths(release.FailedPackages)
             };
             publications.Add(result);
             if (!result.Success)
@@ -134,7 +142,7 @@ internal sealed class ModulePackageReleaseCheckpointService
             .GroupBy(asset => Path.GetFullPath(asset.Path), PathComparer)
             .ToDictionary(
                 static group => group.Key,
-                static group => Path.GetFullPath(group.Single().StagedPath!),
+                static group => group.Single(),
                 PathComparer);
         var clone = new DotNetRepositoryReleaseResult
         {
@@ -167,14 +175,29 @@ internal sealed class ModulePackageReleaseCheckpointService
 
     private static string ResolvePublicationPackagePath(
         string path,
-        IReadOnlyDictionary<string, string> stagedBySource,
+        IReadOnlyDictionary<string, PowerForgeReleaseAssetEntry> stagedBySource,
         bool requireStagedAssets)
     {
         var fullPath = Path.GetFullPath(path);
-        if (stagedBySource.TryGetValue(fullPath, out var stagedPath))
+        if (stagedBySource.TryGetValue(fullPath, out var stagedAsset))
         {
+            var stagedPath = Path.GetFullPath(stagedAsset.StagedPath!);
             if (!File.Exists(stagedPath))
                 throw new FileNotFoundException($"The staged package artifact was not found: {stagedPath}", stagedPath);
+            if (requireStagedAssets && string.IsNullOrWhiteSpace(stagedAsset.StagedSha256))
+            {
+                throw new InvalidOperationException(
+                    $"The validated staged package artifact has no captured SHA-256 digest: '{stagedPath}'.");
+            }
+            if (!string.IsNullOrWhiteSpace(stagedAsset.StagedSha256))
+            {
+                var actualSha256 = ComputeSha256(stagedPath);
+                if (!string.Equals(actualSha256, stagedAsset.StagedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The staged package artifact changed after release staging: '{stagedPath}'.");
+                }
+            }
             return stagedPath;
         }
 
@@ -186,6 +209,13 @@ internal sealed class ModulePackageReleaseCheckpointService
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"The package artifact was not found: {fullPath}", fullPath);
         return fullPath;
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
     }
 
     private static string ResolveRepositoryRoot(string releaseConfigPath, PowerForgeReleaseSpec spec)
@@ -289,6 +319,153 @@ internal sealed class ModulePackageReleaseCheckpointService
 
         return lanes;
     }
+}
+
+internal sealed class ModulePackagePublicationSnapshot : IDisposable
+{
+    private readonly string _rootPath;
+    private readonly Dictionary<string, string> _originalBySnapshot;
+    private readonly Dictionary<string, string> _sha256BySnapshot;
+    private bool _disposed;
+
+    private ModulePackagePublicationSnapshot(
+        string rootPath,
+        DotNetRepositoryReleaseResult release,
+        Dictionary<string, string> originalBySnapshot,
+        Dictionary<string, string> sha256BySnapshot)
+    {
+        _rootPath = rootPath;
+        Release = release;
+        _originalBySnapshot = originalBySnapshot;
+        _sha256BySnapshot = sha256BySnapshot;
+    }
+
+    internal DotNetRepositoryReleaseResult Release { get; }
+
+    internal static ModulePackagePublicationSnapshot Create(DotNetRepositoryReleaseResult release)
+    {
+        if (release is null)
+            throw new ArgumentNullException(nameof(release));
+
+        var rootPath = Path.Combine(
+            Path.GetTempPath(),
+            "PowerForge",
+            "module-package-publication",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(rootPath);
+        var snapshotByOriginal = new Dictionary<string, string>(PathComparer);
+        var originalBySnapshot = new Dictionary<string, string>(PathComparer);
+        var sha256BySnapshot = new Dictionary<string, string>(PathComparer);
+        try
+        {
+            string Snapshot(string path)
+            {
+                var originalPath = Path.GetFullPath(path);
+                if (snapshotByOriginal.TryGetValue(originalPath, out var existing))
+                    return existing;
+                if (!File.Exists(originalPath))
+                    throw new FileNotFoundException($"The package publication input was not found: {originalPath}", originalPath);
+
+                var expectedSha256 = ComputeSha256(originalPath);
+                var snapshotPath = Path.Combine(
+                    rootPath,
+                    snapshotByOriginal.Count.ToString("D4"),
+                    Path.GetFileName(originalPath));
+                Directory.CreateDirectory(Path.GetDirectoryName(snapshotPath)!);
+                File.Copy(originalPath, snapshotPath, overwrite: false);
+                var sourceSha256AfterCopy = ComputeSha256(originalPath);
+                var snapshotSha256 = ComputeSha256(snapshotPath);
+                if (!string.Equals(expectedSha256, sourceSha256AfterCopy, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(expectedSha256, snapshotSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"The staged package changed while its private publication snapshot was created: '{originalPath}'.");
+                }
+
+                File.SetAttributes(snapshotPath, File.GetAttributes(snapshotPath) | FileAttributes.ReadOnly);
+                snapshotByOriginal[originalPath] = snapshotPath;
+                originalBySnapshot[snapshotPath] = originalPath;
+                sha256BySnapshot[snapshotPath] = snapshotSha256;
+                return snapshotPath;
+            }
+
+            foreach (var project in release.Projects)
+            {
+                project.Packages = project.Packages.Select(Snapshot).ToList();
+                project.SymbolPackages = project.SymbolPackages.Select(Snapshot).ToList();
+            }
+
+            return new ModulePackagePublicationSnapshot(
+                rootPath,
+                release,
+                originalBySnapshot,
+                sha256BySnapshot);
+        }
+        catch
+        {
+            DeleteSnapshot(rootPath);
+            throw;
+        }
+    }
+
+    internal void ValidateUnchanged()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(ModulePackagePublicationSnapshot));
+
+        foreach (var entry in _sha256BySnapshot)
+        {
+            if (!File.Exists(entry.Key) ||
+                !string.Equals(ComputeSha256(entry.Key), entry.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The private package publication snapshot changed before publication completed: '{entry.Key}'.");
+            }
+        }
+    }
+
+    internal string[] ResolveOriginalPaths(IEnumerable<string> paths)
+        => paths.Select(path =>
+        {
+            var fullPath = Path.GetFullPath(path);
+            return _originalBySnapshot.TryGetValue(fullPath, out var originalPath)
+                ? originalPath
+                : fullPath;
+        }).ToArray();
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        DeleteSnapshot(_rootPath);
+    }
+
+    private static void DeleteSnapshot(string rootPath)
+    {
+        if (!Directory.Exists(rootPath))
+            return;
+
+        foreach (var path in Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories))
+        {
+            try { File.SetAttributes(path, FileAttributes.Normal); }
+            catch { }
+        }
+        try { Directory.Delete(rootPath, recursive: true); }
+        catch { }
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return string.Concat(sha256.ComputeHash(stream).Select(static value => value.ToString("x2")));
+    }
+
+    private static StringComparer PathComparer => Path.DirectorySeparatorChar == '\\'
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 }
 
 /// <summary>

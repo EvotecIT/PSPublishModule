@@ -312,7 +312,7 @@ internal sealed partial class PowerForgeReleaseService
         ApplyAppleAction(spec.AppleApps, request);
         var explicitAppleAction = request.AppleAction != PowerForgeAppleReleaseAction.Configured;
         var configDirectory = Path.GetDirectoryName(configPath) ?? Directory.GetCurrentDirectory();
-        ValidateReleaseValidationConfiguration(spec.Validation, spec.Outputs, configDirectory);
+        ValidateReleaseValidationConfiguration(spec.Validation, spec.Outputs, request, configDirectory);
         ValidateVirusTotalConfiguration(spec.VirusTotal);
         var selectedToolOutputs = ResolveSelectedToolOutputs(request);
         var selectedTargets = NormalizeStrings(request.Targets);
@@ -441,10 +441,9 @@ internal sealed partial class PowerForgeReleaseService
             using (AcquireVirusTotalReceiptLock(spec.VirusTotal!, configDirectory))
                 EnsureVirusTotalReceiptWritable(spec.VirusTotal!, configDirectory, virusTotalProject);
         }
-        var captureModuleArtifactProvenance = ShouldCaptureVirusTotalModuleArtifactProvenance(
-            spec,
-            request,
-            runModule);
+        var captureModuleArtifactProvenance =
+            ShouldCaptureVirusTotalModuleArtifactProvenance(spec, request, runModule) ||
+            runModule && spec.Module?.IncludesPackages == true;
 
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
@@ -718,27 +717,6 @@ internal sealed partial class PowerForgeReleaseService
                             return result;
                         }
 
-                        var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
-                        if (publishToolGitHub)
-                        {
-                            ValidatePostBuildSourceState(request);
-                            var releases = PublishDotNetToolGitHubReleases(
-                                spec,
-                                configDirectory,
-                                dotNetPlan,
-                                dotNetTools,
-                                sharedReleaseVersion,
-                                request.CancellationToken);
-                            result.ToolGitHubReleases = releases;
-                            var failures = releases.Where(entry => !entry.Success).ToArray();
-                            if (failures.Length > 0)
-                            {
-                                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, failures[0].ErrorMessage);
-                                result.Success = false;
-                                result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
-                                return result;
-                            }
-                        }
                     }
                 }
             }
@@ -776,25 +754,6 @@ internal sealed partial class PowerForgeReleaseService
                             return result;
                         }
 
-                        var publishToolGitHub = request.PublishToolGitHub ?? spec.Tools!.GitHub.Publish;
-                        if (publishToolGitHub)
-                        {
-                            ValidatePostBuildSourceState(request);
-                            var releases = PublishLegacyToolGitHubReleases(
-                                spec,
-                                configDirectory,
-                                tools,
-                                request.CancellationToken);
-                            result.ToolGitHubReleases = releases;
-                            var failures = releases.Where(entry => !entry.Success).ToArray();
-                            if (failures.Length > 0)
-                            {
-                                request.Progress?.PhaseFailed(PowerForgeReleaseProgressPhase.Tools, failures[0].ErrorMessage);
-                                result.Success = false;
-                                result.ErrorMessage = failures[0].ErrorMessage ?? "Tool GitHub release publishing failed.";
-                                return result;
-                            }
-                        }
                     }
                 }
             }
@@ -1066,6 +1025,19 @@ internal sealed partial class PowerForgeReleaseService
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Module,
                 "Module publication complete");
+        }
+
+        if (!request.PlanOnly &&
+            !request.ValidateOnly &&
+            !explicitAppleAction &&
+            !PublishToolGitHubAfterStaging(
+                spec,
+                request,
+                configDirectory,
+                result,
+                sharedReleaseVersion))
+        {
+            return result;
         }
 
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
@@ -5348,6 +5320,12 @@ internal sealed partial class PowerForgeReleaseService
                     Directory.Delete(plannedEntry.DestinationFullPath, recursive: true);
                 CopyDirectory(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath);
             }
+        }
+
+        foreach (var entry in entries)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath))
+                entry.StagedSha256 = ComputeSha256(entry.StagedPath!);
         }
 
         return entries;

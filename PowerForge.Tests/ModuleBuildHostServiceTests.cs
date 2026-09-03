@@ -526,19 +526,78 @@ public sealed class ModuleBuildHostServiceTests
         });
 
         Assert.NotNull(captured);
-        Assert.Contains(
-            "$buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild')",
-            captured!.CommandText!,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "$buildScriptCommand.Parameters.ContainsKey('StagingPath')",
-            captured.CommandText!,
-            StringComparison.Ordinal);
+        foreach (var parameterName in new[]
+        {
+            "NoDotnetBuild",
+            "StagingPath",
+            "ReuseStaging",
+            "IncludeProjectPackages",
+            "IncludeModulePublishing",
+            "SkipInstall"
+        })
+        {
+            Assert.Contains($"'{parameterName}'", captured!.CommandText!, StringComparison.Ordinal);
+        }
+        Assert.Contains("$missingCheckpointParameters", captured!.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Parameters.ContainsKey('RunMode')", captured.CommandText!, StringComparison.Ordinal);
+        Assert.Contains("Parameters.ContainsKey('ConfigurationGateMode')", captured.CommandText!, StringComparison.Ordinal);
         Assert.Contains(
             "Deferred module publication requires the legacy build script",
             captured.CommandText!,
             StringComparison.Ordinal);
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ExecuteBuildAsync_DeferredLegacyPublishRejectsWrapperWithoutGateParameter()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-module-host-checkpoint-gate-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var moduleName = "CheckpointHost";
+            var modulePath = Path.Combine(root.FullName, moduleName + ".psd1");
+            var scriptPath = Path.Combine(root.FullName, "Build-Module.ps1");
+            var markerPath = Path.Combine(root.FullName, "invoked.txt");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), string.Empty);
+            File.WriteAllText(
+                modulePath,
+                $"@{{ RootModule = '{moduleName}.psm1'; ModuleVersion = '1.0.0' }}");
+            File.WriteAllText(
+                scriptPath,
+                $$"""
+                [CmdletBinding()]
+                param(
+                    [bool] $NoDotnetBuild = $false,
+                    [string] $StagingPath,
+                    [bool] $ReuseStaging = $false,
+                    [bool] $IncludeProjectPackages = $true,
+                    [bool] $IncludeModulePublishing = $true,
+                    [bool] $SkipInstall = $false
+                )
+                [IO.File]::WriteAllText('{{markerPath.Replace("'", "''")}}', 'invoked')
+                """);
+
+            var result = await new ModuleBuildHostService().ExecuteBuildAsync(new ModuleBuildHostBuildRequest
+            {
+                RepositoryRoot = root.FullName,
+                ScriptPath = scriptPath,
+                ModulePath = modulePath,
+                RunMode = ConfigurationGateMode.Build,
+                StagingPath = Path.Combine(root.FullName, "staging"),
+                RequireReusableOutput = true,
+                Timeout = TimeSpan.FromMinutes(1)
+            });
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("RunMode or ConfigurationGateMode", result.StandardError, StringComparison.Ordinal);
+            Assert.False(File.Exists(markerPath));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
     }
 
     [Fact]

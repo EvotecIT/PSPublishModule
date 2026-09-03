@@ -131,7 +131,8 @@ public sealed class ProjectBuildPublishHostService
         DotNetRepositoryReleaseResult release,
         string? repositoryRoot = null,
         Action? remotePublishAttempted = null,
-        IProjectBuildProgressReporter? progress = null)
+        IProjectBuildProgressReporter? progress = null,
+        CancellationToken cancellationToken = default)
     {
         FrameworkCompatibility.NotNull(configuration, nameof(configuration));
         FrameworkCompatibility.NotNull(release, nameof(release));
@@ -167,7 +168,8 @@ public sealed class ProjectBuildPublishHostService
             configuration.PublishFailFast,
             suppressCompanionSymbols: !configuration.IncludeSymbols || publishSymbolsSeparately,
             remotePublishAttempted: remotePublishAttempted,
-            progress: progress);
+            progress: progress,
+            cancellationToken: cancellationToken);
 
         DotNetRepositoryReleaseService.ApplyPublishedNuGetArtifactOutcomes(
             release,

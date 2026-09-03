@@ -1164,6 +1164,8 @@ internal sealed class PowerForgeReleaseAssetEntry
 
     public string? StagedPath { get; set; }
 
+    internal string? StagedSha256 { get; set; }
+
     public bool IsFinalPackageOutput { get; set; }
 }
 

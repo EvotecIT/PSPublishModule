@@ -45,6 +45,38 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("Company.Library.4.0.0.snupkg")]
+    [InlineData("Company.Library.4.0.0.symbols.nupkg")]
+    public void CreateModuleAssetEntries_ClassifiesCurrentRunSymbolPackageAsFinal(string fileName)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string packagePath = Path.Combine(root, fileName);
+            using (ZipArchive archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                ZipArchiveEntry nuspec = archive.CreateEntry("Company.Library.nuspec");
+                using var writer = new StreamWriter(nuspec.Open());
+                writer.Write("<package><metadata><id>Company.Library</id><version>4.0.0</version></metadata></package>");
+            }
+
+            PowerForgeReleaseAssetEntry entry = Assert.Single(
+                PowerForgeReleaseService.CreateModuleAssetEntries(
+                    packagePath,
+                    new PowerForgeModuleReleasePlanSummary { ModuleVersion = "4.0.0" },
+                    new[] { packagePath }));
+
+            Assert.Equal(PowerForgeReleaseAssetCategory.Package, entry.Category);
+            Assert.Equal("Company.Library", entry.PackageId);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void CreateModuleAssetEntries_ExistingNuGetPackageWithoutCurrentRunProofIsNotFinal()
     {

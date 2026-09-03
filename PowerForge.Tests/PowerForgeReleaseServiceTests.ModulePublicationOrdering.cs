@@ -490,6 +490,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var moduleCalls = new List<ModuleExecutionSnapshot>();
             var toolCompleted = false;
             var validationCalls = 0;
+            var stageRoot = Path.Combine(root, "request-staged");
             var service = CreateReleaseService(
                 root,
                 moduleCalls,
@@ -502,6 +503,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assert.Single(moduleCalls);
                     Assert.True(File.Exists(context.ReleaseManifestPath), context.ReleaseManifestPath);
                     Assert.Equal("1.2.3", context.ResolvedVersion);
+                    Assert.Equal(stageRoot, context.StagingRoot);
                     return new PowerForgeReleaseValidationResult
                     {
                         Name = "release",
@@ -511,10 +513,6 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
             var spec = CreateReleaseSpec(root, scriptPath);
             spec.Module!.ModuleVersion = "1.2.3";
-            spec.Outputs.Staging = new PowerForgeReleaseStagingOptions
-            {
-                RootPath = Path.Combine(root, "staged")
-            };
             spec.Validation = new PowerForgeReleaseValidationOptions
             {
                 AfterStaging =
@@ -533,13 +531,107 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     ConfigPath = releasePath,
                     ModuleRunMode = ConfigurationGateMode.Publish,
-                    ModuleVersion = "1.2.3"
+                    ModuleVersion = "1.2.3",
+                    StageRoot = stageRoot
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Equal(1, validationCalls);
             Assert.Equal(2, moduleCalls.Count);
             Assert.Single(result.ReleaseValidations);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_ValidatesStagedReleaseBeforePublishingPerToolGitHubRelease()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var releasePath = Path.Combine(root, "release.json");
+            var validationPath = Path.Combine(root, "Test-Release.ps1");
+            var toolZip = Path.Combine(root, "SampleTool-1.2.3.zip");
+            var toolExecutable = Path.Combine(root, "SampleTool.exe");
+            File.WriteAllText(releasePath, "{}");
+            File.WriteAllText(validationPath, "# validation");
+            File.WriteAllText(toolZip, "tool archive");
+            File.WriteAllText(toolExecutable, "tool executable");
+            var validationCompleted = false;
+            var publicationCalls = 0;
+            var service = CreateReleaseService(
+                root,
+                new List<ModuleExecutionSnapshot>(),
+                new PowerForgeToolReleaseResult
+                {
+                    Success = true,
+                    Artefacts =
+                    [
+                        new PowerForgeToolReleaseArtifactResult
+                        {
+                            Target = "SampleTool",
+                            Version = "1.2.3",
+                            ExecutablePath = toolExecutable,
+                            ZipPath = toolZip
+                        }
+                    ]
+                },
+                publishGitHubRelease: _ =>
+                {
+                    Assert.True(validationCompleted);
+                    publicationCalls++;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                },
+                runReleaseValidation: (_, _, _, _) =>
+                {
+                    Assert.Equal(0, publicationCalls);
+                    validationCompleted = true;
+                    return new PowerForgeReleaseValidationResult
+                    {
+                        Name = "release",
+                        Succeeded = true,
+                        ExitCode = 0
+                    };
+                });
+            var spec = CreateReleaseSpec(root, Path.Combine(root, "unused-Build-Module.ps1"));
+            spec.Module = null;
+            spec.Tools!.GitHub = new PowerForgeToolReleaseGitHubOptions
+            {
+                Publish = true,
+                Owner = "EvotecIT",
+                Repository = "Sample",
+                TokenEnvName = "PATH",
+                TagTemplate = "{Target}-v{Version}",
+                ReleaseNameTemplate = "{Target} {Version}"
+            };
+            spec.Validation = new PowerForgeReleaseValidationOptions
+            {
+                AfterStaging =
+                [
+                    new PowerForgeReleaseValidationAction
+                    {
+                        Name = "release",
+                        FilePath = validationPath
+                    }
+                ]
+            };
+
+            var result = service.Execute(
+                spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = releasePath,
+                    ToolsOnly = true,
+                    StageRoot = Path.Combine(root, "staged")
+                });
+
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.True(validationCompleted);
+            Assert.Equal(1, publicationCalls);
+            Assert.Single(result.ToolGitHubReleases);
         }
         finally
         {
