@@ -934,7 +934,9 @@ Notes:
   stabilization, then rewrites root-relative and document-relative references in
   HTML and CSS (including the effective HTML `<base href>`). Cyclic references
   between fingerprinted assets fail closed instead of emitting immutable URLs
-  whose names do not match their bytes. PowerForge keeps its canonical WebMCP
+  whose names do not match their bytes. Documents with an invalid or cross-origin
+  `<base href>` also fail before assets move because their local references cannot
+  be rewritten safely. PowerForge keeps its canonical WebMCP
   runtime route and bytes stable so readiness verification can compare the
   deployed asset with the owning engine runtime.
 - `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).

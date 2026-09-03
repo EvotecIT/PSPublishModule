@@ -61,6 +61,12 @@ public partial class WebSiteAuditOptimizeBuildTests
                     [
                         new AssetRewriteSpec
                         {
+                            Match = "assets/",
+                            Replace = "cdn/assets/",
+                            MatchType = "contains"
+                        },
+                        new AssetRewriteSpec
+                        {
                             Match = "/unused.js",
                             Replace = "/assets/powerforge/webmcp-site-search.v1.js",
                             Source = replacementPath,
@@ -201,12 +207,115 @@ public partial class WebSiteAuditOptimizeBuildTests
         }
     }
 
+    [Fact]
+    public void OptimizeDetailed_Hashing_RewritesQuotedAndUrlCssImports()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-css-imports-" + Guid.NewGuid().ToString("N"));
+        var cssRoot = Path.Combine(root, "css");
+        Directory.CreateDirectory(cssRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<link rel=\"stylesheet\" href=\"/css/app.css\">");
+            File.WriteAllText(Path.Combine(cssRoot, "app.css"), "@import \"./theme.css\"; body { color: navy; }");
+            File.WriteAllText(Path.Combine(cssRoot, "theme.css"), "@import url('./base.css'); h1 { color: teal; }");
+            File.WriteAllText(Path.Combine(cssRoot, "base.css"), "html { background: white; }");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                HashAssets = true,
+                HashExtensions = new[] { ".css" }
+            });
+
+            var hashedApp = Assert.Single(result.HashedAssets, asset => asset.OriginalPath == "/css/app.css");
+            var hashedTheme = Assert.Single(result.HashedAssets, asset => asset.OriginalPath == "/css/theme.css");
+            var hashedBase = Assert.Single(result.HashedAssets, asset => asset.OriginalPath == "/css/base.css");
+            var appCss = File.ReadAllText(GetHashedPath(root, hashedApp));
+            var themeCss = File.ReadAllText(GetHashedPath(root, hashedTheme));
+            Assert.Contains($"@import \"./{Path.GetFileName(hashedTheme.HashedPath)}\"", appCss, StringComparison.Ordinal);
+            Assert.Contains($"@import url('./{Path.GetFileName(hashedBase.HashedPath)}')", themeCss, StringComparison.Ordinal);
+            AssertFinalHashMatches(root, hashedApp);
+            AssertFinalHashMatches(root, hashedTheme);
+            AssertFinalHashMatches(root, hashedBase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_Hashing_RejectsCyclicCssImports()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-css-cycle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.css"), "@import \"./b.css\";");
+            File.WriteAllText(Path.Combine(root, "b.css"), "@import url('./a.css');");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+                {
+                    SiteRoot = root,
+                    HashAssets = true,
+                    HashExtensions = new[] { ".css" }
+                }));
+
+            Assert.Contains("cyclic references", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_Hashing_RejectsExternalHtmlBaseBeforeMovingAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-external-base-" + Guid.NewGuid().ToString("N"));
+        var assetRoot = Path.Combine(root, "assets");
+        Directory.CreateDirectory(assetRoot);
+
+        try
+        {
+            var originalAsset = Path.Combine(assetRoot, "site.js");
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                "<base href=\"https://docs.example.com/assets/\"><script src=\"site.js\"></script>");
+            File.WriteAllText(originalAsset, "console.log('external base');");
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+                {
+                    SiteRoot = root,
+                    HashAssets = true,
+                    HashExtensions = new[] { ".js" }
+                }));
+
+            Assert.Contains("another origin", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(originalAsset));
+            Assert.Empty(Directory.EnumerateFiles(assetRoot, "site.*.js"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static void AssertFinalHashMatches(string root, WebOptimizeHashedAssetEntry asset)
     {
-        var path = Path.Combine(root, asset.HashedPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        var path = GetHashedPath(root, asset);
         var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)))[..8]
             .ToLowerInvariant();
         var actual = Path.GetFileNameWithoutExtension(asset.HashedPath).Split('.').Last();
         Assert.Equal(expected, actual);
     }
+
+    private static string GetHashedPath(string root, WebOptimizeHashedAssetEntry asset) =>
+        Path.Combine(root, asset.HashedPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 }

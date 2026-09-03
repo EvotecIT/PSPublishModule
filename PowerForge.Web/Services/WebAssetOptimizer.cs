@@ -21,6 +21,7 @@ public static partial class WebAssetOptimizer
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CssQuotedImportRegex = new("(?<prefix>@import\\s+)(?<quote>['\"])(?<url>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgTagRegex = new("<img\\b(?<attrs>[^>]*?)>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgSrcAttrRegex = new("\\bsrc\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -148,7 +149,8 @@ public static partial class WebAssetOptimizer
             {
                 var content = File.ReadAllText(htmlFile);
                 if (string.IsNullOrWhiteSpace(content)) continue;
-                var updated = RewriteHtmlAssets(content, applicableRewrites);
+                var relativeHtmlPath = Path.GetRelativePath(siteRoot, htmlFile).Replace('\\', '/');
+                var updated = RewriteHtmlAssets(content, applicableRewrites, relativeHtmlPath);
                 updated = WebSiteBuilder.OptimizeNetworkHints(updated);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
@@ -192,18 +194,21 @@ public static partial class WebAssetOptimizer
             OptimizeImages(siteRoot, htmlFiles, protectedStoryArtifacts, options, result, MarkUpdated);
         }
 
+        var hashSpec = ResolveHashSpec(options, policy);
+        // Fingerprinting moves shared assets and therefore requires every generated HTML
+        // reference to be rewritten in the same pass. A sampled/incremental HTML scope
+        // must never hash assets because untouched pages would retain broken old URLs.
+        var hasCompleteHtmlScope = htmlFiles.Length == mutableHtmlFiles.Length;
+        if (hashSpec.Enabled && hasCompleteHtmlScope)
+            ValidateHashableDocumentBases(htmlFiles, siteRoot);
+
         // Fingerprinted names must describe the bytes that receive immutable cache headers.
         // Minify byte-mutating asset types before hashing, then stabilize hashes again after
         // references inside CSS have been rewritten.
         MinifyCssAssets(siteRoot, protectedStoryArtifacts, options, result, MarkUpdated);
         MinifyJavaScriptAssets(siteRoot, protectedStoryArtifacts, options, result, MarkUpdated);
 
-        var hashSpec = ResolveHashSpec(options, policy);
         Dictionary<string, string>? hashMap = null;
-        // Fingerprinting moves shared assets and therefore requires every generated HTML
-        // reference to be rewritten in the same pass. A sampled/incremental HTML scope
-        // must never hash assets because untouched pages would retain broken old URLs.
-        var hasCompleteHtmlScope = htmlFiles.Length == mutableHtmlFiles.Length;
         if (hashSpec.Enabled && hasCompleteHtmlScope)
         {
             hashMap = HashAssets(
@@ -433,13 +438,19 @@ public static partial class WebAssetOptimizer
         return applicable.ToArray();
     }
 
-    private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)
+    private static string RewriteHtmlAssets(
+        string html,
+        AssetRewriteSpec[] rewrites,
+        string relativeHtmlPath)
     {
         if (rewrites.Length == 0) return html;
+        var documentBaseUri = ResolveDocumentBaseUri(html, CreateSiteDocumentUri(relativeHtmlPath));
         return HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
             var decodedUrl = System.Web.HttpUtility.HtmlDecode(url);
+            if (IsCanonicalWebMcpRuntimeReference(decodedUrl, documentBaseUri))
+                return match.Value;
             var replaced = ApplyRewriteRules(decodedUrl, rewrites);
             if (string.Equals(replaced, decodedUrl, StringComparison.Ordinal))
                 return match.Value;
@@ -679,12 +690,19 @@ public static partial class WebAssetOptimizer
         string relativeCssPath)
     {
         var stylesheetUri = CreateSiteDocumentUri(relativeCssPath);
-        return CssUrlRegex.Replace(css, match =>
+        var rewritten = CssUrlRegex.Replace(css, match =>
         {
             var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map, stylesheetUri);
-            if (rewritten == url) return match.Value;
-            return $"url({match.Groups["quote"].Value}{rewritten}{match.Groups["quote"].Value})";
+            var mapped = RewriteUrlWithMap(url, map, stylesheetUri);
+            if (mapped == url) return match.Value;
+            return $"url({match.Groups["quote"].Value}{mapped}{match.Groups["quote"].Value})";
+        });
+        return CssQuotedImportRegex.Replace(rewritten, match =>
+        {
+            var url = match.Groups["url"].Value;
+            var mapped = RewriteUrlWithMap(url, map, stylesheetUri);
+            if (mapped == url) return match.Value;
+            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{mapped}{match.Groups["quote"].Value}";
         });
     }
 
@@ -709,9 +727,7 @@ public static partial class WebAssetOptimizer
         var resolutionBase = rootRelative ? AssetRewriteOrigin : documentBaseUri;
         if (resolutionBase is null ||
             !Uri.TryCreate(resolutionBase, baseUrl, out var resolved) ||
-            !string.Equals(resolved.Scheme, AssetRewriteOrigin.Scheme, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(resolved.Host, AssetRewriteOrigin.Host, StringComparison.OrdinalIgnoreCase) ||
-            resolved.Port != AssetRewriteOrigin.Port)
+            !HasAssetRewriteOrigin(resolved))
         {
             return url;
         }

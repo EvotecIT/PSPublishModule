@@ -165,6 +165,45 @@ public static partial class WebAssetOptimizer
         return FileSystemPathComparer.Equals(canonicalPath, Path.GetFullPath(path));
     }
 
+    private static bool IsCanonicalWebMcpRuntimeReference(string url, Uri? documentBaseUri)
+    {
+        if (documentBaseUri is null ||
+            !Uri.TryCreate(documentBaseUri, url, out var resolved) ||
+            !HasAssetRewriteOrigin(resolved))
+        {
+            return false;
+        }
+
+        var resolvedPath = DecodeUrlPathForLookup(resolved.AbsolutePath.TrimStart('/'));
+        return string.Equals(
+            resolvedPath,
+            WebSiteBuilder.WebMcpSiteSearchAssetRoute.TrimStart('/'),
+            StringComparison.Ordinal);
+    }
+
+    private static void ValidateHashableDocumentBases(IEnumerable<string> htmlFiles, string siteRoot)
+    {
+        foreach (var htmlFile in htmlFiles)
+        {
+            var html = File.ReadAllText(htmlFile);
+            if (html.IndexOf("<base", StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+
+            var relativeHtmlPath = Path.GetRelativePath(siteRoot, htmlFile).Replace('\\', '/');
+            var documentBaseUri = ResolveDocumentBaseUri(html, CreateSiteDocumentUri(relativeHtmlPath));
+            if (documentBaseUri is not null && HasAssetRewriteOrigin(documentBaseUri))
+                continue;
+
+            throw new InvalidOperationException(
+                $"Asset hashing cannot safely rewrite '{relativeHtmlPath}' because its HTML base URL is invalid or points at another origin.");
+        }
+    }
+
+    private static bool HasAssetRewriteOrigin(Uri uri) =>
+        string.Equals(uri.Scheme, AssetRewriteOrigin.Scheme, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(uri.Host, AssetRewriteOrigin.Host, StringComparison.OrdinalIgnoreCase) &&
+        uri.Port == AssetRewriteOrigin.Port;
+
     private static Uri CreateSiteDocumentUri(string relativeDocumentPath) =>
         new(AssetRewriteOrigin, EncodeUrlPath(relativeDocumentPath.Replace('\\', '/').TrimStart('/')));
 
