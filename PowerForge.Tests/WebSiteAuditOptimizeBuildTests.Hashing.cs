@@ -199,6 +199,8 @@ public partial class WebSiteAuditOptimizeBuildTests
             var css = File.ReadAllText(hashedCssPath);
             Assert.Contains("../images/" + Path.GetFileName(hashedImage.HashedPath), css, StringComparison.Ordinal);
             AssertFinalHashMatches(root, hashedCss);
+            Assert.Equal(1, result.HtmlHashRewriteCount);
+            Assert.Equal(1, result.CssHashRewriteCount);
         }
         finally
         {
@@ -217,7 +219,8 @@ public partial class WebSiteAuditOptimizeBuildTests
         try
         {
             File.WriteAllText(Path.Combine(root, "index.html"), "<link rel=\"stylesheet\" href=\"/css/app.css\">");
-            File.WriteAllText(Path.Combine(cssRoot, "app.css"), "@import \"./theme.css\"; body { color: navy; }");
+            File.WriteAllText(Path.Combine(cssRoot, "app.css"),
+                "@import \"./theme.css\"; .notice::before { content: '@import \"./theme.css\" url(./base.css)'; } /* @import \"./theme.css\"; url(./base.css) */");
             File.WriteAllText(Path.Combine(cssRoot, "theme.css"), "@import url('./base.css'); h1 { color: teal; }");
             File.WriteAllText(Path.Combine(cssRoot, "base.css"), "html { background: white; }");
 
@@ -235,9 +238,13 @@ public partial class WebSiteAuditOptimizeBuildTests
             var themeCss = File.ReadAllText(GetHashedPath(root, hashedTheme));
             Assert.Contains($"@import \"./{Path.GetFileName(hashedTheme.HashedPath)}\"", appCss, StringComparison.Ordinal);
             Assert.Contains($"@import url('./{Path.GetFileName(hashedBase.HashedPath)}')", themeCss, StringComparison.Ordinal);
+            Assert.Contains("content: '@import \"./theme.css\" url(./base.css)'", appCss, StringComparison.Ordinal);
+            Assert.Contains("/* @import \"./theme.css\"; url(./base.css) */", appCss, StringComparison.Ordinal);
             AssertFinalHashMatches(root, hashedApp);
             AssertFinalHashMatches(root, hashedTheme);
             AssertFinalHashMatches(root, hashedBase);
+            Assert.Equal(1, result.HtmlHashRewriteCount);
+            Assert.Equal(2, result.CssHashRewriteCount);
         }
         finally
         {

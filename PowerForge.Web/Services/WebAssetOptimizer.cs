@@ -21,7 +21,6 @@ public static partial class WebAssetOptimizer
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HtmlSrcSetAttrRegex = new("(?<attr>\\b(?:srcset|imagesrcset))\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex CssQuotedImportRegex = new("(?<prefix>@import\\s+)(?<quote>['\"])(?<url>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgTagRegex = new("<img\\b(?<attrs>[^>]*?)>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgSrcAttrRegex = new("\\bsrc\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -221,22 +220,33 @@ public static partial class WebAssetOptimizer
             result.HashedAssetCount = hashedAssetCount;
             if (hashMap.Count > 0)
             {
-                var rewrites = RewriteHashedReferences(
+                var rewrittenHtmlFiles = new HashSet<string>(FileSystemPathComparer);
+                var rewrittenCssFiles = new HashSet<string>(FileSystemPathComparer);
+                var cssRewriteIdentityByRoute = hashedAssets.ToDictionary(
+                    asset => asset.HashedPath.TrimStart('/'),
+                    asset => asset.OriginalPath.TrimStart('/'),
+                    StringComparer.OrdinalIgnoreCase);
+                RewriteHashedReferences(
                     siteRoot,
                     htmlFiles,
                     hashMap,
                     protectedStoryArtifacts,
+                    rewrittenHtmlFiles,
+                    rewrittenCssFiles,
+                    cssRewriteIdentityByRoute,
                     MarkUpdated);
-                result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
-                result.CssHashRewriteCount = rewrites.CssFilesRewritten;
                 StabilizeHashedAssets(
                     siteRoot,
                     htmlFiles,
                     hashMap,
                     hashedAssets,
                     protectedStoryArtifacts,
-                    result,
+                    rewrittenHtmlFiles,
+                    rewrittenCssFiles,
+                    cssRewriteIdentityByRoute,
                     MarkUpdated);
+                result.HtmlHashRewriteCount = rewrittenHtmlFiles.Count;
+                result.CssHashRewriteCount = rewrittenCssFiles.Count;
                 result.HashedAssets = hashedAssets.ToArray();
                 var manifestPath = WriteHashManifest(
                     siteRoot,
@@ -556,15 +566,16 @@ public static partial class WebAssetOptimizer
         return map;
     }
 
-    private static (int HtmlFilesRewritten, int CssFilesRewritten) RewriteHashedReferences(
+    private static void RewriteHashedReferences(
         string siteRoot,
         string[] htmlFiles,
         Dictionary<string, string> map,
         IReadOnlySet<string> protectedStoryArtifacts,
+        HashSet<string> rewrittenHtmlFiles,
+        HashSet<string> rewrittenCssFiles,
+        IReadOnlyDictionary<string, string> cssRewriteIdentityByRoute,
         Action<string>? onUpdated = null)
     {
-        var htmlFilesRewritten = 0;
-        var cssFilesRewritten = 0;
         foreach (var htmlFile in htmlFiles)
         {
             var html = File.ReadAllText(htmlFile);
@@ -574,7 +585,7 @@ public static partial class WebAssetOptimizer
             if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
                 File.WriteAllText(htmlFile, updated);
-                htmlFilesRewritten++;
+                rewrittenHtmlFiles.Add(Path.GetFullPath(htmlFile));
                 onUpdated?.Invoke(htmlFile);
             }
         }
@@ -590,12 +601,13 @@ public static partial class WebAssetOptimizer
             if (!string.Equals(updated, css, StringComparison.Ordinal))
             {
                 File.WriteAllText(cssFile, updated);
-                cssFilesRewritten++;
+                var identity = cssRewriteIdentityByRoute.TryGetValue(relativeCssPath, out var originalRoute)
+                    ? originalRoute
+                    : relativeCssPath;
+                rewrittenCssFiles.Add(identity);
                 onUpdated?.Invoke(cssFile);
             }
         }
-
-        return (htmlFilesRewritten, cssFilesRewritten);
     }
 
     private static string RewriteReferences(
@@ -690,20 +702,7 @@ public static partial class WebAssetOptimizer
         string relativeCssPath)
     {
         var stylesheetUri = CreateSiteDocumentUri(relativeCssPath);
-        var rewritten = CssUrlRegex.Replace(css, match =>
-        {
-            var url = match.Groups["url"].Value;
-            var mapped = RewriteUrlWithMap(url, map, stylesheetUri);
-            if (mapped == url) return match.Value;
-            return $"url({match.Groups["quote"].Value}{mapped}{match.Groups["quote"].Value})";
-        });
-        return CssQuotedImportRegex.Replace(rewritten, match =>
-        {
-            var url = match.Groups["url"].Value;
-            var mapped = RewriteUrlWithMap(url, map, stylesheetUri);
-            if (mapped == url) return match.Value;
-            return $"{match.Groups["prefix"].Value}{match.Groups["quote"].Value}{mapped}{match.Groups["quote"].Value}";
-        });
+        return RewriteCssAssetReferences(css, map, stylesheetUri);
     }
 
     private static string RewriteUrlWithMap(

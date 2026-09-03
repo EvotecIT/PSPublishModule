@@ -96,7 +96,9 @@ public static partial class WebAssetOptimizer
         Dictionary<string, string> hashMap,
         List<WebOptimizeHashedAssetEntry> hashedAssets,
         IReadOnlySet<string> protectedStoryArtifacts,
-        WebOptimizeResult result,
+        HashSet<string> rewrittenHtmlFiles,
+        HashSet<string> rewrittenCssFiles,
+        Dictionary<string, string> cssRewriteIdentityByRoute,
         Action<string>? onUpdated)
     {
         var maximumPasses = Math.Max(1, hashedAssets.Count + 1);
@@ -138,24 +140,244 @@ public static partial class WebAssetOptimizer
                 move.Entry.HashedPath = "/" + move.TargetRoute;
                 hashMap[move.Entry.OriginalPath] = move.Entry.HashedPath;
                 hashMap[move.Entry.OriginalPath.TrimStart('/')] = move.TargetRoute;
+                cssRewriteIdentityByRoute[move.TargetRoute] = move.Entry.OriginalPath.TrimStart('/');
                 transitionMap["/" + move.CurrentRoute] = "/" + move.TargetRoute;
                 transitionMap[move.CurrentRoute] = move.TargetRoute;
                 onUpdated?.Invoke(move.TargetPath);
             }
 
-            var rewrites = RewriteHashedReferences(
+            RewriteHashedReferences(
                 siteRoot,
                 htmlFiles,
                 transitionMap,
                 protectedStoryArtifacts,
+                rewrittenHtmlFiles,
+                rewrittenCssFiles,
+                cssRewriteIdentityByRoute,
                 onUpdated);
-            result.HtmlHashRewriteCount += rewrites.HtmlFilesRewritten;
-            result.CssHashRewriteCount += rewrites.CssFilesRewritten;
         }
 
         throw new InvalidOperationException(
             "Hashed asset references did not stabilize. Check for cyclic references between fingerprinted assets.");
     }
+
+    private static string RewriteCssAssetReferences(
+        string css,
+        Dictionary<string, string> map,
+        Uri stylesheetUri)
+    {
+        List<(int Start, int Length, string Value)>? replacements = null;
+        var braceDepth = 0;
+        for (var index = 0; index < css.Length;)
+        {
+            if (index + 1 < css.Length && css[index] == '/' && css[index + 1] == '*')
+            {
+                index = SkipCssComment(css, index + 2);
+                continue;
+            }
+
+            if (css[index] is '\'' or '"')
+            {
+                index = SkipCssString(css, index + 1, css[index]);
+                continue;
+            }
+
+            if (css[index] == '{')
+            {
+                braceDepth++;
+                index++;
+                continue;
+            }
+
+            if (css[index] == '}')
+            {
+                braceDepth = Math.Max(0, braceDepth - 1);
+                index++;
+                continue;
+            }
+
+            if (TryReadCssUrl(css, index, out var urlStart, out var urlLength, out var nextIndex) ||
+                (braceDepth == 0 &&
+                 TryReadQuotedCssImport(css, index, out urlStart, out urlLength, out nextIndex)))
+            {
+                var url = css.Substring(urlStart, urlLength);
+                var mapped = RewriteUrlWithMap(url, map, stylesheetUri);
+                if (!string.Equals(mapped, url, StringComparison.Ordinal))
+                {
+                    replacements ??= new List<(int, int, string)>();
+                    replacements.Add((urlStart, urlLength, mapped));
+                }
+
+                index = nextIndex;
+                continue;
+            }
+
+            index++;
+        }
+
+        if (replacements is null)
+            return css;
+
+        var rewritten = new StringBuilder(css.Length + replacements.Sum(replacement => replacement.Value.Length - replacement.Length));
+        var copyFrom = 0;
+        foreach (var replacement in replacements)
+        {
+            rewritten.Append(css, copyFrom, replacement.Start - copyFrom);
+            rewritten.Append(replacement.Value);
+            copyFrom = replacement.Start + replacement.Length;
+        }
+
+        rewritten.Append(css, copyFrom, css.Length - copyFrom);
+        return rewritten.ToString();
+    }
+
+    private static bool TryReadCssUrl(
+        string css,
+        int index,
+        out int urlStart,
+        out int urlLength,
+        out int nextIndex)
+    {
+        urlStart = 0;
+        urlLength = 0;
+        nextIndex = index + 1;
+        if (!StartsWithCssKeyword(css, index, "url") ||
+            (index > 0 && IsCssIdentifierCharacter(css[index - 1])))
+        {
+            return false;
+        }
+
+        var cursor = index + 3;
+        while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+            cursor++;
+        if (cursor >= css.Length || css[cursor] != '(')
+            return false;
+
+        cursor++;
+        while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+            cursor++;
+        if (cursor >= css.Length)
+            return false;
+
+        if (css[cursor] is '\'' or '"')
+        {
+            var quote = css[cursor++];
+            urlStart = cursor;
+            var afterString = SkipCssString(css, cursor, quote);
+            if (afterString <= cursor || afterString > css.Length || css[afterString - 1] != quote)
+                return false;
+            urlLength = afterString - cursor - 1;
+            cursor = afterString;
+            while (cursor < css.Length && char.IsWhiteSpace(css[cursor]))
+                cursor++;
+            if (cursor >= css.Length || css[cursor] != ')')
+                return false;
+            nextIndex = cursor + 1;
+            return true;
+        }
+
+        urlStart = cursor;
+        while (cursor < css.Length && css[cursor] != ')')
+        {
+            if (css[cursor] == '\\' && cursor + 1 < css.Length)
+                cursor += 2;
+            else
+                cursor++;
+        }
+        if (cursor >= css.Length)
+            return false;
+        var urlEnd = cursor;
+        while (urlEnd > urlStart && char.IsWhiteSpace(css[urlEnd - 1]))
+            urlEnd--;
+        urlLength = urlEnd - urlStart;
+        nextIndex = cursor + 1;
+        return urlLength > 0;
+    }
+
+    private static bool TryReadQuotedCssImport(
+        string css,
+        int index,
+        out int urlStart,
+        out int urlLength,
+        out int nextIndex)
+    {
+        urlStart = 0;
+        urlLength = 0;
+        nextIndex = index + 1;
+        const string keyword = "@import";
+        if (!StartsWithCssKeyword(css, index, keyword) ||
+            (index + keyword.Length < css.Length && IsCssIdentifierCharacter(css[index + keyword.Length])))
+        {
+            return false;
+        }
+
+        var cursor = index + keyword.Length;
+        cursor = SkipCssTrivia(css, cursor);
+        if (cursor >= css.Length || css[cursor] is not ('\'' or '"'))
+            return false;
+
+        var quote = css[cursor++];
+        urlStart = cursor;
+        var afterString = SkipCssString(css, cursor, quote);
+        if (afterString <= cursor || afterString > css.Length || css[afterString - 1] != quote)
+            return false;
+        urlLength = afterString - cursor - 1;
+        nextIndex = afterString;
+        return true;
+    }
+
+    private static int SkipCssTrivia(string css, int index)
+    {
+        while (index < css.Length)
+        {
+            if (char.IsWhiteSpace(css[index]))
+            {
+                index++;
+                continue;
+            }
+            if (index + 1 < css.Length && css[index] == '/' && css[index + 1] == '*')
+            {
+                index = SkipCssComment(css, index + 2);
+                continue;
+            }
+            break;
+        }
+        return index;
+    }
+
+    private static int SkipCssComment(string css, int index)
+    {
+        while (index + 1 < css.Length)
+        {
+            if (css[index] == '*' && css[index + 1] == '/')
+                return index + 2;
+            index++;
+        }
+        return css.Length;
+    }
+
+    private static int SkipCssString(string css, int index, char quote)
+    {
+        while (index < css.Length)
+        {
+            if (css[index] == '\\' && index + 1 < css.Length)
+            {
+                index += 2;
+                continue;
+            }
+            if (css[index] == quote)
+                return index + 1;
+            index++;
+        }
+        return css.Length;
+    }
+
+    private static bool StartsWithCssKeyword(string css, int index, string keyword) =>
+        index + keyword.Length <= css.Length &&
+        css.AsSpan(index, keyword.Length).Equals(keyword.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCssIdentifierCharacter(char value) =>
+        char.IsLetterOrDigit(value) || value is '_' or '-' || value >= 0x80;
 
     private static bool IsCanonicalWebMcpRuntimePath(string siteRoot, string path)
     {
