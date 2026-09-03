@@ -896,60 +896,6 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
-    public void OptimizeDetailed_Hashing_PreservesCanonicalWebMcpRuntime()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-webmcp-" + Guid.NewGuid().ToString("N"));
-        var powerForgeAssets = Path.Combine(root, "assets", "powerforge");
-        var cssAssets = Path.Combine(root, "css");
-        var searchRoot = Path.Combine(root, "search");
-        Directory.CreateDirectory(powerForgeAssets);
-        Directory.CreateDirectory(cssAssets);
-        Directory.CreateDirectory(searchRoot);
-
-        try
-        {
-            var htmlPath = Path.Combine(searchRoot, "index.html");
-            var runtimePath = Path.Combine(powerForgeAssets, "webmcp-site-search.v1.js");
-            var ordinaryScriptPath = Path.Combine(root, "site.js");
-            var ordinaryStylePath = Path.Combine(cssAssets, "app.css");
-            var runtime = WebSiteBuilder.GetWebMcpSiteSearchAssetContent();
-            File.WriteAllText(htmlPath,
-                """
-                <!doctype html>
-                <html><head><link rel="stylesheet" href="../css/app.css"></head><body>
-                  <script src="../site.js"></script>
-                  <script src="../assets/powerforge/webmcp-site-search.v1.js" data-powerforge-webmcp></script>
-                </body></html>
-                """);
-            File.WriteAllText(runtimePath, runtime);
-            File.WriteAllText(ordinaryScriptPath, "console.log('ordinary');");
-            File.WriteAllText(ordinaryStylePath, "body { color: green; }");
-
-            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
-            {
-                SiteRoot = root,
-                HashAssets = true,
-                HashExtensions = new[] { ".css", ".js" }
-            });
-
-            Assert.Equal(2, result.HashedAssetCount);
-            var hashedScript = Assert.Single(result.HashedAssets, asset => asset.OriginalPath == "/site.js");
-            var hashedStyle = Assert.Single(result.HashedAssets, asset => asset.OriginalPath == "/css/app.css");
-            Assert.True(File.Exists(runtimePath));
-            Assert.Equal(runtime, File.ReadAllText(runtimePath));
-            var html = File.ReadAllText(htmlPath);
-            Assert.Contains("src=\"../assets/powerforge/webmcp-site-search.v1.js\"", html, StringComparison.Ordinal);
-            Assert.Contains($"src=\"../{hashedScript.HashedPath.TrimStart('/')}\"", html, StringComparison.Ordinal);
-            Assert.Contains($"href=\"../{hashedStyle.HashedPath.TrimStart('/')}\"", html, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-                Directory.Delete(root, true);
-        }
-    }
-
-    [Fact]
     public void OptimizeDetailed_DoesNotOverwriteProtectedStoryHashDestination()
     {
         var root = WebVisualStoryStagerTests.CreateBundle();

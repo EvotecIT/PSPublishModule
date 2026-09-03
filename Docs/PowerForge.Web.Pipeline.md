@@ -930,7 +930,13 @@ Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash asset
 Notes:
 - `minifyHtml`, `minifyCss`, and `minifyJs` default to `false`; the `optimize` task does not minify by name alone, so CI/deploy pipelines should set them explicitly.
 - `config` loads `AssetPolicy` from `site.json` (rewrites, hashing defaults, cache headers).
-- `hashAssets` fingerprints files and rewrites root-relative and document-relative references in HTML and CSS. PowerForge keeps its canonical WebMCP runtime route stable so readiness verification can compare the deployed bytes with the owning engine asset.
+- `hashAssets` fingerprints final asset bytes after minification and reference
+  stabilization, then rewrites root-relative and document-relative references in
+  HTML and CSS (including the effective HTML `<base href>`). Cyclic references
+  between fingerprinted assets fail closed instead of emitting immutable URLs
+  whose names do not match their bytes. PowerForge keeps its canonical WebMCP
+  runtime route and bytes stable so readiness verification can compare the
+  deployed asset with the owning engine runtime.
 - `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).
 - `imageGenerateWebp` / `imageGenerateAvif` can create next-gen variants when they are smaller than source output.
 - `imageMetadataPolicy` controls the original file. `preserve` (default) leaves it byte-for-byte unchanged, including rights, color profiles, and Content Credentials. `stripAll` always rewrites the original after removing encoder-supported metadata, even when the rewritten file is larger.

@@ -192,6 +192,12 @@ public static partial class WebAssetOptimizer
             OptimizeImages(siteRoot, htmlFiles, protectedStoryArtifacts, options, result, MarkUpdated);
         }
 
+        // Fingerprinted names must describe the bytes that receive immutable cache headers.
+        // Minify byte-mutating asset types before hashing, then stabilize hashes again after
+        // references inside CSS have been rewritten.
+        MinifyCssAssets(siteRoot, protectedStoryArtifacts, options, result, MarkUpdated);
+        MinifyJavaScriptAssets(siteRoot, protectedStoryArtifacts, options, result, MarkUpdated);
+
         var hashSpec = ResolveHashSpec(options, policy);
         Dictionary<string, string>? hashMap = null;
         // Fingerprinting moves shared assets and therefore requires every generated HTML
@@ -208,7 +214,6 @@ public static partial class WebAssetOptimizer
                 out var hashedAssets,
                 MarkUpdated);
             result.HashedAssetCount = hashedAssetCount;
-            result.HashedAssets = hashedAssets.ToArray();
             if (hashMap.Count > 0)
             {
                 var rewrites = RewriteHashedReferences(
@@ -219,6 +224,15 @@ public static partial class WebAssetOptimizer
                     MarkUpdated);
                 result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
                 result.CssHashRewriteCount = rewrites.CssFilesRewritten;
+                StabilizeHashedAssets(
+                    siteRoot,
+                    htmlFiles,
+                    hashMap,
+                    hashedAssets,
+                    protectedStoryArtifacts,
+                    result,
+                    MarkUpdated);
+                result.HashedAssets = hashedAssets.ToArray();
                 var manifestPath = WriteHashManifest(
                     siteRoot,
                     hashSpec,
@@ -261,64 +275,6 @@ public static partial class WebAssetOptimizer
             }
         }
 
-        if (options.MinifyCss)
-        {
-            foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories)
-                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
-            {
-                var css = File.ReadAllText(cssFile);
-                if (string.IsNullOrWhiteSpace(css)) continue;
-                string? minified = null;
-                try
-                {
-                    minified = HtmlOptimizer.OptimizeCss(css);
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning($"CSS minify failed for {cssFile}: {ex.GetType().Name}: {ex.Message}");
-                    minified = null;
-                }
-                if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(css, minified, StringComparison.Ordinal))
-                {
-                    var beforeBytes = Encoding.UTF8.GetByteCount(css);
-                    var afterBytes = Encoding.UTF8.GetByteCount(minified);
-                    File.WriteAllText(cssFile, minified);
-                    result.CssMinifiedCount++;
-                    result.CssBytesSaved += Math.Max(0, beforeBytes - afterBytes);
-                    MarkUpdated(cssFile);
-                }
-            }
-        }
-
-        if (options.MinifyJs)
-        {
-            foreach (var jsFile in Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories)
-                         .Where(path => !protectedStoryArtifacts.Contains(Path.GetFullPath(path))))
-            {
-                var js = File.ReadAllText(jsFile);
-                if (string.IsNullOrWhiteSpace(js)) continue;
-                string? minified = null;
-                try
-                {
-                    minified = HtmlOptimizer.OptimizeJavaScript(js);
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceWarning($"JS minify failed for {jsFile}: {ex.GetType().Name}: {ex.Message}");
-                    minified = null;
-                }
-                if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(js, minified, StringComparison.Ordinal))
-                {
-                    var beforeBytes = Encoding.UTF8.GetByteCount(js);
-                    var afterBytes = Encoding.UTF8.GetByteCount(minified);
-                    File.WriteAllText(jsFile, minified);
-                    result.JsMinifiedCount++;
-                    result.JsBytesSaved += Math.Max(0, beforeBytes - afterBytes);
-                    MarkUpdated(jsFile);
-                }
-            }
-        }
-
         if (policy?.CacheHeaders?.Enabled == true)
         {
             var headersPath = WriteCacheHeaders(
@@ -335,9 +291,11 @@ public static partial class WebAssetOptimizer
         }
 
         result.UpdatedFiles = updatedFiles
+            .Where(File.Exists)
             .Select(path => ToRelative(siteRoot, path))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        result.UpdatedCount = result.UpdatedFiles.Length;
 
         // Convenience summary sections for large reports.
         const int reportTopCount = 5;
@@ -436,6 +394,11 @@ public static partial class WebAssetOptimizer
             if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
             {
                 Trace.TraceWarning($"Asset rewrite destination outside site root: {rewrite.Destination}");
+                continue;
+            }
+            if (IsCanonicalWebMcpRuntimePath(siteRoot, dest))
+            {
+                Trace.TraceWarning($"Asset rewrite destination is managed by PowerForge.Web: {rewrite.Destination}");
                 continue;
             }
             if (protectedStoryArtifacts.Contains(Path.GetFullPath(dest)))
@@ -549,13 +512,8 @@ public static partial class WebAssetOptimizer
             if (protectedStoryArtifacts.Contains(Path.GetFullPath(file)))
                 continue;
             var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
-            if (string.Equals(
-                    relative,
-                    WebSiteBuilder.WebMcpSiteSearchAssetRoute.TrimStart('/'),
-                    StringComparison.OrdinalIgnoreCase))
-            {
+            if (IsCanonicalWebMcpRuntimePath(siteRoot, file))
                 continue;
-            }
             if (IsExcluded(relative, spec.Exclude))
                 continue;
 
@@ -634,17 +592,19 @@ public static partial class WebAssetOptimizer
         Dictionary<string, string> map,
         string relativeHtmlPath)
     {
+        var documentUri = CreateSiteDocumentUri(relativeHtmlPath);
+        var documentBaseUri = ResolveDocumentBaseUri(html, documentUri);
         var rewrittenHtml = HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map, relativeHtmlPath);
+            var rewritten = RewriteUrlWithMap(url, map, documentBaseUri);
             return rewritten == url ? match.Value : $"{match.Groups["attr"].Value}=\"{rewritten}\"";
         });
 
         return HtmlSrcSetAttrRegex.Replace(rewrittenHtml, match =>
         {
             var value = match.Groups["value"].Value;
-            var rewritten = RewriteSrcSetWithMap(value, map, relativeHtmlPath);
+            var rewritten = RewriteSrcSetWithMap(value, map, documentBaseUri);
             if (string.Equals(rewritten, value, StringComparison.Ordinal))
                 return match.Value;
 
@@ -656,7 +616,7 @@ public static partial class WebAssetOptimizer
     private static string RewriteSrcSetWithMap(
         string srcSet,
         Dictionary<string, string> map,
-        string relativeHtmlPath)
+        Uri? documentBaseUri)
     {
         StringBuilder? rewritten = null;
         var copyFrom = 0;
@@ -680,7 +640,7 @@ public static partial class WebAssetOptimizer
             if (urlEnd > urlStart)
             {
                 var url = srcSet[urlStart..urlEnd];
-                var mapped = RewriteUrlWithMap(url, map, relativeHtmlPath);
+                var mapped = RewriteUrlWithMap(url, map, documentBaseUri);
                 if (!string.Equals(mapped, url, StringComparison.Ordinal))
                 {
                     rewritten ??= new StringBuilder(srcSet.Length + 32);
@@ -718,10 +678,11 @@ public static partial class WebAssetOptimizer
         Dictionary<string, string> map,
         string relativeCssPath)
     {
+        var stylesheetUri = CreateSiteDocumentUri(relativeCssPath);
         return CssUrlRegex.Replace(css, match =>
         {
             var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map, relativeCssPath);
+            var rewritten = RewriteUrlWithMap(url, map, stylesheetUri);
             if (rewritten == url) return match.Value;
             return $"url({match.Groups["quote"].Value}{rewritten}{match.Groups["quote"].Value})";
         });
@@ -730,7 +691,7 @@ public static partial class WebAssetOptimizer
     private static string RewriteUrlWithMap(
         string url,
         Dictionary<string, string> map,
-        string relativeDocumentPath)
+        Uri? documentBaseUri)
     {
         if (string.IsNullOrWhiteSpace(url)) return url;
         if (url.StartsWith("//", StringComparison.Ordinal) ||
@@ -744,29 +705,29 @@ public static partial class WebAssetOptimizer
             return url;
 
         var suffix = url.Substring(baseUrl.Length);
-        if (baseUrl.StartsWith("/", StringComparison.Ordinal))
-        {
-            return map.TryGetValue(baseUrl, out var rootMapped)
-                ? rootMapped + suffix
-                : url;
-        }
-
-        var origin = new Uri("https://powerforge.invalid/", UriKind.Absolute);
-        var documentUri = new Uri(origin, relativeDocumentPath.Replace('\\', '/'));
-        if (!Uri.TryCreate(documentUri, baseUrl, out var resolved) ||
-            !string.Equals(resolved.Scheme, origin.Scheme, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(resolved.Host, origin.Host, StringComparison.OrdinalIgnoreCase))
+        var rootRelative = baseUrl.StartsWith("/", StringComparison.Ordinal);
+        var resolutionBase = rootRelative ? AssetRewriteOrigin : documentBaseUri;
+        if (resolutionBase is null ||
+            !Uri.TryCreate(resolutionBase, baseUrl, out var resolved) ||
+            !string.Equals(resolved.Scheme, AssetRewriteOrigin.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(resolved.Host, AssetRewriteOrigin.Host, StringComparison.OrdinalIgnoreCase) ||
+            resolved.Port != AssetRewriteOrigin.Port)
         {
             return url;
         }
 
-        var resolvedPath = Uri.UnescapeDataString(resolved.AbsolutePath.TrimStart('/'));
+        var resolvedPath = DecodeUrlPathForLookup(resolved.AbsolutePath.TrimStart('/'));
+        if (resolvedPath is null)
+            return url;
         if (!map.TryGetValue(resolvedPath, out var relativeMapped))
             return url;
 
-        var mappedUri = new Uri(origin, relativeMapped.TrimStart('/'));
-        var documentDirectory = new Uri(documentUri, ".");
-        var rewritten = Uri.UnescapeDataString(documentDirectory.MakeRelativeUri(mappedUri).ToString());
+        var mappedUri = new Uri(AssetRewriteOrigin, EncodeUrlPath(relativeMapped.TrimStart('/')));
+        if (rootRelative)
+            return mappedUri.AbsolutePath + suffix;
+
+        var documentDirectory = new Uri(documentBaseUri!, ".");
+        var rewritten = documentDirectory.MakeRelativeUri(mappedUri).ToString();
         if (baseUrl.StartsWith("./", StringComparison.Ordinal) &&
             !rewritten.StartsWith(".", StringComparison.Ordinal))
         {
