@@ -395,7 +395,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluationsByEvaluation[visitKey] = evaluation;
                 trustedBuildInfrastructureRootsByEvaluation[visitKey] =
                     evaluation.TrustedBuildInfrastructureRoots;
-                if (request.RequiresPrebuiltProjectReferenceOutputProof)
+                if (request.RequiresPrebuiltProjectReferenceOutputProof ||
+                    evaluation.ConsumesPrebuiltProjectReferenceOutputs)
                 {
                     generatedProjectReferenceOutputs.AddRange(
                         evaluation.GeneratedProjectReferenceOutputs.Select(output => (request, output)));
@@ -610,6 +611,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         : null,
                     controlledGeneratedOutputProofs))
             {
+                if (buildPlan?.NoBuildInPublish != true)
+                {
+                    provenNoBuildPublishInputs.Add(new NoBuildPublishInput(
+                        request.BuildVisitKey(),
+                        output.OutputPath,
+                        Path.GetFileName(output.OutputPath),
+                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                        ComputeSha256Hex(File.ReadAllBytes(output.OutputPath)),
+                        unixFileMode: ReadControlledUnixFileMode(output.OutputPath)));
+                }
                 continue;
             }
 
@@ -789,6 +800,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:OutDir",
             "-getProperty:TargetDir",
             "-getProperty:TargetPath",
+            "-getProperty:BuildProjectReferences",
             "-getProperty:_GlobalPropertiesToRemoveFromProjectReferences",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
@@ -821,10 +833,23 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(property.Value));
         }
-        AddProjectReferenceExecutionProperties(
-            arguments,
-            request,
-            preservePublishBuildProjectReferences: false);
+        if (request.RequiresPrebuiltProjectReferenceOutputProof)
+        {
+            AddProjectReferenceExecutionProperties(
+                arguments,
+                request,
+                preservePublishBuildProjectReferences: false);
+        }
+        else if (request.GlobalProperties.TryGetValue(
+                     "BuildProjectReferences",
+                     out string? requestedBuildProjectReferences))
+        {
+            // This invocation only evaluates properties and items; it does not run a target.
+            // Preserve an explicit publish value and otherwise let project/environment
+            // evaluation reveal whether the real publish will consume prebuilt outputs.
+            arguments.Add("-p:BuildProjectReferences=" +
+                EscapeMsBuildPropertyValue(requestedBuildProjectReferences));
+        }
 
         try
         {
@@ -884,6 +909,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string? msBuildToolsPath = null;
             string? msBuildSdksPath = null;
             string? customAfterMicrosoftCommonTargets = null;
+            bool evaluatedBuildProjectReferencesDisabled = false;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -953,6 +979,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 customAfterMicrosoftCommonTargets = ReadItemText(
                     properties,
                     "CustomAfterMicrosoftCommonTargets");
+                evaluatedBuildProjectReferencesDisabled =
+                    bool.TryParse(
+                        ReadItemText(properties, "BuildProjectReferences")?.Trim(),
+                        out bool buildProjectReferences) &&
+                    !buildProjectReferences;
                 AddSemicolonSeparatedPathValues(
                     properties,
                     "MSBuildAllProjects",
@@ -1164,8 +1195,8 @@ public sealed partial class DotNetPublishPipelineRunner
                      RequiresControlledProjectReferenceFrameworkResolution(
                          request,
                          rawReferences.Values) ||
-                     (request.RequiresPrebuiltProjectReferenceOutputProof &&
-                      request.DisablesProjectReferenceBuilds) ||
+                     request.DisablesProjectReferenceBuilds ||
+                     evaluatedBuildProjectReferencesDisabled ||
                      hasDynamicProjectReferenceTaskOutputs)
             {
                 if (!TryReadControlledResolvedProjectReferences(
@@ -1243,7 +1274,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedProjectReferenceConditionProperties,
                 ResolveExistingCustomAfterTargets(
                     customAfterMicrosoftCommonTargets,
-                    Path.GetDirectoryName(request.ProjectPath)!));
+                    Path.GetDirectoryName(request.ProjectPath)!),
+                evaluatedBuildProjectReferencesDisabled);
             return true;
         }
         catch

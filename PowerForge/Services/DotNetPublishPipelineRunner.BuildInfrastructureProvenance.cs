@@ -854,7 +854,8 @@ public sealed partial class DotNetPublishPipelineRunner
             VerifiedPackageInputCatalog? verifiedPackages,
             string[] trustedBuildInfrastructureRoots,
             IReadOnlyDictionary<string, string> evaluatedProperties,
-            string? customAfterMicrosoftCommonTargets)
+            string? customAfterMicrosoftCommonTargets,
+            bool consumesPrebuiltProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
             MsBuildInputs = msBuildInputs;
@@ -872,6 +873,7 @@ public sealed partial class DotNetPublishPipelineRunner
             TrustedBuildInfrastructureRoots = trustedBuildInfrastructureRoots;
             EvaluatedProperties = evaluatedProperties;
             CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
+            ConsumesPrebuiltProjectReferenceOutputs = consumesPrebuiltProjectReferenceOutputs;
         }
 
         internal string[] BuildInputs { get; }
@@ -890,6 +892,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] TrustedBuildInfrastructureRoots { get; }
         internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
         internal string? CustomAfterMicrosoftCommonTargets { get; }
+        internal bool ConsumesPrebuiltProjectReferenceOutputs { get; }
     }
 
     private sealed class EvaluatedProjectReference
