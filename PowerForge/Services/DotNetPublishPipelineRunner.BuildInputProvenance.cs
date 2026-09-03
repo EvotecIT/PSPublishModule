@@ -304,17 +304,23 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? projectPaths,
         string? configuration,
         DotNetPublishPlan? buildPlan,
+        DotNetPublishStep? buildStep,
         out string[] projectDirectories,
         out HashSet<string> buildInputs,
         out HashSet<string> sourceInputs,
-        out NoBuildPublishInput[] noBuildPublishInputs)
+        out NoBuildPublishInput[] noBuildPublishInputs,
+        out string? failureReason)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         ProjectEvaluationRequest[] roots = BuildProjectEvaluationRequests(
                 projectPaths,
                 configuration,
-                buildPlan)
+                buildPlan,
+                buildStep)
             .ToArray();
+        HashSet<string> rootProjectPaths = roots
+            .Select(request => Path.GetFullPath(request.ProjectPath))
+            .ToHashSet(comparison);
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -337,6 +343,13 @@ public sealed partial class DotNetPublishPipelineRunner
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
         noBuildPublishInputs = Array.Empty<NoBuildPublishInput>();
+        failureReason = null;
+        if (!string.IsNullOrWhiteSpace(buildStep?.TargetName) && roots.Length == 0)
+        {
+            projectDirectories = Array.Empty<string>();
+            failureReason = $"MSBuild input evaluation failed: publish target '{buildStep!.TargetName}' has no matching project combination.";
+            return false;
+        }
 
         foreach (ProjectEvaluationRequest root in roots)
         {
@@ -347,6 +360,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
                     .Distinct(comparison)
                     .ToArray();
+                failureReason = $"MSBuild input evaluation failed: locked restore refresh failed for '{root.ProjectPath}'.";
                 return false;
             }
 
@@ -369,6 +383,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         out EvaluatedProjectInputs? evaluation) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
+                    failureReason = $"MSBuild input evaluation failed: evaluated project inputs could not be read for '{request.ProjectPath}'" +
+                        (string.IsNullOrWhiteSpace(request.TargetFramework)
+                            ? "."
+                            : $" ({request.TargetFramework}).");
                     return false;
                 }
                 foreach (string input in evaluation.BuildInputs)
@@ -426,6 +444,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string evaluationKey = entry.Key;
             ProjectEvaluationRequest request = entry.Value;
+            // Only release roots are publish surfaces. Referenced projects are rebuilt and
+            // attested through the frozen graph using their own project-reference context.
+            if (!rootProjectPaths.Contains(Path.GetFullPath(request.ProjectPath)))
+                continue;
             if (string.IsNullOrWhiteSpace(request.TargetFramework) ||
                 !TryReadFrozenProjectReferenceGraph(
                     request,
@@ -438,6 +460,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!string.IsNullOrWhiteSpace(request.TargetFramework))
                 {
                     projectDirectories = directories.ToArray();
+                    failureReason = $"MSBuild input evaluation failed: the frozen project-reference graph could not be resolved for '{request.ProjectPath}' ({request.TargetFramework}).";
                     return false;
                 }
                 continue;
@@ -471,13 +494,24 @@ public sealed partial class DotNetPublishPipelineRunner
                     buildPlan?.NoBuildInPublish == true,
                     graphNodes,
                     evaluationsByEvaluation[evaluationKey].EvaluatedProperties,
-                    out EvaluatedPublishInput[] publishInputs))
+                    out EvaluatedPublishInput[] publishInputs,
+                    out string? publishInputFailureReason))
             {
                 projectDirectories = directories.ToArray();
+                failureReason = $"MSBuild input evaluation failed: publish inputs could not be evaluated for '{request.ProjectPath}' ({request.TargetFramework})" +
+                    (string.IsNullOrWhiteSpace(publishInputFailureReason)
+                        ? "."
+                        : $": {publishInputFailureReason}");
                 return false;
             }
             evaluatedPublishInputs.AddRange(
-                publishInputs.Select(input => (evaluationKey, input)));
+                publishInputs
+                    .Where(input => IsFinalPublishInputRetained(
+                        input.FullPath,
+                        request,
+                        buildPlan,
+                        buildStep))
+                    .Select(input => (evaluationKey, input)));
         }
 
         var provenNoBuildPublishInputsByEvaluation =
@@ -522,6 +556,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     entry.Input.IsPackageBacked)));
         }
 
+        HashSet<string> fullyProvenGeneratedPublishInputPaths = evaluatedPublishInputs
+            .Where(entry => !entry.Input.IsPackageBacked)
+            .GroupBy(entry => entry.Input.FullPath, comparison)
+            .Where(group => group.All(entry =>
+                provenNoBuildPublishInputsByEvaluation.TryGetValue(
+                    entry.EvaluationKey,
+                    out HashSet<string>? provenInputs) &&
+                provenInputs.Contains(entry.Input.FullPath)))
+            .Select(group => group.Key)
+            .ToHashSet(comparison);
+        HashSet<string> evaluatedPublishInputPaths = evaluatedPublishInputs
+            .Where(entry => !entry.Input.IsPackageBacked)
+            .Select(entry => Path.GetFullPath(entry.Input.FullPath))
+            .ToHashSet(comparison);
+
         foreach ((string evaluationKey, EvaluatedPublishInput publishInput) in evaluatedPublishInputs)
         {
             if (publishInput.IsPackageBacked)
@@ -548,6 +597,15 @@ public sealed partial class DotNetPublishPipelineRunner
 
         foreach ((ProjectEvaluationRequest request, GeneratedProjectReferenceOutput output) in generatedProjectReferenceOutputs)
         {
+            string fullOutputPath = Path.GetFullPath(output.OutputPath);
+            if (buildPlan?.NoBuildInPublish == true &&
+                !evaluatedPublishInputPaths.Contains(fullOutputPath))
+            {
+                continue;
+            }
+            if (fullyProvenGeneratedPublishInputPaths.Contains(fullOutputPath))
+                continue;
+
             ProjectEvaluationRequest referencedProject = request.ForProject(output.ProjectReference);
             if (!TryResolveProjectEvaluationKey(
                     referencedProject,
@@ -638,15 +696,68 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
+    private static bool IsFinalPublishInputRetained(
+        string path,
+        ProjectEvaluationRequest request,
+        DotNetPublishPlan? buildPlan,
+        DotNetPublishStep? buildStep)
+    {
+        if (buildPlan?.Targets is not { Length: > 0 })
+            return true;
+
+        StringComparison comparison = IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        string projectPath = Path.GetFullPath(request.ProjectPath);
+        DotNetPublishTargetPlan[] targets = buildPlan.Targets
+            .Where(target =>
+                target is not null &&
+                !string.IsNullOrWhiteSpace(target.ProjectPath) &&
+                string.Equals(Path.GetFullPath(target.ProjectPath), projectPath, comparison) &&
+                IsPublishProvenanceCombinationInScope(target.Name, combination: null, buildStep))
+            .ToArray();
+        if (targets.Length == 0)
+            return true;
+
+        bool keepSymbols = targets.Any(target => target.Publish?.KeepSymbols == true);
+        bool keepDocs = targets.Any(target => target.Publish?.KeepDocs == true);
+        return IsFinalPublishInputRetained(path, keepSymbols, keepDocs);
+    }
+
+    internal static bool IsFinalPublishInputRetained(
+        string path,
+        bool keepSymbols,
+        bool keepDocs)
+    {
+        string extension = Path.GetExtension(path);
+        if (!keepSymbols && extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!keepDocs &&
+            (extension.Equals(".xml", StringComparison.OrdinalIgnoreCase) ||
+             extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        return true;
+    }
+
     private static IEnumerable<ProjectEvaluationRequest> BuildProjectEvaluationRequests(
         IEnumerable<string>? projectPaths,
         string? configuration,
-        DotNetPublishPlan? buildPlan)
+        DotNetPublishPlan? buildPlan,
+        DotNetPublishStep? buildStep)
     {
         string effectiveConfiguration = string.IsNullOrWhiteSpace(buildPlan?.Configuration)
             ? string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration!.Trim()
             : buildPlan!.Configuration.Trim();
         DotNetPublishTargetPlan[] targets = buildPlan?.Targets ?? Array.Empty<DotNetPublishTargetPlan>();
+        if (!string.IsNullOrWhiteSpace(buildStep?.TargetName))
+        {
+            targets = targets
+                .Where(target => IsPublishProvenanceCombinationInScope(
+                    target.Name,
+                    combination: null,
+                    buildStep))
+                .ToArray();
+        }
         if (targets.Length > 0)
         {
             foreach (DotNetPublishTargetPlan target in targets)
@@ -654,6 +765,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (target is null || string.IsNullOrWhiteSpace(target.ProjectPath))
                     continue;
                 DotNetPublishTargetCombination[] combinations = target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+                if (!string.IsNullOrWhiteSpace(buildStep?.TargetName))
+                {
+                    combinations = combinations
+                        .Where(combination => IsPublishProvenanceCombinationInScope(
+                            target.Name,
+                            combination,
+                            buildStep))
+                        .ToArray();
+                    if (combinations.Length == 0)
+                        continue;
+                }
                 if (combinations.Length == 0)
                 {
                     yield return new ProjectEvaluationRequest(
@@ -742,6 +864,30 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishTargetCombination combination)
         => PublishConsumesPrebuiltProjectReferenceOutputs(plan, target, combination) ||
            target.Publish?.Sign?.Enabled != true;
+
+    internal static bool IsPublishProvenanceCombinationInScope(
+        string targetName,
+        DotNetPublishTargetCombination? combination,
+        DotNetPublishStep? buildStep)
+    {
+        if (string.IsNullOrWhiteSpace(buildStep?.TargetName))
+            return true;
+        if (!string.Equals(targetName, buildStep!.TargetName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (combination is null)
+            return true;
+        return (string.IsNullOrWhiteSpace(buildStep.Framework) ||
+                string.Equals(
+                    combination.Framework,
+                    buildStep.Framework,
+                    StringComparison.OrdinalIgnoreCase)) &&
+               (string.IsNullOrWhiteSpace(buildStep.Runtime) ||
+                string.Equals(
+                    combination.Runtime,
+                    buildStep.Runtime,
+                    StringComparison.OrdinalIgnoreCase)) &&
+               (!buildStep.Style.HasValue || combination.Style == buildStep.Style.Value);
+    }
 
     private static Dictionary<string, string> BuildPublishEvaluationProperties(
         DotNetPublishPlan plan,
@@ -1318,7 +1464,21 @@ public sealed partial class DotNetPublishPipelineRunner
         if (string.IsNullOrWhiteSpace(request.TargetFramework))
             return false;
 
-        return references.Any(reference =>
+        EvaluatedProjectReference[] candidates = references.ToArray();
+        if (candidates.Length == 0)
+            return false;
+
+        // The SDK decides per referenced target whether RuntimeIdentifier and
+        // SelfContained flow into that project. Raw ProjectReference items do not
+        // contain those computed UndefineProperties, so a RID-scoped release must
+        // resolve the SDK-authored context before reconstructing the build graph.
+        if (request.GlobalProperties.ContainsKey("RuntimeIdentifier") ||
+            request.GlobalProperties.ContainsKey("SelfContained"))
+        {
+            return true;
+        }
+
+        return candidates.Any(reference =>
             !reference.UndefineProperties.Contains(
                 "TargetFramework",
                 StringComparer.OrdinalIgnoreCase) &&

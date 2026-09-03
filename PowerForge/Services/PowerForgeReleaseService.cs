@@ -3550,17 +3550,6 @@ internal sealed partial class PowerForgeReleaseService
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(stageRootTemplate))
-        {
-            var stageRoot = ResolveOutputPath(configDirectory, stageRootTemplate!);
-            assetEntries = StageReleaseAssets(assetEntries, stageRoot, outputs.Staging).ToArray();
-        }
-
-        result.ReleaseAssetEntries = assetEntries;
-        result.ReleaseAssets = assetEntries
-            .Select(entry => entry.StagedPath ?? entry.Path)
-            .ToArray();
-
         var manifestPathTemplate = outputs.ManifestJsonPath;
         var checksumsPathTemplate = outputs.ChecksumsPath;
         if (!string.IsNullOrWhiteSpace(request.OutputRoot))
@@ -3577,6 +3566,26 @@ internal sealed partial class PowerForgeReleaseService
         var checksumsPath = string.IsNullOrWhiteSpace(checksumsPathTemplate)
             ? null
             : ResolveOutputPath(configDirectory, checksumsPathTemplate!);
+
+        if (!string.IsNullOrWhiteSpace(stageRootTemplate))
+        {
+            var stageRoot = ResolveOutputPath(configDirectory, stageRootTemplate!);
+            assetEntries = StageReleaseAssets(
+                assetEntries,
+                stageRoot,
+                outputs.Staging,
+                manifestPath,
+                checksumsPath).ToArray();
+        }
+        else
+        {
+            ValidateReleaseOutputDestinations(assetEntries, manifestPath, checksumsPath);
+        }
+
+        result.ReleaseAssetEntries = assetEntries;
+        result.ReleaseAssets = assetEntries
+            .Select(entry => entry.StagedPath ?? entry.Path)
+            .ToArray();
 
         if (!string.IsNullOrWhiteSpace(manifestPath))
         {
@@ -4401,9 +4410,14 @@ internal sealed partial class PowerForgeReleaseService
                 "Use DotNet publish Styles in config when Tools uses DotNetPublish.");
         }
 
+        DotNetPublishPipelineRunner runner = new(logger);
+        DotNetPublishPlan? configuredRuntimePlan = request.Runtimes is { Length: > 0 }
+            ? runner.Plan(spec, configPath)
+            : null;
         ApplyDotNetRequestOverrides(spec, request);
         ApplyDotNetToolOutputSelection(spec, selectedOutputs);
-        DotNetPublishPlan plan = new DotNetPublishPipelineRunner(logger).Plan(spec, configPath);
+        DotNetPublishPlan plan = runner.Plan(spec, configPath);
+        RetainConfiguredRestoreCombinations(plan, configuredRuntimePlan);
         string releaseConfigPath = Path.GetFullPath(request.ConfigPath.Trim().Trim('"'));
         plan.ConfigurationInputPaths = plan.ConfigurationInputPaths
             .Concat(new[] { releaseConfigPath })
@@ -4414,6 +4428,46 @@ internal sealed partial class PowerForgeReleaseService
         BindGeneratedConfigurationInput(plan, request);
         request.DotNetPublishPlan = plan;
         return plan;
+    }
+
+    internal static void RetainConfiguredRestoreCombinations(
+        DotNetPublishPlan plan,
+        DotNetPublishPlan? configuredPlan)
+    {
+        if (configuredPlan is null)
+            return;
+
+        foreach (DotNetPublishTargetPlan target in plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+        {
+            DotNetPublishTargetPlan? configuredTarget = (configuredPlan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                .FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, target.Name, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(candidate.ProjectPath, target.ProjectPath, StringComparison.OrdinalIgnoreCase));
+            if (configuredTarget is null)
+                continue;
+
+            DotNetPublishTargetCombination[] selected = target.Combinations
+                ?? Array.Empty<DotNetPublishTargetCombination>();
+            var restoreCombinations = (configuredTarget.Combinations
+                    ?? Array.Empty<DotNetPublishTargetCombination>())
+                .Where(configured => selected.Any(executed =>
+                    string.Equals(executed.Framework, configured.Framework, StringComparison.OrdinalIgnoreCase)
+                    && executed.Style == configured.Style))
+                .ToList();
+            foreach (DotNetPublishTargetCombination executed in selected)
+            {
+                if (restoreCombinations.Any(configured =>
+                        string.Equals(executed.Framework, configured.Framework, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(executed.Runtime, configured.Runtime, StringComparison.OrdinalIgnoreCase)
+                        && executed.Style == configured.Style))
+                {
+                    continue;
+                }
+
+                restoreCombinations.Add(executed);
+            }
+            target.RestoreCombinations = restoreCombinations.ToArray();
+        }
     }
 
     private static void ApplyDotNetRequestOverrides(DotNetPublishSpec spec, PowerForgeReleaseRequest request)
@@ -5119,15 +5173,7 @@ internal sealed partial class PowerForgeReleaseService
         if (File.Exists(path))
         {
             var fullPath = Path.GetFullPath(path);
-            yield return new PowerForgeReleaseAssetEntry
-            {
-                Path = fullPath,
-                Category = PowerForgeReleaseAssetCategory.Module,
-                Source = "Module",
-                Version = ResolveModuleReleaseVersion(plan),
-                IsFinalPackageOutput = produced?.Contains(fullPath) == true &&
-                                       IsFinalPowerShellModulePackage(fullPath, plan)
-            };
+            yield return CreateModuleProducedAssetEntry(fullPath, plan, produced);
             yield break;
         }
 
@@ -5140,63 +5186,155 @@ internal sealed partial class PowerForgeReleaseService
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(file);
-            yield return new PowerForgeReleaseAssetEntry
-            {
-                Path = fullPath,
-                Category = PowerForgeReleaseAssetCategory.Module,
-                Source = "Module",
-                Version = ResolveModuleReleaseVersion(plan),
-                IsFinalPackageOutput = produced?.Contains(fullPath) == true &&
-                                       IsFinalPowerShellModulePackage(fullPath, plan)
-            };
+            yield return CreateModuleProducedAssetEntry(fullPath, plan, produced);
         }
     }
 
     private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
         IEnumerable<PowerForgeReleaseAssetEntry> assetEntries,
         string stageRoot,
-        PowerForgeReleaseStagingOptions? stagingOptions)
+        PowerForgeReleaseStagingOptions? stagingOptions,
+        string? manifestPath,
+        string? checksumsPath)
     {
         var options = stagingOptions ?? new PowerForgeReleaseStagingOptions();
-        Directory.CreateDirectory(stageRoot);
-
-        foreach (var entry in assetEntries)
-        {
-            var sourcePath = entry.Path;
-            if (string.IsNullOrWhiteSpace(sourcePath))
-                continue;
-
-            var sourceIsFile = File.Exists(sourcePath);
-            var sourceIsDirectory = !sourceIsFile && Directory.Exists(sourcePath);
-            if (!sourceIsFile && !sourceIsDirectory)
-                continue;
-
-            var categoryDirectory = ResolveStageDirectory(options, entry.Category);
-            var relativeStagePath = Path.Combine(categoryDirectory, GetStageEntryName(entry, sourceIsDirectory, options));
-            var destinationPath = Path.Combine(stageRoot, relativeStagePath);
-            var sourceFullPath = Path.GetFullPath(sourcePath);
-            var destinationFullPath = Path.GetFullPath(destinationPath);
-
-            entry.RelativeStagePath = relativeStagePath.Replace('\\', '/');
-            entry.StagedPath = destinationFullPath;
-
-            if (string.Equals(sourceFullPath, destinationFullPath, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationFullPath)!);
-            if (sourceIsFile)
+        PowerForgeReleaseAssetEntry[] entries = assetEntries.ToArray();
+        var plannedEntries = entries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Path))
+            .Select(entry =>
             {
-                File.Copy(sourceFullPath, destinationFullPath, overwrite: true);
+                string sourcePath = entry.Path;
+                bool sourceIsFile = File.Exists(sourcePath);
+                bool sourceIsDirectory = !sourceIsFile && Directory.Exists(sourcePath);
+                if (!sourceIsFile && !sourceIsDirectory)
+                    return null;
+
+                string categoryDirectory = ResolveStageDirectory(options, entry.Category);
+                string relativeStagePath = Path.Combine(
+                    categoryDirectory,
+                    GetStageEntryName(entry, sourceIsDirectory, options));
+                string sourceFullPath = Path.GetFullPath(sourcePath);
+                string destinationFullPath = Path.GetFullPath(Path.Combine(stageRoot, relativeStagePath));
+                entry.RelativeStagePath = relativeStagePath.Replace('\\', '/');
+                entry.StagedPath = destinationFullPath;
+                return new
+                {
+                    SourceFullPath = sourceFullPath,
+                    DestinationFullPath = destinationFullPath,
+                    SourceIsFile = sourceIsFile
+                };
+            })
+            .Where(entry => entry is not null)
+            .ToArray();
+
+        StringComparison sourcePathComparison = Path.DirectorySeparatorChar == '\\'
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        for (int firstIndex = 0; firstIndex < plannedEntries.Length; firstIndex++)
+        {
+            var first = plannedEntries[firstIndex]!;
+            for (int secondIndex = firstIndex + 1; secondIndex < plannedEntries.Length; secondIndex++)
+            {
+                var second = plannedEntries[secondIndex]!;
+                if (string.Equals(first.SourceFullPath, second.SourceFullPath, sourcePathComparison) &&
+                    string.Equals(
+                        first.DestinationFullPath,
+                        second.DestinationFullPath,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                if (!ReleasePathsOverlap(first.DestinationFullPath, second.DestinationFullPath))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Release staging destination collision between '{first.DestinationFullPath}' and " +
+                    $"'{second.DestinationFullPath}'. Distinct sources: '{first.SourceFullPath}', " +
+                    $"'{second.SourceFullPath}'.");
+            }
+        }
+        ValidateReleaseOutputDestinations(entries, manifestPath, checksumsPath);
+
+        Directory.CreateDirectory(stageRoot);
+        foreach (var plannedEntry in plannedEntries)
+        {
+            if (plannedEntry is null || string.Equals(
+                    plannedEntry.SourceFullPath,
+                    plannedEntry.DestinationFullPath,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(plannedEntry.DestinationFullPath)!);
+            if (plannedEntry.SourceIsFile)
+            {
+                File.Copy(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath, overwrite: true);
             }
             else
             {
-                if (Directory.Exists(destinationFullPath))
-                    Directory.Delete(destinationFullPath, recursive: true);
-                CopyDirectory(sourceFullPath, destinationFullPath);
+                if (Directory.Exists(plannedEntry.DestinationFullPath))
+                    Directory.Delete(plannedEntry.DestinationFullPath, recursive: true);
+                CopyDirectory(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath);
             }
         }
 
-        return assetEntries;
+        return entries;
+    }
+
+    internal static void ValidateReleaseOutputDestinations(
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> assetEntries,
+        string? manifestPath,
+        string? checksumsPath)
+    {
+        string[] generatedOutputPaths = new[] { manifestPath, checksumsPath }
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path!))
+            .ToArray();
+        if (generatedOutputPaths.Length > 1 && string.Equals(
+                generatedOutputPaths[0],
+                generatedOutputPaths[1],
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Release manifest and checksum outputs resolve to the same destination '{generatedOutputPaths[0]}'.");
+        }
+
+        foreach (string generatedOutputPath in generatedOutputPaths)
+        {
+            PowerForgeReleaseAssetEntry? collision = assetEntries.FirstOrDefault(entry =>
+                (!string.IsNullOrWhiteSpace(entry.Path) &&
+                 ReleasePathsOverlap(Path.GetFullPath(entry.Path), generatedOutputPath)) ||
+                (!string.IsNullOrWhiteSpace(entry.StagedPath) &&
+                 ReleasePathsOverlap(Path.GetFullPath(entry.StagedPath!), generatedOutputPath)));
+            if (collision is null)
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"Generated release output destination '{generatedOutputPath}' collides with staged asset " +
+                $"source '{Path.GetFullPath(collision.Path)}'.");
+        }
+    }
+
+    private static bool ReleasePathsOverlap(string firstPath, string secondPath)
+    {
+        string first = Path.GetFullPath(firstPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string second = Path.GetFullPath(secondPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(first, second, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string firstPrefix = first + Path.DirectorySeparatorChar;
+        string secondPrefix = second + Path.DirectorySeparatorChar;
+        return first.StartsWith(secondPrefix, StringComparison.OrdinalIgnoreCase) ||
+               second.StartsWith(firstPrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveStageDirectory(PowerForgeReleaseStagingOptions options, PowerForgeReleaseAssetCategory category)
@@ -5709,7 +5847,15 @@ internal sealed partial class PowerForgeReleaseService
             : Path.GetFileName(sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         var template = ResolveStageNameTemplate(options, entry.Category);
         if (string.IsNullOrWhiteSpace(template))
+        {
+            if (entry.Category == PowerForgeReleaseAssetCategory.Metadata &&
+                string.Equals(entry.Source, "DotNetPublish", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(defaultName, "SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase))
+            {
+                return "DotNetPublish." + defaultName;
+            }
             return defaultName;
+        }
 
         var extension = isDirectory ? string.Empty : Path.GetExtension(sourcePath);
         var fileNameWithoutExtension = isDirectory

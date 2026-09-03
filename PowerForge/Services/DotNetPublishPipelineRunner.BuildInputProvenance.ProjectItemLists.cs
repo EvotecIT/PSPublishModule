@@ -273,9 +273,11 @@ public sealed partial class DotNetPublishPipelineRunner
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         IReadOnlyDictionary<string, string> evaluatedProperties,
-        out EvaluatedPublishInput[] publishInputs)
+        out EvaluatedPublishInput[] publishInputs,
+        out string? failureReason)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
+        failureReason = null;
         if (!proveControlledGeneratedInputs &&
             !ContainsPotentialPublishItemMutation(
                 request.ProjectPath,
@@ -297,7 +299,8 @@ public sealed partial class DotNetPublishPipelineRunner
             proveControlledGeneratedInputs,
             graphBuildNodes,
             evaluatedProperties,
-            out publishInputs);
+            out publishInputs,
+            out failureReason);
     }
 
     private static bool TryReadFrozenProjectReferenceGraph(

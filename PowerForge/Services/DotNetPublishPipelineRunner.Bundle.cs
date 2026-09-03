@@ -62,7 +62,8 @@ public sealed partial class DotNetPublishPipelineRunner
             _ = ReadPortableInventorySourceProvenance(
                 plan,
                 outputDir,
-                EnumerateBundleGeneratedArtefactPaths(artefacts));
+                EnumerateBundleGeneratedArtefactPaths(artefacts),
+                step);
 
         string outputBoundary = plan.AllowOutputOutsideProjectRoot
             ? outputDir
@@ -197,7 +198,8 @@ public sealed partial class DotNetPublishPipelineRunner
             SourceProvenance provenance = ReadPortableInventorySourceProvenance(
                 plan,
                 outputDir,
-                EnumerateBundleGeneratedArtefactPaths(artefacts));
+                EnumerateBundleGeneratedArtefactPaths(artefacts),
+                step);
             (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                 outputDir,
                 primaryExecutable,
