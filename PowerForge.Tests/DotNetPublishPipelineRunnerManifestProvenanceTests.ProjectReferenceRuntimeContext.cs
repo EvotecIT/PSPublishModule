@@ -89,6 +89,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "Release",
                 "net8.0",
                 "Library.dll")));
+
+            plan.MsBuildProperties["BuildProjectReferences"] = "false";
+
+            DotNetPublishPipelineRunner.SourceProvenance prebuiltProvenance =
+                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
+
+            Assert.True(prebuiltProvenance.Dirty);
+            Assert.Contains(prebuiltProvenance.DirtyReasons, reason =>
+                reason.Contains("Library.dll", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -128,6 +137,45 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             plan,
             target,
             combination));
+
+        plan.MsBuildProperties["BuildProjectReferences"] = "false";
+
+        Assert.True(DotNetPublishPipelineRunner.PublishConsumesPrebuiltProjectReferenceOutputs(
+            plan,
+            target,
+            combination));
+
+        plan.MsBuildProperties["BuildProjectReferences"] = "true";
+        target.Publish.MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BuildProjectReferences"] = "false"
+        };
+
+        Assert.True(DotNetPublishPipelineRunner.PublishConsumesPrebuiltProjectReferenceOutputs(
+            plan,
+            target,
+            combination));
+
+        target.Publish.MsBuildProperties = null;
+        target.Publish.StyleOverrides = new Dictionary<string, DotNetPublishStyleOverride>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            [DotNetPublishStyle.FrameworkDependent.ToString()] = new DotNetPublishStyleOverride
+            {
+                MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["BuildProjectReferences"] = "false"
+                }
+            }
+        };
+
+        Assert.True(DotNetPublishPipelineRunner.PublishConsumesPrebuiltProjectReferenceOutputs(
+            plan,
+            target,
+            combination));
+
+        target.Publish.StyleOverrides = null;
+        plan.MsBuildProperties.Clear();
 
         plan.NoBuildInPublish = true;
 

@@ -707,6 +707,10 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
         internal bool RequiresSdkPackageEvidence { get; }
         internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
+        internal bool DisablesProjectReferenceBuilds
+            => GlobalProperties.TryGetValue("BuildProjectReferences", out string? value) &&
+               bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
+               !buildProjectReferences;
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {

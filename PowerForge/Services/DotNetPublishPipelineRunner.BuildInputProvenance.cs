@@ -704,13 +704,25 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (combination is null) throw new ArgumentNullException(nameof(combination));
 
-        return plan.NoBuildInPublish &&
-               !TargetUsesPublishMsiVersionProperties(
-                   plan,
-                   target.Name,
-                   combination.Framework,
-                   combination.Runtime,
-                   combination.Style);
+        Dictionary<string, string> publishProperties = BuildPublishMsBuildProperties(
+            plan,
+            target,
+            combination.Framework,
+            combination.Runtime,
+            combination.Style);
+        bool projectReferenceBuildDisabled =
+            publishProperties.TryGetValue("BuildProjectReferences", out string? value) &&
+            bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
+            !buildProjectReferences;
+
+        return projectReferenceBuildDisabled ||
+               (plan.NoBuildInPublish &&
+                !TargetUsesPublishMsiVersionProperties(
+                    plan,
+                    target.Name,
+                    combination.Framework,
+                    combination.Runtime,
+                    combination.Style));
     }
 
     internal static bool RequiresPrebuiltProjectReferenceOutputProof(
@@ -1152,6 +1164,8 @@ public sealed partial class DotNetPublishPipelineRunner
                      RequiresControlledProjectReferenceFrameworkResolution(
                          request,
                          rawReferences.Values) ||
+                     (request.RequiresPrebuiltProjectReferenceOutputProof &&
+                      request.DisablesProjectReferenceBuilds) ||
                      hasDynamicProjectReferenceTaskOutputs)
             {
                 if (!TryReadControlledResolvedProjectReferences(
