@@ -121,13 +121,35 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
-        var args = new List<string> { "restore", projectPath, "--nologo" };
-        var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, projectPath, runtime, framework);
-        if (runtimeIdentifiers.Length <= 1)
-            args.AddRange(new[] { "-r", runtime });
+        var args = new List<string> { "restore", projectPath, "--nologo", "--disable-build-servers" };
+        Dictionary<string, string> properties = BuildRestoreMsBuildProperties(
+            plan,
+            projectPath,
+            runtime,
+            framework);
+        bool hasExplicitRuntimeIdentifiers = properties.TryGetValue(
+            "RuntimeIdentifiers",
+            out string? configuredRuntimeIdentifiers) &&
+            !string.IsNullOrWhiteSpace(configuredRuntimeIdentifiers);
+        if (hasExplicitRuntimeIdentifiers)
+        {
+            properties.Remove("RuntimeIdentifiers");
+            string[] configuredRuntimes = configuredRuntimeIdentifiers!
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => value.Trim())
+                .Where(value => value.Length > 0)
+                .ToArray();
+            args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(configuredRuntimes)}");
+        }
         else
-            args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
-        args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework)));
+        {
+            var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, projectPath, runtime, framework);
+            if (runtimeIdentifiers.Length <= 1)
+                args.AddRange(new[] { "-r", runtime });
+            else
+                args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
+        }
+        args.AddRange(BuildMsBuildPropertyArgs(properties));
         return args;
     }
 
@@ -249,7 +271,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var label = string.IsNullOrWhiteSpace(runtime) ? string.Empty : $" ({runtime})";
             _logger.Info($"Build{label} -> {path}");
 
-            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo" };
+            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
             if (!string.IsNullOrWhiteSpace(runtime))
             {
                 args.AddRange(new[] { "-r", runtime! });
@@ -283,7 +305,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
-        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
+        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
         if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
         if (plan.Restore) args.Add("--no-restore");
@@ -581,6 +603,7 @@ public sealed partial class DotNetPublishPipelineRunner
             target.ProjectPath,
             "-c", plan.Configuration,
             "--nologo",
+            "--disable-build-servers",
             "-f", framework,
             "--output", outputDir
         };

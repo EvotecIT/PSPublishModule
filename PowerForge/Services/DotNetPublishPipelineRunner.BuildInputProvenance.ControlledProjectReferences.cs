@@ -151,7 +151,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     controlledSourceRoot,
                     controlledProjectPath!,
+                    request.TrustedBuildPackages,
                     out offlinePackageSources,
+                    out _,
                     allowSdkManagedToolchainPackages: true))
             {
                 return false;
@@ -270,8 +272,7 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSourceList,
-                Path.Combine(controlledOutputRoot, "packages.lock.json"));
+                offlinePackageSourceList);
             arguments.Add("-p:RestoreRecursive=false");
             arguments.Add("-p:BaseIntermediateOutputPath=" +
                 EscapeMsBuildPropertyValue(controlledIntermediateRoot + Path.DirectorySeparatorChar));

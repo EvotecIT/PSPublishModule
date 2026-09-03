@@ -25,6 +25,8 @@ public sealed partial class DotNetPublishPipelineRunner
             "EditorConfigFiles",
             "GlobalAnalyzerConfigFiles",
             "ApplicationDefinition",
+            "AvaloniaResource",
+            "AvaloniaXaml",
             "Page",
             "Resource",
             "SplashScreen",
@@ -43,6 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
         "EditorConfigFiles",
         "GlobalAnalyzerConfigFiles",
         "ApplicationDefinition",
+        "AvaloniaResource",
+        "AvaloniaXaml",
         "Page",
         "Resource",
         "SplashScreen",
@@ -307,7 +311,8 @@ public sealed partial class DotNetPublishPipelineRunner
         out string[] projectDirectories,
         out HashSet<string> buildInputs,
         out HashSet<string> sourceInputs,
-        out NoBuildPublishInput[] noBuildPublishInputs)
+        out NoBuildPublishInput[] noBuildPublishInputs,
+        out string? failureReason)
     {
         var comparison = IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         ProjectEvaluationRequest[] roots = BuildProjectEvaluationRequests(
@@ -315,6 +320,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 configuration,
                 buildPlan)
             .ToArray();
+        var rootProjectPaths = new HashSet<string>(
+            roots.Select(root => Path.GetFullPath(root.ProjectPath)),
+            comparison);
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var directories = new HashSet<string>(comparison);
         var outputRootsByEvaluation = new Dictionary<string, string[]>(StringComparer.Ordinal);
@@ -330,13 +338,14 @@ public sealed partial class DotNetPublishPipelineRunner
         var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
         var trustedBuildInfrastructureRootsByEvaluation =
             new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var sdkManagedArchivePaths = new HashSet<string>(comparison);
+        var sdkManagedPackageKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
         buildInputs = new HashSet<string>(comparison);
         sourceInputs = new HashSet<string>(comparison);
         noBuildPublishInputs = Array.Empty<NoBuildPublishInput>();
+        failureReason = null;
 
         foreach (ProjectEvaluationRequest root in roots)
         {
@@ -347,6 +356,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Select(request => Path.GetDirectoryName(request.ProjectPath)!)
                     .Distinct(comparison)
                     .ToArray();
+                failureReason = $"locked restore refresh failed for '{Path.GetFileName(root.ProjectPath)}'";
                 return false;
             }
 
@@ -365,10 +375,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
-                        sdkManagedArchivePaths,
-                        out EvaluatedProjectInputs? evaluation) || evaluation is null)
+                        sdkManagedPackageKeys,
+                        out EvaluatedProjectInputs? evaluation,
+                        out string? evaluationFailureReason) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
+                    failureReason = $"project evaluation failed for '{Path.GetFileName(request.ProjectPath)}': {evaluationFailureReason ?? "unknown reason"}";
                     return false;
                 }
                 foreach (string input in evaluation.BuildInputs)
@@ -422,6 +434,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             string evaluationKey = entry.Key;
             ProjectEvaluationRequest request = entry.Value;
+            if (!rootProjectPaths.Contains(Path.GetFullPath(request.ProjectPath)))
+                continue;
             if (string.IsNullOrWhiteSpace(request.TargetFramework) ||
                 !TryReadFrozenProjectReferenceGraph(
                     request,
@@ -434,6 +448,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!string.IsNullOrWhiteSpace(request.TargetFramework))
                 {
                     projectDirectories = directories.ToArray();
+                    failureReason = $"project-reference graph evaluation failed for '{Path.GetFileName(request.ProjectPath)}' ({request.TargetFramework})";
                     return false;
                 }
                 continue;
@@ -467,13 +482,20 @@ public sealed partial class DotNetPublishPipelineRunner
                     buildPlan?.NoBuildInPublish == true,
                     graphNodes,
                     evaluationsByEvaluation[evaluationKey].EvaluatedProperties,
-                    out EvaluatedPublishInput[] publishInputs))
+                    out EvaluatedPublishInput[] publishInputs,
+                    out string? publishInputFailureReason))
             {
                 projectDirectories = directories.ToArray();
+                failureReason = $"publish input evaluation failed for '{Path.GetFileName(request.ProjectPath)}' ({request.TargetFramework}): {publishInputFailureReason ?? "unknown reason"}";
                 return false;
             }
             evaluatedPublishInputs.AddRange(
-                publishInputs.Select(input => (evaluationKey, input)));
+                publishInputs
+                    .Where(input => ShouldRetainConfiguredPublishInput(
+                        buildPlan,
+                        request.ProjectPath,
+                        input.RelativePath))
+                    .Select(input => (evaluationKey, input)));
         }
 
         var provenNoBuildPublishInputsByEvaluation =
@@ -624,6 +646,38 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
+    internal static bool ShouldRetainConfiguredPublishInput(
+        DotNetPublishPlan? plan,
+        string projectPath,
+        string relativePath)
+    {
+        if (plan is null)
+            return true;
+
+        string fullProjectPath = Path.GetFullPath(projectPath);
+        DotNetPublishTargetPlan[] matchingTargets = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(target => !string.IsNullOrWhiteSpace(target.ProjectPath) &&
+                Path.GetFullPath(ResolvePath(plan.ProjectRoot, target.ProjectPath))
+                    .Equals(
+                        fullProjectPath,
+                        IsWindows()
+                            ? StringComparison.OrdinalIgnoreCase
+                            : StringComparison.Ordinal))
+            .ToArray();
+        if (matchingTargets.Length == 0)
+            return true;
+
+        string extension = Path.GetExtension(relativePath);
+        if (extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase))
+            return matchingTargets.Any(target => target.Publish.KeepSymbols);
+        if (extension.Equals(".xml", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return matchingTargets.Any(target => target.Publish.KeepDocs);
+        }
+        return true;
+    }
+
     private static IEnumerable<ProjectEvaluationRequest> BuildProjectEvaluationRequests(
         IEnumerable<string>? projectPaths,
         string? configuration,
@@ -648,7 +702,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         effectiveConfiguration,
                         globalProperties: null,
                         buildPlan!.EnvironmentVariables,
-                        buildPlan.ControlledBuildEnvironmentVariableNames);
+                        buildPlan.ControlledBuildEnvironmentVariableNames,
+                        buildPlan.TrustedBuildPackages);
                     continue;
                 }
 
@@ -664,7 +719,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         effectiveConfiguration,
                         properties,
                         buildPlan!.EnvironmentVariables,
-                        buildPlan.ControlledBuildEnvironmentVariableNames);
+                        buildPlan.ControlledBuildEnvironmentVariableNames,
+                        buildPlan.TrustedBuildPackages);
                 }
             }
 
@@ -723,10 +779,12 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
-        HashSet<string> knownSdkManagedArchivePaths,
-        out EvaluatedProjectInputs? evaluation)
+        HashSet<string> knownSdkManagedPackageKeys,
+        out EvaluatedProjectInputs? evaluation,
+        out string? failureReason)
     {
         evaluation = null;
+        failureReason = null;
         var arguments = new List<string>
         {
             "msbuild",
@@ -750,6 +808,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
+            "-getProperty:PackageId",
+            "-getProperty:PackageVersion",
+            "-getProperty:PackageValidationBaselineVersion",
             "-getProperty:PowerForgeSdkPackageLockFile",
             "-getProperty:MSBuildToolsPath",
             "-getProperty:MSBuildSDKsPath",
@@ -788,6 +849,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2));
             if (process.ExitCode != 0 || process.TimedOut)
             {
+                failureReason = process.TimedOut
+                    ? "dotnet msbuild evaluation timed out"
+                    : $"dotnet msbuild evaluation exited with code {process.ExitCode}";
                 return false;
             }
 
@@ -795,6 +859,7 @@ public sealed partial class DotNetPublishPipelineRunner
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
             {
+                failureReason = "dotnet msbuild evaluation returned no JSON payload";
                 return false;
             }
             using JsonDocument document = JsonDocument.Parse(
@@ -836,6 +901,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string? msBuildToolsPath = null;
             string? msBuildSdksPath = null;
             string? customAfterMicrosoftCommonTargets = null;
+            string? packageId = null;
+            string? packageVersion = null;
+            string? packageValidationBaselineVersion = null;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
                 AddPropertyPath(properties, "BaseOutputPath", Path.GetDirectoryName(request.ProjectPath)!, generatedBuildRoots);
@@ -888,14 +956,15 @@ public sealed partial class DotNetPublishPipelineRunner
                         request.RequiresSdkPackageEvidence,
                         out verifiedPackages))
                 {
+                    failureReason = "NuGet package input catalog could not be verified";
                     return false;
                 }
                 if (verifiedPackages is not null)
                 {
                     if (request.RequiresSdkPackageEvidence)
-                        knownSdkManagedArchivePaths.UnionWith(verifiedPackages.SdkManagedArchivePaths);
+                        knownSdkManagedPackageKeys.UnionWith(verifiedPackages.SdkManagedPackageKeys);
                     else
-                        verifiedPackages.InheritSdkManagedArchivePaths(knownSdkManagedArchivePaths);
+                        verifiedPackages.InheritSdkManagedPackageKeys(knownSdkManagedPackageKeys);
                 }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
@@ -905,6 +974,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 customAfterMicrosoftCommonTargets = ReadItemText(
                     properties,
                     "CustomAfterMicrosoftCommonTargets");
+                packageId = ReadItemText(properties, "PackageId");
+                packageVersion = ReadItemText(properties, "PackageVersion");
+                packageValidationBaselineVersion = ReadItemText(
+                    properties,
+                    "PackageValidationBaselineVersion");
                 AddSemicolonSeparatedPathValues(
                     properties,
                     "MSBuildAllProjects",
@@ -918,6 +992,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out hasDynamicProjectReferenceTaskOutputs,
                         out dynamicProjectReferences))
                 {
+                    failureReason = "preprocessed project imports could not be evaluated";
                     return false;
                 }
                 importPaths.UnionWith(preprocessedImports);
@@ -928,6 +1003,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (verifiedPackages is not null &&
                     !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
                 {
+                    failureReason = "controlled package build inputs could not be verified";
                     return false;
                 }
                 evaluatedProjectReferenceConditionProperties =
@@ -944,6 +1020,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             evaluatedProjectReferenceConditionProperties,
                             out taskWideProjectReferencePropertyRemovals))
                     {
+                        failureReason = "project-reference property removals could not be resolved";
                         return false;
                     }
                 }
@@ -958,6 +1035,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             taskWideProjectReferencePropertyRemovals,
                             out EvaluatedProjectReference[] itemReferences))
                     {
+                        failureReason = "dynamic project references could not be resolved";
                         return false;
                     }
                     foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -991,6 +1069,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             continue;
                         if (IsAmbientReferenceResolutionItem(itemName) && values.GetArrayLength() > 0)
                         {
+                            failureReason = $"ambient '{itemName}' items are not allowed";
                             return false;
                         }
                         foreach (JsonElement item in values.EnumerateArray())
@@ -1040,6 +1119,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
                                 {
+                                    failureReason = "an evaluated project reference could not be resolved";
                                     return false;
                                 }
                                 foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -1136,6 +1216,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out EvaluatedProjectReference[] resolvedReferences,
                         out string resolvedItemsJson))
                 {
+                    failureReason = "controlled project references could not be resolved";
                     return false;
                 }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
@@ -1165,6 +1246,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         trustedBuildInfrastructureRoots,
                         generatedProjectReferenceOutputs))
                 {
+                    failureReason = "controlled project-reference items could not be processed";
                     return false;
                 }
             }
@@ -1193,11 +1275,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 evaluatedProjectReferenceConditionProperties,
                 ResolveExistingCustomAfterTargets(
                     customAfterMicrosoftCommonTargets,
-                    Path.GetDirectoryName(request.ProjectPath)!));
+                    Path.GetDirectoryName(request.ProjectPath)!),
+                packageId,
+                packageVersion,
+                packageValidationBaselineVersion);
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            failureReason = $"{exception.GetType().Name} while reading evaluated project inputs";
             return false;
         }
     }

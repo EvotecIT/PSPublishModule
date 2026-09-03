@@ -1,4 +1,6 @@
 using PowerForge;
+using System.IO.Compression;
+using System.Xml.Linq;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -37,13 +39,180 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         DotNetPublishPipelineRunner.AppendControlledProofSafeguards(
             arguments,
             "isolated.config",
-            "isolated-source",
-            "isolated.lock.json");
+            "isolated-source");
 
         Assert.Equal("-p:RunAnalyzers=false", arguments.Last(value =>
             value.StartsWith("-p:RunAnalyzers=", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal("-p:RestoreSources=isolated-source", arguments.Last(value =>
             value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(arguments, value =>
+            value.StartsWith("-p:RestorePackagesWithLockFile=", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(arguments, value =>
+            value.StartsWith("-p:NuGetLockFilePath=", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ControlledRootGraphRestore_ReenablesRecursiveProjectRestoreAfterSafeguards()
+    {
+        var arguments = new List<string>
+        {
+            "-p:BuildProjectReferences=false",
+            "-p:RestoreRecursive=false"
+        };
+
+        DotNetPublishPipelineRunner.AppendControlledProofSafeguards(
+            arguments,
+            "isolated.config",
+            "isolated-source");
+        DotNetPublishPipelineRunner.AppendControlledRootGraphRestoreOverrides(
+            arguments,
+            "unused-packages.lock.json");
+
+        Assert.Equal("-p:BuildProjectReferences=true", arguments.Last(value =>
+            value.StartsWith("-p:BuildProjectReferences=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:RestoreRecursive=true", arguments.Last(value =>
+            value.StartsWith("-p:RestoreRecursive=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:RestoreLockedMode=false", arguments.Last(value =>
+            value.StartsWith("-p:RestoreLockedMode=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:RestoreForceEvaluate=true", arguments.Last(value =>
+            value.StartsWith("-p:RestoreForceEvaluate=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:RestorePackagesWithLockFile=false", arguments.Last(value =>
+            value.StartsWith("-p:RestorePackagesWithLockFile=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:NuGetLockFilePath=unused-packages.lock.json", arguments.Last(value =>
+            value.StartsWith("-p:NuGetLockFilePath=", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal("-p:WarningsNotAsErrors=NU1510", arguments.Last(value =>
+            value.StartsWith("-p:WarningsNotAsErrors=", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void ControlledProjectMetadataSource_ContainsOnlyEvaluatedIdentityMetadata()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            Assert.True(DotNetPublishPipelineRunner.TrySeedControlledProjectMetadataPackages(
+                new[]
+                {
+                    new KeyValuePair<string?, string?>("Example.Core", "3.3.0"),
+                    new KeyValuePair<string?, string?>("Example.Core", "3.3.0.0")
+                },
+                root,
+                out string failureReason), failureReason);
+
+            string packagePath = Assert.Single(Directory.GetFiles(root, "*.nupkg"));
+            Assert.Equal("example.core.3.3.0.nupkg", Path.GetFileName(packagePath));
+            using ZipArchive archive = ZipFile.OpenRead(packagePath);
+            ZipArchiveEntry nuspec = Assert.Single(archive.Entries);
+            Assert.Equal("Example.Core.nuspec", nuspec.FullName);
+            using Stream stream = nuspec.Open();
+            XDocument document = XDocument.Load(stream);
+            Assert.Equal(
+                "Example.Core",
+                document.Descendants().Single(element => element.Name.LocalName == "id").Value);
+            Assert.Equal(
+                "3.3.0",
+                document.Descendants().Single(element => element.Name.LocalName == "version").Value);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("../escape", "1.0.0")]
+    [InlineData("Example.Core", "not-a-version")]
+    [InlineData("", "1.0.0")]
+    public void ControlledProjectMetadataSource_RejectsUnsafeIdentity(string packageId, string packageVersion)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            Assert.False(DotNetPublishPipelineRunner.TrySeedControlledProjectMetadataPackages(
+                new[] { new KeyValuePair<string?, string?>(packageId, packageVersion) },
+                root,
+                out string failureReason));
+            Assert.Contains("identity is invalid", failureReason, StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFiles(root));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledRuntimeMatrix_IsScopedToTheSelectedPublishRuntime()
+    {
+        Assert.Equal(
+            new[] { "win-x64" },
+            DotNetPublishPipelineRunner.SelectControlledRuntimeIdentifiers(
+                "linux-x64;win-x64;osx-arm64",
+                "win-x64"));
+        Assert.Empty(DotNetPublishPipelineRunner.SelectControlledRuntimeIdentifiers(
+            "linux-x64;win-x64;osx-arm64",
+            selectedRuntimeIdentifier: null));
+        Assert.Equal(
+            new[] { "win-arm64" },
+            DotNetPublishPipelineRunner.SelectControlledRuntimeIdentifiers(
+                "linux-x64;win-x64",
+                "win-arm64"));
+    }
+
+    [Fact]
+    public void PublishProvenance_ExcludesOnlyOutputsDiscardedByEveryMatchingTarget()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "Studio.csproj");
+            var plan = new DotNetPublishPlan
+            {
+                ProjectRoot = root,
+                Targets =
+                [
+                    new DotNetPublishTargetPlan
+                    {
+                        ProjectPath = projectPath,
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            KeepSymbols = false,
+                            KeepDocs = false
+                        }
+                    }
+                ]
+            };
+
+            Assert.False(DotNetPublishPipelineRunner.ShouldRetainConfiguredPublishInput(
+                plan,
+                projectPath,
+                "Studio.pdb"));
+            Assert.False(DotNetPublishPipelineRunner.ShouldRetainConfiguredPublishInput(
+                plan,
+                projectPath,
+                "Studio.xml"));
+            Assert.True(DotNetPublishPipelineRunner.ShouldRetainConfiguredPublishInput(
+                plan,
+                projectPath,
+                "Studio.dll"));
+
+            plan.Targets = plan.Targets.Concat(
+            [
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = projectPath,
+                    Publish = new DotNetPublishPublishOptions { KeepSymbols = true }
+                }
+            ]).ToArray();
+            Assert.True(DotNetPublishPipelineRunner.ShouldRetainConfiguredPublishInput(
+                plan,
+                projectPath,
+                "Studio.pdb"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
     }
 
     [Fact]

@@ -68,6 +68,9 @@ public sealed class DotNetPublishPlan
     /// <summary>Resolved MSBuild properties.</summary>
     public Dictionary<string, string> MsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Lock-file-verified package IDs explicitly authorized to provide build tasks and targets.</summary>
+    public string[] TrustedBuildPackages { get; set; } = Array.Empty<string>();
+
     /// <summary>Resolved environment variables passed to dotnet commands.</summary>
     public Dictionary<string, string?> EnvironmentVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

@@ -208,7 +208,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     controlledSourceRoot,
                     controlledProjectPath!,
+                    request.TrustedBuildPackages,
                     out offlinePackageSources,
+                    out _,
                     allowSdkManagedToolchainPackages: true))
                 return CacheAll(false);
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
@@ -295,8 +297,7 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSourceList,
-                Path.Combine(controlledOutputRoot, "packages.lock.json"));
+                offlinePackageSourceList);
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -383,8 +384,7 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static void AppendControlledProofSafeguards(
         ICollection<string> arguments,
         string nuGetConfig,
-        string packageSource,
-        string lockFilePath)
+        string packageSource)
     {
         arguments.Add("-noAutoResponse");
         arguments.Add("-maxCpuCount:1");
@@ -396,9 +396,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:RestoreNoCache=true");
         arguments.Add("-p:RestoreIgnoreFailedSources=false");
         arguments.Add("-p:RestoreLockedMode=false");
-        arguments.Add("-p:RestorePackagesWithLockFile=true");
         arguments.Add("-p:RestoreForceEvaluate=true");
-        arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(lockFilePath));
         arguments.Add("-p:NuGetAudit=false");
         arguments.Add("-p:RunAnalyzers=false");
         arguments.Add("-p:RunAnalyzersDuringBuild=false");
@@ -680,6 +678,7 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string>? globalProperties,
             IReadOnlyDictionary<string, string?>? environmentVariables,
             IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null,
+            IReadOnlyCollection<string>? trustedBuildPackages = null,
             bool requiresSdkPackageEvidence = true)
         {
             ProjectPath = projectPath;
@@ -693,6 +692,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
+            TrustedBuildPackages = trustedBuildPackages?
+                .Where(packageId => !string.IsNullOrWhiteSpace(packageId))
+                .Select(packageId => packageId.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(packageId => packageId, StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? Array.Empty<string>();
             RequiresSdkPackageEvidence = requiresSdkPackageEvidence;
         }
 
@@ -703,6 +708,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
         internal IReadOnlyDictionary<string, string?> EnvironmentVariables { get; }
         internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
+        internal IReadOnlyCollection<string> TrustedBuildPackages { get; }
         internal bool RequiresSdkPackageEvidence { get; }
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
@@ -733,6 +739,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 GlobalProperties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
+                TrustedBuildPackages,
                 RequiresSdkPackageEvidence);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
@@ -773,7 +780,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
-                requiresSdkPackageEvidence: true);
+                TrustedBuildPackages,
+                requiresSdkPackageEvidence: false);
         }
 
         internal string BuildVisitKey()
@@ -841,7 +849,10 @@ public sealed partial class DotNetPublishPipelineRunner
             VerifiedPackageInputCatalog? verifiedPackages,
             string[] trustedBuildInfrastructureRoots,
             IReadOnlyDictionary<string, string> evaluatedProperties,
-            string? customAfterMicrosoftCommonTargets)
+            string? customAfterMicrosoftCommonTargets,
+            string? packageId,
+            string? packageVersion,
+            string? packageValidationBaselineVersion)
         {
             BuildInputs = buildInputs;
             MsBuildInputs = msBuildInputs;
@@ -859,6 +870,9 @@ public sealed partial class DotNetPublishPipelineRunner
             TrustedBuildInfrastructureRoots = trustedBuildInfrastructureRoots;
             EvaluatedProperties = evaluatedProperties;
             CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
+            PackageId = packageId;
+            PackageVersion = packageVersion;
+            PackageValidationBaselineVersion = packageValidationBaselineVersion;
         }
 
         internal string[] BuildInputs { get; }
@@ -877,6 +891,9 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string[] TrustedBuildInfrastructureRoots { get; }
         internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
         internal string? CustomAfterMicrosoftCommonTargets { get; }
+        internal string? PackageId { get; }
+        internal string? PackageVersion { get; }
+        internal string? PackageValidationBaselineVersion { get; }
     }
 
     private sealed class EvaluatedProjectReference

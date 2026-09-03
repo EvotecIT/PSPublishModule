@@ -425,8 +425,11 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        private string? _sdkEvidenceFailureReason;
 
-        internal IEnumerable<string> SdkManagedArchivePaths => _sdkManagedArchivePaths;
+        internal IEnumerable<string> SdkManagedPackageKeys => _archivePathsByPackageKey
+            .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
+            .Select(package => package.Key);
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
@@ -448,13 +451,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal void InheritSdkManagedArchivePaths(IEnumerable<string> archivePaths)
+        internal void InheritSdkManagedPackageKeys(IEnumerable<string> packageKeys)
         {
-            var verifiedArchivePaths = new HashSet<string>(
-                _archivePathsByPackageKey.Values.Select(Path.GetFullPath),
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             _sdkManagedArchivePaths.UnionWith(
-                archivePaths.Select(Path.GetFullPath).Where(verifiedArchivePaths.Contains));
+                packageKeys
+                    .Where(_archivePathsByPackageKey.ContainsKey)
+                    .Select(packageKey => Path.GetFullPath(_archivePathsByPackageKey[packageKey])));
         }
 
         internal static bool TryCreate(
@@ -559,6 +561,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
+            string? sdkEvidenceFailureReason = null;
             string? sdkEvidenceRoot = includeSdkPackageEvidence
                 ? AddSdkManagedPackageHashes(
                     projectPath,
@@ -569,7 +572,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     effectiveGlobalProperties,
                     environmentVariables,
                     archivePathsByPackageKey,
-                    archives)
+                    archives,
+                    out sdkEvidenceFailureReason)
                 : null;
             try
             {
@@ -602,6 +606,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     archives,
                     archivePathsByPackageKey,
                     sdkManagedPackageKeys);
+                catalog._sdkEvidenceFailureReason = sdkEvidenceFailureReason;
                 return true;
             }
             finally

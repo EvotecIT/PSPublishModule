@@ -593,6 +593,7 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
             MsBuildProperties = msbuildProps,
+            TrustedBuildPackages = NormalizeStrings(spec.DotNet.TrustedBuildPackages),
             EnvironmentVariables = resolvedEnvironmentVariables,
             ControlledBuildEnvironmentVariableNames = controlledBuildEnvironmentVariableNames,
             Targets = targets.ToArray(),
@@ -868,6 +869,7 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = dotNet.NoRestoreInPublish,
             NoBuildInPublish = dotNet.NoBuildInPublish,
             Runtimes = (dotNet.Runtimes ?? Array.Empty<string>()).ToArray(),
+            TrustedBuildPackages = (dotNet.TrustedBuildPackages ?? Array.Empty<string>()).ToArray(),
             MsBuildProperties = dotNet.MsBuildProperties is null
                 ? null
                 : new Dictionary<string, string>(dotNet.MsBuildProperties, StringComparer.OrdinalIgnoreCase),

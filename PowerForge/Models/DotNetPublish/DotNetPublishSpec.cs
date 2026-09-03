@@ -1093,6 +1093,12 @@ public sealed class DotNetPublishDotNetOptions
     public Dictionary<string, string>? MsBuildProperties { get; set; }
 
     /// <summary>
+    /// Package IDs whose lock-file-verified build assets may execute during a controlled release build.
+    /// Versions and archive content remain pinned by the committed package lock.
+    /// </summary>
+    public string[] TrustedBuildPackages { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Optional environment variables supplied to dotnet restore/build/publish commands.
     /// Use this for private package feeds that rely on NuGet.config environment-variable expansion.
     /// </summary>

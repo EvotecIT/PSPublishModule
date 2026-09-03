@@ -150,6 +150,16 @@ public sealed class PowerForgeWixInstallerSourceEmitter
         project.Add(new XElement(
             "ItemGroup",
             sourceFiles.Select(file => new XElement("Compile", new XAttribute("Include", file)))));
+        project.Add(new XElement(
+            "Target",
+            new XAttribute("Name", "PowerForgeRestrictWixCompileItems"),
+            new XAttribute("BeforeTargets", "CoreCompile"),
+            new XElement(
+                "ItemGroup",
+                new XElement(
+                    "Compile",
+                    new XAttribute("Remove", "@(Compile)"),
+                    new XAttribute("Condition", "'%(Compile.Extension)' != '.wxs'")))));
 
         return new XDocument(new XDeclaration("1.0", "utf-8", null), project)
             .ToString(SaveOptions.None);

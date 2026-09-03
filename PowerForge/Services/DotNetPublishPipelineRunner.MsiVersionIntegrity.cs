@@ -374,7 +374,12 @@ public sealed partial class DotNetPublishPipelineRunner
         SourceDirtyScope dirtyScope)
     {
         if (!dirtyScope.BuildInputsResolved)
-            return new[] { "MSBuild input evaluation failed" };
+        {
+            string detail = string.IsNullOrWhiteSpace(dirtyScope.BuildInputFailureReason)
+                ? string.Empty
+                : ": " + dirtyScope.BuildInputFailureReason;
+            return new[] { "MSBuild input evaluation failed" + detail };
+        }
         string[] projectDirectories = dirtyScope.ProjectDirectories;
         HashSet<string> buildInputs = dirtyScope.BuildInputs;
         HashSet<string> sourceInputs = dirtyScope.SourceInputs;

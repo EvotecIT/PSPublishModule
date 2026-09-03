@@ -1207,6 +1207,11 @@
           "type": ["object", "null"],
           "additionalProperties": { "type": "string" }
         },
+        "TrustedBuildPackages": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
         "EnvironmentVariables": {
           "type": ["object", "null"],
           "additionalProperties": { "$ref": "#/$defs/DotNetPublishEnvironmentVariable" }

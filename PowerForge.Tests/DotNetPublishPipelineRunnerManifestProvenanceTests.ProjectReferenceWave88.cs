@@ -9,14 +9,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void VerifiedPackageCatalog_InheritsOnlyArchivesVerifiedByChildLock()
+    public void VerifiedPackageCatalog_InheritsOnlyPackageKeysVerifiedByChildLock()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
             string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
             string sharedArchive = Path.Combine(packageRoot, "shared.nupkg");
-            string rootOnlyArchive = Path.Combine(packageRoot, "root-only.nupkg");
             Type runnerType = typeof(DotNetPublishPipelineRunner);
             Type catalogType = runnerType.GetNestedType(
                 "VerifiedPackageInputCatalog",
@@ -36,21 +35,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     cache,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
-                        ["Shared.Package/1.0.0"] = sharedArchive
+                        ["Shared.Package|1.0.0"] = sharedArchive
                     },
                     Array.Empty<string>()
                 ]);
                 catalogType.GetMethod(
-                        "InheritSdkManagedArchivePaths",
+                        "InheritSdkManagedPackageKeys",
                         BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(catalog, [new[] { sharedArchive, rootOnlyArchive }]);
+                    .Invoke(catalog, [new[] { "Shared.Package|1.0.0", "Root.Only|1.0.0" }]);
 
                 var inherited = Assert.IsAssignableFrom<IEnumerable<string>>(
                     catalogType.GetProperty(
-                            "SdkManagedArchivePaths",
+                            "SdkManagedPackageKeys",
                             BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(catalog));
-                Assert.Equal(Path.GetFullPath(sharedArchive), Assert.Single(inherited));
+                Assert.Equal("Shared.Package|1.0.0", Assert.Single(inherited));
             }
             finally
             {

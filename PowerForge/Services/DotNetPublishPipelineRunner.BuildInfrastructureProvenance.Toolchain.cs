@@ -93,6 +93,8 @@ public sealed partial class DotNetPublishPipelineRunner
             new("core.fsmonitor", "false"),
             new("core.safecrlf", "false")
         };
+        if (IsWindows())
+            configuration.Add(new KeyValuePair<string, string>("core.longpaths", "true"));
         if (controlledConfiguration is not null)
             configuration.AddRange(controlledConfiguration);
         environment["GIT_CONFIG_COUNT"] = configuration.Count.ToString(

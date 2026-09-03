@@ -17,13 +17,15 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         var properties = new Dictionary<string, string>
         {
             ["MonitoringDbProviders"] = "Sqlite,SqlServer",
-            ["Composite"] = "one;two=three%$@"
+            ["Composite"] = "one;two=three%$@",
+            ["RuntimeIdentifiers"] = "win-x64;linux-x64"
         };
 
         string[] arguments = DotNetPublishPipelineRunner.BuildMsBuildPropertyArgs(properties).ToArray();
 
         Assert.Contains("/p:MonitoringDbProviders=Sqlite%2CSqlServer", arguments);
         Assert.Contains("/p:Composite=one%3Btwo%3Dthree%25%24%40", arguments);
+        Assert.Contains("/p:RuntimeIdentifiers=\"win-x64;linux-x64\"", arguments);
     }
 
     [Fact]

@@ -1,6 +1,4 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -115,7 +113,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string destination,
             string controlledSourceRoot,
             string controlledProjectPath,
+            IReadOnlyCollection<string> trustedBuildPackages,
             out string[] packageSources,
+            out string failureReason,
             bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
                 destination,
@@ -124,7 +124,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 _controlledBuildInputsByArchive,
                 controlledSourceRoot,
                 controlledProjectPath,
+                trustedBuildPackages,
                 out packageSources,
+                out failureReason,
+                _sdkEvidenceFailureReason,
                 allowSdkManagedToolchainPackages);
     }
 
@@ -172,14 +175,17 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive,
             string controlledSourceRoot,
             string controlledProjectPath,
+            IReadOnlyCollection<string> trustedBuildPackages,
             out string[] packageSources,
+            out string failureReason,
+            string? sdkEvidenceFailureReason,
             bool allowSdkManagedToolchainPackages)
         {
             packageSources = Array.Empty<string>();
+            failureReason = string.Empty;
             try
             {
                 Directory.CreateDirectory(destination);
-                var sources = new List<string>();
                 foreach (KeyValuePair<string, string> package in archivePathsByPackageKey.OrderBy(
                              entry => entry.Key,
                              StringComparer.OrdinalIgnoreCase))
@@ -187,6 +193,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     string archivePath = package.Value;
                     if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
                     {
+                        failureReason = $"verified package archive is unavailable: '{package.Key}'";
                         return false;
                     }
                     IReadOnlyCollection<string> controlledBuildInputs =
@@ -195,46 +202,54 @@ public sealed partial class DotNetPublishPipelineRunner
                             out HashSet<string>? inputs)
                             ? inputs
                             : Array.Empty<string>();
-                    if (!(allowSdkManagedToolchainPackages &&
+                    string packageId = package.Key.Split(new[] { '|' }, 2)[0];
+                    bool explicitlyTrustedBuildPackage = trustedBuildPackages.Contains(
+                        packageId,
+                        StringComparer.OrdinalIgnoreCase);
+                    if (!explicitlyTrustedBuildPackage &&
+                        !(allowSdkManagedToolchainPackages &&
                           sdkManagedArchivePaths.Contains(Path.GetFullPath(archivePath))) &&
                         !cached.Archive.HasOnlyControlledBuildInputs(
                             controlledBuildInputs,
                             controlledSourceRoot,
                             controlledProjectPath))
                     {
+                        string sdkDetail = IsTrustedSdkAutoReferencedPackageId(packageId) &&
+                                           !string.IsNullOrWhiteSpace(sdkEvidenceFailureReason)
+                            ? "; SDK evidence: " + sdkEvidenceFailureReason
+                            : string.Empty;
+                        failureReason = $"package contains an unverified build input: '{package.Key}'{sdkDetail}";
                         return false;
                     }
-                    string packageSource = Path.Combine(
-                        destination,
-                        CreateControlledPackageSourceDirectoryName(package.Key));
-                    Directory.CreateDirectory(packageSource);
-                    string destinationPath = Path.Combine(packageSource, Path.GetFileName(cached.SourcePath));
+                    string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
-                        return false;
+                        var existingInfo = new FileInfo(destinationPath);
+                        var sourceInfo = new FileInfo(cached.SourcePath);
+                        if (existingInfo.Length != sourceInfo.Length ||
+                            !string.Equals(
+                                ComputeSha256Hex(File.ReadAllBytes(destinationPath)),
+                                ComputeSha256Hex(File.ReadAllBytes(cached.SourcePath)),
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            failureReason = $"offline package destination conflicts: '{package.Key}'";
+                            return false;
+                        }
+                        continue;
                     }
                     cached.Archive.CopyTo(destinationPath);
-                    sources.Add(packageSource);
                 }
-                packageSources = sources.Count == 0
-                    ? new[] { destination }
-                    : sources.ToArray();
+                packageSources = new[] { destination };
                 return true;
             }
-            catch
+            catch (Exception exception)
             {
                 packageSources = Array.Empty<string>();
+                failureReason = $"{exception.GetType().Name} while creating the verified offline package source";
                 return false;
             }
         }
 
-        private static string CreateControlledPackageSourceDirectoryName(string packageKey)
-        {
-            using SHA256 sha256 = SHA256.Create();
-            return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(packageKey)))
-                .Replace("-", string.Empty)
-                .ToLowerInvariant();
-        }
     }
 
     private sealed partial class VerifiedPackageArchive

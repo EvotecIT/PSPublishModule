@@ -245,7 +245,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (props is null || props.Count == 0) return Array.Empty<string>();
         return props
             .Where(kv => !string.IsNullOrWhiteSpace(kv.Key))
-            .Select(kv => $"/p:{kv.Key}={EscapeMsBuildPropertyValue(kv.Value)}");
+            .Select(kv => kv.Key.Equals("RuntimeIdentifiers", StringComparison.OrdinalIgnoreCase)
+                ? $"/p:{kv.Key}={BuildMsBuildListPropertyValue(
+                    (kv.Value ?? string.Empty)
+                        .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))}"
+                : $"/p:{kv.Key}={EscapeMsBuildPropertyValue(kv.Value)}");
     }
 
     private static string EscapeMsBuildPropertyValue(string? value)
