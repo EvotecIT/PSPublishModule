@@ -549,6 +549,13 @@ public static partial class WebAssetOptimizer
             if (protectedStoryArtifacts.Contains(Path.GetFullPath(file)))
                 continue;
             var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
+            if (string.Equals(
+                    relative,
+                    WebSiteBuilder.WebMcpSiteSearchAssetRoute.TrimStart('/'),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
             if (IsExcluded(relative, spec.Exclude))
                 continue;
 
@@ -593,7 +600,8 @@ public static partial class WebAssetOptimizer
         {
             var html = File.ReadAllText(htmlFile);
             if (string.IsNullOrWhiteSpace(html)) continue;
-            var updated = RewriteReferences(html, map);
+            var relativeHtmlPath = Path.GetRelativePath(siteRoot, htmlFile).Replace('\\', '/');
+            var updated = RewriteReferences(html, map, relativeHtmlPath);
             if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
                 File.WriteAllText(htmlFile, updated);
@@ -608,7 +616,8 @@ public static partial class WebAssetOptimizer
                 continue;
             var css = File.ReadAllText(cssFile);
             if (string.IsNullOrWhiteSpace(css)) continue;
-            var updated = RewriteCssUrls(css, map);
+            var relativeCssPath = Path.GetRelativePath(siteRoot, cssFile).Replace('\\', '/');
+            var updated = RewriteCssUrls(css, map, relativeCssPath);
             if (!string.Equals(updated, css, StringComparison.Ordinal))
             {
                 File.WriteAllText(cssFile, updated);
@@ -620,19 +629,22 @@ public static partial class WebAssetOptimizer
         return (htmlFilesRewritten, cssFilesRewritten);
     }
 
-    private static string RewriteReferences(string html, Dictionary<string, string> map)
+    private static string RewriteReferences(
+        string html,
+        Dictionary<string, string> map,
+        string relativeHtmlPath)
     {
         var rewrittenHtml = HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map);
+            var rewritten = RewriteUrlWithMap(url, map, relativeHtmlPath);
             return rewritten == url ? match.Value : $"{match.Groups["attr"].Value}=\"{rewritten}\"";
         });
 
         return HtmlSrcSetAttrRegex.Replace(rewrittenHtml, match =>
         {
             var value = match.Groups["value"].Value;
-            var rewritten = RewriteSrcSetWithMap(value, map);
+            var rewritten = RewriteSrcSetWithMap(value, map, relativeHtmlPath);
             if (string.Equals(rewritten, value, StringComparison.Ordinal))
                 return match.Value;
 
@@ -641,7 +653,10 @@ public static partial class WebAssetOptimizer
         });
     }
 
-    private static string RewriteSrcSetWithMap(string srcSet, Dictionary<string, string> map)
+    private static string RewriteSrcSetWithMap(
+        string srcSet,
+        Dictionary<string, string> map,
+        string relativeHtmlPath)
     {
         StringBuilder? rewritten = null;
         var copyFrom = 0;
@@ -665,7 +680,7 @@ public static partial class WebAssetOptimizer
             if (urlEnd > urlStart)
             {
                 var url = srcSet[urlStart..urlEnd];
-                var mapped = RewriteUrlWithMap(url, map);
+                var mapped = RewriteUrlWithMap(url, map, relativeHtmlPath);
                 if (!string.Equals(mapped, url, StringComparison.Ordinal))
                 {
                     rewritten ??= new StringBuilder(srcSet.Length + 32);
@@ -698,30 +713,66 @@ public static partial class WebAssetOptimizer
         return rewritten.ToString();
     }
 
-    private static string RewriteCssUrls(string css, Dictionary<string, string> map)
+    private static string RewriteCssUrls(
+        string css,
+        Dictionary<string, string> map,
+        string relativeCssPath)
     {
         return CssUrlRegex.Replace(css, match =>
         {
             var url = match.Groups["url"].Value;
-            var rewritten = RewriteUrlWithMap(url, map);
+            var rewritten = RewriteUrlWithMap(url, map, relativeCssPath);
             if (rewritten == url) return match.Value;
             return $"url({match.Groups["quote"].Value}{rewritten}{match.Groups["quote"].Value})";
         });
     }
 
-    private static string RewriteUrlWithMap(string url, Dictionary<string, string> map)
+    private static string RewriteUrlWithMap(
+        string url,
+        Dictionary<string, string> map,
+        string relativeDocumentPath)
     {
         if (string.IsNullOrWhiteSpace(url)) return url;
-        if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase) || url.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        if (url.StartsWith("//", StringComparison.Ordinal) ||
+            (!url.StartsWith("/", StringComparison.Ordinal) &&
+             Uri.TryCreate(url, UriKind.Absolute, out _)))
             return url;
 
         var split = url.Split('?', '#');
         var baseUrl = split[0];
-        if (map.TryGetValue(baseUrl, out var mapped))
+        if (string.IsNullOrEmpty(baseUrl))
+            return url;
+
+        var suffix = url.Substring(baseUrl.Length);
+        if (baseUrl.StartsWith("/", StringComparison.Ordinal))
         {
-            var suffix = url.Substring(baseUrl.Length);
-            return mapped + suffix;
+            return map.TryGetValue(baseUrl, out var rootMapped)
+                ? rootMapped + suffix
+                : url;
         }
-        return url;
+
+        var origin = new Uri("https://powerforge.invalid/", UriKind.Absolute);
+        var documentUri = new Uri(origin, relativeDocumentPath.Replace('\\', '/'));
+        if (!Uri.TryCreate(documentUri, baseUrl, out var resolved) ||
+            !string.Equals(resolved.Scheme, origin.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(resolved.Host, origin.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var resolvedPath = Uri.UnescapeDataString(resolved.AbsolutePath.TrimStart('/'));
+        if (!map.TryGetValue(resolvedPath, out var relativeMapped))
+            return url;
+
+        var mappedUri = new Uri(origin, relativeMapped.TrimStart('/'));
+        var documentDirectory = new Uri(documentUri, ".");
+        var rewritten = Uri.UnescapeDataString(documentDirectory.MakeRelativeUri(mappedUri).ToString());
+        if (baseUrl.StartsWith("./", StringComparison.Ordinal) &&
+            !rewritten.StartsWith(".", StringComparison.Ordinal))
+        {
+            rewritten = "./" + rewritten;
+        }
+
+        return rewritten + suffix;
     }
 }
