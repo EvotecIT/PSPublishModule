@@ -9,6 +9,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
