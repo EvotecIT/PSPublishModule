@@ -78,7 +78,7 @@ function ConvertTo-Baseline {
     param([object] $Packet, [string] $PacketSha256, [object[]] $Results)
 
     return [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
         packetId = $Packet.packetId
         packetSha256 = $PacketSha256
         recordedOn = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-dd')
@@ -102,6 +102,7 @@ function ConvertTo-Baseline {
                 emittedFunctions = $_.emittedFunctions
                 droppedEligibleFunctions = $_.droppedEligibleFunctions
                 fallbackFunctions = $_.fallbackFunctions
+                functionDispositions = @($_.functionDispositions)
             }
         })
         interpretation = [ordered]@{
@@ -116,7 +117,7 @@ function Compare-Baseline {
 
     $regressions = [Collections.Generic.List[object]]::new()
     foreach ($identity in @(
-        @{ Metric = 'schemaVersion'; Expected = 1; Actual = $Baseline.schemaVersion },
+        @{ Metric = 'schemaVersion'; Expected = 2; Actual = $Baseline.schemaVersion },
         @{ Metric = 'packetId'; Expected = $Packet.packetId; Actual = $Baseline.packetId },
         @{ Metric = 'semanticProfile'; Expected = $Packet.semanticProfile; Actual = $Baseline.semanticProfile },
         @{ Metric = 'targetFramework'; Expected = $Packet.targetFramework; Actual = $Baseline.targetFramework }
@@ -157,9 +158,51 @@ function Compare-Baseline {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = $metric; expectedMinimum = $expected.$metric; actual = $current.$metric })
             }
         }
-        foreach ($metric in @('runtimeFallbackUnits', 'parseErrorFiles', 'droppedEligibleFunctions', 'fallbackFunctions')) {
+        foreach ($metric in @('runtimeFallbackUnits', 'parseErrorFiles', 'fallbackFunctions')) {
             if ([int] $current.$metric -gt [int] $expected.$metric) {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = $metric; expectedMaximum = $expected.$metric; actual = $current.$metric })
+            }
+        }
+        $expectedDispositions = @($expected.functionDispositions)
+        $currentDispositions = @($current.functionDispositions)
+        foreach ($set in @(
+            @{ Name = 'baselineFunctionDispositionCount'; Items = $expectedDispositions; ExpectedCount = [int] $expected.totalFunctions },
+            @{ Name = 'currentFunctionDispositionCount'; Items = $currentDispositions; ExpectedCount = [int] $current.totalFunctions }
+        )) {
+            if ($set.Items.Count -ne $set.ExpectedCount) {
+                $regressions.Add([ordered]@{ id = $expected.id; metric = $set.Name; expected = $set.ExpectedCount; actual = $set.Items.Count })
+            }
+            $ids = @($set.Items | ForEach-Object { [string] $_.unitId })
+            if (@($ids | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0 -or @($ids | Sort-Object -Unique).Count -ne $ids.Count) {
+                $regressions.Add([ordered]@{ id = $expected.id; metric = "$($set.Name)Identity"; expected = 'unique non-empty unit ids'; actual = 'invalid' })
+            }
+        }
+        $currentById = @{}
+        foreach ($disposition in $currentDispositions) { $currentById[[string] $disposition.unitId] = $disposition }
+        foreach ($expectedDisposition in $expectedDispositions) {
+            $unitId = [string] $expectedDisposition.unitId
+            if (-not $currentById.ContainsKey($unitId)) {
+                $regressions.Add([ordered]@{ id = $expected.id; metric = "functionDisposition:$unitId"; expected = 'present'; actual = 'missing' })
+                continue
+            }
+            $currentDisposition = $currentById[$unitId]
+            foreach ($identityMetric in @('relativePath', 'name', 'startLine')) {
+                if ($currentDisposition.$identityMetric -ne $expectedDisposition.$identityMetric) {
+                    $regressions.Add([ordered]@{ id = $expected.id; metric = "$identityMetric`:$unitId"; expected = $expectedDisposition.$identityMetric; actual = $currentDisposition.$identityMetric })
+                }
+            }
+            foreach ($lossMetric in @('semanticEligible', 'emitted')) {
+                if ($expectedDisposition.$lossMetric -eq $true -and $currentDisposition.$lossMetric -ne $true) {
+                    $regressions.Add([ordered]@{ id = $expected.id; metric = "$lossMetric`:$unitId"; expected = $true; actual = $currentDisposition.$lossMetric })
+                }
+            }
+            foreach ($gainMetric in @('runtimeRouted')) {
+                if ($expectedDisposition.$gainMetric -ne $true -and $currentDisposition.$gainMetric -eq $true) {
+                    $regressions.Add([ordered]@{ id = $expected.id; metric = "$gainMetric`:$unitId"; expected = $false; actual = $true })
+                }
+            }
+            if ($expectedDisposition.semanticEligible -eq $true -and $expectedDisposition.shapingFallback -ne $true -and $currentDisposition.shapingFallback -eq $true) {
+                $regressions.Add([ordered]@{ id = $expected.id; metric = "shapingFallback:$unitId"; expected = $false; actual = $true })
             }
         }
         if ($expected.postEmissionEvaluated -ne $true -or $current.postEmissionEvaluated -ne $true) {
@@ -237,6 +280,18 @@ try {
                 emittedFunctions = $product.coverage.emittedFunctions
                 droppedEligibleFunctions = $product.coverage.droppedEligibleFunctions
                 fallbackFunctions = $product.coverage.fallbackFunctions
+                functionDispositions = @($product.functionDispositions | ForEach-Object {
+                    [ordered]@{
+                        unitId = $_.unitId
+                        relativePath = $_.relativePath
+                        name = $_.name
+                        startLine = $_.startLine
+                        semanticEligible = $_.semanticEligible
+                        emitted = $_.emitted
+                        runtimeRouted = $_.runtimeRouted
+                        shapingFallback = $_.shapingFallback
+                    }
+                })
                 emittedUnitPercentage = $unitPercentage
                 emittedFunctionPercentage = $functionPercentage
                 leadingBlockers = @($product.blockers | Select-Object -First 12)

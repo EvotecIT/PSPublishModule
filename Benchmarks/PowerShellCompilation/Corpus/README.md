@@ -5,11 +5,11 @@ This checked-in corpus is the portable, product-neutral acceptance surface for P
 - `HybridModule` exercises parameter metadata and literal defaults, typed operators, direct self-recursion, safe runtime-state intrinsics, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its current net10 baseline emits all 8 functions without fallback.
 - `StrictProgram` is a multi-file script graph that must build as a PowerShell-free typed executable.
 - `StrictCollections` and `StrictSwitch` add collection mutation and exhaustive control-flow programs without input-specific compiler configuration.
-- `census-baseline.net10.json` records post-emission module coverage and a source fingerprint. Its relative product path remains comparable from another checkout root.
+- `census-baseline.net10.json` records post-emission module coverage, a source fingerprint, and the required final-ledger identity/disposition of every authored function. Its relative product path remains comparable from another checkout root.
 - `public-corpus.net8.json` fixes ten unrelated public module packages by URL, version, license, content hash, scenario family, entrypoint, and clean-target probe. Package contents remain external.
 - `public-corpus-baseline.net8.json` records the bounded Windows Hybrid and Windows/Linux Strict outcomes. Its percentages are packet measurements, never estimates of PowerShell-language coverage.
 - `external-assessment.net10.json` is a separate, replaceable frontier packet. It pins repository archives, gallery packages, and standalone files by immutable revision and SHA-256, but it does not turn their names or behavior into compiler configuration.
-- `external-assessment-baseline.net10.json` records post-emission census results for the pinned frontier. Its gate protects source identity, parser health, and existing emission from regression; low coverage remains visible and is not treated as successful compilation or execution.
+- `external-assessment-baseline.net10.json` records post-emission census results for the pinned frontier. Baseline schema 2 binds every authored function by its final-ledger unit identity and rejects loss of semantic eligibility or emission, newly gained runtime routing, shaping fallback for a previously eligible function, incomplete/duplicate identities, source drift, parser regressions, and aggregate fallback growth. A newly supported function may advance from runtime fallback to an explicitly attributed shaping fallback, but it cannot replace a previously emitted function while aggregate counts remain unchanged. Low coverage remains visible and is not treated as successful compilation or execution.
 - `Corpus.Runner.Common.ps1` owns exact-hash HTTPS acquisition, offline cache verification, contained archive extraction, expansion limits, and owned child-process execution for both packets.
 
 Run the portable coverage gate from the repository root:
@@ -20,6 +20,8 @@ powerforge powershell census `
     --framework net10.0 `
     --baseline .\Benchmarks\PowerShellCompilation\Corpus\census-baseline.net10.json
 ```
+
+Identity-less legacy census baselines with authored functions intentionally fail closed. Regenerate them with `--write-baseline`, then review the source fingerprint, coverage, and every per-function disposition before accepting the replacement.
 
 The wider external-repository census remains useful scale evidence, but every external root is optional and replaceable. Compiler eligibility is based only on generic syntax, type, binding, host-capability, and artifact contracts.
 

@@ -38,8 +38,7 @@ public sealed class PowerShellCompilationCensusProduct
     {
     }
 
-    /// <summary>Creates a product census result.</summary>
-    [System.Text.Json.Serialization.JsonConstructor]
+    /// <summary>Creates a product census result using the expanded public contract.</summary>
     public PowerShellCompilationCensusProduct(
         string name,
         string path,
@@ -56,6 +55,45 @@ public sealed class PowerShellCompilationCensusProduct
         PowerShellCompilationCoverageBreakdown? coverage = null,
         string? sourceFingerprint = null,
         PowerShellCompilationFeatureImpact[]? functionImpacts = null)
+        : this(
+            name,
+            path,
+            sourceFiles,
+            totalUnits,
+            compilableUnits,
+            runtimeFallbackUnits,
+            parseErrorFiles,
+            analysisMilliseconds,
+            blockers,
+            featureImpacts,
+            dependencySummary,
+            resourceSummary,
+            coverage,
+            sourceFingerprint,
+            functionImpacts,
+            Array.Empty<PowerShellCompilationFunctionDisposition>())
+    {
+    }
+
+    /// <summary>Creates a product census result with stable per-function dispositions.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationCensusProduct(
+        string name,
+        string path,
+        int sourceFiles,
+        int totalUnits,
+        int compilableUnits,
+        int runtimeFallbackUnits,
+        int parseErrorFiles,
+        double analysisMilliseconds,
+        PowerShellCompilationCensusBlocker[] blockers,
+        PowerShellCompilationFeatureImpact[]? featureImpacts,
+        PowerShellCompilationDependencySummary[]? dependencySummary,
+        PowerShellCompilationResourceSummary? resourceSummary,
+        PowerShellCompilationCoverageBreakdown? coverage,
+        string? sourceFingerprint,
+        PowerShellCompilationFeatureImpact[]? functionImpacts,
+        PowerShellCompilationFunctionDisposition[]? functionDispositions)
     {
         Name = name ?? string.Empty;
         Path = path ?? string.Empty;
@@ -72,6 +110,7 @@ public sealed class PowerShellCompilationCensusProduct
         Coverage = coverage ?? new PowerShellCompilationCoverageBreakdown();
         SourceFingerprint = sourceFingerprint ?? string.Empty;
         FunctionImpacts = functionImpacts ?? Array.Empty<PowerShellCompilationFeatureImpact>();
+        FunctionDispositions = functionDispositions ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
     }
 
     /// <summary>Stable product name derived from the source root.</summary>
@@ -121,6 +160,52 @@ public sealed class PowerShellCompilationCensusProduct
 
     /// <summary>Missing-feature impact restricted to authored functions and post-emission coverage.</summary>
     public PowerShellCompilationFeatureImpact[] FunctionImpacts { get; }
+
+    /// <summary>Stable post-shaping identity and disposition for every authored function.</summary>
+    public PowerShellCompilationFunctionDisposition[] FunctionDispositions { get; }
+}
+
+/// <summary>Stable post-shaping census disposition for one authored function.</summary>
+public sealed class PowerShellCompilationFunctionDisposition
+{
+    /// <summary>Creates one function disposition.</summary>
+    [System.Text.Json.Serialization.JsonConstructor]
+    public PowerShellCompilationFunctionDisposition(
+        string unitId,
+        string relativePath,
+        string name,
+        int startLine,
+        bool semanticEligible,
+        bool emitted,
+        bool runtimeRouted,
+        bool shapingFallback)
+    {
+        UnitId = unitId ?? string.Empty;
+        RelativePath = relativePath ?? string.Empty;
+        Name = name ?? string.Empty;
+        StartLine = startLine;
+        SemanticEligible = semanticEligible;
+        Emitted = emitted;
+        RuntimeRouted = runtimeRouted;
+        ShapingFallback = shapingFallback;
+    }
+
+    /// <summary>Relocation-stable authored-unit identity.</summary>
+    public string UnitId { get; }
+    /// <summary>Portable source path relative to the assessed root.</summary>
+    public string RelativePath { get; }
+    /// <summary>Authored function name.</summary>
+    public string Name { get; }
+    /// <summary>One-based authored start line.</summary>
+    public int StartLine { get; }
+    /// <summary>Whether canonical semantic analysis accepted the function before shaping.</summary>
+    public bool SemanticEligible { get; }
+    /// <summary>Whether the delivered assembly contains a CLR implementation.</summary>
+    public bool Emitted { get; }
+    /// <summary>Whether the delivered function still executes PowerShell runtime semantics.</summary>
+    public bool RuntimeRouted { get; }
+    /// <summary>Whether artifact shaping retained a runtime path for an analyzer-eligible function.</summary>
+    public bool ShapingFallback { get; }
 }
 
 /// <summary>One aggregated blocker category in a compilation census.</summary>

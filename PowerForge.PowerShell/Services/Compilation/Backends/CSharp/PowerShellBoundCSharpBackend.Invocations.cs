@@ -30,6 +30,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (!reordered) return call;
         var evaluations = authored.Select(parameterIndex =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(invocation.Arguments[parameterIndex].ClrType)} {temporaries[parameterIndex]} = {EmitExpression(invocation.Arguments[parameterIndex])};");
+        if (invocation.ClrType == typeof(void))
+            return $"new global::System.Action(() => {{ {string.Join(" ", evaluations)} {call}; }})()";
         return $"new global::System.Func<{PowerShellCSharpSymbolRenderer.TypeName(invocation.ClrType)}>(() => {{ {string.Join(" ", evaluations)} return {call}; }})()";
     }
 

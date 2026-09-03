@@ -242,6 +242,132 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Analyze_LocalCallBindsExplicitPositionsInNumericOrder()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Join-Position { [CmdletBinding(PositionalBinding=$false)] " +
+            "param([Parameter(Position=5)][string] $Five, [Parameter(Position=2)][string] $Two, [string] $NamedOnly) " +
+            "return \"$Two|$Five|$NamedOnly\" }; " +
+            "function Get-Position { return Join-Position 'two' -NamedOnly 'named' 'five' }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "explicit-position-local-call.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
+        var caller = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Position");
+        var invocation = Assert.IsType<PowerShellBoundInvocationExpression>(
+            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(caller.Body.Statements)).Expression);
+        Assert.Equal(new[] { 1, 2, 0 }, invocation.AuthoredEvaluationOrder);
+        Assert.Equal(new[] { "Five", "NamedOnly", "Two" }, invocation.BoundParameterNames);
+    }
+
+    [Fact]
+    public void Analyze_LocalCallRejectsUnpositionedParameterBesideExplicitPositions()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Join-Position { param([string] $NamedOnly, [Parameter(Position=1)][string] $Second) return \"$NamedOnly|$Second\" }; " +
+            "function Get-Position { return Join-Position 'second' 'surplus' }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "unpositioned-local-call.ps1"));
+
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document },
+            "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+
+        Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Get_Position");
+        Assert.Contains(result.Emitted.Diagnostics, static diagnostic =>
+            diagnostic.Code == "PSB2806" &&
+            diagnostic.Message.Contains("too many positional arguments", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Build_StrictLibraryExecutesExplicitPositionLocalCallWithoutPowerShellRuntime()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Join-Position { [CmdletBinding(PositionalBinding=$false)] " +
+            "param([Parameter(Position=5)][string] $Five, [Parameter(Position=2)][string] $Two, [string] $NamedOnly) " +
+            "return \"$Two|$Five|$NamedOnly\" }; " +
+            "function Get-Position { return Join-Position 'two' -NamedOnly 'named' 'five' }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExplicitPositionLocalCall",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+        Assert.DoesNotContain(result.Manifest.Dependencies, static dependency =>
+            dependency.Name.Contains("System.Management.Automation", StringComparison.OrdinalIgnoreCase));
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
+            .Single(static candidate => candidate.Name == "Get_Position");
+        Assert.Equal("two|five|named", method.Invoke(null, null));
+    }
+
+    [Fact]
+    public void Build_StrictLibraryEmitsReorderedVoidLocalCallWithoutPowerShellRuntime()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Set-Position { param([Parameter(Position=1)][string] $Second, [Parameter(Position=0)][string] $First) }; " +
+            "function Get-Position { Set-Position 'first' 'second'; return 42 }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExplicitPositionVoidLocalCall",
+            PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.False(result.Manifest!.RequiresPowerShellRuntime);
+        var assembly = System.Reflection.Assembly.LoadFile(result.ArtifactPath!);
+        var method = assembly.GetTypes().SelectMany(static type => type.GetMethods())
+            .Single(static candidate => candidate.Name == "Get_Position");
+        Assert.Equal(42, method.Invoke(null, null));
+    }
+
+    [Theory]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
+    public void Build_HybridModulePreservesExplicitPositionLocalCallAcrossHosts(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !OperatingSystem.IsWindows()) return;
+        using var fixture = ArtifactFixture.Create(
+            "function Join-Position { [CmdletBinding(PositionalBinding=$false)] " +
+            "param([Parameter(Position=5)][string] $Five, [Parameter(Position=2)][string] $Two, [string] $NamedOnly) " +
+            "return \"$Two|$Five|$NamedOnly\" }; " +
+            "function Get-Position { return Join-Position 'two' -NamedOnly 'named' 'five' }; " +
+            "function Get-FallbackValue { return [int](Get-Date -Format yyyy) }; " +
+            "Export-ModuleMember -Function Get-Position, Get-FallbackValue",
+            ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.ExplicitPositionHybrid",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        const string proof = "Get-Position; [int](Get-FallbackValue) -gt 2000";
+        var original = RunModuleProof(fixture.ScriptPath, proof, host);
+        var compiled = RunModuleProof(result.ArtifactPath!, proof, host);
+
+        Assert.Equal(original, compiled);
+        Assert.Equal(new[] { "two|five|named", "True" }, compiled.Split(Environment.NewLine));
+    }
+
+    [Fact]
     public void Transpile_KeepsNamedParameterSetSelectionOutOfTypedLocalCalls()
     {
         using var fixture = ArtifactFixture.Create(

@@ -248,6 +248,7 @@ internal static class PowerShellLocalCallSemanticBinder
 
         var bound = new Dictionary<int, PowerShellBoundExpression>();
         var authoredOrder = new List<int>();
+        var positionalParameters = GetPositionalParameters(signature);
         var positionalIndex = 0;
         var elements = command.CommandElements.Skip(1).ToArray();
         for (var elementIndex = 0; elementIndex < elements.Length; elementIndex++)
@@ -276,12 +277,16 @@ internal static class PowerShellLocalCallSemanticBinder
             }
             else if (elements[elementIndex] is ExpressionAst positional)
             {
-                if (!signature.CommandBinding.PositionalBinding || signature.Parameters.SelectMany(static parameter => parameter.Contract.Bindings).Any(static binding => binding.Position.HasValue))
-                    return Reject(diagnostics, "PSB2805", $"Local function '{signature.Symbol.Name}' uses an explicit positional-binding contract that is not represented by source-order calls.", PowerShellSourceParser.GetSpan(document, positional.Extent));
-                while (positionalIndex < signature.Parameters.Length && bound.ContainsKey(positionalIndex)) positionalIndex++;
-                if (positionalIndex >= signature.Parameters.Length)
-                    return Reject(diagnostics, "PSB2806", $"Local function '{signature.Symbol.Name}' received too many positional arguments.", PowerShellSourceParser.GetSpan(document, positional.Extent));
-                parameterIndex = positionalIndex++;
+                while (positionalIndex < positionalParameters.Length && bound.ContainsKey(positionalParameters[positionalIndex])) positionalIndex++;
+                if (positionalIndex >= positionalParameters.Length)
+                {
+                    var code = positionalParameters.Length == 0 ? "PSB2805" : "PSB2806";
+                    var message = positionalParameters.Length == 0
+                        ? $"Local function '{signature.Symbol.Name}' does not expose a parameter that accepts positional arguments."
+                        : $"Local function '{signature.Symbol.Name}' received too many positional arguments.";
+                    return Reject(diagnostics, code, message, PowerShellSourceParser.GetSpan(document, positional.Extent));
+                }
+                parameterIndex = positionalParameters[positionalIndex++];
                 argumentSyntax = positional;
             }
             else return Reject(diagnostics, "PSB2807", "Typed local calls accept scalar named or positional arguments only.", PowerShellSourceParser.GetSpan(document, elements[elementIndex].Extent));
@@ -326,6 +331,30 @@ internal static class PowerShellLocalCallSemanticBinder
             returnType,
             authoredOrder.ToArray(),
             bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static int[] GetPositionalParameters(PowerShellLocalCallSignature signature)
+    {
+        var explicitlyPositioned = signature.Parameters
+            .Select((parameter, index) => new
+            {
+                Index = index,
+                Position = parameter.Contract.Bindings
+                    .Where(static binding => binding.Position.HasValue)
+                    .Select(static binding => binding.Position!.Value)
+                    .DefaultIfEmpty(-1)
+                    .Min()
+            })
+            .Where(static item => item.Position >= 0)
+            .OrderBy(static item => item.Position)
+            .ThenBy(static item => item.Index)
+            .Select(static item => item.Index)
+            .ToArray();
+        if (explicitlyPositioned.Length > 0)
+            return explicitlyPositioned;
+        if (!signature.CommandBinding.PositionalBinding)
+            return Array.Empty<int>();
+        return Enumerable.Range(0, signature.Parameters.Length).ToArray();
     }
 
     private static int ResolveParameter(

@@ -5,7 +5,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>Runs repeatable compilation coverage censuses across product source trees.</summary>
-public sealed class PowerShellCompilationCensusRunner
+public sealed partial class PowerShellCompilationCensusRunner
 {
     /// <summary>Analyzes all source roots and optionally compares them with a prior census.</summary>
     public PowerShellCompilationCensusResult Run(
@@ -211,7 +211,8 @@ public sealed class PowerShellCompilationCensusRunner
                 coverage.EmittedFunctions,
                 coverage.TotalFunctions,
                 functionMetrics,
-                PowerShellCompilationUnitKind.Function));
+                PowerShellCompilationUnitKind.Function),
+            BuildFunctionDispositions(dispositionLedger));
         return new AnalyzedProduct(product, featureEvidence);
     }
 
@@ -379,7 +380,13 @@ public sealed class PowerShellCompilationCensusRunner
                     regressions.Add(new PowerShellCompilationCensusRegression(actual.Name, "PostEmissionEvaluated", 1, 0));
                 AddLowerIsRegression(regressions, actual.Name, "EmittedFunctions", expected.Coverage.EmittedFunctions, actual.Coverage.EmittedFunctions);
                 AddHigherIsRegression(regressions, actual.Name, "FallbackFunctions", expected.Coverage.FallbackFunctions, actual.Coverage.FallbackFunctions);
-                AddHigherIsRegression(regressions, actual.Name, "DroppedEligibleFunctions", expected.Coverage.DroppedEligibleFunctions, actual.Coverage.DroppedEligibleFunctions);
+                AddFunctionDispositionRegressions(
+                    regressions,
+                    actual.Name,
+                    expected.Coverage.TotalFunctions,
+                    expected.FunctionDispositions,
+                    actual.Coverage.TotalFunctions,
+                    actual.FunctionDispositions);
             }
         }
 
@@ -441,6 +448,22 @@ public sealed class PowerShellCompilationCensusRunner
             entries.Count(static entry => entry.Kind == PowerShellCompilationUnitKind.Script &&
                 entry.DiagnosticChain.Any(static cause => cause.Code == PowerShellCompilationDiagnosticCode.RuntimeScope)));
     }
+
+    private static PowerShellCompilationFunctionDisposition[] BuildFunctionDispositions(
+        PowerShellCompilationUnitDispositionLedger? ledger)
+        => ledger?.Entries
+               .Where(static entry => entry.Kind == PowerShellCompilationUnitKind.Function)
+               .Select(static entry => new PowerShellCompilationFunctionDisposition(
+                   entry.UnitId,
+                   entry.RelativePath,
+                   entry.Name,
+                   entry.StartLine,
+                   entry.SemanticEligible,
+                   entry.Emitted,
+                   entry.RuntimeRouted,
+                   entry.ShapingFallback))
+               .ToArray()
+           ?? Array.Empty<PowerShellCompilationFunctionDisposition>();
 
     private static string ComputeSourceFingerprint(IEnumerable<string> files, string sourceRoot)
     {

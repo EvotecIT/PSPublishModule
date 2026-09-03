@@ -190,10 +190,21 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         {
             Assert.True(Directory.Exists(extractedRoot), $"Extracted payload root was removed: {extractedRoot}");
             var deadline = DateTime.UtcNow.AddSeconds(20);
-            while (!File.Exists(marker) && DateTime.UtcNow < deadline)
+            string? markerContent = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    if (File.Exists(marker)) markerContent = File.ReadAllText(marker).Trim();
+                    if (markerContent == "async-payload") break;
+                }
+                catch (IOException)
+                {
+                    // The asynchronous writer may have created the file without closing it yet.
+                }
                 Thread.Sleep(100);
-            Assert.True(File.Exists(marker), "The asynchronous child did not consume the extracted payload in time.");
-            Assert.Equal("async-payload", File.ReadAllText(marker).Trim());
+            }
+            Assert.Equal("async-payload", markerContent);
         }
         finally
         {
