@@ -67,7 +67,8 @@ internal static class PowerShellLocalCallSemanticBinder
         FunctionDefinitionAst function,
         PowerShellSymbolId symbol,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var parameters = (function.Body.ParamBlock?.Parameters.ToArray() ?? Array.Empty<ParameterAst>())
             .Select(parameter =>
@@ -76,7 +77,7 @@ internal static class PowerShellLocalCallSemanticBinder
                 var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
                 var parameterSymbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
                 var type = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter) ? typeof(bool) : parameter.StaticType;
-                return new PowerShellLocalCallParameter(parameterSymbol, type, PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities));
+                return new PowerShellLocalCallParameter(parameterSymbol, type, PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, semanticProfileId));
             })
             .ToArray();
         PowerShellOutputTypeSemanticPolicy.TryResolve(

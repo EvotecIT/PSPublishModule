@@ -7,7 +7,8 @@ internal static class PowerShellCompilationConversionPolicy
     internal static bool CanLower(
         ConvertExpressionAst conversion,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var targetType = conversion.StaticType;
         if (targetType == typeof(void))
@@ -15,7 +16,13 @@ internal static class PowerShellCompilationConversionPolicy
         if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
             return false;
 
-        return PowerShellCompilationLiteralPolicy.TryResolve(conversion, targetType, targetFramework, out _) ||
+        return PowerShellCompilationLiteralPolicy.TryResolveValue(
+                   conversion,
+                   targetType,
+                   targetFramework,
+                   semanticProfileId,
+                   out var value) &&
+               PowerShellCompilationLiteralPolicy.CanEmitBoundValue(value, targetType) ||
                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions);
     }
 

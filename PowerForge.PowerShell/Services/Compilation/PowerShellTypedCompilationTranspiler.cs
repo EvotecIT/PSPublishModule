@@ -119,7 +119,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath, basePath)));
         }
         if (parsedFiles.Count != fullPaths.Length)
-            return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework);
+            return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
         var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId);
         var boundEmissions = boundResult.Emissions;
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
@@ -241,7 +241,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             methodSources.RemoveAt(index);
         }
 
-        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, boundResult.Optimization, boundResult.IrSnapshots);
+        return CreateResult(fullPaths, namespaceName, typeName, methods.ToArray(), methodSources.ToArray(), diagnostics, parsedFiles, targetFramework, semanticProfileId, boundResult.Optimization, boundResult.IrSnapshots);
     }
 
     private static void EmitFunctionGraph(
@@ -419,6 +419,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         IEnumerable<PowerShellCompilationDiagnostic> diagnostics,
         IEnumerable<ParsedSource> parsedFiles,
         string? targetFramework,
+        string semanticProfileId,
         PowerShellCompilationOptimizationEvidence? optimization = null,
         PowerShellCompilationIrSnapshotBundle? irSnapshots = null)
     {
@@ -440,7 +441,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                 .ThenBy(static diagnostic => diagnostic.Column)
                 .ToArray(),
             sourcePaths,
-            parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework)).ToArray(),
+            parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework, semanticProfileId)).ToArray(),
             optimization,
             irSnapshots);
     }

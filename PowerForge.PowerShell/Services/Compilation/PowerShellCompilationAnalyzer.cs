@@ -79,6 +79,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             return new PowerShellCompilationFilePlan(file, relativePath, Array.Empty<PowerShellCompilationUnitPlan>(), diagnostics);
         }
 
+        var unsupportedProfileTokens = PowerShellSourceProfileSyntaxPolicy.FindUnsupportedTokens(tokens, _semanticProfileId);
+        if (unsupportedProfileTokens.Length > 0)
+        {
+            var diagnostics = unsupportedProfileTokens.Select(token => CreateDiagnostic(
+                PowerShellCompilationDiagnosticCode.ParseError,
+                $"Numeric literal syntax '{token.Extent.Text}' is not accepted by selected semantic profile '{_semanticProfileId}'; source fallback would not parse on that target.",
+                file,
+                token.Extent,
+                PowerShellCompilationFeatureIds.Parser)).ToArray();
+            return new PowerShellCompilationFilePlan(file, relativePath, Array.Empty<PowerShellCompilationUnitPlan>(), diagnostics);
+        }
+
         var units = new List<PowerShellCompilationUnitPlan>();
         var topLevelStatements = GetEndStatements(
             ast,
@@ -290,7 +302,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
                     PowerShellObjectConstructionPolicy.IsLiteral(conversion):
                     break;
-                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework, capabilities):
+                case ConvertExpressionAst conversion when PowerShellCompilationConversionPolicy.CanLower(conversion, targetFramework, capabilities, _semanticProfileId):
                     break;
                 case ConvertExpressionAst conversion:
                     diagnostics.Add(CreateDiagnostic(

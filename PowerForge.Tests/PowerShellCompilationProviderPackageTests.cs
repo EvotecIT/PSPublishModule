@@ -321,13 +321,14 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
         provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationProvider.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationProvider.ForgedAdapter";
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var forgedAssemblyPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "..", "..", "..",
             "Fixtures",
             "PowerShellCompilationForgedCancellationProviderFixture",
             "bin",
-            "Debug",
+            configuration,
             "net8.0",
             "Generic.Semantic.ForgedCancellationProvider.dll"));
         Assert.True(File.Exists(forgedAssemblyPath), forgedAssemblyPath);
@@ -357,19 +358,20 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
         provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationReferenceProvider.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationReferenceProvider.ForgedReferenceAdapter";
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var fixturesRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures"));
         var forgedProviderPath = Path.Combine(
             fixturesRoot,
             "PowerShellCompilationForgedCancellationReferenceProviderFixture",
             "bin",
-            "Debug",
+            configuration,
             "net8.0",
             "Generic.Semantic.ForgedCancellationReferenceProvider.dll");
         var forgedContractPath = Path.Combine(
             fixturesRoot,
             "PowerShellCompilationForgedCancellationContractFixture",
             "bin",
-            "Debug",
+            configuration,
             "net8.0",
             "Generic.Semantic.ForgedCancellationContract.dll");
         Assert.True(File.Exists(forgedProviderPath), forgedProviderPath);

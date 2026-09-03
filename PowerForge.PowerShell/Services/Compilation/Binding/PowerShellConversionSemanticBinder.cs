@@ -10,6 +10,7 @@ internal static class PowerShellConversionSemanticBinder
         ConvertExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
+        string semanticProfileId,
         PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
@@ -21,7 +22,7 @@ internal static class PowerShellConversionSemanticBinder
             return null;
         }
 
-        if (PowerShellCompilationLiteralPolicy.TryResolveValue(syntax, targetType, targetFramework, out var value) &&
+        if (PowerShellCompilationLiteralPolicy.TryResolveValue(syntax, targetType, targetFramework, semanticProfileId, out var value) &&
             PowerShellCompilationLiteralPolicy.CanEmitBoundValue(value, targetType))
             return BindResolvedLiteral(span, targetType, value);
 

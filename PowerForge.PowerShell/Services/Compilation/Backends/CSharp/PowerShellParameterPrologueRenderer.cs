@@ -78,7 +78,7 @@ internal sealed class PowerShellParameterPrologueRenderer
                 var condition = metadata.AllowNull ? $"{identifier} is not null && {identifier}.Length == 0" : $"global::System.String.IsNullOrEmpty({identifier})";
                 AppendFailure(condition, $"Mandatory parameter '-{metadata.Name}' does not allow an empty string.", metadata.Name);
             }
-            else if (metadata.IsMandatory && parameterType.IsArray)
+            else if (metadata.IsMandatory && IsArrayContract(parameterType))
             {
                 if (!metadata.AllowNull)
                     AppendFailure($"{identifier} is null", $"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name);
@@ -90,12 +90,17 @@ internal sealed class PowerShellParameterPrologueRenderer
                 AppendFailure($"{identifier} is null", $"Mandatory parameter '-{metadata.Name}' does not allow null values.", metadata.Name);
             }
             if (metadata.Validations.Length == 0) continue;
-            var skipWhenOmitted = !metadata.IsMandatory && metadata.DefaultValue is null &&
-                                  _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
+            // PowerShell applies validation attributes only to explicitly bound arguments;
+            // an optional default expression is not itself parameter-binding input.
+            // Defaults themselves require the generated bound-parameter set, while optional
+            // parameters without defaults receive it only on bound-parameter-capable targets.
+            var hasBoundParameterSet = metadata.DefaultValue is not null ||
+                                       _capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters);
+            var skipWhenOmitted = !metadata.IsMandatory && hasBoundParameterSet;
             if (skipWhenOmitted) BeginBlock($"if (__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(metadata.Name)}))");
-            if (parameterType.IsArray)
+            if (IsArrayContract(parameterType))
             {
-                var elementType = parameterType.GetElementType()!;
+                var elementType = parameterType == typeof(Array) ? typeof(object) : parameterType.GetElementType()!;
                 RenderArrayValidationRules(metadata, identifier);
                 var item = _getTemporaryIdentifier("validation_value");
                 BeginBlock($"foreach (var {item} in {identifier} ?? global::System.Array.Empty<{_getTypeName(elementType)}>())");
@@ -194,6 +199,9 @@ internal sealed class PowerShellParameterPrologueRenderer
             PowerShellCompilationValidationKind.Pattern => $"Parameter '-{parameterName}' contains a value that does not match its validation pattern.",
             _ => $"Parameter '-{parameterName}' failed validation."
         };
+
+    private static bool IsArrayContract(Type type)
+        => type == typeof(Array) || type.IsArray;
 
     private void BeginBlock(string header) { AppendLine(header); AppendLine("{"); _indent++; }
     private void EndBlock() { _indent--; AppendLine("}"); }

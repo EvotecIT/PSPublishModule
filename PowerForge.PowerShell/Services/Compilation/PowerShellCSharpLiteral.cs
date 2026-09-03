@@ -15,6 +15,17 @@ internal static class PowerShellCSharpLiteral
             return "default!";
         if (literal.Kind == PowerShellCompilationLiteralKind.Array)
         {
+            if (targetType == typeof(Array))
+            {
+                var systemArrayElements = literal.Elements.Select(element =>
+                {
+                    if (element.Kind == PowerShellCompilationLiteralKind.Null) return "null";
+                    var elementType = Type.GetType(element.TypeName, throwOnError: false)
+                        ?? throw new InvalidOperationException($"System.Array literal element type '{element.TypeName}' could not be resolved.");
+                    return $"(object?)({Emit(element, elementType, getTypeName)})";
+                });
+                return $"new object?[] {{ {string.Join(", ", systemArrayElements)} }}";
+            }
             var elementType = targetType.GetElementType()
                 ?? throw new InvalidOperationException($"Literal target '{targetType.FullName}' is not an array.");
             var elements = literal.Elements.Select(element => Emit(element, elementType, getTypeName));

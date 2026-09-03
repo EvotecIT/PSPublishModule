@@ -9,7 +9,8 @@ internal static class PowerShellParameterContractBinder
     internal static PowerShellCompilationParameter Bind(
         ParameterAst parameter,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var type = parameter.StaticType;
         var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
@@ -17,7 +18,7 @@ internal static class PowerShellParameterContractBinder
         var bindings = GetBindings(parameter);
         PowerShellCompilationLiteral? defaultValue = null;
         if (parameter.DefaultValue is not null)
-            PowerShellCompilationLiteralPolicy.TryResolve(parameter.DefaultValue, clrType, targetFramework, out defaultValue);
+            PowerShellCompilationLiteralPolicy.TryResolve(parameter.DefaultValue, clrType, targetFramework, semanticProfileId, out defaultValue);
         return new PowerShellCompilationParameter(
             parameter.Name.VariablePath.UserPath,
             clrType.FullName ?? clrType.Name,

@@ -75,15 +75,16 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
     }
 
     [Fact]
-    public void Build_StrictExecutableValidatesOmittedLiteralDefault()
+    public void Build_StrictExecutableDoesNotValidateOmittedLiteralDefault()
     {
         using var fixture = Fixture.Create("param([ValidateRange(1,5)][int] $Value = 7); return $Value");
         var result = BuildExecutable(fixture, "PowerForge.InvalidDefault");
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var omitted = Run(result.ArtifactPath!);
-        Assert.NotEqual(0, omitted.ExitCode);
-        Assert.Contains("outside", omitted.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, omitted.ExitCode);
+        Assert.Equal("7", omitted.StandardOutput.Trim());
+        Assert.True(string.IsNullOrWhiteSpace(omitted.StandardError), omitted.StandardError);
     }
 
     [Fact]

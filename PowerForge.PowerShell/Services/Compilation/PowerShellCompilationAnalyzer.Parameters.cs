@@ -217,6 +217,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                      parameter.DefaultValue,
                      isSwitch ? typeof(bool) : type,
                      targetFramework,
+                     _semanticProfileId,
                      out _)))
             {
                 diagnostics.Add(CreateDiagnostic(
@@ -227,7 +228,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterDefault));
                 AnalyzeNode(parameter.DefaultValue, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);
             }
-            result.Add(PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities));
+            result.Add(PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, _semanticProfileId));
 
             foreach (var attribute in parameter.Attributes.Where(static attribute => attribute is not TypeConstraintAst))
                 AnalyzeNode(attribute, unitRoot, file, diagnostics, localVariables, targetFramework, capabilities, localFunctionNames);

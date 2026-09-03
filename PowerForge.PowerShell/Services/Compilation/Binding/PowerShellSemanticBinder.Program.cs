@@ -19,7 +19,7 @@ internal sealed partial class PowerShellSemanticBinder
             .Where(group => HasTypedFunctionShape(group.Single().Syntax.Body, capabilities))
             .ToDictionary(
                 static group => group.Key,
-                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities),
+                group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities, _semanticProfile.ProfileId),
                 StringComparer.OrdinalIgnoreCase);
         for (var iteration = 0; iteration < functionsByName.Count; iteration++)
         {

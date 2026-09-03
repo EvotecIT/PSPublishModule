@@ -175,7 +175,7 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellExecutionDisposition.Typed);
     }
 
-    private static PowerShellBoundParameter[]? BindParameters(
+    private PowerShellBoundParameter[]? BindParameters(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
         IDictionary<string, PowerShellSemanticSymbolBinding> symbols,
@@ -195,7 +195,7 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
             }
 
-            var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities);
+            var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, _semanticProfile.ProfileId);
             var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;

@@ -144,6 +144,7 @@ internal sealed partial class PowerShellSemanticBinder
                     conversion,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     targetFramework,
+                    _semanticProfile.ProfileId,
                     capabilities,
                     diagnostics);
             case BinaryExpressionAst binary:
