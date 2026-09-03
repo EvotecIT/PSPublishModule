@@ -146,7 +146,8 @@ internal enum PowerShellRequiredCapability
     PowerShellHostTypes = 512,
     PowerShellStreams = 1024,
     PowerShellLanguageConversions = 2048,
-    RuntimeFreeProviderOperations = 4096
+    RuntimeFreeProviderOperations = 4096,
+    PowerShellModuleState = 8192
 }
 
 internal enum PowerShellExecutionDispositionKind

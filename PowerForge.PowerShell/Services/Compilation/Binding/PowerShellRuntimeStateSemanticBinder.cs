@@ -28,12 +28,14 @@ internal static class PowerShellRuntimeStateSemanticBinder
                      (PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or
                       PowerShellRuntimeStateIntrinsicKind.ActionPreference or
                       PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
-                      PowerShellRuntimeStateIntrinsicKind.ErrorCollection))
+                      PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
+                      PowerShellRuntimeStateIntrinsicKind.ModuleVariable))
         {
             var name = kind == PowerShellRuntimeStateIntrinsicKind.LanguageMode
                 ? "LanguageMode"
                 : ((VariableExpressionAst)syntax).VariablePath.UserPath;
             if (kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable) name = name.Substring(4);
+            if (kind == PowerShellRuntimeStateIntrinsicKind.ModuleVariable) name = name.Substring(7);
             arguments = new PowerShellBoundExpression?[]
             {
                 new PowerShellBoundLiteralExpression(

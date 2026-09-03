@@ -20,6 +20,8 @@ internal sealed partial class PowerShellTypedLowerer
                 parameter.Contract.Validations.Length > 0 &&
                 targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)));
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
+        var moduleStateBindings = PropagateHostRequirement(program, static function =>
+            function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellModuleState));
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
         var providerCancellationBindings = PropagateHostRequirement(program, static function => ContainsCooperativeProvider(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
@@ -31,7 +33,8 @@ internal sealed partial class PowerShellTypedLowerer
                 streamBindings.Contains(function.Symbol.StableKey),
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
-                runtimeStateBindings.Contains(function.Symbol.StableKey)),
+                runtimeStateBindings.Contains(function.Symbol.StableKey),
+                moduleStateBindings.Contains(function.Symbol.StableKey)),
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
@@ -67,6 +70,15 @@ internal sealed partial class PowerShellTypedLowerer
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSL1003",
                     "Runtime-state semantics require the runtime-state-intrinsics target capability.",
+                    function.Symbol.Declaration));
+                continue;
+            }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellModuleState) &&
+                !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1011",
+                    "Live script-module state requires the Hybrid module-state target capability.",
                     function.Symbol.Declaration));
                 continue;
             }
@@ -121,7 +133,8 @@ internal sealed partial class PowerShellTypedLowerer
                 streamBindings.Contains(function.Symbol.StableKey),
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
-                runtimeStateBindings.Contains(function.Symbol.StableKey));
+                runtimeStateBindings.Contains(function.Symbol.StableKey),
+                moduleStateBindings.Contains(function.Symbol.StableKey));
             if (generatedHostParameterCollision is not null)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -175,6 +188,7 @@ internal sealed partial class PowerShellTypedLowerer
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
+                moduleStateBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
                     .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
@@ -661,7 +675,8 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresPowerShellStreams,
                     target.RequiresProviderCancellation,
                     target.RequiresPowerShellCommandRegions,
-                    target.RequiresPowerShellRuntimeState),
+                    target.RequiresPowerShellRuntimeState,
+                    target.RequiresPowerShellModuleState),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

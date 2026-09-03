@@ -41,10 +41,6 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         "CleanLifecycle",
         "Dispose"
     };
-    private static readonly HashSet<string> RuntimeStateMemberNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "CaptureRuntimeState"
-    };
     private static readonly HashSet<string> CommonParameterNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction",
@@ -62,7 +58,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         PowerShellTypedCompilationResult typed,
         string[]? exportedFunctions,
         string? targetFramework,
-        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invalid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -115,7 +112,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             typed.TypeName,
             targetFramework,
             invalid,
-            PowerShellCompilationCapabilities.BinaryModule);
+            capabilities);
         return new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
@@ -161,17 +158,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         builder.AppendLine();
         if (cmdlets.SelectMany(static cmdlet => cmdlet.Method.Parameters).Any(RequiresInvariantParameterConversion))
             AppendInvariantParameterAttribute(builder);
-        if (cmdlets.Any(static cmdlet => cmdlet.Method.RequiresPowerShellCommandRegions))
-        {
-            builder.AppendLine($"public static class {GetRuntimeRegionHostTypeName(typed)}");
-            builder.AppendLine("{");
-            builder.AppendLine("    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<global::System.Guid, ScriptBlock> Dispatchers = new();");
-            builder.AppendLine("    public static void SetDispatcher(global::System.Guid runspaceId, ScriptBlock dispatcher) => Dispatchers[runspaceId] = dispatcher;");
-            builder.AppendLine("    public static ScriptBlock? GetDispatcher(global::System.Guid runspaceId) => Dispatchers.TryGetValue(runspaceId, out var dispatcher) ? dispatcher : null;");
-            builder.AppendLine("    public static void ClearDispatcher(global::System.Guid runspaceId) => Dispatchers.TryRemove(runspaceId, out _);");
-            builder.AppendLine("}");
-            builder.AppendLine();
-        }
+        AppendRuntimeHost(builder, typed, cmdlets);
         foreach (var cmdlet in cmdlets)
             AppendCmdlet(builder, typed, cmdlet, targetFramework);
         return builder.ToString();
@@ -210,7 +197,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
                    memberName.Equals(cmdlet.ClassName, StringComparison.OrdinalIgnoreCase) ||
                    cmdlet.Method.RequiresProviderCancellation && ProviderCancellationMemberNames.Contains(memberName) ||
                    cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName) ||
-                   cmdlet.Method.RequiresPowerShellRuntimeState && RuntimeStateMemberNames.Contains(memberName) ||
+                   cmdlet.Method.RequiresPowerShellRuntimeState && memberName.Equals("CaptureRuntimeState", StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresPowerShellModuleState && memberName.Equals("ReadPowerShellModuleVariable", StringComparison.OrdinalIgnoreCase) ||
                    cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && HostedLifecycleMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
@@ -426,6 +414,17 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("    }");
             builder.AppendLine();
         }
+        if (cmdlet.Method.RequiresPowerShellModuleState)
+        {
+            builder.AppendLine("    private object? ReadPowerShellModuleVariable(string name)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
+            builder.AppendLine($"        var result = {GetRuntimeRegionHostTypeName(typed)}.ReadModuleVariable(runspaceId, name);");
+            builder.AppendLine("        if (result.Error is not null) ThrowTerminatingError(result.Error);");
+            builder.AppendLine("        return result.Value;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
         var lifecycleMethod = cmdlet.Method.Parameters.Any(static parameter => parameter.AcceptsPipelineInput)
             ? "EndProcessing"
             : "ProcessRecord";
@@ -459,6 +458,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
                 "CaptureRuntimeState()"
             });
         }
+        if (cmdlet.Method.RequiresPowerShellModuleState)
+            arguments = arguments.Append("ReadPowerShellModuleVariable");
         if (cmdlet.Method.RequiresPowerShellBoundParameters)
             arguments = arguments.Append("new global::System.Collections.Generic.HashSet<string>(MyInvocation.BoundParameters.Keys, global::System.StringComparer.OrdinalIgnoreCase)");
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({string.Join(", ", arguments)})";

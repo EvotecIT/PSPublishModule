@@ -15,7 +15,7 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
                 PowerShellRuntimeStateIntrinsicPolicy.GetType(kind),
                 PowerShellTypeFactProvenance.Inferred,
                 "The bounded runtime-state intrinsic defines its CLR result type."),
-            kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable
+            kind is PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or PowerShellRuntimeStateIntrinsicKind.ModuleVariable
                 ? PowerShellValueState.Unknown
                 : PowerShellValueState.Known,
             arguments.Aggregate(
@@ -59,5 +59,8 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
                PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction
                ? PowerShellRequiredCapability.PowerShellStreams
+               : PowerShellRequiredCapability.None) |
+           (kind == PowerShellRuntimeStateIntrinsicKind.ModuleVariable
+               ? PowerShellRequiredCapability.PowerShellModuleState | PowerShellRequiredCapability.PowerShellHostTypes
                : PowerShellRequiredCapability.None);
 }

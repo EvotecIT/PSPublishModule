@@ -124,8 +124,10 @@ public sealed class PowerShellCompilationBuildSpec
         PowerShellCompilationMode mode)
     {
         EnsureModeSupported(kind, mode);
-        return kind == PowerShellCompilationArtifactKind.BinaryModule ||
-               kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
+        return kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
+            ? PowerShellCompilationCapabilities.HybridModule
+            : kind == PowerShellCompilationArtifactKind.BinaryModule ||
+              kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
             ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Library
                 ? PowerShellCompilationCapabilities.StaticRuntimeFacts

@@ -10,7 +10,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
     internal static PowerShellTypedCompilationResult RouteNameCollisionsToFallback(
         PowerShellTypedCompilationResult typed,
         string? targetFramework,
-        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
         var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
@@ -58,7 +59,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
             typed.TypeName,
             targetFramework,
             excludedMethods,
-            PowerShellCompilationCapabilities.BinaryModule);
+            capabilities);
         var diagnostics = definitions.Where(definition => fallbackNames.Contains(definition.Function.Name)).Select(definition =>
         {
             var name = definition.Function.Name;

@@ -68,7 +68,10 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var runtimeCommandRegions = dispositionMethod?.RequiresPowerShellCommandRegions == true
                     ? Math.Max(1, dispositionMethod.HostedRegionSiteCount)
                     : 0;
-                var runtimeRouted = retainedHostedSource || runtimeCommandRegions > 0;
+                var moduleStateBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleState == true
+                    ? Math.Max(1, dispositionMethod.PowerShellModuleStateReadSiteCount)
+                    : 0;
+                var runtimeRouted = retainedHostedSource || runtimeCommandRegions > 0 || moduleStateBoundaryCrossings > 0;
                 var rejected = !emitted &&
                                (plan.Mode == PowerShellCompilationMode.Strict ||
                                 artifactKind == PowerShellCompilationArtifactKind.Library);
@@ -107,6 +110,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     retainedHostedSource,
                     runtimeCommandRegions,
                     boundaryCrossings: (dispositionMethod?.HostedRegionSiteCount ?? 0) +
+                                       moduleStateBoundaryCrossings +
                                        (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0),
                     shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
                     omitted,
@@ -243,6 +247,11 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (retainedHostedSource) causes.Add("Authored source remains on the hosted PowerShell path after artifact shaping.");
         if (method?.RequiresPowerShellCommandRegions == true) causes.Add("The emitted CLR method contains hosted PowerShell command regions.");
         if (method?.RequiresPowerShellRuntimeState == true) causes.Add("The emitted CLR method captures PowerShell runtime state.");
+        if (method?.RequiredPowerShellModuleVariables.Length > 0)
+            causes.Add("The emitted CLR method reads live parent Hybrid script-module state: " +
+                       string.Join(", ", method.RequiredPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
+        else if (method?.RequiresPowerShellModuleState == true)
+            causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
         if (method?.Lifecycle is not null) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         return causes.ToArray();
     }

@@ -193,7 +193,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         compilationSourcePaths,
                         "PowerForge.Compiled",
                         PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
-                        spec.TargetFramework)
+                        spec.TargetFramework,
+                        capabilities)
                     : transpiler.Transpile(
                         compilationSourcePaths,
                         "PowerForge.Compiled",
@@ -210,11 +211,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     }
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
                     {
-                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId);
+                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities);
                         typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework);
                     }
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-                    typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework, spec.SemanticProfileId);
+                    typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework, spec.SemanticProfileId, capabilities);
                 }
                 if (typed.Methods.Length == 0 &&
                     !(spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid))

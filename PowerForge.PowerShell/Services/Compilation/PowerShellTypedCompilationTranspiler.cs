@@ -51,14 +51,15 @@ public sealed class PowerShellTypedCompilationTranspiler
         IEnumerable<string> sourcePaths,
         string namespaceName,
         string typeName,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
         => TranspileCore(
             sourcePaths,
             namespaceName,
             typeName,
             targetFramework,
             excludedMethods: null,
-            PowerShellCompilationCapabilities.BinaryModule,
+            capabilities,
             _commandRegistry,
             _semanticProfileId);
 
@@ -398,6 +399,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.RequiresProviderCancellation);
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
+        method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
+        method.RequiredPowerShellModuleVariables = emitted.ModuleStateVariableNames;
+        method.PowerShellModuleStateReadSiteCount = emitted.ModuleStateReadSiteCount;
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -542,6 +546,7 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellRuntimeState = false,
+        bool requiresPowerShellModuleState = false,
         Type? declaredOutputType = null,
         string? declaredOutputTypeName = null,
         PowerShellCompilationHelp? help = null,
@@ -554,7 +559,9 @@ internal sealed class PowerShellCSharpMethodEmission
         string? collectionElementType = null,
         string? outputScalarization = null,
         int hostedRegionSiteCount = 0,
-        bool supportsBasicCommandQuerySurface = false)
+        bool supportsBasicCommandQuerySurface = false,
+        string[]? moduleStateVariableNames = null,
+        int moduleStateReadSiteCount = 0)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -565,6 +572,7 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        RequiresPowerShellModuleState = requiresPowerShellModuleState;
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
         Help = help;
@@ -578,6 +586,8 @@ internal sealed class PowerShellCSharpMethodEmission
         OutputScalarization = outputScalarization ?? string.Empty;
         HostedRegionSiteCount = hostedRegionSiteCount;
         SupportsBasicCommandQuerySurface = supportsBasicCommandQuerySurface;
+        ModuleStateVariableNames = moduleStateVariableNames ?? Array.Empty<string>();
+        ModuleStateReadSiteCount = Math.Max(0, moduleStateReadSiteCount);
     }
 
     internal string GeneratedName { get; }
@@ -589,6 +599,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal bool RequiresPowerShellModuleState { get; }
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
     internal PowerShellCompilationHelp? Help { get; }
@@ -602,4 +613,6 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string OutputScalarization { get; }
     internal int HostedRegionSiteCount { get; }
     internal bool SupportsBasicCommandQuerySurface { get; }
+    internal string[] ModuleStateVariableNames { get; }
+    internal int ModuleStateReadSiteCount { get; }
 }

@@ -263,8 +263,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "$script:__powerForgeRunspaceId = 'authored-runspace'; " +
             "$script:__powerForgeModule = 'authored-module'; " +
             "$script:__powerForgePreviousOnRemove = 'authored-previous'; " +
+            "$script:__powerForgeRuntimeCleanup = 'authored-cleanup'; " +
+            "$script:__powerForgeInstalledOnRemove = 'authored-installed'; " +
+            "$script:__powerForgeEffectiveOnRemove = 'authored-effective'; " +
+            "$script:__powerForgeInitializationFailed = 'authored-failed'; " +
             "function Get-RegionValue { [CmdletBinding()] param([string] $Name) Microsoft.PowerShell.Utility\\Write-Output 'region'; return $Name }; " +
-            "function Get-AuthoredDispatcherState { return \"$script:__powerForgeRunspaceId|$script:__powerForgeModule|$script:__powerForgePreviousOnRemove\" }; " +
+            "function Get-AuthoredDispatcherState { return \"$script:__powerForgeRunspaceId|$script:__powerForgeModule|$script:__powerForgePreviousOnRemove|$script:__powerForgeRuntimeCleanup|$script:__powerForgeInstalledOnRemove|$script:__powerForgeEffectiveOnRemove|$script:__powerForgeInitializationFailed\" }; " +
             "Export-ModuleMember -Function Get-RegionValue, Get-AuthoredDispatcherState",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -288,7 +292,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "-NonInteractive",
             "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-AuthoredDispatcherState");
-        Assert.Equal((0, "authored-runspace|authored-module|authored-previous", string.Empty),
+        Assert.Equal((0, "authored-runspace|authored-module|authored-previous|authored-cleanup|authored-installed|authored-effective|authored-failed", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 

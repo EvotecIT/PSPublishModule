@@ -22,6 +22,7 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     ConfirmPreference,
     ErrorCollection,
     EnvironmentVariable,
+    ModuleVariable,
     ShouldProcessTarget,
     ShouldProcessAction,
     CurrentLocalDateTime
@@ -60,6 +61,8 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             var name = variable.VariablePath.UserPath;
             if (name.StartsWith("env:", StringComparison.OrdinalIgnoreCase) && name.Length > 4)
                 kind = PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable;
+            else if (TryGetModuleVariableName(variable, capabilities, out _))
+                kind = PowerShellRuntimeStateIntrinsicKind.ModuleVariable;
             else if (IsActionPreference(name) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
                 kind = PowerShellRuntimeStateIntrinsicKind.ActionPreference;
             else if (name.Equals("ConfirmPreference", StringComparison.OrdinalIgnoreCase) && !HasLocalDefinition(body, name) && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
@@ -162,6 +165,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
                              PowerShellRuntimeStateIntrinsicKind.ActionPreference or
                              PowerShellRuntimeStateIntrinsicKind.ConfirmPreference or
                              PowerShellRuntimeStateIntrinsicKind.ErrorCollection or
+                             PowerShellRuntimeStateIntrinsicKind.ModuleVariable or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
                              PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
 
@@ -192,6 +196,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
             PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.ModuleVariable => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr or
             PowerShellRuntimeStateIntrinsicKind.IsWindows or
             PowerShellRuntimeStateIntrinsicKind.IsLinux or
@@ -225,6 +230,51 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => "global::System.DateTime.Now",
             _ => throw new InvalidOperationException($"Runtime-state intrinsic '{kind}' requires expression-specific emission.")
         };
+
+    internal static bool TryGetModuleVariableName(
+        VariableExpressionAst variable,
+        PowerShellCompilationCapability capabilities,
+        out string name)
+    {
+        name = string.Empty;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) ||
+            PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable) ||
+            IsComplexModuleVariableReceiver(variable))
+            return false;
+        var userPath = variable.VariablePath.UserPath;
+        if (!userPath.StartsWith("script:", StringComparison.OrdinalIgnoreCase) || userPath.Length <= 7)
+            return false;
+        var candidate = userPath.Substring(7);
+        if (!IsSafeGeneratedModuleVariableName(candidate))
+            return false;
+        name = candidate;
+        return true;
+    }
+
+    private static bool IsComplexModuleVariableReceiver(VariableExpressionAst variable)
+    {
+        Ast receiver = variable;
+        while (receiver.Parent is Ast parent && IsTransparentExpressionWrapper(parent, receiver))
+            receiver = parent;
+        return receiver.Parent is MemberExpressionAst member && ReferenceEquals(member.Expression, receiver) ||
+               receiver.Parent is IndexExpressionAst index && ReferenceEquals(index.Target, receiver);
+    }
+
+    private static bool IsTransparentExpressionWrapper(Ast parent, Ast child)
+        => parent switch
+        {
+            CommandExpressionAst command => ReferenceEquals(command.Expression, child),
+            PipelineAst pipeline when pipeline.PipelineElements.Count == 1 =>
+                ReferenceEquals(pipeline.PipelineElements[0], child),
+            ParenExpressionAst parenthesized => ReferenceEquals(parenthesized.Pipeline, child),
+            _ => false
+        };
+
+    private static bool IsSafeGeneratedModuleVariableName(string name)
+    {
+        if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_')) return false;
+        return name.Skip(1).All(static character => char.IsLetterOrDigit(character) || character == '_');
+    }
 
     private static bool IsExecutionContextLanguageMode(Ast ast, ScriptBlockAst body)
         => !IsAssignmentTarget(ast) &&

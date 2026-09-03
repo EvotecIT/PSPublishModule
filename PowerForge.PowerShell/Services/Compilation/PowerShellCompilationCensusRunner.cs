@@ -88,6 +88,9 @@ public sealed partial class PowerShellCompilationCensusRunner
         if (recurse)
         {
             var resolved = new PowerShellCompilationInputResolver().Resolve(path);
+            var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
+                resolved.Kind,
+                PowerShellCompilationMode.Hybrid);
             dependencies = resolved.Dependencies;
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
@@ -97,23 +100,26 @@ public sealed partial class PowerShellCompilationCensusRunner
                     resolved.CompilationSourceFiles,
                     Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
                     targetFramework,
-                    PowerShellCompilationCapabilities.BinaryModule);
+                    analysisCapabilities);
             var emitted = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 resolved.CompilationSourceFiles,
                 "PowerForge.Census",
                 "CompiledPowerShell",
-                targetFramework);
+                targetFramework,
+                analysisCapabilities);
             var exportContract = PowerShellModuleExportContract.TryRead(resolved.SourcePath);
             var exportedFunctions = exportContract?.SelectFunctions(emitted.Methods.Select(static method => method.SourceName));
-            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(emitted, targetFramework);
-            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(emitted, exportedFunctions, targetFramework);
+            emitted = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(
+                emitted, targetFramework, capabilities: analysisCapabilities);
+            emitted = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
+                emitted, exportedFunctions, targetFramework, capabilities: analysisCapabilities);
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
                 .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
                     source,
                     PowerShellCompilationMode.Analyze,
                     targetFramework: targetFramework,
-                    capabilities: PowerShellCompilationCapabilities.BinaryModule)).Files)
+                    capabilities: analysisCapabilities)).Files)
                 .Select(MarkRuntimeOnly)
                 .ToArray();
             var files = analyzedCompilation.Files.Concat(runtimeOnlyFiles).ToArray();
@@ -133,12 +139,15 @@ public sealed partial class PowerShellCompilationCensusRunner
         }
         else
         {
+            var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
+                PowerShellCompilationInputResolver.InferDefaultArtifactKind(path),
+                PowerShellCompilationMode.Hybrid);
             plan = analyzer.Analyze(new PowerShellCompilationSpec(
                 path,
                 PowerShellCompilationMode.Analyze,
                 recurse: false,
                 targetFramework: targetFramework,
-                capabilities: PowerShellCompilationCapabilities.BinaryModule));
+                capabilities: analysisCapabilities));
             sourceFiles = plan.Files.Length;
             sourceFingerprint = ComputeSourceFingerprint(plan.Files.Select(static file => file.FullPath), path);
             var units = plan.Files.SelectMany(static file => file.Units).ToArray();

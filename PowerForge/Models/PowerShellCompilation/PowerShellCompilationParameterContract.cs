@@ -26,6 +26,11 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.UntypedObjectParameters |
         PowerShellCompilationCapability.AdvisoryOutputTypeMetadata;
 
+    /// <summary>Capabilities supplied by a Hybrid binary module with one retained script-module state owner.</summary>
+    public const PowerShellCompilationCapability HybridModule =
+        BinaryModule |
+        PowerShellCompilationCapability.PowerShellModuleState;
+
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =
         PowerShellCompilationCapability.RuntimeFreeProviderOperations |

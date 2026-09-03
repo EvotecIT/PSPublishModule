@@ -19,6 +19,8 @@ internal sealed partial class PowerShellTypedLowerer
         "__whatIfPreference", "__runtimeState"
     };
 
+    private static readonly string[] ModuleStateHostParameterNames = { "__readPowerShellModuleVariable" };
+
     private static HashSet<string> PropagateHostRequirement(
         PowerShellBoundProgram program,
         Func<PowerShellBoundFunction, bool> hasDirectRequirement)
@@ -44,7 +46,8 @@ internal sealed partial class PowerShellTypedLowerer
         bool requiresPowerShellStreams,
         bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
-        bool requiresPowerShellRuntimeState)
+        bool requiresPowerShellRuntimeState,
+        bool requiresPowerShellModuleState)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -54,6 +57,7 @@ internal sealed partial class PowerShellTypedLowerer
         if (requiresPowerShellStreams) generated.UnionWith(StreamHostParameterNames);
         if (requiresPowerShellCommandRegions) generated.UnionWith(CommandRegionHostParameterNames);
         if (requiresPowerShellRuntimeState) generated.UnionWith(RuntimeStateHostParameterNames);
+        if (requiresPowerShellModuleState) generated.UnionWith(ModuleStateHostParameterNames);
         generated.Remove(string.Empty);
         return function.Parameters
             .Select(static parameter => PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name))

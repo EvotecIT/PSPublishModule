@@ -255,6 +255,15 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether the generated method expects bounded PowerShell runtime-state delegates and values.</summary>
     public bool RequiresPowerShellRuntimeState { get; }
 
+    /// <summary>Whether the generated method expects access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleState { get; internal set; }
+
+    /// <summary>Live parent script-module variables read by this method's canonical lowered body.</summary>
+    public string[] RequiredPowerShellModuleVariables { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>Number of statically emitted reads across the live parent Hybrid script-module boundary.</summary>
+    public int PowerShellModuleStateReadSiteCount { get; internal set; }
+
     /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
     public bool RequiresPowerShellBoundParameters { get; }
 

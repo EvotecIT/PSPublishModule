@@ -147,6 +147,30 @@ public sealed class PowerShellCompilationCoverageV2Tests
     }
 
     [Fact]
+    public void Run_NoRecurseUsesHybridModuleCapabilitiesForScriptModules()
+    {
+        var root = CreateRoot();
+        var source = Path.Combine(root, "AnalyzeOnly.psm1");
+        File.WriteAllText(source, "function Get-State { return $script:State }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(
+                new[] { source },
+                "net10.0",
+                recurse: false);
+
+            Assert.False(result.PostEmissionEvaluated);
+            Assert.Equal(1, result.CompilableUnits);
+            Assert.Equal(1, result.Products[0].Coverage.AnalyzerEligibleFunctions);
+            Assert.Equal(0, result.EmittedFunctions);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_FailsBaselineWhenPostEmissionEvaluationIsSkipped()
     {
         var root = CreateRoot();

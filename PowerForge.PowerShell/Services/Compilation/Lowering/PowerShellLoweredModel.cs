@@ -61,7 +61,8 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         bool requiresPowerShellStreams,
         bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
-        bool requiresPowerShellRuntimeState)
+        bool requiresPowerShellRuntimeState,
+        bool requiresPowerShellModuleState)
         : base(span, clrType)
     {
         Target = target;
@@ -74,6 +75,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        RequiresPowerShellModuleState = requiresPowerShellModuleState;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -86,6 +88,7 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal bool RequiresPowerShellModuleState { get; }
 }
 
 internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
@@ -192,6 +195,7 @@ internal sealed class PowerShellLoweredFunction
         bool requiresProviderCancellation,
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
+        bool requiresPowerShellModuleState,
         PowerShellOutputCardinality outputCardinality,
         PowerShellValueState[] outputValueStates,
         Type? collectionElementType,
@@ -215,6 +219,7 @@ internal sealed class PowerShellLoweredFunction
         RequiresProviderCancellation = requiresProviderCancellation;
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
+        RequiresPowerShellModuleState = requiresPowerShellModuleState;
         OutputCardinality = outputCardinality;
         OutputValueStates = outputValueStates ?? Array.Empty<PowerShellValueState>();
         CollectionElementType = collectionElementType;
@@ -239,6 +244,7 @@ internal sealed class PowerShellLoweredFunction
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
+    internal bool RequiresPowerShellModuleState { get; }
     internal PowerShellOutputCardinality OutputCardinality { get; }
     internal PowerShellImmutableArray<PowerShellValueState> OutputValueStates { get; }
     internal Type? CollectionElementType { get; }

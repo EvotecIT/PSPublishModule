@@ -84,6 +84,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
         builder.AppendLine("        }").Append("    }");
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
+        var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
+        var moduleStateReadSiteCount = PowerShellLoweredModuleStateCollector.CountReadSites(function.Statements);
         var hostedRegionSiteCount = CountHostedRegionSites(function.Statements);
         var supportsBasicCommandQuerySurface =
             function.RequiresPowerShellCommandRegions &&
@@ -101,6 +103,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellCommandRegions: function.RequiresPowerShellCommandRegions,
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
+            requiresPowerShellModuleState: function.RequiresPowerShellModuleState,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
             declaredOutputTypeName: function.DeclaredOutputTypeName,
@@ -121,7 +124,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 _ => "RuntimeDependent"
             },
             hostedRegionSiteCount: hostedRegionSiteCount,
-            supportsBasicCommandQuerySurface: supportsBasicCommandQuerySurface);
+            supportsBasicCommandQuerySurface: supportsBasicCommandQuerySurface,
+            moduleStateVariableNames: moduleStateVariableNames,
+            moduleStateReadSiteCount: moduleStateReadSiteCount);
     }
 
     private static void EmitStatement(
@@ -357,25 +362,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
                PowerShellCSharpLiteral.QuoteString(script) + ", new object?[] { " +
                EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
-    }
-
-    private static string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
-    {
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget)
-            return $"__shouldProcessTarget({EmitExpression(expression.Arguments[0])})";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction)
-            return $"__shouldProcessAction({EmitExpression(expression.Arguments[0])}, {EmitExpression(expression.Arguments[1])})";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable)
-            return $"global::System.Environment.GetEnvironmentVariable({EmitExpression(expression.Arguments[0])})";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ActionPreference)
-            return $"(global::System.Management.Automation.ActionPreference)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__runtimeState[{EmitExpression(expression.Arguments[0])}], typeof(global::System.Management.Automation.ActionPreference), global::System.Globalization.CultureInfo.InvariantCulture)!";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ConfirmPreference)
-            return $"(global::System.Management.Automation.ConfirmImpact)global::System.Management.Automation.LanguagePrimitives.ConvertTo(__runtimeState[{EmitExpression(expression.Arguments[0])}], typeof(global::System.Management.Automation.ConfirmImpact), global::System.Globalization.CultureInfo.InvariantCulture)!";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ErrorCollection)
-            return $"(global::System.Collections.ArrayList)__runtimeState[{EmitExpression(expression.Arguments[0])}]";
-        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.LanguageMode)
-            return $"(global::System.Management.Automation.PSLanguageMode)__runtimeState[{EmitExpression(expression.Arguments[0])}]!";
-        return PowerShellRuntimeStateIntrinsicPolicy.EmitStatic(expression.Kind, expression.TargetFramework, expression.SemanticProfileId);
     }
 
     private static string EmitConversion(PowerShellLoweredConversionExpression conversion)

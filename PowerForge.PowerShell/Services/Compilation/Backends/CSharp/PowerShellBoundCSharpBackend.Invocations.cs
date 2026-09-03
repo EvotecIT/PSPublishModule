@@ -25,6 +25,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             callArguments.AddRange(new[] { "__invokePowerShellRegion", "__invokePowerShellCapture" });
         if (invocation.RequiresPowerShellRuntimeState)
             callArguments.AddRange(new[] { "__shouldProcessTarget", "__shouldProcessAction", "__psVersion", "__whatIfPreference", "__runtimeState" });
+        if (invocation.RequiresPowerShellModuleState)
+            callArguments.Add("__readPowerShellModuleVariable");
         if (invocation.RequiresBoundParameters) callArguments.Add(EmitBoundParameterSet(invocation.BoundParameterNames));
         var call = $"{PowerShellCSharpSymbolRenderer.Identifier(invocation.Target.Name)}({string.Join(", ", callArguments)})";
         if (!reordered) return call;

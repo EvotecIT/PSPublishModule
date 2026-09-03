@@ -32,6 +32,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             parameters.Add("bool __whatIfPreference");
             parameters.Add("global::System.Collections.Generic.IReadOnlyDictionary<string, object?> __runtimeState");
         }
+        if (function.RequiresPowerShellModuleState)
+        {
+            parameters.Add("global::System.Func<string, object?> __readPowerShellModuleVariable");
+        }
         if (requiresBoundParameters)
             parameters.Add("global::System.Collections.Generic.ISet<string> __boundParameters");
     }

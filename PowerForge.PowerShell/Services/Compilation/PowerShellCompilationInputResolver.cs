@@ -81,6 +81,23 @@ public sealed class PowerShellCompilationResolvedInput
 /// </summary>
 public sealed class PowerShellCompilationInputResolver
 {
+    internal static PowerShellCompilationArtifactKind InferDefaultArtifactKind(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("A PowerShell script, module, manifest, or directory path is required.", nameof(path));
+        var requestedPath = Path.GetFullPath(path.Trim().Trim('"'));
+        if (Directory.Exists(requestedPath)) return PowerShellCompilationArtifactKind.BinaryModule;
+        if (!File.Exists(requestedPath))
+            throw new FileNotFoundException("PowerShell compilation input was not found.", requestedPath);
+        var extension = Path.GetExtension(requestedPath);
+        if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+            return PowerShellCompilationArtifactKind.Executable;
+        if (extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase))
+            return PowerShellCompilationArtifactKind.BinaryModule;
+        throw new ArgumentException("PowerShell compilation input must be a .ps1, .psm1, .psd1, or directory path.", nameof(path));
+    }
+
     /// <summary>Resolves a loose set of PowerShell script files into one typed library or strict binary module.</summary>
     public PowerShellCompilationResolvedInput Resolve(
         IEnumerable<string> paths,
@@ -236,9 +253,7 @@ public sealed class PowerShellCompilationInputResolver
                 $"PowerShell module manifest '{manifestPath}' traverses a symbolic link or junction.");
         }
 
-        var resolvedKind = kind ?? (Path.GetExtension(sourcePath).Equals(".ps1", StringComparison.OrdinalIgnoreCase)
-            ? PowerShellCompilationArtifactKind.Executable
-            : PowerShellCompilationArtifactKind.BinaryModule);
+        var resolvedKind = kind ?? InferDefaultArtifactKind(sourcePath);
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable &&
             Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase))
         {

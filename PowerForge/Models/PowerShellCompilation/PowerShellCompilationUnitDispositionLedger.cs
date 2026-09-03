@@ -122,9 +122,16 @@ public sealed class PowerShellCompilationUnitDisposition
     [JsonIgnore]
     public bool Emitted => EmittedClrMethod;
 
+    /// <summary>Reads that cross from emitted CLR into the retained parent Hybrid script-module scope.</summary>
+    [JsonIgnore]
+    public int ModuleStateBoundaryCrossings => Math.Max(
+        0,
+        BoundaryCrossings - RuntimeCommandRegions -
+        (RetainedHostedSource && (EmittedClrMethod || EmittedBinaryCmdlet) ? 1 : 0));
+
     /// <summary>Whether the delivered unit executes any PowerShell runtime semantics.</summary>
     [JsonIgnore]
-    public bool RuntimeRouted => RetainedHostedSource || RuntimeCommandRegions > 0;
+    public bool RuntimeRouted => RetainedHostedSource || RuntimeCommandRegions > 0 || ModuleStateBoundaryCrossings > 0;
 
     /// <summary>Stable summary of all final artifact dispositions; dispositions may overlap.</summary>
     [JsonIgnore]
@@ -133,6 +140,7 @@ public sealed class PowerShellCompilationUnitDisposition
         Emitted ? "TypedArtifact" : string.Empty,
         RetainedHostedSource ? "HostedSource" : string.Empty,
         RuntimeCommandRegions > 0 ? "HostedCommandRegions" : string.Empty,
+        ModuleStateBoundaryCrossings > 0 ? "HostedModuleState" : string.Empty,
         Omitted ? "Omitted" : string.Empty,
         Rejected ? "Rejected" : string.Empty
     }.Where(static value => value.Length > 0));

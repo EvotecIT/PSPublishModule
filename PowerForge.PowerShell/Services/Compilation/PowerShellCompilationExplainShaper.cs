@@ -48,13 +48,14 @@ public static class PowerShellCompilationExplainShaper
 
         var transpiler = new PowerShellTypedCompilationTranspiler();
         var typeName = PowerShellCSharpSymbolRenderer.Identifier(input.ArtifactName) + "Methods";
+        var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, plan.Mode);
         var typed = input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable
-            ? transpiler.TranspileForBinaryModule(input.CompilationSourceFiles, "PowerForge.Compiled", typeName, targetFramework)
+            ? transpiler.TranspileForBinaryModule(input.CompilationSourceFiles, "PowerForge.Compiled", typeName, targetFramework, capabilities)
             : transpiler.Transpile(input.CompilationSourceFiles, "PowerForge.Compiled", typeName, targetFramework);
         if (plan.Mode == PowerShellCompilationMode.Hybrid &&
             input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework);
+            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, capabilities: capabilities);
         }
         if (input.Kind == PowerShellCompilationArtifactKind.BinaryModule)
         {
@@ -62,11 +63,11 @@ public static class PowerShellCompilationExplainShaper
                 typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, targetFramework);
             var exportContract = PowerShellModuleExportContract.TryRead(input.SourcePath);
             var exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework, capabilities: capabilities);
         }
         else if (input.Kind == PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework, capabilities: capabilities);
         }
         return typed;
     }

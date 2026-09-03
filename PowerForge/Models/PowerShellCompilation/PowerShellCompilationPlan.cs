@@ -59,7 +59,10 @@ public enum PowerShellCompilationCapability
     UntypedObjectParameters = 2048,
 
     /// <summary>Generated command hosts may preserve a statically resolved output type name as advisory metadata without using it in a CLR signature.</summary>
-    AdvisoryOutputTypeMetadata = 4096
+    AdvisoryOutputTypeMetadata = 4096,
+
+    /// <summary>Hybrid binary modules may read live values from their retained parent script-module scope.</summary>
+    PowerShellModuleState = 8192
 }
 
 /// <summary>
@@ -416,7 +419,8 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
                               PowerShellCompilationCapability.UntypedObjectParameters |
-                              PowerShellCompilationCapability.AdvisoryOutputTypeMetadata)) != 0)
+                              PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
+                              PowerShellCompilationCapability.PowerShellModuleState)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)

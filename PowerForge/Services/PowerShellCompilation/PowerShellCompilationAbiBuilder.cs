@@ -220,6 +220,11 @@ internal static class PowerShellCompilationAbiBuilder
             AddCompilerParameter(parameters, "__shouldProcessAction", "System.Func<System.String,System.String,System.Boolean>", "ShouldProcessAction");
             AddCompilerParameter(parameters, "__psVersion", "System.Object", "PowerShellVersionState");
             AddCompilerParameter(parameters, "__whatIfPreference", "System.Boolean", "WhatIfPreference");
+            AddCompilerParameter(parameters, "__runtimeState", "System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object>", "PowerShellRuntimeState");
+        }
+        if (method.RequiresPowerShellModuleState)
+        {
+            AddCompilerParameter(parameters, "__readPowerShellModuleVariable", "System.Func<System.String,System.Object>", "PowerShellModuleStateReader");
         }
         if (method.RequiresPowerShellBoundParameters)
             AddCompilerParameter(parameters, "__boundParameters", "System.Collections.Generic.ISet<System.String>", "BoundParameterNames");
