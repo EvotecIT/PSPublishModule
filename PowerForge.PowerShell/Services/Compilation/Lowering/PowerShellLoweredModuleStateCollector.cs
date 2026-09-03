@@ -17,6 +17,19 @@ internal static class PowerShellLoweredModuleStateCollector
     internal static int CountReadSites(IEnumerable<PowerShellLoweredStatement> statements)
         => GetReads(statements).Count();
 
+    internal static string[] CollectWrites(IEnumerable<PowerShellLoweredStatement> statements)
+        => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .OfType<PowerShellLoweredModuleVariableAssignmentStatement>()
+            .Select(static assignment => assignment.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+    internal static int CountWriteSites(IEnumerable<PowerShellLoweredStatement> statements)
+        => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .Count(static statement => statement is PowerShellLoweredModuleVariableAssignmentStatement);
+
     private static IEnumerable<PowerShellLoweredRuntimeStateExpression> GetReads(
         IEnumerable<PowerShellLoweredStatement> statements)
         => PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)

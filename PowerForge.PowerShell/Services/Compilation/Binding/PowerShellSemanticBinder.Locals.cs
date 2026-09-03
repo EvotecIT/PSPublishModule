@@ -25,7 +25,8 @@ internal sealed partial class PowerShellSemanticBinder
             var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
             if (variable is null) continue;
             var name = variable.VariablePath.UserPath;
-            if (name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
+            if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(assignment, capabilities, out _) ||
+                name.Equals("null", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("false", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals(PowerShellBoundParametersPolicy.VariableName, StringComparison.OrdinalIgnoreCase))

@@ -68,9 +68,13 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var runtimeCommandRegions = dispositionMethod?.RequiresPowerShellCommandRegions == true
                     ? Math.Max(1, dispositionMethod.HostedRegionSiteCount)
                     : 0;
-                var moduleStateBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleState == true
+                var moduleStateReadBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleStateRead == true
                     ? Math.Max(1, dispositionMethod.PowerShellModuleStateReadSiteCount)
                     : 0;
+                var moduleStateWriteBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleStateWrite == true
+                    ? Math.Max(1, dispositionMethod.PowerShellModuleStateWriteSiteCount)
+                    : 0;
+                var moduleStateBoundaryCrossings = moduleStateReadBoundaryCrossings + moduleStateWriteBoundaryCrossings;
                 var runtimeRouted = retainedHostedSource || runtimeCommandRegions > 0 || moduleStateBoundaryCrossings > 0;
                 var rejected = !emitted &&
                                (plan.Mode == PowerShellCompilationMode.Strict ||
@@ -109,9 +113,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     emittedBinaryCmdlet,
                     retainedHostedSource,
                     runtimeCommandRegions,
-                    boundaryCrossings: (dispositionMethod?.HostedRegionSiteCount ?? 0) +
-                                       moduleStateBoundaryCrossings +
-                                       (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0),
+                    boundaryCrossings: runtimeCommandRegions +
+                                        moduleStateBoundaryCrossings +
+                                        (retainedHostedSource && (emitted || emittedBinaryCmdlet) ? 1 : 0),
                     shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
                     omitted,
                     rejected,
@@ -120,7 +124,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                         ? GetUnitDependencyCauses(plan.Dependencies, file.FullPath, relativePath)
                         : Array.Empty<string>(),
                     boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource),
-                    diagnosticChain));
+                    diagnosticChain,
+                    moduleStateReadBoundaryCrossings,
+                    moduleStateWriteBoundaryCrossings));
             }
         }
 
@@ -250,7 +256,12 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (method?.RequiredPowerShellModuleVariables.Length > 0)
             causes.Add("The emitted CLR method reads live parent Hybrid script-module state: " +
                        string.Join(", ", method.RequiredPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
-        else if (method?.RequiresPowerShellModuleState == true)
+        if (method?.WrittenPowerShellModuleVariables.Length > 0)
+            causes.Add("The emitted CLR method writes live parent Hybrid script-module state: " +
+                       string.Join(", ", method.WrittenPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
+        if (method?.RequiresPowerShellModuleState == true &&
+            method.RequiredPowerShellModuleVariables.Length == 0 &&
+            method.WrittenPowerShellModuleVariables.Length == 0)
             causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
         if (method?.Lifecycle is not null) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         return causes.ToArray();

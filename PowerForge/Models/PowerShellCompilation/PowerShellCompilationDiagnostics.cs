@@ -132,7 +132,7 @@ public sealed class PowerShellCompilationIrUnitSnapshot
 public sealed class PowerShellCompilationIrSnapshotBundle
 {
     /// <summary>IR snapshot schema version.</summary>
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
     /// <summary>Snapshot content excludes parser AST objects, authored source, and hosted source payload.</summary>
     public bool RedactedSemanticOnly { get; set; } = true;
     /// <summary>Deterministically ordered bound semantic units.</summary>

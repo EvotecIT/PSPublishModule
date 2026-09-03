@@ -23,6 +23,26 @@ public sealed class PowerShellCompilationOptimizationTests
     }
 
     [Fact]
+    public void SemanticPipelineFoldsModuleStateWriteValuesThroughCanonicalOptimizer()
+    {
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { PowerShellSourceParser.Parse("function Set-OptimizedState { $script:State = 1.5 + 2.5 }", "module-state-optimizer.psm1") },
+            capabilities: PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.Equal(1, result.Optimization.ConstantExpressionsFolded);
+        Assert.True(result.Optimization.Changed);
+        var assignment = Assert.IsType<PowerShellBoundModuleVariableAssignmentStatement>(
+            Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements));
+        var literal = Assert.IsType<PowerShellBoundLiteralExpression>(assignment.Value);
+        Assert.Equal(4d, literal.Value);
+        Assert.Contains(
+            "__writePowerShellModuleVariable(\"State\", 4d);",
+            Assert.Single(result.Emitted.Methods).Source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SemanticPipelineRemovesAuthoredStaticallyUnreachableConditionalBranch()
     {
         var result = new PowerShellSemanticCompilationPipeline().Compile(

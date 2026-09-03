@@ -68,6 +68,10 @@ public sealed class PowerShellCompilationUnitExplanation
     public bool RetainedHostedSource { get; set; }
     /// <summary>Number of hosted command regions in the emitted implementation.</summary>
     public int RuntimeCommandRegions { get; set; }
+    /// <summary>Number of reads from emitted CLR into retained parent Hybrid script-module state.</summary>
+    public int ModuleStateReadBoundaryCrossings { get; set; }
+    /// <summary>Number of writes from emitted CLR into retained parent Hybrid script-module state.</summary>
+    public int ModuleStateWriteBoundaryCrossings { get; set; }
     /// <summary>Number of typed/hosted boundary crossings.</summary>
     public int BoundaryCrossings { get; set; }
     /// <summary>Whether artifact shaping retained a runtime path for an eligible unit.</summary>
@@ -189,9 +193,9 @@ public sealed class PowerShellCompilationReproductionEvidence
 public sealed class PowerShellCompilationExplanation
 {
     /// <summary>Explanation schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     /// <summary>Compatibility contract used by semantic fingerprints across supported hosts.</summary>
-    public int SemanticCompatibilityVersion { get; set; } = 1;
+    public int SemanticCompatibilityVersion { get; set; } = 2;
     /// <summary>SHA-256 over semantic decisions with authored coordinates and traversal order removed.</summary>
     public string SemanticFingerprintSha256 { get; set; } = string.Empty;
     /// <summary>Selected compilation mode.</summary>

@@ -404,6 +404,14 @@ public sealed partial class PowerShellCompilationAnalyzer
                     unitRoot is ScriptBlockAst body &&
                     PowerShellRuntimeStateIntrinsicPolicy.IsSupportedReference(variable, body, targetFramework, capabilities):
                     break;
+                case VariableExpressionAst variable when
+                    variable.Parent is AssignmentStatementAst moduleAssignment &&
+                    ReferenceEquals(moduleAssignment.Left, variable) &&
+                    PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                        moduleAssignment,
+                        capabilities,
+                        out _):
+                    break;
                 case VariableExpressionAst variable when IsRuntimeVariable(variable, localVariables):
                     diagnostics.Add(CreateDiagnostic(
                         PowerShellCompilationDiagnosticCode.RuntimeScope,
@@ -451,6 +459,11 @@ public sealed partial class PowerShellCompilationAnalyzer
                         _commandResolver):
                     break;
                 case AssignmentStatementAst assignment:
+                    if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                            assignment,
+                            capabilities,
+                            out _))
+                        break;
                     var assignedVariable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left);
                     if (assignedVariable is null && IsPotentialTypedMutation(assignment, unitRoot))
                         break;

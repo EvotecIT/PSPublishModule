@@ -86,6 +86,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
         var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
         var moduleStateReadSiteCount = PowerShellLoweredModuleStateCollector.CountReadSites(function.Statements);
+        var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(function.Statements);
+        var moduleStateWriteSiteCount = PowerShellLoweredModuleStateCollector.CountWriteSites(function.Statements);
         var hostedRegionSiteCount = CountHostedRegionSites(function.Statements);
         var supportsBasicCommandQuerySurface =
             function.RequiresPowerShellCommandRegions &&
@@ -103,7 +105,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellCommandRegions: function.RequiresPowerShellCommandRegions,
             requiresPowerShellBoundParameters: requiresBoundParameters,
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
-            requiresPowerShellModuleState: function.RequiresPowerShellModuleState,
+            requiresPowerShellModuleStateRead: function.RequiresPowerShellModuleStateRead,
+            requiresPowerShellModuleStateWrite: function.RequiresPowerShellModuleStateWrite,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
             declaredOutputTypeName: function.DeclaredOutputTypeName,
@@ -126,7 +129,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
             hostedRegionSiteCount: hostedRegionSiteCount,
             supportsBasicCommandQuerySurface: supportsBasicCommandQuerySurface,
             moduleStateVariableNames: moduleStateVariableNames,
-            moduleStateReadSiteCount: moduleStateReadSiteCount);
+            moduleStateReadSiteCount: moduleStateReadSiteCount,
+            writtenModuleStateVariableNames: writtenModuleStateVariableNames,
+            moduleStateWriteSiteCount: moduleStateWriteSiteCount);
     }
 
     private static void EmitStatement(
@@ -181,6 +186,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     assignment.Value,
                     assignment.NormalizeNullString,
                     assignment.CheckedIntegral)).AppendLine(";");
+                return;
+            case PowerShellLoweredModuleVariableAssignmentStatement assignment:
+                builder.Append(prefix).Append("__writePowerShellModuleVariable(")
+                    .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
+                    .Append(EmitExpression(assignment.Value)).AppendLine(");");
                 return;
             case PowerShellLoweredIndexAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");

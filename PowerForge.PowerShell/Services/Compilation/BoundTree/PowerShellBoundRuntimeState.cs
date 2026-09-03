@@ -61,6 +61,31 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
                ? PowerShellRequiredCapability.PowerShellStreams
                : PowerShellRequiredCapability.None) |
            (kind == PowerShellRuntimeStateIntrinsicKind.ModuleVariable
-               ? PowerShellRequiredCapability.PowerShellModuleState | PowerShellRequiredCapability.PowerShellHostTypes
+               ? PowerShellRequiredCapability.PowerShellModuleState |
+                 PowerShellRequiredCapability.PowerShellModuleStateRead |
+                 PowerShellRequiredCapability.PowerShellHostTypes
                : PowerShellRequiredCapability.None);
+}
+
+internal sealed class PowerShellBoundModuleVariableAssignmentStatement : PowerShellBoundStatement
+{
+    internal PowerShellBoundModuleVariableAssignmentStatement(
+        SourceSpan span,
+        string name,
+        PowerShellBoundExpression value)
+        : base(
+            span,
+            PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.Host | value.Effects,
+            PowerShellRequiredCapability.RuntimeStateIntrinsics |
+            PowerShellRequiredCapability.PowerShellModuleState |
+            PowerShellRequiredCapability.PowerShellModuleStateWrite |
+            PowerShellRequiredCapability.PowerShellHostTypes |
+            value.Capabilities)
+    {
+        Name = name;
+        Value = value;
+    }
+
+    internal string Name { get; }
+    internal PowerShellBoundExpression Value { get; }
 }

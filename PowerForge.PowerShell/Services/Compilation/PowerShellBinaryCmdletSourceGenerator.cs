@@ -198,7 +198,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
                    cmdlet.Method.RequiresProviderCancellation && ProviderCancellationMemberNames.Contains(memberName) ||
                    cmdlet.Method.RequiresPowerShellCommandRegions && CommandRegionMemberNames.Contains(memberName) ||
                    cmdlet.Method.RequiresPowerShellRuntimeState && memberName.Equals("CaptureRuntimeState", StringComparison.OrdinalIgnoreCase) ||
-                   cmdlet.Method.RequiresPowerShellModuleState && memberName.Equals("ReadPowerShellModuleVariable", StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresPowerShellModuleStateRead && memberName.Equals("ReadPowerShellModuleVariable", StringComparison.OrdinalIgnoreCase) ||
+                   cmdlet.Method.RequiresPowerShellModuleStateWrite && memberName.Equals("WritePowerShellModuleVariable", StringComparison.OrdinalIgnoreCase) ||
                    cmdlet.Method.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline && HostedLifecycleMemberNames.Contains(memberName);
         });
         if (reservedParameter is not null)
@@ -414,14 +415,24 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine("    }");
             builder.AppendLine();
         }
-        if (cmdlet.Method.RequiresPowerShellModuleState)
+        if (cmdlet.Method.RequiresPowerShellModuleStateRead)
         {
             builder.AppendLine("    private object? ReadPowerShellModuleVariable(string name)");
             builder.AppendLine("    {");
             builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
             builder.AppendLine($"        var result = {GetRuntimeRegionHostTypeName(typed)}.ReadModuleVariable(runspaceId, name);");
-            builder.AppendLine("        if (result.Error is not null) ThrowTerminatingError(result.Error);");
+            builder.AppendLine($"        if (result.Error is not null) {GetRuntimeRegionHostTypeName(typed)}.ThrowPowerShellModuleStateError(result.Error);");
             builder.AppendLine("        return result.Value;");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
+        if (cmdlet.Method.RequiresPowerShellModuleStateWrite)
+        {
+            builder.AppendLine("    private void WritePowerShellModuleVariable(string name, object? value)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        var runspaceId = global::System.Management.Automation.Runspaces.Runspace.DefaultRunspace?.InstanceId ?? global::System.Guid.Empty;");
+            builder.AppendLine($"        var result = {GetRuntimeRegionHostTypeName(typed)}.WriteModuleVariable(runspaceId, name, value);");
+            builder.AppendLine($"        if (result.Error is not null) {GetRuntimeRegionHostTypeName(typed)}.ThrowPowerShellModuleStateError(result.Error);");
             builder.AppendLine("    }");
             builder.AppendLine();
         }
@@ -458,11 +469,18 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
                 "CaptureRuntimeState()"
             });
         }
-        if (cmdlet.Method.RequiresPowerShellModuleState)
+        if (cmdlet.Method.RequiresPowerShellModuleStateRead)
             arguments = arguments.Append("ReadPowerShellModuleVariable");
+        if (cmdlet.Method.RequiresPowerShellModuleStateWrite)
+            arguments = arguments.Append("WritePowerShellModuleVariable");
         if (cmdlet.Method.RequiresPowerShellBoundParameters)
             arguments = arguments.Append("new global::System.Collections.Generic.HashSet<string>(MyInvocation.BoundParameters.Keys, global::System.StringComparer.OrdinalIgnoreCase)");
         var invocation = $"{typed.TypeName}.{cmdlet.Method.GeneratedName}({string.Join(", ", arguments)})";
+        if (cmdlet.Method.RequiresPowerShellModuleState)
+        {
+            builder.AppendLine("        try");
+            builder.AppendLine("        {");
+        }
         if (requiresProviderCancellation)
             AppendProviderCancellationInvocation(
                 builder,
@@ -472,6 +490,14 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             builder.AppendLine($"        {invocation};");
         else
             builder.AppendLine($"        WriteObject({invocation}, enumerateCollection: true);");
+        if (cmdlet.Method.RequiresPowerShellModuleState)
+        {
+            builder.AppendLine("        }");
+            builder.AppendLine($"        catch (global::System.Exception exception) when ({GetRuntimeRegionHostTypeName(typed)}.TryTakePowerShellModuleStateError(exception, out var moduleStateError))");
+            builder.AppendLine("        {");
+            builder.AppendLine("            ThrowTerminatingError(moduleStateError);");
+            builder.AppendLine("        }");
+        }
         builder.AppendLine("    }");
         builder.AppendLine("}");
         builder.AppendLine();

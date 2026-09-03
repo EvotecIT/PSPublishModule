@@ -114,7 +114,13 @@ internal sealed partial class PowerShellSemanticBinder
                 else statements.Add(objectMutation);
                 continue;
             }
-            if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+            var isModuleStateAssignment = statement is AssignmentStatementAst moduleStateAssignment &&
+                                          PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                                              moduleStateAssignment,
+                                              capabilities,
+                                              out _);
+            if (!isModuleStateAssignment &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 PowerShellHostedStatementBinder.TryBind(
                     document,
                     authoredStatements,
@@ -280,12 +286,39 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (statement is AssignmentStatementAst assignment)
         {
+            if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
+                    assignment,
+                    capabilities,
+                    out var moduleVariableName))
+            {
+                var moduleValue = BindExpression(
+                    document,
+                    assignment.Right,
+                    symbols,
+                    functions,
+                    diagnostics,
+                    targetFramework: targetFramework,
+                    capabilities: capabilities);
+                if (moduleValue is null) return null;
+                if (moduleValue.Type.ClrType == typeof(void))
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic(
+                        PowerShellCompilationFeatureIds.RuntimeScope,
+                        $"Assignment to live module variable '$script:{moduleVariableName}' requires a value-producing typed expression.",
+                        PowerShellSourceParser.GetSpan(document, assignment.Right.Extent)));
+                    return null;
+                }
+                return new PowerShellBoundModuleVariableAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent),
+                    moduleVariableName,
+                    moduleValue);
+            }
             if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } scopedTarget &&
                 IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.RuntimeScope,
-                    $"Assignment to runtime-owned scope '${scopedTarget.VariablePath.UserPath}' is outside the bounded read-only runtime-state contract.",
+                    $"Assignment to runtime-owned scope '${scopedTarget.VariablePath.UserPath}' is outside the bounded runtime-state contract.",
                     PowerShellSourceParser.GetSpan(document, assignment.Extent)));
                 return null;
             }
@@ -414,7 +447,9 @@ internal sealed partial class PowerShellSemanticBinder
                 foreach (var constraint in clause.CatchTypes)
                 {
                     var type = constraint.TypeName.GetReflectionType();
-                    var supportedPowerShellRuntimeException = type == typeof(System.Management.Automation.RuntimeException) &&
+                    var supportedPowerShellRuntimeException = type is not null &&
+                                                               (type == typeof(System.Management.Automation.RuntimeException) ||
+                                                                type == typeof(System.Management.Automation.SessionStateUnauthorizedAccessException)) &&
                                                                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
                     if (type is null || !typeof(Exception).IsAssignableFrom(type) ||
                         !supportedPowerShellRuntimeException && !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))

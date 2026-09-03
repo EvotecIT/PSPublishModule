@@ -20,8 +20,10 @@ internal sealed partial class PowerShellTypedLowerer
                 parameter.Contract.Validations.Length > 0 &&
                 targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters)));
         var runtimeStateBindings = PropagateHostRequirement(program, static function => RequiresRuntimeStateHostBinding(function.Body));
-        var moduleStateBindings = PropagateHostRequirement(program, static function =>
-            function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellModuleState));
+        var moduleStateReadBindings = PropagateHostRequirement(program, static function =>
+            ContainsPowerShellModuleStateRead(function.Body));
+        var moduleStateWriteBindings = PropagateHostRequirement(program, static function =>
+            ContainsPowerShellModuleStateWrite(function.Body));
         var streamBindings = PropagateHostRequirement(program, static function => ContainsPowerShellStreamWrite(function.Body));
         var providerCancellationBindings = PropagateHostRequirement(program, static function => ContainsCooperativeProvider(function.Body));
         var commandRegionBindings = PropagateHostRequirement(program, static function => ContainsPowerShellCommandRegion(function.Body));
@@ -34,7 +36,8 @@ internal sealed partial class PowerShellTypedLowerer
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
-                moduleStateBindings.Contains(function.Symbol.StableKey)),
+                moduleStateReadBindings.Contains(function.Symbol.StableKey),
+                moduleStateWriteBindings.Contains(function.Symbol.StableKey)),
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
@@ -134,7 +137,8 @@ internal sealed partial class PowerShellTypedLowerer
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
-                moduleStateBindings.Contains(function.Symbol.StableKey));
+                moduleStateReadBindings.Contains(function.Symbol.StableKey),
+                moduleStateWriteBindings.Contains(function.Symbol.StableKey));
             if (generatedHostParameterCollision is not null)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -188,7 +192,8 @@ internal sealed partial class PowerShellTypedLowerer
                 providerCancellationBindings.Contains(function.Symbol.StableKey),
                 commandRegionBindings.Contains(function.Symbol.StableKey),
                 runtimeStateBindings.Contains(function.Symbol.StableKey),
-                moduleStateBindings.Contains(function.Symbol.StableKey),
+                moduleStateReadBindings.Contains(function.Symbol.StableKey),
+                moduleStateWriteBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
                     .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
@@ -348,6 +353,10 @@ internal sealed partial class PowerShellTypedLowerer
                 assignment.Operation,
                 assignment.NormalizeNullString,
                 assignment.CheckedIntegral),
+            PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellLoweredModuleVariableAssignmentStatement(
+                assignment.Span,
+                assignment.Name,
+                LowerExpression(assignment.Value, functions, names, targetCapabilities)),
             PowerShellBoundIndexAssignmentStatement assignment => new PowerShellLoweredIndexAssignmentStatement(
                 assignment.Span,
                 LowerExpression(assignment.Target, functions, names, targetCapabilities),
@@ -676,7 +685,8 @@ internal sealed partial class PowerShellTypedLowerer
                     target.RequiresProviderCancellation,
                     target.RequiresPowerShellCommandRegions,
                     target.RequiresPowerShellRuntimeState,
-                    target.RequiresPowerShellModuleState),
+                    target.RequiresPowerShellModuleStateRead,
+                    target.RequiresPowerShellModuleStateWrite),
             _ => throw new InvalidOperationException($"Bound expression '{expression.GetType().Name}' reached typed lowering without an owner.")
         };
 

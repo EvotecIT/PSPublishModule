@@ -258,11 +258,23 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether the generated method expects access to live parent Hybrid script-module state.</summary>
     public bool RequiresPowerShellModuleState { get; internal set; }
 
+    /// <summary>Whether the generated method expects read access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleStateRead { get; internal set; }
+
+    /// <summary>Whether the generated method expects write access to live parent Hybrid script-module state.</summary>
+    public bool RequiresPowerShellModuleStateWrite { get; internal set; }
+
     /// <summary>Live parent script-module variables read by this method's canonical lowered body.</summary>
     public string[] RequiredPowerShellModuleVariables { get; internal set; } = Array.Empty<string>();
 
     /// <summary>Number of statically emitted reads across the live parent Hybrid script-module boundary.</summary>
     public int PowerShellModuleStateReadSiteCount { get; internal set; }
+
+    /// <summary>Live parent script-module variables written by this method's canonical lowered body.</summary>
+    public string[] WrittenPowerShellModuleVariables { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>Number of statically emitted writes across the live parent Hybrid script-module boundary.</summary>
+    public int PowerShellModuleStateWriteSiteCount { get; internal set; }
 
     /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
     public bool RequiresPowerShellBoundParameters { get; }

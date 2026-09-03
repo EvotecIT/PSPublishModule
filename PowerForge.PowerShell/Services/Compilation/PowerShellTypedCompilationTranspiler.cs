@@ -400,8 +400,12 @@ public sealed class PowerShellTypedCompilationTranspiler
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
+        method.RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead;
+        method.RequiresPowerShellModuleStateWrite = emitted.RequiresPowerShellModuleStateWrite;
         method.RequiredPowerShellModuleVariables = emitted.ModuleStateVariableNames;
         method.PowerShellModuleStateReadSiteCount = emitted.ModuleStateReadSiteCount;
+        method.WrittenPowerShellModuleVariables = emitted.WrittenModuleStateVariableNames;
+        method.PowerShellModuleStateWriteSiteCount = emitted.ModuleStateWriteSiteCount;
         method.Help = emitted.Help ?? PowerShellCommentHelpBinder.Bind(source.Function)?.ToPublicModel();
         return method;
     }
@@ -546,7 +550,8 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellCommandRegions = false,
         bool requiresPowerShellBoundParameters = false,
         bool requiresPowerShellRuntimeState = false,
-        bool requiresPowerShellModuleState = false,
+        bool requiresPowerShellModuleStateRead = false,
+        bool requiresPowerShellModuleStateWrite = false,
         Type? declaredOutputType = null,
         string? declaredOutputTypeName = null,
         PowerShellCompilationHelp? help = null,
@@ -561,7 +566,9 @@ internal sealed class PowerShellCSharpMethodEmission
         int hostedRegionSiteCount = 0,
         bool supportsBasicCommandQuerySurface = false,
         string[]? moduleStateVariableNames = null,
-        int moduleStateReadSiteCount = 0)
+        int moduleStateReadSiteCount = 0,
+        string[]? writtenModuleStateVariableNames = null,
+        int moduleStateWriteSiteCount = 0)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -572,7 +579,8 @@ internal sealed class PowerShellCSharpMethodEmission
         RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
-        RequiresPowerShellModuleState = requiresPowerShellModuleState;
+        RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
+        RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
         Help = help;
@@ -588,6 +596,8 @@ internal sealed class PowerShellCSharpMethodEmission
         SupportsBasicCommandQuerySurface = supportsBasicCommandQuerySurface;
         ModuleStateVariableNames = moduleStateVariableNames ?? Array.Empty<string>();
         ModuleStateReadSiteCount = Math.Max(0, moduleStateReadSiteCount);
+        WrittenModuleStateVariableNames = writtenModuleStateVariableNames ?? Array.Empty<string>();
+        ModuleStateWriteSiteCount = Math.Max(0, moduleStateWriteSiteCount);
     }
 
     internal string GeneratedName { get; }
@@ -599,7 +609,9 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
-    internal bool RequiresPowerShellModuleState { get; }
+    internal bool RequiresPowerShellModuleStateRead { get; }
+    internal bool RequiresPowerShellModuleStateWrite { get; }
+    internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
     internal PowerShellCompilationHelp? Help { get; }
@@ -615,4 +627,6 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool SupportsBasicCommandQuerySurface { get; }
     internal string[] ModuleStateVariableNames { get; }
     internal int ModuleStateReadSiteCount { get; }
+    internal string[] WrittenModuleStateVariableNames { get; }
+    internal int ModuleStateWriteSiteCount { get; }
 }

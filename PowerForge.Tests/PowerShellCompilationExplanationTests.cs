@@ -114,10 +114,36 @@ public sealed class PowerShellCompilationExplanationTests
             exists: true,
             sizeBytes: 12,
             "Selected by policy.");
-        var explanation = PowerShellCompilationExplanationService.CreateFinal(
-            new PowerShellCompilationPlan(PowerShellCompilationMode.Strict, new[] { file }, "net8.0", new[] { dependency }),
-            PowerShellCompilationArtifactKind.Executable,
-            shapedCompilation: null);
+        var plan = new PowerShellCompilationPlan(
+            PowerShellCompilationMode.Strict,
+            new[] { file },
+            "net8.0",
+            new[] { dependency });
+        var ledger = new PowerShellCompilationUnitDispositionLedger(
+            new[]
+            {
+                new PowerShellCompilationUnitDisposition(
+                    PowerShellCompilationExplanationService.ComputeUnitId(file.RelativePath, unit),
+                    file.RelativePath,
+                    unit.Name,
+                    unit.Kind,
+                    unit.StartLine,
+                    semanticEligible: true,
+                    emittedClrMethod: true,
+                    emittedBinaryCmdlet: false,
+                    retainedHostedSource: false,
+                    runtimeCommandRegions: 0,
+                    boundaryCrossings: 0,
+                    shapingFallback: false,
+                    omitted: false,
+                    rejected: false,
+                    generatedMemberName: "Get_RandomValue",
+                    dependencyCauses: Array.Empty<string>(),
+                    boundaryCauses: Array.Empty<string>(),
+                    diagnosticChain: Array.Empty<PowerShellCompilationDispositionCause>())
+            },
+            Array.Empty<string>());
+        var explanation = PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
 
         var tracedUnit = Assert.Single(Assert.Single(explanation.Files).Units);
         Assert.Equal(typeof(int).FullName, tracedUnit.ReturnType);
@@ -126,6 +152,24 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
         Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
         Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
+
+#pragma warning disable CS0618 // The regression locks the explicit pre-ledger compatibility contract.
+        var compatibility = PowerShellCompilationExplanationService.CreateFinal(
+            plan,
+            PowerShellCompilationArtifactKind.Executable,
+            shapedCompilation: null);
+#pragma warning restore CS0618
+        Assert.Equal(2, compatibility.SchemaVersion);
+        Assert.Equal(1, compatibility.SemanticCompatibilityVersion);
+        var compatibilityOverload = typeof(PowerShellCompilationExplanationService).GetMethod(
+            nameof(PowerShellCompilationExplanationService.CreateFinal),
+            new[]
+            {
+                typeof(PowerShellCompilationPlan),
+                typeof(PowerShellCompilationArtifactKind),
+                typeof(PowerShellTypedCompilationResult)
+            });
+        Assert.NotNull(compatibilityOverload?.GetCustomAttributes(typeof(ObsoleteAttribute), inherit: false).SingleOrDefault());
     }
 
     [Fact]

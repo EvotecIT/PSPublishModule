@@ -25,3 +25,19 @@ internal sealed class PowerShellLoweredRuntimeStateExpression : PowerShellLowere
     internal PowerShellImmutableArray<PowerShellLoweredExpression> Arguments { get; }
     internal PowerShellCompilationCommandProviderContract? Provider { get; }
 }
+
+internal sealed class PowerShellLoweredModuleVariableAssignmentStatement : PowerShellLoweredStatement
+{
+    internal PowerShellLoweredModuleVariableAssignmentStatement(
+        SourceSpan span,
+        string name,
+        PowerShellLoweredExpression value)
+        : base(span)
+    {
+        Name = name;
+        Value = value;
+    }
+
+    internal string Name { get; }
+    internal PowerShellLoweredExpression Value { get; }
+}

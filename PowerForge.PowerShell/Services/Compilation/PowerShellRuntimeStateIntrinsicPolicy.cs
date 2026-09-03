@@ -251,6 +251,26 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         return true;
     }
 
+    internal static bool TryGetModuleVariableAssignmentName(
+        AssignmentStatementAst assignment,
+        PowerShellCompilationCapability capabilities,
+        out string name)
+    {
+        name = string.Empty;
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) ||
+            assignment.Operator != TokenKind.Equals ||
+            assignment.Left is not VariableExpressionAst variable)
+            return false;
+        var userPath = variable.VariablePath.UserPath;
+        if (!userPath.StartsWith("script:", StringComparison.OrdinalIgnoreCase) || userPath.Length <= 7)
+            return false;
+        var candidate = userPath.Substring(7);
+        if (!IsSafeGeneratedModuleVariableName(candidate))
+            return false;
+        name = candidate;
+        return true;
+    }
+
     private static bool IsComplexModuleVariableReceiver(VariableExpressionAst variable)
     {
         Ast receiver = variable;

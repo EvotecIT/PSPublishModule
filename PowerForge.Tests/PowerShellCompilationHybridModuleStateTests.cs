@@ -30,7 +30,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         """;
 
     [Fact]
-    public void Analyze_ModuleStateIsHybridOnlyAndWritesRemainFallback()
+    public void Analyze_ModuleStateReadAndSimpleWriteAreHybridOnly()
     {
         using var fixture = ArtifactFixture.Create(HybridModuleStateSource, ".psm1");
         var analyzer = new PowerShellCompilationAnalyzer();
@@ -54,8 +54,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
 
         Assert.True(FindFunction(hybrid, "Get-BridgeState").IsCompilable);
-        Assert.False(FindFunction(hybrid, "Set-BridgeState").IsCompilable);
+        Assert.True(FindFunction(hybrid, "Set-BridgeState").IsCompilable);
         Assert.False(FindFunction(strict, "Get-BridgeState").IsCompilable);
+        Assert.False(FindFunction(strict, "Set-BridgeState").IsCompilable);
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath },
@@ -64,11 +65,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
         var method = Assert.Single(typed.Methods, static method => method.SourceName == "Get-BridgeState");
-        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Set-BridgeState");
+        var setter = Assert.Single(typed.Methods, static method => method.SourceName == "Set-BridgeState");
         Assert.Equal(new[] { "State" }, method.RequiredPowerShellModuleVariables);
         Assert.Equal(1, method.PowerShellModuleStateReadSiteCount);
         Assert.False(method.RequiresPowerShellRuntimeState);
         Assert.Contains("__readPowerShellModuleVariable(\"State\")", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Equal(new[] { "State" }, setter.WrittenPowerShellModuleVariables);
+        Assert.Equal(1, setter.PowerShellModuleStateWriteSiteCount);
+        Assert.Contains("__writePowerShellModuleVariable(\"State\", Value)", typed.SourceCode, StringComparison.Ordinal);
         var abiMethod = Assert.Single(PowerShellCompilationAbiBuilder.Create(
             typed.NamespaceName,
             typed.TypeName,
@@ -77,6 +81,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             parameter.CompilerPurpose == "PowerShellRuntimeState");
         Assert.Contains(abiMethod.Parameters, static parameter =>
             parameter.CompilerPurpose == "PowerShellModuleStateReader" && parameter.ClrName == "__readPowerShellModuleVariable");
+        var setterAbi = Assert.Single(PowerShellCompilationAbiBuilder.Create(
+            typed.NamespaceName,
+            typed.TypeName,
+            new[] { setter }).Methods);
+        Assert.Contains(setterAbi.Parameters, static parameter =>
+            parameter.CompilerPurpose == "PowerShellModuleStateWriter" && parameter.ClrName == "__writePowerShellModuleVariable");
     }
 
     [Theory]
@@ -99,7 +109,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
         var getter = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-BridgeState");
         Assert.Contains(getter.BoundaryCauses, static cause => cause.Contains("$script:State", StringComparison.Ordinal));
@@ -120,7 +130,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "2", "one,two", "changed", "Ada", "VariableIsUndefined" }, compiled.Split(Environment.NewLine));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledCmdlets.cs"));
         Assert.Contains("SetModuleVariableReader", generated, StringComparison.Ordinal);
-        Assert.Contains("ThrowTerminatingError(result.Error)", generated, StringComparison.Ordinal);
+        Assert.Contains("SetModuleVariableWriter", File.ReadAllText(result.ArtifactPath!), StringComparison.Ordinal);
+        Assert.Contains("ThrowPowerShellModuleStateError(result.Error)", generated, StringComparison.Ordinal);
+        Assert.Contains("ThrowTerminatingError(moduleStateError)", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,13 +182,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         const string source = """
             $script:State = 'initial'
             function Get-FailedState { [CmdletBinding()] param() return $script:State }
+            function Set-FailedState { [CmdletBinding()] param([string] $Value) $script:State = $Value }
             function Get-FailedRegion {
                 [CmdletBinding()]
                 param()
                 return [bool](Microsoft.PowerShell.Management\Test-Path -LiteralPath 'FileSystem::proof' -IsValid -ErrorAction Ignore)
             }
             throw 'module initialization failed'
-            Export-ModuleMember -Function Get-FailedState, Get-FailedRegion
+            Export-ModuleMember -Function Get-FailedState, Set-FailedState, Get-FailedRegion
             """;
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -192,7 +205,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var escapedAssemblyPath = Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, artifactName + ".dll")
             .Replace("'", "''", StringComparison.Ordinal);
@@ -203,16 +216,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "$id = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.InstanceId; " +
             "$dispatcherPresent = $null -ne $type.GetMethod('GetDispatcher').Invoke($null, @($id)); " +
             "try { [void]$type.GetMethod('ReadModuleVariable').Invoke($null, @($id, 'State')); $reader = 'leaked' } catch { $reader = 'cleared' }; " +
-            "\"$dispatcherPresent|$reader\"";
+            "try { [void]$type.GetMethod('WriteModuleVariable').Invoke($null, @($id, 'State', 'leak')); $writer = 'leaked' } catch { $writer = 'cleared' }; " +
+            "\"$dispatcherPresent|$reader|$writer\"";
         var run = RunModuleStateHostProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command", proof);
 
         Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
-        Assert.Equal("False|cleared", run.StandardOutput.Trim());
+        Assert.Equal("False|cleared|cleared", run.StandardOutput.Trim());
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
         var generated = File.ReadAllText(result.ArtifactPath!);
         Assert.Contains("catch {", generated, StringComparison.Ordinal);
         Assert.Contains("::ClearDispatcher", generated, StringComparison.Ordinal);
         Assert.Contains("::ClearModuleVariableReaders", generated, StringComparison.Ordinal);
+        Assert.Contains("::ClearModuleVariableWriters", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -354,7 +369,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var method = Assert.Single(typed.Methods);
         Assert.True(method.RequiresPowerShellRuntimeState);
         Assert.False(method.RequiresPowerShellModuleState);
+        Assert.False(method.RequiresPowerShellModuleStateRead);
+        Assert.False(method.RequiresPowerShellModuleStateWrite);
         Assert.DoesNotContain("__readPowerShellModuleVariable", typed.SourceCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("__writePowerShellModuleVariable", typed.SourceCode, StringComparison.Ordinal);
         var abiMethod = Assert.Single(PowerShellCompilationAbiBuilder.Create(
             typed.NamespaceName,
             typed.TypeName,
@@ -363,10 +381,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             parameter.CompilerPurpose == "PowerShellRuntimeState" && parameter.ClrName == "__runtimeState");
         Assert.DoesNotContain(abiMethod.Parameters, static parameter =>
             parameter.CompilerPurpose == "PowerShellModuleStateReader");
+        Assert.DoesNotContain(abiMethod.Parameters, static parameter =>
+            parameter.CompilerPurpose == "PowerShellModuleStateWriter");
 
         var generated = PowerShellBinaryCmdletSourceGenerator.Generate(typed, targetFramework: "net10.0");
         Assert.DoesNotContain("ModuleVariableReaders", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("ReadModuleVariable", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("ModuleVariableWriters", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("WriteModuleVariable", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -429,10 +451,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("$script:State = 2")]
     [InlineData("$script:State += 1")]
     [InlineData("$script:State++")]
     [InlineData("++$script:State")]
+    [InlineData("[int]$script:State = 2")]
+    [InlineData("${script:State-Name} = 2")]
     public void Analyze_ModuleStateMutationFormsRemainFallback(string mutation)
     {
         using var fixture = ArtifactFixture.Create(

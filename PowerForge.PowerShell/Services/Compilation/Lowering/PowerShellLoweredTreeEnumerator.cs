@@ -62,6 +62,9 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredAssignmentStatement assignment:
                 yield return assignment.Value;
                 break;
+            case PowerShellLoweredModuleVariableAssignmentStatement assignment:
+                yield return assignment.Value;
+                break;
             case PowerShellLoweredIndexAssignmentStatement assignment:
                 yield return assignment.Target;
                 yield return assignment.Index;

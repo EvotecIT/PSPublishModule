@@ -95,6 +95,8 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
                 assignment.NormalizeNullString, assignment.CheckedIntegral),
+            PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
+                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(

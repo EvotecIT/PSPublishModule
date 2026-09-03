@@ -282,8 +282,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Equal(3, result.Manifest!.AnalyzedUnits);
         Assert.Equal(1, result.Manifest.EmittedUnits);
         Assert.Equal(2, result.Manifest.RuntimeRoutedUnits);
-        Assert.Equal(2, result.Manifest.FallbackUnits);
-        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(1, result.Manifest.FallbackUnits);
+        Assert.Equal(1, result.Manifest.ShapedFallbackUnits);
         Assert.Equal(100d / 3d, result.Manifest.CompilationCoveragePercentage, precision: 8);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(

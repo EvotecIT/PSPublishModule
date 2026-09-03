@@ -66,6 +66,10 @@ internal static class PowerShellCompilationIrSnapshotBuilder
         if (function.RequiresPowerShellRuntimeState) capabilities |= PowerShellRequiredCapability.RuntimeStateIntrinsics;
         if (function.RequiresPowerShellModuleState)
             capabilities |= PowerShellRequiredCapability.PowerShellModuleState;
+        if (function.RequiresPowerShellModuleStateRead)
+            capabilities |= PowerShellRequiredCapability.PowerShellModuleStateRead;
+        if (function.RequiresPowerShellModuleStateWrite)
+            capabilities |= PowerShellRequiredCapability.PowerShellModuleStateWrite;
         return capabilities;
     }
 

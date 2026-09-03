@@ -102,7 +102,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(2, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(3, explanation.GetProperty("schemaVersion").GetInt32());
             var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
             Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
             var unit = Assert.Single(file.GetProperty("units").EnumerateArray());

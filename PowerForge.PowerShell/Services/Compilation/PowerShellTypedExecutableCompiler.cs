@@ -203,8 +203,12 @@ internal static class PowerShellTypedExecutableCompiler
         description.DocumentId = function.Symbol.DocumentId;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
         description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;
+        description.RequiresPowerShellModuleStateRead = method.RequiresPowerShellModuleStateRead;
+        description.RequiresPowerShellModuleStateWrite = method.RequiresPowerShellModuleStateWrite;
         description.RequiredPowerShellModuleVariables = method.ModuleStateVariableNames;
         description.PowerShellModuleStateReadSiteCount = method.ModuleStateReadSiteCount;
+        description.WrittenPowerShellModuleVariables = method.WrittenModuleStateVariableNames;
+        description.PowerShellModuleStateWriteSiteCount = method.ModuleStateWriteSiteCount;
         return description;
     }
 

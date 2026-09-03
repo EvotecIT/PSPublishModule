@@ -29,7 +29,8 @@ internal sealed partial class PowerShellTypedLowerer
             bool requiresProviderCancellation,
             bool requiresPowerShellCommandRegions,
             bool requiresPowerShellRuntimeState,
-            bool requiresPowerShellModuleState)
+            bool requiresPowerShellModuleStateRead,
+            bool requiresPowerShellModuleStateWrite)
         {
             Function = function;
             RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
@@ -37,7 +38,8 @@ internal sealed partial class PowerShellTypedLowerer
             RequiresProviderCancellation = requiresProviderCancellation;
             RequiresPowerShellCommandRegions = requiresPowerShellCommandRegions;
             RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
-            RequiresPowerShellModuleState = requiresPowerShellModuleState;
+            RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
+            RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
         }
 
         internal PowerShellBoundFunction Function { get; }
@@ -46,6 +48,8 @@ internal sealed partial class PowerShellTypedLowerer
         internal bool RequiresProviderCancellation { get; }
         internal bool RequiresPowerShellCommandRegions { get; }
         internal bool RequiresPowerShellRuntimeState { get; }
-        internal bool RequiresPowerShellModuleState { get; }
+        internal bool RequiresPowerShellModuleStateRead { get; }
+        internal bool RequiresPowerShellModuleStateWrite { get; }
+        internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     }
 }

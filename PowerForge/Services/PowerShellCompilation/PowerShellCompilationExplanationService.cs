@@ -10,12 +10,26 @@ public static class PowerShellCompilationExplanationService
     public static PowerShellCompilationExplanation Create(PowerShellCompilationPlan plan)
         => CreateCore(plan, artifactKind: null, shapedCompilation: null, finalShape: false);
 
-    /// <summary>Explains the final artifact-shaped disposition of every unit after emitter routing and collision handling.</summary>
+    /// <summary>
+    /// Creates the pre-ledger compatibility approximation of artifact shaping.
+    /// Use the ledger overload for final artifact evidence.
+    /// </summary>
+    [Obsolete("This compatibility overload cannot represent immutable post-shaping evidence. Use CreateFinal(PowerShellCompilationPlan, PowerShellCompilationUnitDispositionLedger).")]
     public static PowerShellCompilationExplanation CreateFinal(
         PowerShellCompilationPlan plan,
         PowerShellCompilationArtifactKind artifactKind,
         PowerShellTypedCompilationResult? shapedCompilation)
-        => CreateCore(plan, artifactKind, shapedCompilation, finalShape: true);
+    {
+        if (shapedCompilation?.Methods.Any(static method => method.RequiresPowerShellModuleState) == true)
+            throw new InvalidOperationException(
+                "The pre-ledger explanation overload cannot represent directional parent-module state evidence. " +
+                "Create the immutable final unit-disposition ledger and use the ledger overload.");
+        var explanation = CreateCore(plan, artifactKind, shapedCompilation, finalShape: true);
+        explanation.SchemaVersion = 2;
+        explanation.SemanticCompatibilityVersion = 1;
+        explanation.SemanticFingerprintSha256 = ComputeSemanticFingerprint(explanation);
+        return explanation;
+    }
 
     /// <summary>Explains final artifact disposition exclusively from the immutable post-shaping ledger.</summary>
     public static PowerShellCompilationExplanation CreateFinal(
@@ -34,6 +48,8 @@ public static class PowerShellCompilationExplanationService
             unit.Emitted = entry.Emitted;
             unit.RetainedHostedSource = entry.RetainedHostedSource;
             unit.RuntimeCommandRegions = entry.RuntimeCommandRegions;
+            unit.ModuleStateReadBoundaryCrossings = entry.ModuleStateReadBoundaryCrossings;
+            unit.ModuleStateWriteBoundaryCrossings = entry.ModuleStateWriteBoundaryCrossings;
             unit.BoundaryCrossings = entry.BoundaryCrossings;
             unit.ShapingFallback = entry.ShapingFallback;
             unit.Omitted = entry.Omitted;
@@ -320,6 +336,11 @@ public static class PowerShellCompilationExplanationService
                 Append(unit.Emitted ? "true" : "false");
                 Append(unit.RetainedHostedSource ? "true" : "false");
                 Append(unit.RuntimeCommandRegions.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (explanation.SemanticCompatibilityVersion >= 2)
+                {
+                    Append(unit.ModuleStateReadBoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    Append(unit.ModuleStateWriteBoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
                 Append(unit.BoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 foreach (var parameter in unit.Parameters)
                 {
