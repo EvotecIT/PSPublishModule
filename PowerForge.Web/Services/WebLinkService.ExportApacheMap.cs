@@ -18,9 +18,21 @@ public static partial class WebLinkService
         if (string.IsNullOrWhiteSpace(options.ShortlinkMapOutputPath))
             return Array.Empty<ApacheShortlinkMapEntry>();
 
-        return rules
-            .Where(rule => IsApacheShortlinkMapRule(rule, options))
-            .Select(rule => CreateApacheShortlinkMapEntry(rule, options))
+        var entries = new List<ApacheShortlinkMapEntry>();
+        var precedingOrdinaryRules = new List<LinkRedirectRule>();
+        foreach (var rule in rules)
+        {
+            if (!IsApacheShortlinkMapRule(rule, options) ||
+                precedingOrdinaryRules.Any(preceding => ApacheRulesMayOverlap(preceding, rule)))
+            {
+                precedingOrdinaryRules.Add(rule);
+                continue;
+            }
+
+            entries.Add(CreateApacheShortlinkMapEntry(rule, options));
+        }
+
+        return entries
             .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
     }
@@ -36,7 +48,8 @@ public static partial class WebLinkService
             BuildApacheShortlinkMapKey(rule),
             destination,
             rule.SourceHost!.Trim(),
-            ResolveStatus(rule.Status, defaultStatus: 302));
+            ResolveStatus(rule.Status, defaultStatus: 302),
+            rule);
     }
 
     private static bool IsApacheShortlinkMapRule(LinkRedirectRule rule, WebLinkApacheExportOptions options)
@@ -64,6 +77,14 @@ public static partial class WebLinkService
         if (!hasRuntime)
             return;
 
+        var configurationOutputPath = Path.GetFullPath(options.OutputPath);
+        var mapOutputPath = Path.GetFullPath(options.ShortlinkMapOutputPath!);
+        var pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(configurationOutputPath, mapOutputPath, pathComparison))
+            throw new InvalidOperationException("Apache configuration and shortlink-map outputs must use different paths.");
+
         var runtimePath = options.ShortlinkMapRuntimePath!.Trim();
         if (!Path.IsPathRooted(runtimePath) || runtimePath.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value is '"' or '\'' or '$' or '{' or '}'))
             throw new InvalidOperationException("Apache shortlink-map runtime path must be an absolute path without shell or configuration metacharacters.");
@@ -77,6 +98,41 @@ public static partial class WebLinkService
             path.Length == 0 || path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':'))
             throw new InvalidOperationException($"Apache indexed shortlink path is not map-safe: {rule.Id ?? rule.SourcePath}");
         return $"{ResolveStatus(rule.Status, defaultStatus: 302)}:{host}:{path}";
+    }
+
+    private static bool ApacheRulesMayOverlap(LinkRedirectRule preceding, LinkRedirectRule shortlink)
+    {
+        if (!ApacheHostsMayOverlap(preceding.SourceHost, shortlink.SourceHost))
+            return false;
+
+        var shortlinkPath = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
+        if (preceding.MatchType == LinkRedirectMatchType.Regex)
+            return true;
+
+        var precedingPath = NormalizeSourcePath(preceding.SourcePath).Trim('/');
+        if (preceding.MatchType == LinkRedirectMatchType.Prefix)
+        {
+            var starIndex = precedingPath.IndexOf('*');
+            if (starIndex >= 0)
+                precedingPath = precedingPath.Substring(0, starIndex).TrimEnd('/');
+            return precedingPath.Length == 0 ||
+                   shortlinkPath.Equals(precedingPath, StringComparison.OrdinalIgnoreCase) ||
+                   shortlinkPath.StartsWith(precedingPath + "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return shortlinkPath.Equals(precedingPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ApacheHostsMayOverlap(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || left.Trim() == "*" ||
+            string.IsNullOrWhiteSpace(right) || right.Trim() == "*")
+            return true;
+
+        static string NormalizeHost(string value) => value.Trim().StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? value.Trim().Substring(4)
+            : value.Trim();
+        return NormalizeHost(left).Equals(NormalizeHost(right), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? WriteApacheShortlinkMap(
@@ -119,5 +175,10 @@ public static partial class WebLinkService
         }
     }
 
-    private sealed record ApacheShortlinkMapEntry(string Key, string Destination, string Host, int Status);
+    private sealed record ApacheShortlinkMapEntry(
+        string Key,
+        string Destination,
+        string Host,
+        int Status,
+        LinkRedirectRule Rule);
 }

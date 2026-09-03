@@ -41,13 +41,14 @@ public static partial class WebLinkService
             .ToArray();
 
         var mapEntries = BuildApacheShortlinkMapEntries(rules, options);
+        var mappedRules = new HashSet<LinkRedirectRule>(mapEntries.Select(static entry => entry.Rule));
         if (mapEntries.Length > 0)
             AppendApacheShortlinkMapRules(lines, mapEntries, options);
 
         var ruleCount = mapEntries.Length;
         foreach (var rule in rules)
         {
-            if (IsApacheShortlinkMapRule(rule, options))
+            if (mappedRules.Contains(rule))
                 continue;
             if (!TryAppendApacheRule(lines, rule, options.LanguageRootHosts))
                 continue;

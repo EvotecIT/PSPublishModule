@@ -663,6 +663,91 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ExportApache_RejectsSharedConfigurationAndMapOutputPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var sharedPath = Path.Combine(root, "shared.out");
+            var exception = Assert.Throws<InvalidOperationException>(() => WebLinkService.ExportApache(
+                new WebLinkDataSet(),
+                new WebLinkApacheExportOptions
+                {
+                    OutputPath = sharedPath,
+                    ShortlinkMapOutputPath = sharedPath,
+                    ShortlinkMapRuntimePath = "/var/lib/powerforge/maps/shortlinks.map"
+                }));
+            Assert.Contains("different paths", exception.Message, StringComparison.Ordinal);
+            Assert.False(File.Exists(sharedPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_KeepsShortlinkOnOrdinaryPathBehindHigherPriorityOverlap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-priority-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var result = WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects =
+                [
+                    new LinkRedirectRule
+                    {
+                        Id = "priority-prefix",
+                        SourceHost = "evo.yt",
+                        SourcePath = "/docs",
+                        MatchType = LinkRedirectMatchType.Prefix,
+                        TargetUrl = "https://priority.example.test/{path}",
+                        Status = 302,
+                        Priority = 2_000,
+                        AllowExternal = true
+                    }
+                ],
+                Shortlinks =
+                [
+                    new LinkShortlinkRule
+                    {
+                        Slug = "docs/guide",
+                        Host = "evo.yt",
+                        TargetUrl = "https://shortlink.example.test/guide",
+                        Status = 302,
+                        Owner = "test",
+                        AllowExternal = true
+                    }
+                ]
+            }, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath,
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/powerforge/maps/shortlinks.map",
+                Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["short"] = "evo.yt" }
+            });
+
+            Assert.Equal(0, result.ShortlinkMapEntryCount);
+            Assert.Empty(File.ReadAllText(mapPath));
+            var apache = File.ReadAllText(outPath);
+            var prefixPosition = apache.IndexOf("RewriteRule ^/?docs(?:/(.*))?$", StringComparison.Ordinal);
+            var shortlinkPosition = apache.IndexOf("RewriteRule ^/?docs/guide/?$", StringComparison.Ordinal);
+            Assert.True(prefixPosition >= 0 && shortlinkPosition > prefixPosition);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void ExportApache_WritesEmptyIndexedMapForEmptyCatalog()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-empty-" + Guid.NewGuid().ToString("N"));
