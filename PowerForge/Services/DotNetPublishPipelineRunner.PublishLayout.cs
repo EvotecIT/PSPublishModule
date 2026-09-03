@@ -241,6 +241,11 @@ public sealed partial class DotNetPublishPipelineRunner
             if (File.Exists(zipPath)) File.Delete(zipPath);
 
             ZipFile.CreateFromDirectory(outputDir, zipPath);
+            ApplyArchiveExecutablePermissions(
+                outputDir,
+                rid,
+                zipPath,
+                target.ExecutableIdentities);
             return zipPath;
         }
         catch (Exception ex)
@@ -248,6 +253,33 @@ public sealed partial class DotNetPublishPipelineRunner
             _logger.Warn($"Failed to create zip for '{target.Name}' ({rid}). Error: {ex.Message}");
             return null;
         }
+    }
+
+    internal static void ApplyArchiveExecutablePermissions(
+        string outputRoot,
+        string runtime,
+        string archivePath,
+        IEnumerable<string> expectedIdentities)
+    {
+        if (runtime.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string? executablePath = ResolvePrimaryExecutable(
+            outputRoot,
+            runtime,
+            expectedIdentities);
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return;
+        }
+
+        PowerForgeToolReleaseService.ApplyArchiveExecutablePermissions(
+            runtime,
+            outputRoot,
+            archivePath,
+            executablePath);
     }
 
     internal static string? ResolvePrimaryExecutable(

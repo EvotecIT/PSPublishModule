@@ -5,6 +5,75 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Fact]
+    public void DotNetPublishArchive_UnixPrimaryExecutablePreservesLaunchPermissions()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var outputRoot = Path.Combine(root, "output");
+            Directory.CreateDirectory(outputRoot);
+
+            var executablePath = Path.Combine(outputRoot, "evx");
+            File.WriteAllText(executablePath, "main");
+
+            var archivePath = Path.Combine(root, "EventViewerX.Cli-linux-x64.zip");
+            ZipFile.CreateFromDirectory(outputRoot, archivePath);
+            RewriteCentralDirectoryAsDos(archivePath);
+
+            DotNetPublishPipelineRunner.ApplyArchiveExecutablePermissions(
+                outputRoot,
+                "linux-x64",
+                archivePath,
+                ["evx"]);
+
+            using var archive = ZipFile.OpenRead(archivePath);
+            Assert.Equal(unchecked((int)0x81ED0000u), archive.GetEntry("evx")!.ExternalAttributes);
+            Assert.All(ReadCentralDirectoryCreatorSystems(archivePath), creatorSystem => Assert.Equal((byte)3, creatorSystem));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void DotNetPublishArchive_WindowsRuntimeLeavesArchiveMetadataUnchanged()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var outputRoot = Path.Combine(root, "output");
+            Directory.CreateDirectory(outputRoot);
+
+            var executablePath = Path.Combine(outputRoot, "EventViewerX.Cli.exe");
+            File.WriteAllText(executablePath, "main");
+
+            var archivePath = Path.Combine(root, "EventViewerX.Cli-win-x64.zip");
+            ZipFile.CreateFromDirectory(outputRoot, archivePath);
+            RewriteCentralDirectoryAsDos(archivePath);
+
+            int expectedAttributes;
+            using (var before = ZipFile.OpenRead(archivePath))
+            {
+                expectedAttributes = before.GetEntry("EventViewerX.Cli.exe")!.ExternalAttributes;
+            }
+
+            DotNetPublishPipelineRunner.ApplyArchiveExecutablePermissions(
+                outputRoot,
+                "win-x64",
+                archivePath,
+                ["EventViewerX.Cli"]);
+
+            using var after = ZipFile.OpenRead(archivePath);
+            Assert.Equal(expectedAttributes, after.GetEntry("EventViewerX.Cli.exe")!.ExternalAttributes);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void ToolArchive_UnixExecutablesPreserveLaunchPermissions()
     {
         var root = CreateSandbox();
