@@ -1,5 +1,6 @@
 using PowerForge;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 
@@ -7,6 +8,55 @@ namespace PowerForge.Tests;
 
 public sealed class GitHubReleasePublisherRetryTests
 {
+    [Fact]
+    public void UploadRetryClassification_RequiresRetryAfterForForbiddenResponses()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
+        Assert.False(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(45));
+        Assert.True(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+    }
+
+    [Fact]
+    public void UploadRetryClassification_UsesPrimaryRateLimitResetForForbiddenResponses()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
+        var reset = DateTimeOffset.UtcNow.AddMinutes(2).ToUnixTimeSeconds();
+        response.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "0");
+        response.Headers.TryAddWithoutValidation(
+            "X-RateLimit-Reset",
+            reset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.True(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+        var delay = GitHubReleasePublisher.GetAssetRetryAfterDelay(response);
+        Assert.NotNull(delay);
+        Assert.InRange(delay.Value.TotalSeconds, 115, 121);
+
+        response.Headers.Remove("X-RateLimit-Remaining");
+        response.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "1");
+        Assert.False(GitHubReleasePublisher.IsTransientAssetUploadResponse(response));
+    }
+
+    [Fact]
+    public void UploadRetryClassification_UsesSecondaryRateLimitFallbackWithoutRetryHeaders()
+    {
+        const string secondaryRateLimit = "{\"message\":\"You have exceeded a secondary rate limit.\"}";
+        using var forbidden = new HttpResponseMessage(HttpStatusCode.Forbidden);
+        forbidden.Headers.TryAddWithoutValidation("X-RateLimit-Remaining", "100");
+
+        Assert.True(GitHubReleasePublisher.IsTransientAssetUploadResponse(forbidden, secondaryRateLimit));
+        Assert.Equal(
+            TimeSpan.FromMinutes(1),
+            GitHubReleasePublisher.GetAssetRetryAfterDelay(forbidden, secondaryRateLimit));
+        Assert.False(GitHubReleasePublisher.IsTransientAssetUploadResponse(
+            forbidden,
+            "{\"message\":\"Resource not accessible by integration\"}"));
+
+        using var tooManyRequests = new HttpResponseMessage((HttpStatusCode)429);
+        Assert.Equal(TimeSpan.FromMinutes(1), GitHubReleasePublisher.GetAssetRetryAfterDelay(tooManyRequests));
+    }
+
     [Fact]
     public async Task PublishRelease_RetriesTransientAssetFailureWithFreshContent()
     {
@@ -68,7 +118,7 @@ public sealed class GitHubReleasePublisherRetryTests
 
         try
         {
-            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+            var result = CreatePublisher().PublishRelease(
                 new GitHubReleasePublishRequest
                 {
                     Owner = "EvotecIT",
@@ -94,7 +144,7 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
-    public async Task PublishRelease_RemovesExistingStarterAssetBeforeRetry()
+    public async Task PublishRelease_RefusesAmbiguousStarterAfterNameCollision()
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -138,10 +188,237 @@ public sealed class GitHubReleasePublisherRetryTests
             var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
             await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
             await Respond(await NextRequest(), starterAsset);
-            await Respond(await NextRequest(), starterAsset);
-            await Respond(await NextRequest(), string.Empty, 204);
+        });
 
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreatePublisher().PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("publisher cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
+            Assert.Equal(
+                [
+                    "POST /repos/EvotecIT/example/releases",
+                    "POST /uploads",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/42/assets"
+                ],
+                requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RefusesAmbiguousStarterAfterInterruptedUpload()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "reconciliation-retry");
+        var assetName = Path.GetFileName(assetPath);
+        var requests = new List<string>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(
+                await NextRequest(),
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""",
+                201);
+            await Respond(await NextRequest(), "{\"message\":\"Bad Gateway\"}", 502);
+
+            var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
+            await Respond(await NextRequest(), starterAsset);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreatePublisher().PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains("publisher cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
+            Assert.Equal(
+                [
+                    "POST /repos/EvotecIT/example/releases",
+                    "POST /uploads",
+                    "GET /repos/EvotecIT/example/releases/42/assets"
+                ],
+                requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_ExhaustedReconciliationPreservesTerminalCause()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "terminal-reconciliation");
+        var assetName = Path.GetFileName(assetPath);
+        var requests = new List<string>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(
+                await NextRequest(),
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""",
+                201);
+            await Respond(await NextRequest(), "{\"message\":\"Bad Gateway\"}", 502);
+            for (var attempt = 0; attempt < 3; attempt++)
+                await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
+        });
+
+        try
+        {
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreatePublisher().PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
+
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Contains(assetName, exception.Message, StringComparison.Ordinal);
+            Assert.Contains("reconciliation", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("3 attempts", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("503 Service Unavailable", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(exception.InnerException);
+            Assert.Equal(
+                [
+                    "POST /repos/EvotecIT/example/releases",
+                    "POST /uploads",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/42/assets",
+                    "GET /repos/EvotecIT/example/releases/42/assets"
+                ],
+                requests);
+        }
+        finally
+        {
+            listener.Stop();
+            listener.Close();
+            File.Delete(assetPath);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRelease_RetriesTransientPostUploadVerificationFailure()
+    {
+        var listener = new HttpListener();
+        var port = GetAvailablePort();
+        var apiBaseUrl = $"http://127.0.0.1:{port}/";
+        listener.Prefixes.Add(apiBaseUrl);
+        listener.Start();
+        var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+        await File.WriteAllTextAsync(assetPath, "verification-retry");
+        var assetName = Path.GetFileName(assetPath);
+        var requests = new List<string>();
+
+        async Task<HttpListenerContext> NextRequest()
+        {
+            var context = await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            requests.Add($"{context.Request.HttpMethod} {context.Request.Url!.AbsolutePath}");
+            return context;
+        }
+
+        static async Task Respond(HttpListenerContext context, string json, int statusCode = 200)
+        {
+            await context.Request.InputStream.CopyToAsync(Stream.Null);
+            var responseBytes = Encoding.UTF8.GetBytes(json);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBytes.Length;
+            await context.Response.OutputStream.WriteAsync(responseBytes);
+            context.Response.Close();
+        }
+
+        var server = Task.Run(async () =>
+        {
+            await Respond(
+                await NextRequest(),
+                $$"""{"id":42,"html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}"}""",
+                201);
             await Respond(await NextRequest(), $$"""{"id":99,"name":"{{assetName}}"}""", 201);
+            await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
             var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
             await Respond(await NextRequest(), uploadedAsset);
             await Respond(await NextRequest(), uploadedAsset);
@@ -149,7 +426,7 @@ public sealed class GitHubReleasePublisherRetryTests
 
         try
         {
-            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+            var result = CreatePublisher().PublishRelease(
                 new GitHubReleasePublishRequest
                 {
                     Owner = "EvotecIT",
@@ -169,10 +446,6 @@ public sealed class GitHubReleasePublisherRetryTests
                     "POST /uploads",
                     "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/42/assets",
-                    "GET /repos/EvotecIT/example/releases/42/assets",
-                    "DELETE /repos/EvotecIT/example/releases/assets/88",
-                    "POST /uploads",
-                    "GET /repos/EvotecIT/example/releases/42/assets",
                     "GET /repos/EvotecIT/example/releases/42/assets"
                 ],
                 requests);
@@ -186,7 +459,7 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
-    public async Task PublishRelease_RefusesToDeleteStarterThatBecameUploaded()
+    public async Task PublishRelease_RefusesToDeleteUnownedStarterBeforeStateRace()
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -227,13 +500,12 @@ public sealed class GitHubReleasePublisherRetryTests
                 "{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"ReleaseAsset\",\"code\":\"already_exists\",\"field\":\"name\"}]}",
                 422);
             await Respond(await NextRequest(), $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""");
-            await Respond(await NextRequest(), $$"""[{"id":88,"name":"{{assetName}}","state":"uploaded"}]""");
         });
 
         try
         {
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                CreatePublisher().PublishRelease(
                     new GitHubReleasePublishRequest
                     {
                         Owner = "EvotecIT",
@@ -245,7 +517,7 @@ public sealed class GitHubReleasePublisherRetryTests
                     }));
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Contains("changed from state 'starter' to 'uploaded'", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("publisher cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(requests, request => request.StartsWith("DELETE ", StringComparison.Ordinal));
         }
         finally
@@ -257,7 +529,7 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
-    public async Task PublishRelease_ReconcilesLateStarterAfterInterruptedUpload()
+    public async Task PublishRelease_RefusesLateStarterAfterInterruptedUpload()
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -298,31 +570,24 @@ public sealed class GitHubReleasePublisherRetryTests
             var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
             await Respond(await NextRequest(), "{\"message\":\"Service Unavailable\"}", 503);
             await Respond(await NextRequest(), starterAsset);
-            await Respond(await NextRequest(), starterAsset);
-            await Respond(await NextRequest(), string.Empty, 204);
-
-            await Respond(await NextRequest(), $$"""{"id":99,"name":"{{assetName}}"}""", 201);
-            var uploadedAsset = $$"""[{"id":99,"name":"{{assetName}}","state":"uploaded"}]""";
-            await Respond(await NextRequest(), uploadedAsset);
-            await Respond(await NextRequest(), uploadedAsset);
         });
 
         try
         {
-            var result = new GitHubReleasePublisher(new NullLogger()).PublishRelease(
-                new GitHubReleasePublishRequest
-                {
-                    Owner = "EvotecIT",
-                    Repository = "example",
-                    Token = "token",
-                    ApiBaseUrl = apiBaseUrl,
-                    TagName = "v1.2.3",
-                    AssetFilePaths = [assetPath]
-                });
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                CreatePublisher().PublishRelease(
+                    new GitHubReleasePublishRequest
+                    {
+                        Owner = "EvotecIT",
+                        Repository = "example",
+                        Token = "token",
+                        ApiBaseUrl = apiBaseUrl,
+                        TagName = "v1.2.3",
+                        AssetFilePaths = [assetPath]
+                    }));
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.True(result.Succeeded);
-            Assert.Equal(assetName, Assert.Single(result.UploadedAssets));
+            Assert.Contains("publisher cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -333,7 +598,7 @@ public sealed class GitHubReleasePublisherRetryTests
     }
 
     [Fact]
-    public async Task PublishRelease_TerminalTransientFailureRemovesStarterBeforeFailing()
+    public async Task PublishRelease_TerminalTransientFailureRefusesStarterDeletion()
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -343,7 +608,6 @@ public sealed class GitHubReleasePublisherRetryTests
         var assetPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
         await File.WriteAllTextAsync(assetPath, "terminal-starter-cleanup");
         var assetName = Path.GetFileName(assetPath);
-        var deleteObserved = false;
 
         async Task<HttpListenerContext> NextRequest()
             => await listener.GetContextAsync().WaitAsync(TimeSpan.FromSeconds(10));
@@ -374,16 +638,12 @@ public sealed class GitHubReleasePublisherRetryTests
             await Respond(await NextRequest(), "{\"message\":\"Bad Gateway\"}", 502);
             var starterAsset = $$"""[{"id":88,"name":"{{assetName}}","state":"starter"}]""";
             await Respond(await NextRequest(), starterAsset);
-            await Respond(await NextRequest(), starterAsset);
-            var delete = await NextRequest();
-            deleteObserved = delete.Request.HttpMethod == "DELETE";
-            await Respond(delete, string.Empty, 204);
         });
 
         try
         {
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                CreatePublisher().PublishRelease(
                     new GitHubReleasePublishRequest
                     {
                         Owner = "EvotecIT",
@@ -395,8 +655,7 @@ public sealed class GitHubReleasePublisherRetryTests
                     }));
 
             await server.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Contains("502", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.True(deleteObserved);
+            Assert.Contains("publisher cannot be proven", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -451,7 +710,7 @@ public sealed class GitHubReleasePublisherRetryTests
         try
         {
             Assert.ThrowsAny<OperationCanceledException>(() =>
-                new GitHubReleasePublisher(new NullLogger()).PublishRelease(
+                CreatePublisher().PublishRelease(
                     new GitHubReleasePublishRequest
                     {
                         Owner = "EvotecIT",
@@ -498,15 +757,33 @@ public sealed class GitHubReleasePublisherRetryTests
     [InlineData(HttpStatusCode.RequestTimeout, true)]
     [InlineData((HttpStatusCode)429, true)]
     [InlineData(HttpStatusCode.InternalServerError, true)]
+    [InlineData(HttpStatusCode.NotImplemented, true)]
     [InlineData(HttpStatusCode.BadGateway, true)]
     [InlineData(HttpStatusCode.ServiceUnavailable, true)]
     [InlineData(HttpStatusCode.GatewayTimeout, true)]
+    [InlineData(HttpStatusCode.HttpVersionNotSupported, true)]
+    [InlineData((HttpStatusCode)599, true)]
     [InlineData(HttpStatusCode.UnprocessableEntity, false)]
     [InlineData(HttpStatusCode.BadRequest, false)]
     public void UploadRetryClassification_RetriesOnlyTransientHttpStatuses(
         HttpStatusCode statusCode,
         bool expected)
         => Assert.Equal(expected, GitHubReleasePublisher.IsTransientAssetUploadStatus(statusCode));
+
+    [Fact]
+    public void DescribeException_IncludesDistinctInnerCause()
+    {
+        var exception = new HttpRequestException(
+            "An error occurred while sending the request.",
+            new IOException("The response ended prematurely."));
+
+        Assert.Equal(
+            "An error occurred while sending the request. -> The response ended prematurely.",
+            GitHubReleasePublisher.DescribeException(exception));
+    }
+
+    private static GitHubReleasePublisher CreatePublisher()
+        => new(new NullLogger(), static (_, cancellationToken) => cancellationToken.ThrowIfCancellationRequested());
 
     private static int GetAvailablePort()
     {
