@@ -76,6 +76,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         controlledSourceRoot,
                         controlledProjectPath!,
                         out string[] catalogSources,
+                        evaluatedProperties,
                         allowSdkManagedToolchainPackages: true))
                 {
                     return false;
@@ -146,12 +147,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath!)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
             {
                 return false;
@@ -387,12 +388,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
                 return false;
         }

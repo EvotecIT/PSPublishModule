@@ -1,6 +1,4 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -116,6 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string controlledSourceRoot,
             string controlledProjectPath,
             out string[] packageSources,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
                 destination,
@@ -125,6 +124,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledSourceRoot,
                 controlledProjectPath,
                 out packageSources,
+                evaluatedProperties,
                 allowSdkManagedToolchainPackages);
     }
 
@@ -173,13 +173,13 @@ public sealed partial class DotNetPublishPipelineRunner
             string controlledSourceRoot,
             string controlledProjectPath,
             out string[] packageSources,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages)
         {
             packageSources = Array.Empty<string>();
             try
             {
                 Directory.CreateDirectory(destination);
-                var sources = new List<string>();
                 foreach (KeyValuePair<string, string> package in archivePathsByPackageKey.OrderBy(
                              entry => entry.Key,
                              StringComparer.OrdinalIgnoreCase))
@@ -200,25 +200,26 @@ public sealed partial class DotNetPublishPipelineRunner
                         !cached.Archive.HasOnlyControlledBuildInputs(
                             controlledBuildInputs,
                             controlledSourceRoot,
-                            controlledProjectPath))
+                            controlledProjectPath,
+                            evaluatedProperties))
                     {
                         return false;
                     }
-                    string packageSource = Path.Combine(
+                    int separator = package.Key.LastIndexOf('|');
+                    if (separator <= 0 || separator == package.Key.Length - 1)
+                        return false;
+                    string packageId = package.Key.Substring(0, separator);
+                    string packageVersion = package.Key.Substring(separator + 1);
+                    string destinationPath = Path.Combine(
                         destination,
-                        CreateControlledPackageSourceDirectoryName(package.Key));
-                    Directory.CreateDirectory(packageSource);
-                    string destinationPath = Path.Combine(packageSource, Path.GetFileName(cached.SourcePath));
+                        packageId + "." + packageVersion + ".nupkg");
                     if (File.Exists(destinationPath))
                     {
                         return false;
                     }
                     cached.Archive.CopyTo(destinationPath);
-                    sources.Add(packageSource);
                 }
-                packageSources = sources.Count == 0
-                    ? new[] { destination }
-                    : sources.ToArray();
+                packageSources = [destination];
                 return true;
             }
             catch
@@ -228,13 +229,6 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        private static string CreateControlledPackageSourceDirectoryName(string packageKey)
-        {
-            using SHA256 sha256 = SHA256.Create();
-            return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(packageKey)))
-                .Replace("-", string.Empty)
-                .ToLowerInvariant();
-        }
     }
 
     private sealed partial class VerifiedPackageArchive
@@ -242,7 +236,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal bool HasOnlyControlledBuildInputs(
             IReadOnlyCollection<string> executableBuildInputs,
             string controlledSourceRoot,
-            string controlledProjectPath)
+            string controlledProjectPath,
+            IReadOnlyDictionary<string, string> evaluatedProperties)
         {
             try
             {
@@ -356,7 +351,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             "package-root",
                             controlledSourceRoot,
                             controlledDocumentSources,
-                            evaluatedGlobalProperties: null,
+                            evaluatedGlobalProperties: evaluatedProperties,
                             controlledProjectPath: controlledProjectPath,
                             isControlledInput: path => IsControlledPackageOrProjectInput(
                                 path,
@@ -369,7 +364,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     }
                 }
                 return !controlledDocuments.Any(document =>
-                    ContainsUncontrolledControlledBuildTask(document, controlledDocuments));
+                        ContainsUncontrolledControlledBuildTask(
+                            document,
+                            controlledDocuments,
+                            evaluatedProperties));
             }
             catch
             {

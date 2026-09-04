@@ -52,6 +52,8 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             foreach (string expandedCondition in expandedConditions)
             {
+                if (IsExactEmptyExistsCondition(expandedCondition))
+                    continue;
                 if (!TryReadReachableExistsConditionOperands(expandedCondition, out string[] operands))
                     return false;
                 foreach (string operand in operands)
@@ -98,6 +100,13 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
         return true;
+    }
+
+    private static bool IsExactEmptyExistsCondition(string expression)
+    {
+        string compact = new(expression.Where(character => !char.IsWhiteSpace(character)).ToArray());
+        return compact.Equals("Exists('')", StringComparison.OrdinalIgnoreCase) ||
+               compact.Equals("Exists(\"\")", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryReadReachableExistsConditionOperands(
