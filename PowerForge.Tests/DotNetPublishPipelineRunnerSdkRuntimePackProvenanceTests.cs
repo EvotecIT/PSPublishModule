@@ -242,6 +242,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     null,
                     null,
                     null,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                     false
                 ];
 
