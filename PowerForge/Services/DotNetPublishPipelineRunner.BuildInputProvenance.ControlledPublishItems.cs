@@ -25,7 +25,7 @@ public sealed partial class DotNetPublishPipelineRunner
         publishInputs = Array.Empty<EvaluatedPublishInput>();
         failureReason = null;
         string controlledOutputRoot = Path.Combine(
-            Path.GetTempPath(),
+            NormalizeBuildInputPathRoot(Path.GetTempPath()),
             "pfpi-" + Guid.NewGuid().ToString("N"));
         string controlledSourceRoot = Path.Combine(controlledOutputRoot, "source");
         string? controlledGitRoot = null;

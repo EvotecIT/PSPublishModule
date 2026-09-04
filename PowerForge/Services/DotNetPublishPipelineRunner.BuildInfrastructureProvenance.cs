@@ -552,6 +552,16 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static string NormalizeBuildInputPathRoot(string path)
     {
         string fullPath = Path.GetFullPath(path);
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.OSX) &&
+            (string.Equals(fullPath, "/var", StringComparison.Ordinal) ||
+             fullPath.StartsWith("/var/", StringComparison.Ordinal)))
+        {
+            // macOS exposes /var through the /private/var system symlink. Some
+            // SDK tasks report the physical spelling even when the controlled
+            // checkout was created from Path.GetTempPath()'s /var spelling.
+            fullPath = "/private" + fullPath;
+        }
         string trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         string pathRoot = Path.GetPathRoot(fullPath)!;
         string trimmedPathRoot = pathRoot.TrimEnd(
@@ -658,6 +668,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool IsSameOrBelowBuildInputPath(string path, string root)
     {
         string fullRoot = NormalizeBuildInputPathRoot(root);
+        string fullPath = NormalizeBuildInputPathRoot(path);
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -665,8 +676,8 @@ public sealed partial class DotNetPublishPipelineRunner
                            fullRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
             ? string.Empty
             : Path.DirectorySeparatorChar.ToString();
-        return string.Equals(Path.GetFullPath(path), fullRoot, comparison) ||
-               Path.GetFullPath(path).StartsWith(fullRoot + separator, comparison);
+        return string.Equals(fullPath, fullRoot, comparison) ||
+               fullPath.StartsWith(fullRoot + separator, comparison);
     }
 
     private sealed class ProjectEvaluationRequest

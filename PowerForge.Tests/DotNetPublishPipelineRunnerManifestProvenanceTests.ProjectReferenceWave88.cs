@@ -462,6 +462,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Equal(root, normalized);
     }
 
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void NormalizeBuildInputPathRoot_CanonicalizesMacOsVarAlias()
+    {
+        if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.OSX))
+        {
+            return;
+        }
+
+        string normalized = DotNetPublishPipelineRunner.NormalizeBuildInputPathRoot(
+            "/var/folders/powerforge");
+
+        Assert.Equal("/private/var/folders/powerforge", normalized);
+    }
+
     private static DotNetPublishArtefactResult CreatePublishArtefact(string runtime)
         => new()
         {

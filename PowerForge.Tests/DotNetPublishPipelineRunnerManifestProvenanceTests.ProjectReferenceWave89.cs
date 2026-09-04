@@ -120,7 +120,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void ProjectEvaluationRequest_RequiresSdkPackageEvidenceForReferencedProject()
+    public void ProjectEvaluationRequest_InheritsRootSdkPackageEvidenceForReferencedProject()
     {
         Type runnerType = typeof(DotNetPublishPipelineRunner);
         Type requestType = runnerType.GetNestedType("ProjectEvaluationRequest", BindingFlags.NonPublic)!;
@@ -137,7 +137,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             null,
             null,
             null,
-            true
+            null,
+            true,
+            null
         ]);
         object projectReference = referenceConstructor.Invoke(
         [
@@ -155,7 +157,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 modifiers: null)!
             .Invoke(request, [projectReference])!;
 
-        Assert.True((bool)requestType.GetProperty(
+        Assert.False((bool)requestType.GetProperty(
                 "RequiresSdkPackageEvidence",
                 BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(childRequest)!);
