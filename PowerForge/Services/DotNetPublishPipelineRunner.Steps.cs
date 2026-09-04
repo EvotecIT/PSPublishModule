@@ -318,7 +318,16 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
-        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
+        var args = new List<string>
+        {
+            "build",
+            target.ProjectPath,
+            "-c", plan.Configuration,
+            "--nologo",
+            "--disable-build-servers",
+            "--no-incremental",
+            "-t:Build;ComputeFilesToPublish"
+        };
         if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
         if (plan.Restore) args.Add("--no-restore");
@@ -689,6 +698,14 @@ public sealed partial class DotNetPublishPipelineRunner
         // SourceLink content deterministic when those checkouts have different
         // physical paths (as they do on macOS and hosted runners).
         merged["ContinuousIntegrationBuild"] = "true";
+        if (!target.Publish.KeepSymbols)
+        {
+            // Avalonia and other post-processors can otherwise retain the
+            // checkout-specific PDB path in the release assembly even when the
+            // portable symbol itself is excluded from the package.
+            merged["DebugType"] = "None";
+            merged["DebugSymbols"] = "false";
+        }
 
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);
         return merged;

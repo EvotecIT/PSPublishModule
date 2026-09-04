@@ -679,6 +679,8 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         Assert.Equal(sourceRevision, merged["SourceRevisionId"]);
         Assert.Equal("true", merged["IncludeSourceRevisionInInformationalVersion"]);
         Assert.Equal("true", merged["ContinuousIntegrationBuild"]);
+        Assert.Equal("None", merged["DebugType"]);
+        Assert.Equal("false", merged["DebugSymbols"]);
     }
 
     [Fact]

@@ -1648,6 +1648,8 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             Assert.Equal("build", buildArguments[0]);
             Assert.Contains("--no-restore", buildArguments);
+            Assert.Contains("--no-incremental", buildArguments);
+            Assert.Contains("-t:Build;ComputeFilesToPublish", buildArguments);
             Assert.Contains("--self-contained", buildArguments);
             Assert.Contains("/p:PublishSingleFile=true", buildArguments);
             Assert.Contains("-f", buildArguments);
