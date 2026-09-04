@@ -679,7 +679,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string?>? environmentVariables,
             IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null,
             IReadOnlyCollection<string>? trustedBuildPackages = null,
-            bool requiresSdkPackageEvidence = true)
+            bool requiresSdkPackageEvidence = true,
+            IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties = null)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -699,6 +700,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 .OrderBy(packageId => packageId, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
             RequiresSdkPackageEvidence = requiresSdkPackageEvidence;
+            SdkPackageEvidenceGlobalProperties = new Dictionary<string, string>(
+                sdkPackageEvidenceGlobalProperties ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase);
         }
 
         internal string ProjectPath { get; }
@@ -710,6 +714,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyCollection<string> ControlledBuildEnvironmentVariableNames { get; }
         internal IReadOnlyCollection<string> TrustedBuildPackages { get; }
         internal bool RequiresSdkPackageEvidence { get; }
+        internal IReadOnlyDictionary<string, string> SdkPackageEvidenceGlobalProperties { get; }
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {
@@ -720,6 +725,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties["Configuration"] = Configuration!;
             if (!string.IsNullOrWhiteSpace(TargetFramework))
                 properties["TargetFramework"] = TargetFramework!;
+            return properties;
+        }
+
+        internal IReadOnlyDictionary<string, string> ReadSdkPackageEvidenceGlobalProperties()
+        {
+            var properties = new Dictionary<string, string>(
+                ReadEffectiveGlobalProperties(),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in SdkPackageEvidenceGlobalProperties)
+                properties[property.Key] = property.Value;
             return properties;
         }
 
@@ -740,7 +755,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
                 TrustedBuildPackages,
-                RequiresSdkPackageEvidence);
+                RequiresSdkPackageEvidence,
+                SdkPackageEvidenceGlobalProperties);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -800,6 +816,14 @@ public sealed partial class DotNetPublishPipelineRunner
                          StringComparer.OrdinalIgnoreCase))
             {
                 AppendProjectReferenceKeySegment(key, "Property");
+                AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(property.Key));
+                AppendProjectReferenceKeySegment(key, HashProjectEvaluationIdentityValue(property.Value));
+            }
+            foreach (KeyValuePair<string, string> property in SdkPackageEvidenceGlobalProperties.OrderBy(
+                         entry => entry.Key,
+                         StringComparer.OrdinalIgnoreCase))
+            {
+                AppendProjectReferenceKeySegment(key, "SdkEvidenceProperty");
                 AppendProjectReferenceKeySegment(key, NormalizeMsBuildPropertyIdentityName(property.Key));
                 AppendProjectReferenceKeySegment(key, HashProjectEvaluationIdentityValue(property.Value));
             }

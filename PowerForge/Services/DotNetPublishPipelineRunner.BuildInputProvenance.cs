@@ -720,7 +720,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         properties,
                         buildPlan!.EnvironmentVariables,
                         buildPlan.ControlledBuildEnvironmentVariableNames,
-                        buildPlan.TrustedBuildPackages);
+                        buildPlan.TrustedBuildPackages,
+                        sdkPackageEvidenceGlobalProperties: combination.Style == DotNetPublishStyle.SelfContained
+                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["PublishSingleFile"] = "true"
+                            }
+                            : null);
                 }
             }
 
@@ -958,7 +964,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         properties,
                         packageRoots,
                         verifiedPackageArchives,
-                        request.ReadEffectiveGlobalProperties(),
+                        request.ReadSdkPackageEvidenceGlobalProperties(),
                         request.EnvironmentVariables,
                         request.RequiresSdkPackageEvidence,
                         out verifiedPackages,
