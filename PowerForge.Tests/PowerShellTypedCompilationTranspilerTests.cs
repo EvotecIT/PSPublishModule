@@ -111,7 +111,9 @@ public sealed class PowerShellTypedCompilationTranspilerTests
         Assert.Equal(typeof(object).FullName, method.ReturnType);
         Assert.Empty(result.Diagnostics);
         Assert.Contains("? null : (object)", result.SourceCode, StringComparison.Ordinal);
-        Assert.Contains(".Length + (Index)", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("var __pf_index_target_", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains("var __pf_index_key_", result.SourceCode, StringComparison.Ordinal);
+        Assert.Contains(".Length + (__pf_index_key_", result.SourceCode, StringComparison.Ordinal);
     }
 
     [Fact]

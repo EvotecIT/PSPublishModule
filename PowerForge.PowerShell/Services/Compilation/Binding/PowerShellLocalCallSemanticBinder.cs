@@ -45,6 +45,7 @@ internal sealed class PowerShellLocalCallSignature
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
+    internal bool ReturnsModuleStateDerived { get; private set; }
 
     internal bool RefineReturnType(Type type)
     {
@@ -56,6 +57,13 @@ internal sealed class PowerShellLocalCallSignature
     internal void SetPipelineLifecycleReturnsCollection()
     {
         if (IsPipelineLifecycle) PipelineLifecycleReturnsCollection = true;
+    }
+
+    internal bool MarkReturnsModuleStateDerived()
+    {
+        if (ReturnsModuleStateDerived) return false;
+        ReturnsModuleStateDerived = true;
+        return true;
     }
 }
 
@@ -313,6 +321,14 @@ internal static class PowerShellLocalCallSemanticBinder
             authoredOrder.Add(parameterIndex);
         }
 
+        var stateArgument = bound.Values.FirstOrDefault(PowerShellModuleStateOriginPolicy.IsDerived);
+        if (stateArgument is not null)
+            return Reject(
+                diagnostics,
+                "PSB2811",
+                $"Local function invocation '{signature.Symbol.Name}' cannot carry a value derived from live Hybrid module state across a call boundary.",
+                stateArgument.Span);
+
         var arguments = new PowerShellBoundExpression[signature.Parameters.Length];
         for (var index = 0; index < signature.Parameters.Length; index++)
         {
@@ -331,7 +347,8 @@ internal static class PowerShellLocalCallSemanticBinder
             arguments,
             returnType,
             authoredOrder.ToArray(),
-            bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray());
+            bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
+            signature.ReturnsModuleStateDerived);
     }
 
     private static int[] GetPositionalParameters(PowerShellLocalCallSignature signature)

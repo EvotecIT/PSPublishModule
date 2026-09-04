@@ -37,6 +37,14 @@ internal sealed partial class PowerShellSemanticBinder
             capabilities: capabilities);
         if (input is null)
             return true;
+        if (PowerShellModuleStateOriginPolicy.IsDerived(input))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2905",
+                "Runtime-free pipeline enumeration cannot carry values derived from live Hybrid module state into a typed pipeline variable.",
+                input.Span));
+            return true;
+        }
 
         var collectionType = input.Type.ClrType;
         if (input is not PowerShellBoundArrayExpression and not PowerShellBoundVariableExpression ||

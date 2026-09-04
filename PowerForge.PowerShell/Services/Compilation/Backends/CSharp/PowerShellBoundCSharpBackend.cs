@@ -293,11 +293,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
                         EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                         continue;
                     }
-                    foreach (var exceptionType in clause.ExceptionTypes)
-                    {
-                        builder.Append(prefix).Append("catch (").Append(PowerShellCSharpSymbolRenderer.TypeName(exceptionType)).AppendLine(")");
-                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
-                    }
+                    var effectiveException = clause.UnwrapPowerShellRuntimeException
+                        ? $"({clause.ExceptionTemporary} is global::System.Management.Automation.RuntimeException && " +
+                          $"(((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.FullyQualifiedErrorId == \"System.IndexOutOfRangeException\" || " +
+                          $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.FullyQualifiedErrorId == \"System.ArgumentOutOfRangeException\") ? " +
+                          $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.Exception : {clause.ExceptionTemporary})"
+                        : clause.ExceptionTemporary;
+                    var filter = string.Join(
+                        " || ",
+                        clause.ExceptionTypes.Select(type =>
+                            $"{effectiveException} is {PowerShellCSharpSymbolRenderer.TypeName(type)}"));
+                    builder.Append(prefix).Append("catch (global::System.Exception ")
+                        .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
                 }
                 if (tryStatement.FinallyStatements is not null)
                 {
@@ -477,61 +485,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
             1 => parts[0],
             _ => $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})"
         };
-    }
-
-    private static string EmitIndex(PowerShellLoweredIndexExpression index)
-    {
-        var target = EmitExpression(index.Target);
-        var key = EmitExpression(index.Index);
-        if (index.Kind == PowerShellBoundIndexKind.StringDictionary)
-            return $"({target} is null ? null : {target}.ContainsKey({key}) ? {target}[{key}] : null)";
-        if (index.Kind == PowerShellBoundIndexKind.OrderedStringDictionary)
-            return $"({target} is null ? null : {target}.Contains({key}) ? (string?){target}[{key}] : null)";
-        if (index.Kind == PowerShellBoundIndexKind.ObjectDictionary)
-            return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";
-        if (index.Kind == PowerShellBoundIndexKind.List)
-        {
-            var checkedList = index.UsePowerShellRuntimeErrors
-                ? $"((global::System.Collections.IList?)({target}) ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
-                : $"((global::System.Collections.IList?)({target}) ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
-            var listIndex = $"(({key}) < 0 ? {checkedList}.Count + ({key}) : ({key}))";
-            return $"({listIndex} < 0 || {listIndex} >= {checkedList}.Count ? null : {checkedList}[{listIndex}])";
-        }
-        if (index.Kind == PowerShellBoundIndexKind.String) target = $"({target} ?? string.Empty)";
-        else target = index.UsePowerShellRuntimeErrors
-            ? $"({target} ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
-            : $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
-        var normalized = $"(({key}) < 0 ? {target}.Length + ({key}) : ({key}))";
-        return $"({normalized} < 0 || {normalized} >= {target}.Length ? null : (object){target}[{normalized}])";
-    }
-
-    private static string EmitIndexAssignment(PowerShellLoweredIndexAssignmentStatement assignment)
-    {
-        var target = EmitExpression(assignment.Target);
-        var index = EmitExpression(assignment.Index);
-        var value = EmitExpression(assignment.Value);
-        if (assignment.Kind == PowerShellBoundIndexKind.List)
-        {
-            var checkedList = assignment.UsePowerShellRuntimeErrors
-                ? $"((global::System.Collections.IList?)({target}) ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
-                : $"((global::System.Collections.IList?)({target}) ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
-            var normalizedListIndex = $"(({index}) < 0 ? {checkedList}.Count + ({index}) : ({index}))";
-            var listIndexException = assignment.UsePowerShellRuntimeErrors
-                ? "new global::System.Management.Automation.RuntimeException(\"Index was outside the bounds of the array.\")"
-                : "new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\")";
-            return $"{checkedList}[({normalizedListIndex} >= 0 && {normalizedListIndex} < {checkedList}.Count ? {normalizedListIndex} : throw {listIndexException})] = {value}";
-        }
-        if (assignment.Kind != PowerShellBoundIndexKind.Array)
-            return $"{target}[{index}] = {value}";
-        var checkedTarget = assignment.UsePowerShellRuntimeErrors
-            ? $"({target} ?? throw new global::System.Management.Automation.RuntimeException(\"Cannot index into a null array.\"))"
-            : $"({target} ?? throw new global::System.InvalidOperationException(\"Cannot index into a null array.\"))";
-        var normalized = $"(({index}) < 0 ? {checkedTarget}.Length + ({index}) : ({index}))";
-        var indexException = assignment.UsePowerShellRuntimeErrors
-            ? "new global::System.Management.Automation.RuntimeException(\"Index was outside the bounds of the array.\")"
-            : "new global::System.IndexOutOfRangeException(\"Index was outside the bounds of the array.\")";
-        var checkedIndex = $"({normalized} >= 0 && {normalized} < {checkedTarget}.Length ? {normalized} : throw {indexException})";
-        return $"{checkedTarget}[{checkedIndex}] = {value}";
     }
 
     private static string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)

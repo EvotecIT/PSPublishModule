@@ -151,14 +151,22 @@ internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStateme
 
 internal sealed class PowerShellLoweredCatchClause
 {
-    internal PowerShellLoweredCatchClause(Type[] exceptionTypes, PowerShellLoweredStatement[] statements)
+    internal PowerShellLoweredCatchClause(
+        Type[] exceptionTypes,
+        PowerShellLoweredStatement[] statements,
+        string exceptionTemporary,
+        bool unwrapPowerShellRuntimeException)
     {
         ExceptionTypes = exceptionTypes;
         Statements = statements;
+        ExceptionTemporary = exceptionTemporary;
+        UnwrapPowerShellRuntimeException = unwrapPowerShellRuntimeException;
     }
 
     internal PowerShellImmutableArray<Type> ExceptionTypes { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal string ExceptionTemporary { get; }
+    internal bool UnwrapPowerShellRuntimeException { get; }
 }
 
 internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement

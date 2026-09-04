@@ -286,6 +286,14 @@ internal sealed partial class PowerShellSemanticBinder
             arrayType,
             targetFramework,
             capabilities);
+        if (input is not null && PowerShellModuleStateOriginPolicy.IsDerived(input))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2927",
+                $"Runtime-free lifecycle invocation of '{signature.Symbol.Name}' cannot carry input derived from live Hybrid module state across a call boundary.",
+                input.Span));
+            return null;
+        }
         if (input is not PowerShellBoundArrayExpression and not PowerShellBoundVariableExpression ||
             input.Type.ClrType != arrayType)
         {
@@ -320,7 +328,8 @@ internal sealed partial class PowerShellSemanticBinder
             new[] { input },
             returnType,
             new[] { 0 },
-            new[] { parameter.Contract.Name });
+            new[] { parameter.Contract.Name },
+            signature.ReturnsModuleStateDerived);
     }
 
     private static bool IsRuntimeFreePipelineLifecycleInvocation(

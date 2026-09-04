@@ -109,7 +109,12 @@ internal sealed partial class PowerShellSemanticBinder
                             : "$null is represented by the exact contextual reference type."),
                     PowerShellValueState.Null);
             case VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var symbol):
-                return new PowerShellBoundVariableExpression(span, symbol.Symbol, symbol.Type, symbol.ValueState);
+                return new PowerShellBoundVariableExpression(
+                    span,
+                    symbol.Symbol,
+                    symbol.Type,
+                    symbol.ValueState,
+                    symbol.IsModuleStateDerived);
             case VariableExpressionAst variable:
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.RuntimeScope,

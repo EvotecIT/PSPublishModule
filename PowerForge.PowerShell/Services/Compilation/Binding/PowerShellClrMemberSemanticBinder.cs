@@ -28,6 +28,14 @@ internal static class PowerShellClrMemberSemanticBinder
         if (!TryResolveTarget(document, memberSyntax.Expression, bindExpression, targetFramework, diagnostics, out var target))
             return null;
         if (!TryGetMemberName(document, memberSyntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && PowerShellModuleStateOriginPolicy.IsDerived(target.Receiver!))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2621",
+                "CLR member mutation cannot target an object derived from live Hybrid module state; only direct module-variable replacement owns that mutation boundary.",
+                target.Receiver!.Span));
+            return null;
+        }
         if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934", "The bounded runtime-free Get-Help metadata view is immutable.", span));
@@ -123,6 +131,14 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && PowerShellModuleStateOriginPolicy.IsDerived(target.Receiver!) &&
+            (!PowerShellModuleStateOriginPolicy.IsExactAuthoredTypedRead(syntax.Expression, target.Receiver!) ||
+             PowerShellModuleStateOriginPolicy.UsesDynamicMemberSemantics(target.Type)))
+            return Reject(
+                diagnostics,
+                "PSB2621",
+                "CLR member access to live Hybrid module state requires one exact authored non-object conversion directly over the $script: variable and cannot use dynamic adapted-member semantics.",
+                target.Receiver!.Span);
         if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
         {
             if (!target.Receiver.Type.TryGetKnownProperty(name, out var helpProperty))
@@ -244,6 +260,12 @@ internal static class PowerShellClrMemberSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
         if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!target.IsStatic && PowerShellModuleStateOriginPolicy.IsDerived(target.Receiver!))
+            return Reject(
+                diagnostics,
+                "PSB2621",
+                "CLR method invocation cannot consume a receiver derived from live Hybrid module state; the current boundary permits direct typed member and index reads only.",
+                target.Receiver!.Span);
         if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
             return Reject(diagnostics, "PSB2934", "The bounded runtime-free Get-Help metadata view does not expose mutable CLR dictionary methods.", span);
         if (target.Receiver is PowerShellBoundRuntimeStateExpression { Kind: PowerShellRuntimeStateIntrinsicKind.ErrorCollection })
@@ -267,6 +289,12 @@ internal static class PowerShellClrMemberSemanticBinder
         {
             var argument = bindExpression(argumentSyntax[index], null);
             if (argument is null) return null;
+            if (PowerShellModuleStateOriginPolicy.IsDerived(argument))
+                return Reject(
+                    diagnostics,
+                    "PSB2621",
+                    "CLR method invocation cannot consume an argument derived from live Hybrid module state.",
+                    argument.Span);
             arguments[index] = argument;
         }
 
@@ -328,6 +356,12 @@ internal static class PowerShellClrMemberSemanticBinder
         {
             var argument = bindExpression(argumentSyntax[index], null);
             if (argument is null) return null;
+            if (PowerShellModuleStateOriginPolicy.IsDerived(argument))
+                return Reject(
+                    diagnostics,
+                    "PSB2621",
+                    "CLR construction cannot consume an argument derived from live Hybrid module state.",
+                    argument.Span);
             arguments[index] = argument;
         }
         var selected = SelectBest(

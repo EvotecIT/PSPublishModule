@@ -65,13 +65,23 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2703", "Typed indexing is value-producing only as a direct return; indexed mutation has a separate statement contract.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return null;
         }
-        if (syntax.Target is not VariableExpressionAst and not StringConstantExpressionAst and not ArrayLiteralAst)
+        var ordinaryTargetSyntax = syntax.Target is VariableExpressionAst or StringConstantExpressionAst or ArrayLiteralAst;
+        var target = bindExpression(syntax.Target, null);
+        if (target is null) return null;
+        if (PowerShellModuleStateOriginPolicy.IsDerived(target))
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2709", "Typed indexing requires a side-effect-free local, parameter, string literal, or array literal target.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
+            if (!PowerShellModuleStateOriginPolicy.IsExactAuthoredTypedRead(syntax.Target, target))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2714", "Typed Hybrid module-state indexing requires one authored non-object conversion directly over a safe $script: variable read; derived locals, calls, and nested conversions remain fallback.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
+                return null;
+            }
+        }
+        else if (!ordinaryTargetSyntax)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2709", "Typed indexing requires a side-effect-free local, parameter, string literal, array literal, or an explicit conversion of one Hybrid module-state variable.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
             return null;
         }
-        var target = bindExpression(syntax.Target, null);
-        if (target is null || !TryClassify(target.Type, out var kind, out var indexType, out var resultType))
+        if (!TryClassify(target.Type, out var kind, out var indexType, out var resultType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2704", "Typed indexing supports strings, one-dimensional arrays, IList values, homogeneous string dictionaries, and IDictionary values.", PowerShellSourceParser.GetSpan(document, syntax.Target.Extent)));
             return null;
@@ -88,6 +98,11 @@ internal static class PowerShellDictionarySemanticBinder
         }
         var index = bindExpression(syntax.Index, indexType);
         if (index is null) return null;
+        if (PowerShellModuleStateOriginPolicy.IsDerived(index))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2715", "Typed indexing cannot consume an index derived from live Hybrid module state.", index.Span));
+            return null;
+        }
         if (indexType != typeof(object) && index.Type.ClrType != indexType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2706", $"Typed indexing requires one scalar {indexType.Name} index for this target.", index.Span));
@@ -133,6 +148,11 @@ internal static class PowerShellDictionarySemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2711", "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.", PowerShellSourceParser.GetSpan(document, indexSyntax.Target.Extent)));
             return null;
         }
+        if (PowerShellModuleStateOriginPolicy.IsDerived(target))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2716", "Typed indexed mutation cannot target a value derived from live Hybrid module state; only direct module-variable replacement owns that mutation boundary.", target.Span));
+            return null;
+        }
         if (target.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2934", "The bounded runtime-free Get-Help metadata view is immutable.", span));
@@ -152,6 +172,11 @@ internal static class PowerShellDictionarySemanticBinder
         if (index is null || indexType != typeof(object) && index.Type.ClrType != indexType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2706", $"Typed indexing requires one scalar {indexType.Name} index for this target.", index?.Span ?? span));
+            return null;
+        }
+        if (PowerShellModuleStateOriginPolicy.IsDerived(index))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2715", "Typed indexed mutation cannot consume an index derived from live Hybrid module state.", index.Span));
             return null;
         }
         var valueType = kind == PowerShellBoundIndexKind.Array

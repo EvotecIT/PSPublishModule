@@ -159,6 +159,14 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var collection = BindExpression(document, statement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
         if (collection is null) return null;
+        if (PowerShellModuleStateOriginPolicy.IsDerived(collection))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic(
+                "PSB2304",
+                "foreach cannot carry a value derived from live Hybrid module state into a typed loop variable.",
+                collection.Span));
+            return null;
+        }
         var collectionType = collection.Type.ClrType;
         var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
         var systemArray = collectionType == typeof(Array) &&

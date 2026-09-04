@@ -59,24 +59,45 @@ internal sealed class PowerShellLoweredDictionaryExpression : PowerShellLoweredE
 
 internal sealed class PowerShellLoweredIndexExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredIndexExpression(SourceSpan span, Type clrType, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellBoundIndexKind kind, bool usePowerShellRuntimeErrors)
+    internal PowerShellLoweredIndexExpression(
+        SourceSpan span,
+        Type clrType,
+        PowerShellLoweredExpression target,
+        PowerShellLoweredExpression index,
+        PowerShellBoundIndexKind kind,
+        bool usePowerShellRuntimeErrors,
+        string targetTemporary,
+        string indexTemporary)
         : base(span, clrType)
     {
         Target = target;
         Index = index;
         Kind = kind;
         UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
+        TargetTemporary = targetTemporary;
+        IndexTemporary = indexTemporary;
     }
 
     internal PowerShellLoweredExpression Target { get; }
     internal PowerShellLoweredExpression Index { get; }
     internal PowerShellBoundIndexKind Kind { get; }
     internal bool UsePowerShellRuntimeErrors { get; }
+    internal string TargetTemporary { get; }
+    internal string IndexTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredIndexAssignmentStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredIndexAssignmentStatement(SourceSpan span, PowerShellLoweredExpression target, PowerShellLoweredExpression index, PowerShellLoweredExpression value, PowerShellBoundIndexKind kind, bool usePowerShellRuntimeErrors)
+    internal PowerShellLoweredIndexAssignmentStatement(
+        SourceSpan span,
+        PowerShellLoweredExpression target,
+        PowerShellLoweredExpression index,
+        PowerShellLoweredExpression value,
+        PowerShellBoundIndexKind kind,
+        bool usePowerShellRuntimeErrors,
+        string valueTemporary,
+        string targetTemporary,
+        string indexTemporary)
         : base(span)
     {
         Target = target;
@@ -84,6 +105,9 @@ internal sealed class PowerShellLoweredIndexAssignmentStatement : PowerShellLowe
         Value = value;
         Kind = kind;
         UsePowerShellRuntimeErrors = usePowerShellRuntimeErrors;
+        ValueTemporary = valueTemporary;
+        TargetTemporary = targetTemporary;
+        IndexTemporary = indexTemporary;
     }
 
     internal PowerShellLoweredExpression Target { get; }
@@ -91,4 +115,7 @@ internal sealed class PowerShellLoweredIndexAssignmentStatement : PowerShellLowe
     internal PowerShellLoweredExpression Value { get; }
     internal PowerShellBoundIndexKind Kind { get; }
     internal bool UsePowerShellRuntimeErrors { get; }
+    internal string ValueTemporary { get; }
+    internal string TargetTemporary { get; }
+    internal string IndexTemporary { get; }
 }

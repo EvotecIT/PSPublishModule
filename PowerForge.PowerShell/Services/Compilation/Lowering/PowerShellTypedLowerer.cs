@@ -363,7 +363,10 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(assignment.Index, functions, names, targetCapabilities),
                 LowerExpression(assignment.Value, functions, names, targetCapabilities),
                 assignment.Kind,
-                assignment.UsePowerShellRuntimeErrors),
+                assignment.UsePowerShellRuntimeErrors,
+                names.Allocate("pf_index_value"),
+                names.Allocate("pf_index_target"),
+                names.Allocate("pf_index_key")),
             PowerShellBoundClrMemberAssignmentStatement assignment => new PowerShellLoweredClrMemberAssignmentStatement(
                 assignment.Span,
                 assignment.Receiver is null ? null : LowerExpression(assignment.Receiver, functions, names, targetCapabilities),
@@ -427,7 +430,9 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerStatements(tryStatement.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 tryStatement.Catches.Select(clause => new PowerShellLoweredCatchClause(
                     clause.ExceptionTypes.ToArray(),
-                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
+                    names.Allocate("pf_caught_exception"),
+                    targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects))).ToArray(),
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities)),
             PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
             PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
@@ -646,7 +651,9 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(index.Target, functions, names, targetCapabilities),
                 LowerExpression(index.Index, functions, names, targetCapabilities),
                 index.Kind,
-                index.UsePowerShellRuntimeErrors),
+                index.UsePowerShellRuntimeErrors,
+                names.Allocate("pf_index_target"),
+                names.Allocate("pf_index_key")),
             PowerShellBoundClrMemberExpression member => new PowerShellLoweredClrMemberExpression(
                 member.Span,
                 member.Type.ClrType,

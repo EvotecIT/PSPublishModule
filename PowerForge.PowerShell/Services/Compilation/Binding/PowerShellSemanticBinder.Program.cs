@@ -74,6 +74,14 @@ internal sealed partial class PowerShellSemanticBinder
                 }
             }
 
+            var moduleStateOriginsChanged = false;
+            foreach (var function in functions)
+            {
+                if (!PowerShellModuleStateOriginPolicy.ReturnsDerivedModuleState(function)) continue;
+                moduleStateOriginsChanged |= functionsByName[function.Symbol.Name].MarkReturnsModuleStateDerived();
+            }
+            if (moduleStateOriginsChanged) continue;
+
             var boundNames = functions.Select(static function => function.Symbol.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (boundNames.SetEquals(functionsByName.Keys))
             {

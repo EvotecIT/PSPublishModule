@@ -243,13 +243,20 @@ internal sealed class PowerShellBoundLiteralExpression : PowerShellBoundExpressi
 
 internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundVariableExpression(SourceSpan span, PowerShellSymbolId symbol, PowerShellTypeFact type, PowerShellValueState valueState = PowerShellValueState.Unknown)
+    internal PowerShellBoundVariableExpression(
+        SourceSpan span,
+        PowerShellSymbolId symbol,
+        PowerShellTypeFact type,
+        PowerShellValueState valueState = PowerShellValueState.Unknown,
+        bool isModuleStateDerived = false)
         : base(span, type, valueState)
     {
         Symbol = symbol;
+        IsModuleStateDerived = isModuleStateDerived;
     }
 
     internal PowerShellSymbolId Symbol { get; }
+    internal bool IsModuleStateDerived { get; }
 }
 
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
@@ -287,7 +294,8 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         PowerShellBoundExpression[] arguments,
         PowerShellTypeFact returnType,
         int[]? authoredEvaluationOrder = null,
-        string[]? boundParameterNames = null)
+        string[]? boundParameterNames = null,
+        bool returnsModuleStateDerived = false)
         : base(
             span,
             returnType,
@@ -299,12 +307,14 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
         AuthoredEvaluationOrder = authoredEvaluationOrder ?? Enumerable.Range(0, Arguments.Length).ToArray();
         BoundParameterNames = boundParameterNames ?? Array.Empty<string>();
+        ReturnsModuleStateDerived = returnsModuleStateDerived;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal PowerShellImmutableArray<PowerShellBoundExpression> Arguments { get; }
     internal PowerShellImmutableArray<int> AuthoredEvaluationOrder { get; }
     internal PowerShellImmutableArray<string> BoundParameterNames { get; }
+    internal bool ReturnsModuleStateDerived { get; }
 }
 
 internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement

@@ -14,6 +14,7 @@ internal sealed class PowerShellSemanticSymbolBinding
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellTypeFact Type { get; private set; }
     internal PowerShellValueState ValueState { get; private set; }
+    internal bool IsModuleStateDerived { get; private set; }
 
     internal void Refine(PowerShellTypeFact type, PowerShellValueState valueState)
     {
@@ -35,10 +36,13 @@ internal sealed class PowerShellSemanticSymbolBinding
     {
         var clone = new PowerShellSemanticSymbolBinding(Symbol, Type);
         clone.ValueState = ValueState;
+        clone.IsModuleStateDerived = IsModuleStateDerived;
         return clone;
     }
 
     internal void ForgetValueState() => ValueState = PowerShellValueState.Unknown;
+
+    internal void SetModuleStateDerived(bool value) => IsModuleStateDerived = value;
 
     internal void MergeFlowState(IEnumerable<PowerShellSemanticSymbolBinding> paths)
     {
@@ -55,6 +59,7 @@ internal sealed class PowerShellSemanticSymbolBinding
         }
         var states = materialized.Select(static path => path.ValueState).Distinct().Take(2).ToArray();
         ValueState = states.Length == 1 ? states[0] : PowerShellValueState.Unknown;
+        IsModuleStateDerived = materialized.Any(static path => path.IsModuleStateDerived);
     }
 }
 
@@ -100,7 +105,9 @@ internal static class PowerShellMutationSemanticBinder
                     value.Type.DictionaryValueKind),
                 value.ValueState);
             targetType = target.Type.ClrType;
+            target.SetModuleStateDerived(PowerShellModuleStateOriginPolicy.IsDerived(value));
         }
+        else if (PowerShellModuleStateOriginPolicy.IsDerived(value)) target.SetModuleStateDerived(true);
         if (operation == PowerShellBoundMutationOperator.Assign &&
             target.Type.Provenance == PowerShellTypeFactProvenance.Inferred &&
             targetType != value.Type.ClrType)

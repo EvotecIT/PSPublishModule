@@ -22,9 +22,12 @@ internal static class PowerShellHostedStatementBinder
         var available = GetAvailableSymbols(symbols, statement.Extent.StartOffset);
         if (index == runtimeTailStart)
         {
+            var tail = authoredStatements.Skip(index).ToArray();
+            if (PowerShellModuleStateOriginPolicy.ReferencesDerivedModuleState(tail, available, capabilities))
+                return false;
             bound = PowerShellCommandRegionSemanticBinder.BindRegion(
                 document,
-                authoredStatements.Skip(index).ToArray(),
+                tail,
                 available,
                 parameters,
                 commandResolver,
@@ -43,6 +46,11 @@ internal static class PowerShellHostedStatementBinder
                 commandResolver,
                 out var captured))
         {
+            if (PowerShellModuleStateOriginPolicy.ReferencesDerivedModuleState(
+                    new Ast[] { captured.Right },
+                    available,
+                    capabilities))
+                return false;
             bound = PowerShellCommandRegionSemanticBinder.BindCapture(
                 document,
                 captured,
@@ -57,15 +65,19 @@ internal static class PowerShellHostedStatementBinder
             return false;
 
         var region = new List<StatementAst> { statement };
-        while (index + 1 < authoredStatements.Length &&
+        var regionEnd = index;
+        while (regionEnd + 1 < authoredStatements.Length &&
                PowerShellCommandIslandPolicy.IsRuntimeRegion(
-                   authoredStatements[index + 1],
+                   authoredStatements[regionEnd + 1],
                    body,
                    localFunctionNames,
                    allowedNames,
                    capabilities,
                    commandResolver))
-            region.Add(authoredStatements[++index]);
+            region.Add(authoredStatements[++regionEnd]);
+        if (PowerShellModuleStateOriginPolicy.ReferencesDerivedModuleState(region, available, capabilities))
+            return false;
+        index = regionEnd;
         bound = PowerShellCommandRegionSemanticBinder.BindRegion(
             document,
             region,
