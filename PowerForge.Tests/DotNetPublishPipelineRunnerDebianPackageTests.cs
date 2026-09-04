@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
@@ -139,6 +140,45 @@ public sealed class DotNetPublishPipelineRunnerDebianPackageTests
         Assert.Contains("MimeType=application/pdf;\n", desktop, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("publish/package.deb")]
+    [InlineData("package.deb")]
+    public void NativeInstallerOutput_RejectsDirectoryOverlap(string relativeOutput)
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string source = Directory.CreateDirectory(Path.Combine(root, "publish")).FullName;
+            string output = Path.Combine(source, relativeOutput);
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => DotNetPublishPipelineRunner.EnsureNativeInstallerOutputDoesNotOverlapSource(source, output, "studio.debian"));
+
+            Assert.Contains("must not overlap", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void NativeInstallerOutput_AllowsAnArtifactRootThatContainsThePublishDirectory()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string source = Directory.CreateDirectory(Path.Combine(root, "artifacts", "publish")).FullName;
+            string output = Path.Combine(root, "artifacts", "sample.deb");
+
+            DotNetPublishPipelineRunner.EnsureNativeInstallerOutputDoesNotOverlapSource(source, output, "studio.debian");
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
     [Fact]
     public void BuildDebianPackage_OnLinux_CreatesInspectablePackage()
     {
@@ -204,6 +244,73 @@ public sealed class DotNetPublishPipelineRunnerDebianPackageTests
         {
             TryDelete(root);
         }
+    }
+
+    [Fact]
+    public void BuildDebianPackage_OnLinux_IsReproducible()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            return;
+
+        string root = CreateTempRoot();
+        try
+        {
+            string publish = Directory.CreateDirectory(Path.Combine(root, "publish")).FullName;
+            File.WriteAllText(Path.Combine(publish, "OfficeIMO.Studio"), "#!/bin/sh\nexit 0\n");
+            string first = BuildTestPackage(root, publish, "first.deb");
+            string second = BuildTestPackage(root, publish, "second.deb");
+
+            Assert.Equal(
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(first))),
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(second))));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static string BuildTestPackage(string root, string publish, string name)
+    {
+        string package = Path.Combine(root, "artifacts", name);
+        DotNetPublishDebianOptions options = CreateDebianOptions();
+        options.IconPath = null;
+        var plan = new DotNetPublishPlan
+        {
+            ProjectRoot = root,
+            Installers = new[]
+            {
+                new DotNetPublishInstallerPlan
+                {
+                    Id = "studio.debian",
+                    Kind = DotNetPublishInstallerKind.Debian,
+                    PrepareFromTarget = "studio",
+                    Debian = options
+                }
+            }
+        };
+        var source = new DotNetPublishArtefactResult
+        {
+            Target = "studio",
+            Runtime = "linux-x64",
+            Framework = "net10.0",
+            Style = DotNetPublishStyle.PortableCompat,
+            OutputDir = publish
+        };
+        var step = new DotNetPublishStep
+        {
+            Key = "debian.package:studio.debian",
+            Kind = DotNetPublishStepKind.DebianPackage,
+            InstallerId = "studio.debian",
+            TargetName = "studio",
+            Runtime = "linux-x64",
+            Framework = "net10.0",
+            Style = DotNetPublishStyle.PortableCompat,
+            InstallerOutputPath = package
+        };
+
+        new DotNetPublishPipelineRunner(new NullLogger()).BuildDebianPackage(plan, new[] { source }, step);
+        return package;
     }
 
     private static DotNetPublishSpec CreateSpec(string root, string runtime)

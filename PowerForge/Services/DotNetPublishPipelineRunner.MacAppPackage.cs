@@ -14,9 +14,6 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (artefacts is null) throw new ArgumentNullException(nameof(artefacts));
         if (step is null) throw new ArgumentNullException(nameof(step));
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            throw new PlatformNotSupportedException("macOS application bundles must be built on macOS with codesign and ditto available.");
-
         string installerId = (step.InstallerId ?? string.Empty).Trim();
         string target = (step.TargetName ?? string.Empty).Trim();
         string framework = (step.Framework ?? string.Empty).Trim();
@@ -35,6 +32,9 @@ public sealed partial class DotNetPublishPipelineRunner
             ?? throw new InvalidOperationException($"Installer '{installerId}' was not found in the plan.");
         DotNetPublishMacAppOptions options = installer.MacApp
             ?? throw new InvalidOperationException($"MacApp installer '{installerId}' is missing package metadata.");
+        ValidateMacAppExecutionBoundary(options, installerId);
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            throw new PlatformNotSupportedException("macOS application bundles must be built on macOS with codesign and ditto available.");
         string? sourceBundleId = ResolveInstallerSourceBundleId(plan, installerId, step.BundleId);
         DotNetPublishArtefactResult source = ResolveInstallerSourceArtefact(
                 artefacts,
@@ -51,6 +51,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string zipPath = Path.GetFullPath(step.InstallerOutputPath!);
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, zipPath, $"Installer '{installerId}' output path");
+        EnsureNativeInstallerOutputDoesNotOverlapSource(sourceRoot, zipPath, installerId);
         string outputDirectory = Path.GetDirectoryName(zipPath)!;
         Directory.CreateDirectory(outputDirectory);
         EnsureNoReparsePointsInExistingPath(
@@ -62,6 +63,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string appPath = Path.Combine(outputDirectory, appFileName);
         string stagingRoot = Path.Combine(outputDirectory, ".powerforge-macapp-" + Guid.NewGuid().ToString("N"));
         string stagedAppPath = Path.Combine(stagingRoot, appFileName);
+        string stagedZipPath = Path.Combine(stagingRoot, Path.GetFileName(zipPath));
+        string validationRoot = Path.Combine(stagingRoot, "validated");
         EnsurePathWithinRoot(outputDirectory, stagingRoot, $"Installer '{installerId}' staging path");
         try
         {
@@ -92,7 +95,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 _logger.Warn(
                     $"MacApp installer '{installerId}' uses ad-hoc signing; hardened runtime is omitted because " +
-                    "ad-hoc nested libraries do not share an Apple Team ID. Supply an Apple signing identity for hardened distribution builds.");
+                    "ad-hoc nested libraries do not share an Apple Team ID. Use PowerForge's Apple release flow for signed distribution builds.");
             }
             if (options.Timestamp && !string.Equals(options.CodesignIdentity, "-", StringComparison.Ordinal))
                 signArguments.Add("--timestamp");
@@ -109,17 +112,30 @@ public sealed partial class DotNetPublishPipelineRunner
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, signArguments);
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, new[] { "--verify", "--deep", "--strict", "--verbose=2", stagedAppPath });
 
+            RunRequiredMacTool(
+                "/usr/bin/ditto",
+                stagingRoot,
+                new[] { "-c", "-k", "--sequesterRsrc", "--keepParent", stagedAppPath, stagedZipPath });
+            if (!File.Exists(stagedZipPath) || new FileInfo(stagedZipPath).Length == 0)
+                throw new InvalidOperationException($"ditto did not produce the expected package: {stagedZipPath}");
+
+            Directory.CreateDirectory(validationRoot);
+            RunRequiredMacTool("/usr/bin/ditto", stagingRoot, new[] { "-x", "-k", stagedZipPath, validationRoot });
+            string validatedAppPath = Path.Combine(validationRoot, appFileName);
+            RunRequiredMacTool(
+                "/usr/bin/codesign",
+                stagingRoot,
+                new[] { "--verify", "--deep", "--strict", "--verbose=2", validatedAppPath });
+
+            string stagedArchiveHash = ComputeSha256(stagedZipPath);
             if (Directory.Exists(appPath))
                 Directory.Delete(appPath, recursive: true);
             Directory.Move(stagedAppPath, appPath);
             if (File.Exists(zipPath))
                 File.Delete(zipPath);
-            RunRequiredMacTool(
-                "/usr/bin/ditto",
-                outputDirectory,
-                new[] { "-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath });
-            if (!File.Exists(zipPath) || new FileInfo(zipPath).Length == 0)
-                throw new InvalidOperationException($"ditto did not produce the expected package: {zipPath}");
+            File.Move(stagedZipPath, zipPath);
+            if (!string.Equals(stagedArchiveHash, ComputeSha256(zipPath), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The macOS archive changed while it was committed to the installer output.");
 
             int files = Directory.EnumerateFiles(appPath, "*", SearchOption.AllDirectories).Count();
             long totalBytes = Directory.EnumerateFiles(appPath, "*", SearchOption.AllDirectories)
@@ -146,6 +162,31 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (Directory.Exists(stagingRoot))
                 Directory.Delete(stagingRoot, recursive: true);
+        }
+    }
+
+    internal static void ValidateMacAppExecutionBoundary(DotNetPublishMacAppOptions options, string installerId)
+    {
+        if (options is null)
+            throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(installerId))
+            throw new ArgumentException("An installer identifier is required.", nameof(installerId));
+
+        string executable = (options.Executable ?? string.Empty).Trim();
+        if (executable.Length == 0 ||
+            executable is "." or ".." ||
+            executable.IndexOfAny(new[] { '/', '\\' }) >= 0 ||
+            !string.Equals(Path.GetFileName(executable), executable, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"MacApp installer '{installerId}' Executable must be a file name in Contents/MacOS, not a nested path.");
+        }
+
+        string codesignIdentity = (options.CodesignIdentity ?? string.Empty).Trim();
+        if (!string.Equals(codesignIdentity, "-", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"MacApp installer '{installerId}' may use only ad-hoc signing until PowerForge owns notarization, stapling, and Gatekeeper validation.");
         }
     }
 

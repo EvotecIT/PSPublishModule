@@ -2981,6 +2981,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ValidateOptionalMacText(result.Category, "Category", installerId);
         ValidateOptionalMacText(result.Copyright, "Copyright", installerId);
         ValidateRequiredMacText(result.CodesignIdentity, "CodesignIdentity", installerId);
+        ValidateMacAppExecutionBoundary(result, installerId);
         ValidateOptionalMacText(result.EntitlementsPath, "EntitlementsPath", installerId);
         foreach (string extension in result.DocumentExtensions)
         {

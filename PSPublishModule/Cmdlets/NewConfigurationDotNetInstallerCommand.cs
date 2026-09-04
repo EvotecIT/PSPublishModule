@@ -8,7 +8,7 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Creates MSI or Debian installer configuration for the DotNet publish DSL.
+/// Creates MSI, Debian, or macOS app-bundle installer configuration for the DotNet publish DSL.
 /// </summary>
 /// <example>
 /// <summary>Create MSI installer mapping</summary>
@@ -177,6 +177,12 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
     public DotNetPublishDebianOptions? Debian { get; set; }
 
     /// <summary>
+    /// macOS app-bundle metadata used when <see cref="Kind"/> is MacApp.
+    /// </summary>
+    [Parameter]
+    public DotNetPublishMacAppOptions? MacApp { get; set; }
+
+    /// <summary>
     /// Emits a <see cref="DotNetPublishInstaller"/> object.
     /// </summary>
     protected override void ProcessRecord()
@@ -208,7 +214,8 @@ public sealed class NewConfigurationDotNetInstallerCommand : PSCmdlet
             Versioning = Versioning,
             MsBuildProperties = NormalizeHashtable(MsBuildProperties),
             ClientLicense = ClientLicense,
-            Debian = Debian
+            Debian = Debian,
+            MacApp = MacApp
         });
     }
 

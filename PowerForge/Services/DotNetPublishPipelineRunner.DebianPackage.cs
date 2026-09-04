@@ -51,6 +51,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string outputPath = Path.GetFullPath(step.InstallerOutputPath!);
         if (!plan.AllowOutputOutsideProjectRoot)
             EnsurePathWithinRoot(plan.ProjectRoot, outputPath, $"Installer '{installerId}' output path");
+        EnsureNativeInstallerOutputDoesNotOverlapSource(sourceRoot, outputPath, installerId);
         string outputDirectory = Path.GetDirectoryName(outputPath)!;
         Directory.CreateDirectory(outputDirectory);
         EnsureNoReparsePointsInExistingPath(outputDirectory, plan.AllowOutputOutsideProjectRoot ? outputDirectory : plan.ProjectRoot, $"Installer '{installerId}' output path");
@@ -123,9 +124,26 @@ public sealed partial class DotNetPublishPipelineRunner
             if (iconPath is not null)
                 RunRequiredLinuxTool("chmod", stagingRoot, new[] { "0644", iconPath });
 
+            string epoch = "@" + DeterministicPackageEpochSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            RunRequiredLinuxTool(
+                "find",
+                stagingRoot,
+                new[] { stagingRoot, "-exec", "touch", "-h", "-d", epoch, "{}", "+" });
+
             if (File.Exists(outputPath))
                 File.Delete(outputPath);
-            RunRequiredLinuxTool("dpkg-deb", outputDirectory, new[] { "--build", "--root-owner-group", stagingRoot, outputPath });
+            RunRequiredLinuxTool(
+                "/usr/bin/env",
+                outputDirectory,
+                new[]
+                {
+                    $"SOURCE_DATE_EPOCH={DeterministicPackageEpochSeconds}",
+                    "dpkg-deb",
+                    "--build",
+                    "--root-owner-group",
+                    stagingRoot,
+                    outputPath
+                });
             if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
                 throw new InvalidOperationException($"dpkg-deb did not produce the expected package: {outputPath}");
 

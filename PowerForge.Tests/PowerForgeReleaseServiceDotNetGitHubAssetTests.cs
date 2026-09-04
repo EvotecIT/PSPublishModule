@@ -231,6 +231,76 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void TryBuildDotNetGitHubRunnableAssets_FailsWhenDeclaredInstallerOutputIsMissing()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var target = new DotNetPublishTargetPlan { Name = "Sample" };
+            var plan = new DotNetPublishPlan { Targets = new[] { target } };
+            string missing = Path.Combine(root, "missing.deb");
+            var result = new DotNetPublishResult
+            {
+                Artefacts = new[]
+                {
+                    new DotNetPublishArtefactResult
+                    {
+                        Category = DotNetPublishArtefactCategory.Installer,
+                        Target = "Sample",
+                        OutputFiles = new[] { missing }
+                    }
+                }
+            };
+
+            bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+                plan,
+                target,
+                result,
+                out _,
+                out _,
+                out _,
+                out string? error);
+
+            Assert.False(success);
+            Assert.Contains(missing, error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryBuildDotNetGitHubRunnableAssets_FailsWhenInstallerResultDeclaresNoOutputs()
+    {
+        var target = new DotNetPublishTargetPlan { Name = "Sample" };
+        var plan = new DotNetPublishPlan { Targets = new[] { target } };
+        var result = new DotNetPublishResult
+        {
+            Artefacts = new[]
+            {
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Installer,
+                    Target = "Sample"
+                }
+            }
+        };
+
+        bool success = PowerForgeReleaseService.TryBuildDotNetGitHubRunnableAssets(
+            plan,
+            target,
+            result,
+            out _,
+            out _,
+            out _,
+            out string? error);
+
+        Assert.False(success);
+        Assert.Contains("contains no output files", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(false, true, true)]
     [InlineData(true, false, false)]

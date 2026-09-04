@@ -446,7 +446,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             foreach (var a in orderedArtefacts)
             {
-                foreach (var file in EnumerateFilesSafe(a.OutputDir, "*", SearchOption.AllDirectories))
+                foreach (var file in EnumerateArtifactFilesForChecksum(a))
                 {
                     var full = Path.GetFullPath(file);
                     if (!File.Exists(full)) continue;
@@ -522,6 +522,15 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return (jsonPath, txtPath, checksumsPath);
+    }
+
+    internal static IEnumerable<string> EnumerateArtifactFilesForChecksum(DotNetPublishArtefactResult artefact)
+    {
+        if (artefact is null)
+            throw new ArgumentNullException(nameof(artefact));
+        return artefact.Category == DotNetPublishArtefactCategory.Installer
+            ? artefact.OutputFiles ?? Array.Empty<string>()
+            : EnumerateFilesSafe(artefact.OutputDir, "*", SearchOption.AllDirectories);
     }
 
     private static List<DotNetPublishManifestEntry> BuildManifestEntries(

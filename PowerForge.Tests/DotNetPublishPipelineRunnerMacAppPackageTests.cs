@@ -96,6 +96,46 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void Plan_RejectsNestedMacExecutablePath()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            DotNetPublishSpec spec = CreateSpec(root, "osx-arm64");
+            Assert.Single(spec.Installers).MacApp!.Executable = "bin/OfficeIMO.Studio";
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("file name", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Plan_RejectsDeveloperIdentityUntilNotarizationIsOwned()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            DotNetPublishSpec spec = CreateSpec(root, "osx-arm64");
+            Assert.Single(spec.Installers).MacApp!.CodesignIdentity = "Developer ID Application: Example Corp (ABCDE12345)";
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+
+            Assert.Contains("notarization", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void InfoPlist_ContainsStableIdentityAndDocumentContracts()
     {
         DotNetPublishMacAppOptions options = CreateMacOptions();
