@@ -247,6 +247,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void TrustedBuildTool_AcceptsAppleSealedSystemGitWithSharedInode()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return;
+
+        Assert.True(DotNetPublishPipelineRunner.TryResolveTrustedBuildTool("git", out string resolvedPath));
+        Assert.Equal("/usr/bin/git", resolvedPath, StringComparer.Ordinal);
+    }
+
+    [Fact]
     public void ReadSourceProvenance_AcceptsPackageTaskInputRelativeToConsumingProject()
     {
         DotNetPublishPipelineRunner.SourceProvenance provenance = ReadPackageTargetProvenance(

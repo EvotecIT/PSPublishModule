@@ -22,7 +22,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!seen.Add(fullPath) ||
                     !File.Exists(fullPath) ||
                     (File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0 ||
-                    !HasSinglePhysicalLink(fullPath) ||
+                    !HasTrustedToolLinkTopology(toolName, fullPath) ||
                     (toolName.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
                      (!IsUsableDotNetInstallation(fullPath) ||
                       !IsIndependentlyTrustedDotNetExecutable(fullPath))) ||
@@ -42,6 +42,19 @@ public sealed partial class DotNetPublishPipelineRunner
 
         path = string.Empty;
         return false;
+    }
+
+    private static bool HasTrustedToolLinkTopology(string toolName, string fullPath)
+    {
+        if (HasSinglePhysicalLink(fullPath))
+            return true;
+
+        // Apple ships /usr/bin/git on the sealed system volume as one inode shared by
+        // multiple Git entry points. The fixed path remains independently trusted and
+        // its exact bytes are hash-snapshotted and leased by the caller.
+        return RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
+               toolName.Equals("git", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(Path.GetFullPath(fullPath), "/usr/bin/git", StringComparison.Ordinal);
     }
 
     internal static Dictionary<string, string?> CreateTrustedGitEnvironment(
