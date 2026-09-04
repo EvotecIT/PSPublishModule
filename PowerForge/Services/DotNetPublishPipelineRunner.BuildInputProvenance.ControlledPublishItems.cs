@@ -259,7 +259,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string originalInputPath,
                         out bool isPackageBacked))
                 {
-                    failureReason = "controlled publish item path could not be mapped";
+                    failureReason = "controlled publish item path could not be mapped: " +
+                        RedactCommandLineSecrets(item.FullPath);
                     return false;
                 }
                 if (!TryMapControlledPublishMetadata(
