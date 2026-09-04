@@ -173,7 +173,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 failureReason = graphProcess.TimedOut
                     ? "restore graph generation timed out"
-                    : $"restore graph generation failed with exit code {graphProcess.ExitCode}";
+                    : $"restore graph generation failed with exit code {graphProcess.ExitCode}" +
+                      ReadControlledProcessFailureDetail(graphProcess);
                 return false;
             }
 
@@ -273,7 +274,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 failureReason = restoreProcess.TimedOut
                     ? "isolated SDK-evidence restore timed out"
-                    : $"isolated SDK-evidence restore failed with exit code {restoreProcess.ExitCode}";
+                    : $"isolated SDK-evidence restore failed with exit code {restoreProcess.ExitCode}" +
+                      ReadControlledProcessFailureDetail(restoreProcess);
                 return false;
             }
             if (!TryReadSdkPackageHashes(
