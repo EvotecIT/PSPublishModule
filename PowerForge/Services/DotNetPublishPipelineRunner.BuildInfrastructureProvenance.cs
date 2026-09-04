@@ -133,10 +133,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string> evaluatedProperties,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
-        IDictionary<string, bool> cache,
-        out string? failureReason)
+        IDictionary<string, bool> cache)
     {
-        failureReason = null;
         StringComparer comparer = IsWindows()
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
@@ -157,10 +155,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
             if (!cachedResult)
-            {
-                failureReason = "a previous controlled rebuild did not prove this output";
                 return false;
-            }
         }
         if (allCached)
             return true;
@@ -172,12 +167,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string? controlledGitRoot = null;
         try
         {
-            string? missingCandidatePath = fullCandidatePaths.FirstOrDefault(path => !File.Exists(path));
-            if (missingCandidatePath is not null)
-            {
-                failureReason = $"candidate output does not exist: '{missingCandidatePath}'";
+            if (fullCandidatePaths.Any(path => !File.Exists(path)))
                 return CacheAll(false);
-            }
             Directory.CreateDirectory(controlledOutputRoot);
             IReadOnlyDictionary<string, string> effectiveGlobalProperties =
                 request.ReadEffectiveGlobalProperties();
@@ -195,11 +186,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         [Path.GetFullPath(request.ProjectPath)] = [controlledEvaluationProperties]
                     },
                     out controlledGitRoot,
-                    out string? controlledProjectPath,
-                    out string? checkoutFailureReason))
+                    out string? controlledProjectPath))
             {
-                failureReason = "controlled checkout failed: " +
-                    (checkoutFailureReason ?? "unknown reason");
                 return CacheAll(false);
             }
             if (!TryCreateControlledBuildEnvironment(
@@ -210,7 +198,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
-                failureReason = "controlled build environment could not be created";
                 return CacheAll(false);
             }
             string offlinePackageSource = Directory.CreateDirectory(
@@ -223,13 +210,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledProjectPath!,
                     request.TrustedBuildPackages,
                     out offlinePackageSources,
-                    out string? packageSourceFailureReason,
+                    out _,
                     allowSdkManagedToolchainPackages: true))
-            {
-                failureReason = "controlled package source could not be created: " +
-                    (packageSourceFailureReason ?? "unknown reason");
                 return CacheAll(false);
-            }
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
             new XDocument(
                 new XElement("configuration",
@@ -261,7 +244,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledConfiguration))
                 {
-                    failureReason = "configuration could not be mapped into the controlled checkout";
                     return CacheAll(false);
                 }
                 arguments.Add("-p:Configuration=" + EscapeMsBuildPropertyValue(controlledConfiguration));
@@ -275,7 +257,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledTargetFramework))
                 {
-                    failureReason = "target framework could not be mapped into the controlled checkout";
                     return CacheAll(false);
                 }
                 arguments.Add("-p:TargetFramework=" + EscapeMsBuildPropertyValue(controlledTargetFramework));
@@ -298,7 +279,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.GetDirectoryName(request.ProjectPath)!,
                         out string controlledValue))
                 {
-                    failureReason = $"MSBuild property '{property.Key}' could not be mapped into the controlled checkout";
                     return CacheAll(false);
                 }
                 arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(controlledValue));
@@ -311,7 +291,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledPathMap,
                     out controlledPathMap))
             {
-                failureReason = "PathMap could not be mapped into the controlled checkout";
                 return CacheAll(false);
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
@@ -329,27 +308,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
             {
-                failureReason = process.TimedOut
-                    ? "controlled rebuild timed out"
-                    : $"controlled rebuild exited with code {process.ExitCode}" +
-                      ReadControlledProcessFailureDetail(process);
                 return CacheAll(false);
             }
 
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
-            {
-                failureReason = "controlled rebuild did not return an MSBuild JSON result";
                 return CacheAll(false);
-            }
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items) ||
                 !items.TryGetProperty("FileWrites", out JsonElement fileWrites) ||
                 fileWrites.ValueKind != JsonValueKind.Array)
             {
-                failureReason = "controlled rebuild did not return the FileWrites item list";
                 return CacheAll(false);
             }
 
@@ -374,16 +345,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         AreControlledGeneratedOutputsEquivalent(
                             fullCandidatePath,
                             controlledCandidatePath);
-                    if (!equivalent)
-                    {
-                        failureReason = File.Exists(controlledCandidatePath)
-                            ? "controlled rebuild output differs from the candidate output"
-                            : "controlled rebuild did not produce the expected output path";
-                    }
-                }
-                else
-                {
-                    failureReason = "candidate output is outside the source Git root";
                 }
 
                 cache[BuildCacheKey(fullCandidatePath)] = equivalent;
@@ -392,10 +353,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
             return allEquivalent;
         }
-        catch (Exception exception)
+        catch
         {
             // A generated output is trusted only when the controlled rebuild proves it.
-            failureReason = $"{exception.GetType().Name} while proving the controlled output";
             return CacheAll(false);
         }
         finally

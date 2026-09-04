@@ -569,6 +569,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 provenInputs.Contains(entry.Input.FullPath)))
             .Select(group => group.Key)
             .ToHashSet(comparison);
+        // A project output can be observed first as a generic ReferencePath while an
+        // ancestor evaluation still knows only its own output roots. Once every publish
+        // occurrence has been rebuilt byte-for-byte in the controlled graph, discard that
+        // earlier provisional source classification. The no-build snapshot below retains
+        // the exact path, digest, metadata, and Unix mode as the release-input contract.
+        buildInputs.ExceptWith(fullyProvenGeneratedPublishInputPaths);
+        sourceInputs.ExceptWith(fullyProvenGeneratedPublishInputPaths);
         HashSet<string> evaluatedPublishInputPaths = evaluatedPublishInputs
             .Where(entry => !entry.Input.IsPackageBacked)
             .Select(entry => Path.GetFullPath(entry.Input.FullPath))
@@ -578,11 +585,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (publishInput.IsPackageBacked)
                 continue;
-            bool isTrustedSdkGeneratedOutput = IsTrustedSdkGeneratedOutput(publishInput.FullPath);
             bool trustedGeneratedOutput =
                 (publishInput.IsSdkDefined ||
                  (publishInput.IsProjectDefined && publishInput.IsControlledEquivalent)) &&
-                isTrustedSdkGeneratedOutput &&
+                IsTrustedSdkGeneratedOutput(publishInput.FullPath) &&
                 (buildPlan?.NoBuildInPublish != true ||
                  (provenNoBuildPublishInputsByEvaluation.TryGetValue(
                       evaluationKey,
@@ -590,25 +596,6 @@ public sealed partial class DotNetPublishPipelineRunner
                   provenInputs.Contains(publishInput.FullPath)));
             if (trustedGeneratedOutput)
                 continue;
-
-            bool isBelowEvaluatedGeneratedRoot = generatedRootsByEvaluation.Values.Any(roots =>
-                IsBelowGeneratedBuildRoot(publishInput.FullPath, roots));
-            if (isBelowEvaluatedGeneratedRoot)
-            {
-                bool hasNoBuildProof = provenNoBuildPublishInputsByEvaluation.TryGetValue(
-                    evaluationKey,
-                    out HashSet<string>? diagnosticProvenInputs) &&
-                    diagnosticProvenInputs.Contains(publishInput.FullPath);
-                projectDirectories = directories.ToArray();
-                failureReason =
-                    $"controlled publish input '{publishInput.FullPath}' was rebuilt but rejected " +
-                    $"(SDK-defined: {publishInput.IsSdkDefined}; project-defined: " +
-                    $"{publishInput.IsProjectDefined}; byte-and-mode equivalent: " +
-                    $"{publishInput.IsControlledEquivalent}; trusted generated path: " +
-                    $"{isTrustedSdkGeneratedOutput}; no-build proof: {hasNoBuildProof}; " +
-                    $"single physical link: {HasSinglePhysicalLink(publishInput.FullPath)}).";
-                return false;
-            }
 
             buildInputs.Add(publishInput.FullPath);
             if (File.Exists(publishInput.FullPath) &&
@@ -671,29 +658,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     expectedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
                     directories);
-            if (!hasTrustedGeneratedOutputPath)
-            {
-                referencedProject.GlobalProperties.TryGetValue(
-                    "RuntimeIdentifier",
-                    out string? referencedRuntimeIdentifier);
-                string expectedOutputSummary = string.Join(
-                    ", ",
-                    expectedOutputPaths.Take(4));
-                string outputRootSummary = string.Join(
-                    ", ",
-                    outputRoots.Take(4));
-                projectDirectories = directories.ToArray();
-                failureReason =
-                    $"generated project-reference output '{output.OutputPath}' is not an expected output for " +
-                    $"'{referencedProject.ProjectPath}' (framework " +
-                    $"'{referencedProject.TargetFramework ?? "<unset>"}', runtime " +
-                    $"'{referencedRuntimeIdentifier ?? "<unset>"}'). Expected path(s): " +
-                    $"{(expectedOutputSummary.Length == 0 ? "<none>" : expectedOutputSummary)}. " +
-                    $"Output root(s): {(outputRootSummary.Length == 0 ? "<none>" : outputRootSummary)}.";
-                return false;
-            }
-            string? controlledOutputFailureReason = null;
-            if (TryProveControlledGeneratedOutputs(
+            if (hasTrustedGeneratedOutputPath &&
+                TryProveControlledGeneratedOutputs(
                     referencedProject,
                     new[] { output.OutputPath },
                     buildInputsByEvaluation.TryGetValue(
@@ -721,8 +687,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out VerifiedPackageInputCatalog? verifiedPackages)
                         ? verifiedPackages
                         : null,
-                    controlledGeneratedOutputProofs,
-                    out controlledOutputFailureReason))
+                    controlledGeneratedOutputProofs))
             {
                 if (buildPlan?.NoBuildInPublish != true)
                 {
@@ -735,14 +700,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         unixFileMode: ReadControlledUnixFileMode(output.OutputPath)));
                 }
                 continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(controlledOutputFailureReason))
-            {
-                projectDirectories = directories.ToArray();
-                failureReason = $"controlled generated-output proof failed for '{output.OutputPath}': " +
-                    controlledOutputFailureReason;
-                return false;
             }
 
             buildInputs.Add(output.OutputPath);
