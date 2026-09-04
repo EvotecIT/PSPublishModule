@@ -220,6 +220,9 @@ public sealed class DotNetPublishInstallerPlan
 
     /// <summary>Resolved Debian package metadata.</summary>
     public DotNetPublishDebianOptions? Debian { get; set; }
+
+    /// <summary>Resolved macOS application-bundle metadata.</summary>
+    public DotNetPublishMacAppOptions? MacApp { get; set; }
 }
 
 /// <summary>

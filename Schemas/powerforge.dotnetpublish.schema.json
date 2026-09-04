@@ -72,7 +72,7 @@
     },
     "DotNetPublishInstallerKind": {
       "type": "string",
-      "enum": ["Msi", "Debian"]
+      "enum": ["Msi", "Debian", "MacApp"]
     },
     "DotNetPublishStoreBuildMode": {
       "type": "string",
@@ -885,7 +885,8 @@
         "SignProfile": { "type": ["string", "null"] },
         "SignOverrides": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignPatch" }, { "type": "null" }] },
         "ClientLicense": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMsiClientLicenseOptions" }, { "type": "null" }] },
-        "Debian": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishDebianOptions" }, { "type": "null" }] }
+        "Debian": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishDebianOptions" }, { "type": "null" }] },
+        "MacApp": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishMacAppOptions" }, { "type": "null" }] }
       },
       "required": ["Id", "PrepareFromTarget"]
     },
@@ -913,6 +914,31 @@
         "IconSize": { "type": "integer", "minimum": 1, "maximum": 4096 }
       },
       "required": ["PackageName", "Version", "Maintainer", "Description", "Executable", "CommandName", "InstallDirectoryName"]
+    },
+    "DotNetPublishMacAppOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "BundleIdentifier": { "type": "string", "minLength": 1 },
+        "BundleName": { "type": "string", "minLength": 1 },
+        "Version": { "type": "string", "minLength": 1 },
+        "BuildNumber": { "type": "string", "minLength": 1 },
+        "Executable": { "type": "string", "minLength": 1 },
+        "IconPath": { "type": ["string", "null"] },
+        "MinimumSystemVersion": { "type": "string", "minLength": 1 },
+        "Category": { "type": ["string", "null"] },
+        "Copyright": { "type": ["string", "null"] },
+        "DocumentExtensions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "CodesignIdentity": { "type": "string", "minLength": 1 },
+        "HardenedRuntime": { "type": "boolean" },
+        "Timestamp": { "type": "boolean" },
+        "EntitlementsPath": { "type": ["string", "null"] }
+      },
+      "required": ["BundleIdentifier", "BundleName", "Version", "Executable", "CodesignIdentity"]
     },
     "DotNetPublishStorePackage": {
       "type": "object",

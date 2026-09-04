@@ -261,6 +261,61 @@ public sealed class DotNetPublishInstaller
 
     /// <summary>Debian package metadata used when <see cref="Kind"/> is <see cref="DotNetPublishInstallerKind.Debian"/>.</summary>
     public DotNetPublishDebianOptions? Debian { get; set; }
+
+    /// <summary>macOS app-bundle metadata used when <see cref="Kind"/> is <see cref="DotNetPublishInstallerKind.MacApp"/>.</summary>
+    public DotNetPublishMacAppOptions? MacApp { get; set; }
+}
+
+/// <summary>
+/// Declarative metadata for a macOS application bundle produced from a dotnet publish output.
+/// </summary>
+public sealed class DotNetPublishMacAppOptions
+{
+    /// <summary>Reverse-DNS application identifier.</summary>
+    public string BundleIdentifier { get; set; } = string.Empty;
+
+    /// <summary>Application name shown by Finder.</summary>
+    public string BundleName { get; set; } = string.Empty;
+
+    /// <summary>User-facing semantic version written to CFBundleShortVersionString.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>Monotonic build version written to CFBundleVersion.</summary>
+    public string BuildNumber { get; set; } = "1";
+
+    /// <summary>Executable path relative to the published payload root.</summary>
+    public string Executable { get; set; } = string.Empty;
+
+    /// <summary>Optional PNG or ICNS icon source path, resolved from the project root.</summary>
+    public string? IconPath { get; set; }
+
+    /// <summary>Minimum supported macOS version.</summary>
+    public string MinimumSystemVersion { get; set; } = "13.0";
+
+    /// <summary>Optional App Store category UTI, for example public.app-category.productivity.</summary>
+    public string? Category { get; set; }
+
+    /// <summary>Optional copyright string.</summary>
+    public string? Copyright { get; set; }
+
+    /// <summary>File-name extensions registered as documents the application can open.</summary>
+    public string[] DocumentExtensions { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// codesign identity. Use '-' only for local ad-hoc proof; direct distribution requires a
+    /// Developer ID Application identity and subsequent notarization through PowerForge's Apple release flow.
+    /// </summary>
+    public string CodesignIdentity { get; set; } = string.Empty;
+
+    /// <summary>Enable hardened runtime when signing. Defaults to true.</summary>
+    public bool HardenedRuntime { get; set; } = true;
+
+    /// <summary>Request a trusted timestamp for non-ad-hoc signatures. Defaults to true.</summary>
+    public bool Timestamp { get; set; } = true;
+
+    /// <summary>Optional entitlements plist path, resolved from the project root.</summary>
+    public string? EntitlementsPath { get; set; }
+
 }
 
 /// <summary>

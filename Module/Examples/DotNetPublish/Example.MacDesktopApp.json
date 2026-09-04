@@ -1,0 +1,62 @@
+{
+  "$schema": "../../../Schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "Configuration": "Release",
+    "Restore": true,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true,
+    "Runtimes": [ "osx-arm64" ]
+  },
+  "Targets": [
+    {
+      "Name": "Sample.Studio",
+      "ProjectPath": "src/Sample.Studio/Sample.Studio.csproj",
+      "Kind": "Desktop",
+      "Publish": {
+        "Framework": "net10.0",
+        "Runtimes": [ "osx-arm64" ],
+        "Style": "PortableCompat",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "KeepSymbols": false,
+        "KeepDocs": false,
+        "Zip": true
+      }
+    }
+  ],
+  "Installers": [
+    {
+      "Id": "sample.studio.macapp",
+      "Kind": "MacApp",
+      "PrepareFromTarget": "Sample.Studio",
+      "Runtimes": [ "osx-arm64" ],
+      "Frameworks": [ "net10.0" ],
+      "Styles": [ "PortableCompat" ],
+      "OutputPath": "Artifacts/DotNetPublish/MacApp/{installer}/{rid}",
+      "OutputName": "Sample-Studio-{version}-{rid}.zip",
+      "MacApp": {
+        "BundleIdentifier": "com.example.sample-studio",
+        "BundleName": "Sample Studio",
+        "Version": "1.0.0",
+        "BuildNumber": "1",
+        "Executable": "Sample.Studio",
+        "IconPath": "src/Sample.Studio/Assets/Sample.Studio.png",
+        "MinimumSystemVersion": "13.0",
+        "Category": "public.app-category.productivity",
+        "DocumentExtensions": [ "pdf", "docx" ],
+        "CodesignIdentity": "-",
+        "HardenedRuntime": true,
+        "Timestamp": false
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/DotNetPublish/manifest.json",
+    "ManifestTextPath": "Artifacts/DotNetPublish/manifest.txt",
+    "ChecksumsPath": "Artifacts/DotNetPublish/SHA256SUMS.txt",
+    "RunReportPath": "Artifacts/DotNetPublish/run-report.json"
+  }
+}

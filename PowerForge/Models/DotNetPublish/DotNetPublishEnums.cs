@@ -89,7 +89,9 @@ public enum DotNetPublishInstallerKind
     /// <summary>Windows Installer package authored through WiX.</summary>
     Msi,
     /// <summary>Debian package for Debian-family Linux distributions.</summary>
-    Debian
+    Debian,
+    /// <summary>macOS application bundle packaged from a published target.</summary>
+    MacApp
 }
 
 /// <summary>
@@ -234,6 +236,8 @@ public enum DotNetPublishStepKind
     MsiSign,
     /// <summary>Build a Debian package from a published Linux target.</summary>
     DebianPackage,
+    /// <summary>Build and sign a macOS application bundle from a published target.</summary>
+    MacAppPackage,
     /// <summary>Build Microsoft Store / MSIX packaging outputs.</summary>
     StorePackage,
     /// <summary>Extract benchmark metrics from JSON/log inputs.</summary>

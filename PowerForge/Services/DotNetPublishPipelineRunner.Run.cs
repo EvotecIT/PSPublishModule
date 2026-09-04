@@ -238,6 +238,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.DebianPackage:
                             artefacts.Add(BuildDebianPackage(plan, artefacts, step));
                             break;
+                        case DotNetPublishStepKind.MacAppPackage:
+                            artefacts.Add(BuildMacAppPackage(plan, artefacts, step));
+                            break;
                         case DotNetPublishStepKind.StorePackage:
                             storePackages.Add(BuildStorePackage(plan, step));
                             break;
