@@ -25,6 +25,31 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
             siteRoot = lastBuildOutPath;
 
+        if (operation.Trim().Equals("exercise", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                throw new InvalidOperationException("agent-ready exercise requires an exact WebMCP page URL.");
+            var query = GetString(step, "query");
+            if (string.IsNullOrWhiteSpace(query))
+                throw new InvalidOperationException("agent-ready exercise requires query.");
+            var behavioralResult = WebMcpBehavioralTester.TestSiteSearchAsync(new WebMcpBehavioralTestOptions
+            {
+                Url = baseUrl,
+                ToolName = GetString(step, "toolName") ?? GetString(step, "tool-name") ?? "search_site",
+                Query = query,
+                Limit = GetInt(step, "limit") ?? 0,
+                TimeoutMs = timeoutMs,
+                EnsureBrowserInstalled = GetBool(step, "ensureBrowser") ?? GetBool(step, "ensure-browser") ?? false,
+                Headless = !(GetBool(step, "headed") ?? false)
+            }).GetAwaiter().GetResult();
+
+            if (failOnFailures && !behavioralResult.Success)
+                throw new InvalidOperationException($"agent-ready WebMCP exercise failed: {string.Join("; ", behavioralResult.Errors)}");
+            stepResult.Success = true;
+            stepResult.Message = $"Agent-ready exercise: {(behavioralResult.Success ? "passed" : "failed")}, {behavioralResult.Returned}/{behavioralResult.TotalMatches} results, {behavioralResult.OutputCharacters} output characters";
+            return;
+        }
+
         WebAgentReadinessResult result;
         switch (operation.Trim().ToLowerInvariant())
         {
@@ -60,7 +85,7 @@ internal static partial class WebPipelineRunner
                 }).GetAwaiter().GetResult();
                 break;
             default:
-                throw new InvalidOperationException("agent-ready operation must be prepare, verify, or scan.");
+                throw new InvalidOperationException("agent-ready operation must be prepare, verify, scan, or exercise.");
         }
 
         if (failOnFailures && !result.Success)

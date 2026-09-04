@@ -9,6 +9,13 @@
   var indexPath = String(surface.getAttribute('data-webmcp-search-index') || surface.getAttribute('data-search-index') || '/search/index.json').trim();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(toolName)) return;
 
+  var DEFAULT_RESULT_LIMIT = 3;
+  var MAX_RESULT_LIMIT = 5;
+  var MAX_RESULT_URL_CHARACTERS = 400;
+  var MAX_OUTPUT_CHARACTERS = 1500;
+  var MAX_INDEX_BYTES = 8 * 1024 * 1024;
+  var MAX_INDEX_ENTRIES = 5000;
+
   var api = global.PowerForgeWebMcpSearch || {};
   var adapter = api.adapter || null;
   var registrationController = null;
@@ -39,13 +46,15 @@
   }
 
   function shapeResult(item) {
+    var url = String(item && item.url || '').trim();
+    if (!url || url.length > MAX_RESULT_URL_CHARACTERS) return null;
     return {
-      title: boundedText(item && item.title, 240),
-      url: boundedText(item && item.url, 1000),
-      description: boundedText(item && (item.description || item.snippet), 500),
-      collection: boundedText(item && item.collection, 100),
-      language: boundedText(item && item.language, 20),
-      tags: toArray(item && item.tags).slice(0, 8).map(function (tag) { return boundedText(tag, 80); })
+      title: boundedText(item && item.title, 120),
+      url: url,
+      description: boundedText(item && (item.description || item.snippet), 200),
+      collection: boundedText(item && item.collection, 48),
+      language: boundedText(item && item.language, 12),
+      tags: toArray(item && item.tags).slice(0, 4).map(function (tag) { return boundedText(tag, 32); })
     };
   }
 
@@ -61,7 +70,7 @@
 
     entries.forEach(function (item) {
       item = item || {};
-      var url = boundedText(item.url, 1000);
+      var url = String(item.url || '').trim();
       if (!url || seen[url]) return;
 
       var title = normalizeText(item.title);
@@ -98,7 +107,7 @@
 
     return {
       totalMatches: matches.length,
-      results: matches.slice(0, limit).map(function (match) { return shapeResult(match.item); })
+      results: matches.slice(0, limit).map(function (match) { return match.item; })
     };
   }
 
@@ -121,9 +130,19 @@
         credentials: 'same-origin'
       }).then(function (response) {
         if (!response.ok) throw new Error('Search index request failed with HTTP ' + response.status + '.');
-        return response.json();
-      }).then(function (entries) {
+        var lengthHeader = response.headers && response.headers.get('content-length');
+        var advertisedLength = lengthHeader == null ? NaN : Number(lengthHeader);
+        var contentEncoding = String(response.headers && response.headers.get('content-encoding') || '').trim();
+        if (!contentEncoding && Number.isFinite(advertisedLength) && advertisedLength > MAX_INDEX_BYTES) {
+          throw new Error('Search index exceeds the ' + MAX_INDEX_BYTES + '-byte safety limit.');
+        }
+        return readBoundedResponseText(response);
+      }).then(function (json) {
+        var entries = JSON.parse(json);
         if (!Array.isArray(entries)) throw new Error('Search index response must be a JSON array.');
+        if (entries.length > MAX_INDEX_ENTRIES) {
+          throw new Error('Search index exceeds the ' + MAX_INDEX_ENTRIES + '-entry safety limit.');
+        }
         return entries;
       }).catch(function (error) {
         indexPromise = null;
@@ -132,6 +151,42 @@
     }
 
     return indexPromise;
+  }
+
+  async function readBoundedResponseText(response) {
+    if (response.body && typeof response.body.getReader === 'function') {
+      var reader = response.body.getReader();
+      var chunks = [];
+      var total = 0;
+      try {
+        while (true) {
+          var next = await reader.read();
+          if (next.done) break;
+          total += next.value.byteLength;
+          if (total > MAX_INDEX_BYTES) {
+            await reader.cancel('Search index safety limit exceeded.');
+            throw new Error('Search index exceeds the ' + MAX_INDEX_BYTES + '-byte safety limit.');
+          }
+          chunks.push(next.value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      var bytes = new Uint8Array(total);
+      var offset = 0;
+      chunks.forEach(function (chunk) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      });
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    var fallbackBytes = new Uint8Array(await response.arrayBuffer());
+    if (fallbackBytes.byteLength > MAX_INDEX_BYTES) {
+      throw new Error('Search index exceeds the ' + MAX_INDEX_BYTES + '-byte safety limit.');
+    }
+    return new TextDecoder('utf-8').decode(fallbackBytes);
   }
 
   function awaitWithSignal(promise, signal) {
@@ -167,16 +222,33 @@
   function normalizeResponse(result, request) {
     result = result || {};
     var source = Array.isArray(result.results) ? result.results : [];
-    var results = source.slice(0, request.limit).map(shapeResult);
-    var totalMatches = Number.isInteger(result.totalMatches) && result.totalMatches >= results.length
+    var selected = source.slice(0, request.limit);
+    var shaped = selected.map(shapeResult).filter(Boolean);
+    var totalMatches = Number.isInteger(result.totalMatches) && result.totalMatches >= source.length
       ? result.totalMatches
-      : results.length;
-    return {
+      : source.length;
+    var response = {
       query: request.query,
       totalMatches: totalMatches,
-      returned: results.length,
-      results: results
+      returned: 0,
+      moreResultsAvailable: totalMatches > 0,
+      outputTruncated: source.length > selected.length || shaped.length !== selected.length,
+      results: []
     };
+
+    shaped.forEach(function (item) {
+      response.results.push(item);
+      response.returned = response.results.length;
+      response.moreResultsAvailable = totalMatches > response.returned;
+      if (JSON.stringify(response).length > MAX_OUTPUT_CHARACTERS) {
+        response.results.pop();
+        response.returned = response.results.length;
+        response.moreResultsAvailable = totalMatches > response.returned;
+        response.outputTruncated = true;
+      }
+    });
+    if (shaped.length > response.returned) response.outputTruncated = true;
+    return response;
   }
 
   async function execute(input, context) {
@@ -185,7 +257,7 @@
     if (!query) throw new TypeError('query must contain between 1 and 200 characters.');
     var request = {
       query: query,
-      limit: boundedInteger(input.limit, 10, 1, 20),
+      limit: boundedInteger(input.limit, DEFAULT_RESULT_LIMIT, 1, MAX_RESULT_LIMIT),
       signal: context && context.signal
     };
     var result = adapter && typeof adapter.search === 'function'
@@ -237,8 +309,8 @@
           limit: {
             type: 'integer',
             minimum: 1,
-            maximum: 20,
-            default: 10,
+            maximum: MAX_RESULT_LIMIT,
+            default: DEFAULT_RESULT_LIMIT,
             description: 'Maximum number of results to return.'
           }
         },

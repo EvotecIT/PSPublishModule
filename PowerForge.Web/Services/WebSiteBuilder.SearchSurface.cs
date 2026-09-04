@@ -20,37 +20,6 @@ public static partial class WebSiteBuilder
         return false;
     }
 
-    private static string BuildSearchText(ContentItem item, string snippet)
-    {
-        var parts = new List<string>
-        {
-            item.Title,
-            item.Description,
-            snippet,
-            item.Collection,
-            item.Kind.ToString(),
-            item.ProjectSlug ?? string.Empty,
-            string.Join(" ", item.Tags ?? Array.Empty<string>()),
-            string.Join(" ", item.Categories ?? Array.Empty<string>())
-        };
-        if (item.Meta.Count > 0)
-        {
-            foreach (var value in item.Meta.Values)
-            {
-                if (value is null)
-                    continue;
-                if (value is string text)
-                {
-                    if (!string.IsNullOrWhiteSpace(text))
-                        parts.Add(text);
-                    continue;
-                }
-                parts.Add(value.ToString() ?? string.Empty);
-            }
-        }
-        return string.Join(" ", parts.Where(static part => !string.IsNullOrWhiteSpace(part))).Trim();
-    }
-
     private static double ResolveSearchWeight(PageKind kind, string? collection)
     {
         var weight = kind switch
