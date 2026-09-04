@@ -764,6 +764,13 @@ public sealed partial class DotNetPublishPipelineRunner
             if (target.Publish.ReadyToRun.HasValue)
                 properties["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
         }
+        else if (combination.Style == DotNetPublishStyle.SelfContained)
+        {
+            properties["SelfContained"] = "true";
+            properties["PublishSingleFile"] = "false";
+            if (target.Publish.ReadyToRun.HasValue)
+                properties["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
+        }
         else if (combination.Style == DotNetPublishStyle.AotSpeed || combination.Style == DotNetPublishStyle.AotSize)
         {
             properties["SelfContained"] = "true";

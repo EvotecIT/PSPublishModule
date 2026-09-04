@@ -11,6 +11,8 @@ public enum DotNetPublishStyle
     PortableCompat,
     /// <summary>Single-file, self-contained publish (IL + JIT) tuned for size (trimming enabled where supported).</summary>
     PortableSize,
+    /// <summary>Multi-file, self-contained publish (IL + JIT). Intended for platform bundles that sign native libraries in place.</summary>
+    SelfContained,
     /// <summary>Framework-dependent publish (runtime required on target machine). Smaller than self-contained outputs.</summary>
     FrameworkDependent,
     /// <summary>NativeAOT publish optimized for startup/runtime speed.</summary>

@@ -715,6 +715,71 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildPublishArguments_SelfContainedProducesMultiFileRuntime()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release"
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net10.0",
+            "osx-arm64",
+            DotNetPublishStyle.SelfContained,
+            "out");
+
+        Assert.Contains("--self-contained", args);
+        Assert.Contains("true", args);
+        Assert.Contains("/p:PublishSingleFile=false", args);
+        Assert.DoesNotContain("/p:IncludeNativeLibrariesForSelfExtract=true", args);
+        Assert.DoesNotContain("/p:PublishAot=true", args);
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_SelfContainedPreservesMultiFileShape()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "App.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "osx-arm64",
+                            Style = DotNetPublishStyle.SelfContained
+                        }
+                    }
+                }
+            }
+        };
+
+        var properties = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "App.csproj",
+            "osx-arm64",
+            "net10.0");
+
+        Assert.Equal("true", properties["SelfContained"]);
+        Assert.Equal("false", properties["PublishSingleFile"]);
+        Assert.False(properties.ContainsKey("IncludeNativeLibrariesForSelfExtract"));
+        Assert.False(properties.ContainsKey("PublishAot"));
+    }
+
+    [Fact]
     public void BuildRestoreMsBuildProperties_IncludesReadyToRunForRuntimeRestore()
     {
         var plan = new DotNetPublishPlan

@@ -100,6 +100,16 @@ public sealed partial class DotNetPublishPipelineRunner
                         merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
                 }
 
+                if (style == DotNetPublishStyle.SelfContained)
+                {
+                    if (!merged.ContainsKey("SelfContained"))
+                        merged["SelfContained"] = "true";
+                    if (!merged.ContainsKey("PublishSingleFile"))
+                        merged["PublishSingleFile"] = "false";
+                    if (target.Publish.ReadyToRun.HasValue && !merged.ContainsKey("PublishReadyToRun"))
+                        merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
+                }
+
                 if (style == DotNetPublishStyle.AotSpeed || style == DotNetPublishStyle.AotSize)
                 {
                     if (!merged.ContainsKey("SelfContained"))
