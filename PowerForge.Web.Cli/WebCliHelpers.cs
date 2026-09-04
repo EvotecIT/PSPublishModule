@@ -164,6 +164,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web agent-ready prepare --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready verify --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready scan [--config <site.json>] [--url <url>] [--timeout-ms <n>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready exercise --url <search-page> --query <text> [--tool <name>] [--limit <1-5>] [--ensure-browser] [--headed] [--output json]");
         Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
         Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");

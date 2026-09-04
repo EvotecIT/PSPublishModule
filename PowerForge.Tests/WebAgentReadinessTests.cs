@@ -749,6 +749,13 @@ public partial class WebAgentReadinessTests
             Assert.Contains("RewriteRule ^$ /index.md [L,T=text/markdown]", apache, StringComparison.Ordinal);
             Assert.Contains("<If \"%{REQUEST_URI} == '/.well-known/api-catalog'\">", apache, StringComparison.Ordinal);
             Assert.Contains("Header always set Content-Type \"application/linkset+json; profile=\\\"https://www.rfc-editor.org/info/rfc9727\\\"\"", apache, StringComparison.Ordinal);
+            Assert.Contains("AddOutputFilterByType BROTLI_COMPRESS application/json", apache, StringComparison.Ordinal);
+            Assert.Contains("AddOutputFilterByType DEFLATE application/json", apache, StringComparison.Ordinal);
+            var filterStart = apache.IndexOf("<IfModule mod_filter.c>", StringComparison.Ordinal);
+            var brotliFilter = apache.IndexOf("AddOutputFilterByType BROTLI_COMPRESS application/json", StringComparison.Ordinal);
+            var deflateFilter = apache.IndexOf("AddOutputFilterByType DEFLATE application/json", StringComparison.Ordinal);
+            var filterEnd = apache.IndexOf("</IfModule>", deflateFilter, StringComparison.Ordinal);
+            Assert.True(filterStart >= 0 && filterStart < brotliFilter && brotliFilter < deflateFilter && deflateFilter < filterEnd);
         }
         finally
         {
@@ -1283,6 +1290,19 @@ public partial class WebAgentReadinessTests
     }
 
     [Fact]
+    public void AgentReadyExerciseStepsAreNotCacheable()
+    {
+        var step = JsonDocument.Parse("""{ "task": "agent-ready", "operation": "exercise", "url": "https://example.test/search/", "query": "docs" }""").RootElement.Clone();
+        var method = typeof(WebPipelineRunner).GetMethod("IsCacheableStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var cacheable = Assert.IsType<bool>(method.Invoke(null, new object[] { "agent-ready", step }));
+
+        Assert.False(cacheable);
+    }
+
+    [Fact]
     public void AgentReadyExpectedOutputsHonorConfiguredOptionalArtifacts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-agent-ready-optional-outputs-" + Guid.NewGuid().ToString("N"));
@@ -1628,6 +1648,72 @@ public partial class WebAgentReadinessTests
 
             Assert.True(result.Success, string.Join(Environment.NewLine, result.Checks.Select(check => $"{check.Status}: {check.Id} - {check.Message}")));
             Assert.Contains(result.Checks, check => check.Id == "webmcp" && check.Status == "pass");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Verify_PassesProductOwnedPageToolWithoutGeneratingSearchRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-agent-ready-page-tool-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "tools", "dns"));
+            Directory.CreateDirectory(Path.Combine(root, "assets"));
+            File.WriteAllText(Path.Combine(root, "tools", "dns", "index.html"),
+                """
+                <!doctype html><html><body>
+                <main data-webmcp-page-tool data-webmcp-tool-name="query_dns_records" data-webmcp-tool-description="Resolve bounded public DNS records." data-webmcp-read-only="true"></main>
+                <script src="/assets/dns-tool.js" defer data-powerforge-webmcp data-webmcp-tool-name="query_dns_records"></script>
+                </body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "assets", "dns-tool.js"), "document.modelContext?.registerTool({ name: 'query_dns_records' });");
+
+            var spec = new AgentReadinessSpec
+            {
+                Enabled = true,
+                WebMcp = true,
+                WebMcpTools =
+                [
+                    new AgentWebMcpToolSpec
+                    {
+                        Name = "query_dns_records",
+                        Route = "/tools/dns/",
+                        Description = "Resolve bounded public DNS records.",
+                        Kind = "page-tool",
+                        ReadOnly = true
+                    }
+                ],
+                Robots = false,
+                LinkHeaders = false,
+                SecurityHeaders = new AgentSecurityHeadersSpec { Enabled = false },
+                ContentSignals = new AgentContentSignalsSpec { Enabled = false },
+                ApiCatalog = new AgentApiCatalogSpec { Enabled = false },
+                AgentSkills = new AgentSkillsDiscoverySpec { Enabled = false },
+                AgentsJson = new AgentDiscoveryDocumentSpec { Enabled = false },
+                MarkdownNegotiation = false
+            };
+
+            _ = WebAgentReadiness.Prepare(new WebAgentReadinessPrepareOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = spec
+            });
+            var verified = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                AgentReadiness = spec
+            });
+
+            Assert.Contains(verified.Checks, check => check.Id == "webmcp" && check.Status == "pass");
+            Assert.False(File.Exists(Path.Combine(root, "assets", "powerforge", "webmcp-site-search.v1.js")));
         }
         finally
         {

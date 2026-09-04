@@ -186,17 +186,17 @@ as informational when disabled or absent. They become required checks only when
 the matching generator is enabled in `site.json`.
 
 When `webMcp` is enabled, every entry in `webMcpTools` is a route-scoped
-contract. PowerForge verifies that the route declares the configured tool with
-`data-webmcp-tool-name`, and loads a same-origin external script marked with
-`data-powerforge-webmcp`. The script must be byte-for-byte the canonical embedded
-PowerForge runtime; comments, legacy `navigator.modelContext` prototypes,
-declarative HTML attributes, or unrelated tool registrations do not satisfy this
-check. The declared search index must exist and contain a JSON array. Remote
-verification resolves relative resources against the final page URL and rejects
-cross-origin redirects for the page, index, or runtime asset.
+contract. PowerForge verifies that the route declares the configured tool and
+loads a same-origin external script marked with `data-powerforge-webmcp`.
+Each `page-tool` adapter must also declare its exact `data-webmcp-tool-name`, so
+multiple tools on one route cannot satisfy each other's readiness contract.
+Remote verification resolves relative resources against the final page URL and
+rejects cross-origin redirects for the page, index, or runtime asset.
 
-Phase 1 intentionally supports only the read-only `site-search` kind. It emits
-`/assets/powerforge/webmcp-site-search.v1.js`. A theme search page should expose
+The read-only `site-search` kind emits
+`/assets/powerforge/webmcp-site-search.v1.js`. Its script must be byte-for-byte
+the canonical embedded PowerForge runtime, and the declared index must be a
+bounded JSON array. A theme search page should expose
 the tool name, description, and index route on its existing search surface:
 
 ```html
@@ -210,8 +210,31 @@ the tool name, description, and index route on its existing search surface:
         data-powerforge-webmcp defer></script>
 ```
 
-The runtime registers a read-only tool with bounded `query` and `limit` input,
-returns a small structured result set, and uses only a same-origin search index.
+The runtime registers a read-only tool with a 200-character query limit. It
+returns three results by default and accepts at most five. The complete
+serialized result is capped at 1,500 characters; `moreResultsAvailable` and
+`outputTruncated` tell the caller when the bounded response omits matches.
+Result URLs are never truncated into a different target; entries whose URL
+cannot fit the declared result contract are omitted.
+
+The generic runtime accepts only a same-origin JSON array containing at most
+5,000 entries and 8 MiB of decoded UTF-8 data. It reads the response as a
+bounded stream before parsing it. The generator applies those same limits to
+the aggregate and every shard, preserving deterministic search order and
+omitting entries that no longer fit. Generated search indexes exclude arbitrary
+front matter from both `meta` and `searchText`; presentation fields such as
+page scripts and CSS are not agent/search input. A small compatibility allowlist
+preserves metadata used by current search and localization UIs, while aliases
+and explicit search keywords remain searchable.
+
+`search/manifest.json` records the source count, emitted count, truncation state,
+byte count, and SHA-256 digest for the aggregate, language, and collection
+indexes. These values prove the generated artifact; they do not prove HTTP
+compression. Remote `agent-ready scan` reports
+large JSON indexes delivered without `Content-Encoding` as a warning. When
+Apache support is enabled, the generated managed block prefers Brotli and falls
+back to deflate for JSON if the corresponding modules are available.
+
 Themes with richer ranking can call `PowerForgeWebMcpSearch.bindAdapter(...)` to
 reuse their visible search implementation. If no adapter is bound, the runtime
 loads and reuses the generated index for the lifetime of the page;
@@ -220,6 +243,30 @@ without WebMCP continue to use the normal search page. Engine-generated fallback
 pages use route-relative index/runtime URLs so sites hosted below an origin path
 remain functional; theme-owned pages should do the same or include the deployed
 base path explicitly.
+
+The `page-tool` kind is a verification contract for a product-owned adapter;
+PowerForge does not generate its behavior. Use it only when an existing visible
+page already owns the operation. The rendered route must contain exactly one
+matching surface and a marked, executable same-origin external adapter:
+
+```html
+<main data-webmcp-page-tool
+      data-webmcp-tool-name="query_dns_records"
+      data-webmcp-tool-description="Resolve one bounded public DNS record query."
+      data-webmcp-read-only="true">
+  <!-- Existing visible product controls and results. -->
+</main>
+<script src="/assets/product-dns-tool.js"
+        data-powerforge-webmcp
+        data-webmcp-tool-name="query_dns_records" defer></script>
+```
+
+The marker, description, read-only declaration, and reachable adapter are
+artifact evidence, not proof of the callback's behavior. Exercise product tools
+in a WebMCP-capable browser and verify their input bounds, annotations, response
+budget, cancellation behavior, and visible result synchronization. Keep product
+logic in its existing owner; the marked adapter should only validate and map the
+Website Tool call into that visible workflow.
 
 See `Docs/PowerForge.Web.WebMcpRollout.md` for the Phase 2 site eligibility
 rules, Phase 3 safety contract, and the distinction between public documentation
@@ -319,6 +366,28 @@ Scan a deployed site:
 ```powershell
 powerforge-web agent-ready scan --config .\site.json --fail-on-failures
 ```
+
+Exercise the real rendered Website Tool in Chromium:
+
+```powershell
+powerforge-web agent-ready exercise `
+  --url https://example.com/search/ `
+  --tool search_site `
+  --query "convert Word documents to PDF" `
+  --ensure-browser `
+  --output json
+```
+
+The exercise command injects a test browser host before page scripts run,
+captures the page's actual imperative registration, invokes its `execute`
+callback, checks the schema and annotations, enforces the 1,500-character output
+budget, and confirms that the visible search input received the same query. It
+uses HtmlTinkerX/Playwright, the same browser owner as rendered site audits.
+
+The equivalent pipeline operation is `agent-ready` with
+`"operation": "exercise"`, an exact search-page `url`, and a `query`. Keep this
+as a deployed acceptance step; local `prepare` and `verify` remain deterministic
+artifact checks.
 
 ## Deployment Notes
 

@@ -1354,7 +1354,8 @@ internal static partial class WebPipelineRunner
         if (spec.McpServerCard?.Enabled == true && !string.IsNullOrWhiteSpace(spec.McpServerCard.Endpoint))
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, string.IsNullOrWhiteSpace(spec.McpServerCard.OutputPath) ? ".well-known/mcp/server-card.json" : spec.McpServerCard.OutputPath!));
 
-        if (spec.WebMcp && spec.WebMcpTools?.Length > 0)
+        if (spec.WebMcp && spec.WebMcpTools?.Any(static tool =>
+                string.Equals(tool.Kind?.Trim(), "site-search", StringComparison.OrdinalIgnoreCase)) == true)
             outputs.Add(ResolveAgentReadySiteOutputPath(siteRoot, WebSiteBuilder.WebMcpSiteSearchAssetRoute));
 
         if (spec.MarkdownArtifacts?.Enabled == true)

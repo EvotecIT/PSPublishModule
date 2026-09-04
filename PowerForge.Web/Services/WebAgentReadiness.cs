@@ -65,7 +65,8 @@ public static partial class WebAgentReadiness
         if (spec.Robots)
             written.Add(UpdateRobots(siteRoot, baseUrl, spec));
 
-        if (spec.WebMcp && spec.WebMcpTools.Length > 0)
+        if (spec.WebMcp && spec.WebMcpTools.Any(static tool =>
+                string.Equals(tool.Kind?.Trim(), "site-search", StringComparison.OrdinalIgnoreCase)))
             written.Add(WebSiteBuilder.EnsureWebMcpSiteSearchAsset(siteRoot));
 
         if (spec.ApiCatalog?.Enabled == true)
@@ -1472,6 +1473,21 @@ public static partial class WebAgentReadiness
             sb.AppendLine("  RewriteCond %{HTTP_ACCEPT} \"(^|,|;)[[:space:]]*text/markdown\" [NC]");
             sb.Append("  RewriteCond %{DOCUMENT_ROOT}/$1/index").Append(markdownExtension).AppendLine(" -f");
             sb.Append("  RewriteRule ^(.+)/$ /$1/index").Append(markdownExtension).AppendLine(" [L,T=text/markdown]");
+            sb.AppendLine("</IfModule>");
+        }
+
+        if (apache.JsonCompression)
+        {
+            sb.AppendLine("# Prefer Brotli for JSON; use deflate only when mod_brotli is unavailable.");
+            sb.AppendLine("<IfModule mod_filter.c>");
+            sb.AppendLine("  <IfModule mod_brotli.c>");
+            sb.AppendLine("    AddOutputFilterByType BROTLI_COMPRESS application/json application/ld+json application/linkset+json");
+            sb.AppendLine("  </IfModule>");
+            sb.AppendLine("  <IfModule !mod_brotli.c>");
+            sb.AppendLine("    <IfModule mod_deflate.c>");
+            sb.AppendLine("      AddOutputFilterByType DEFLATE application/json application/ld+json application/linkset+json");
+            sb.AppendLine("    </IfModule>");
+            sb.AppendLine("  </IfModule>");
             sb.AppendLine("</IfModule>");
         }
 
