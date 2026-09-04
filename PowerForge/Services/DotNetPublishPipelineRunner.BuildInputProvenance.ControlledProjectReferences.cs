@@ -152,6 +152,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     controlledProjectPath!,
                     out offlinePackageSources,
+                    evaluatedConditionProperties,
                     allowSdkManagedToolchainPackages: true))
             {
                 return false;
@@ -282,12 +283,12 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-p:CustomAfterMicrosoftCommonTargets=" +
                 EscapeMsBuildPropertyValue(controlledReferenceTargets));
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath!)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
                 return false;
 
