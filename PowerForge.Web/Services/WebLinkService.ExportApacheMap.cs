@@ -19,11 +19,11 @@ public static partial class WebLinkService
             return Array.Empty<ApacheShortlinkMapEntry>();
 
         var entries = new List<ApacheShortlinkMapEntry>();
-        var precedingOrdinaryRules = new List<LinkRedirectRule>();
+        var precedingOrdinaryRules = new ApacheRuleOverlapIndex();
         foreach (var rule in rules)
         {
             if (!IsApacheShortlinkMapRule(rule, options) ||
-                precedingOrdinaryRules.Any(preceding => ApacheRulesMayOverlap(preceding, rule)))
+                precedingOrdinaryRules.MayOverlap(rule))
             {
                 precedingOrdinaryRules.Add(rule);
                 continue;
@@ -105,39 +105,14 @@ public static partial class WebLinkService
         return $"{ResolveStatus(rule.Status, defaultStatus: 302)}:{host}:{path}";
     }
 
-    private static bool ApacheRulesMayOverlap(LinkRedirectRule preceding, LinkRedirectRule shortlink)
+    private static string NormalizeApacheOverlapHost(string? host)
     {
-        if (!ApacheHostsMayOverlap(preceding.SourceHost, shortlink.SourceHost))
-            return false;
-
-        var shortlinkPath = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
-        if (preceding.MatchType == LinkRedirectMatchType.Regex)
-            return true;
-
-        var precedingPath = NormalizeSourcePath(preceding.SourcePath).Trim('/');
-        if (preceding.MatchType == LinkRedirectMatchType.Prefix)
-        {
-            var starIndex = precedingPath.IndexOf('*');
-            if (starIndex >= 0)
-                precedingPath = precedingPath.Substring(0, starIndex).TrimEnd('/');
-            return precedingPath.Length == 0 ||
-                   shortlinkPath.Equals(precedingPath, StringComparison.OrdinalIgnoreCase) ||
-                   shortlinkPath.StartsWith(precedingPath + "/", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return shortlinkPath.Equals(precedingPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool ApacheHostsMayOverlap(string? left, string? right)
-    {
-        if (string.IsNullOrWhiteSpace(left) || left.Trim() == "*" ||
-            string.IsNullOrWhiteSpace(right) || right.Trim() == "*")
-            return true;
-
-        static string NormalizeHost(string value) => value.Trim().StartsWith("www.", StringComparison.OrdinalIgnoreCase)
-            ? value.Trim().Substring(4)
-            : value.Trim();
-        return NormalizeHost(left).Equals(NormalizeHost(right), StringComparison.OrdinalIgnoreCase);
+        var value = host?.Trim() ?? string.Empty;
+        if (value.Length == 0 || value == "*")
+            return string.Empty;
+        return value.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? value.Substring(4)
+            : value;
     }
 
     private static string? WriteApacheShortlinkMap(
@@ -186,4 +161,83 @@ public static partial class WebLinkService
         string Host,
         int Status,
         LinkRedirectRule Rule);
+
+    private sealed class ApacheRuleOverlapIndex
+    {
+        private readonly ApachePathOverlapIndex _allHosts = new();
+        private readonly Dictionary<string, ApachePathOverlapIndex> _hosts = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Add(LinkRedirectRule rule)
+        {
+            var host = NormalizeApacheOverlapHost(rule.SourceHost);
+            var paths = host.Length == 0 ? _allHosts : GetOrCreateHost(host);
+            paths.Add(rule);
+        }
+
+        public bool MayOverlap(LinkRedirectRule shortlink)
+        {
+            var path = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
+            if (_allHosts.MayOverlap(path))
+                return true;
+
+            var host = NormalizeApacheOverlapHost(shortlink.SourceHost);
+            return host.Length > 0 &&
+                   _hosts.TryGetValue(host, out var paths) &&
+                   paths.MayOverlap(path);
+        }
+
+        private ApachePathOverlapIndex GetOrCreateHost(string host)
+        {
+            if (_hosts.TryGetValue(host, out var paths))
+                return paths;
+            paths = new ApachePathOverlapIndex();
+            _hosts.Add(host, paths);
+            return paths;
+        }
+    }
+
+    private sealed class ApachePathOverlapIndex
+    {
+        private readonly HashSet<string> _exactPaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _prefixPaths = new(StringComparer.OrdinalIgnoreCase);
+        private bool _matchesEveryPath;
+
+        public void Add(LinkRedirectRule rule)
+        {
+            if (rule.MatchType == LinkRedirectMatchType.Regex)
+            {
+                _matchesEveryPath = true;
+                return;
+            }
+
+            var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+            if (rule.MatchType != LinkRedirectMatchType.Prefix)
+            {
+                _exactPaths.Add(path);
+                return;
+            }
+
+            var starIndex = path.IndexOf('*');
+            if (starIndex >= 0)
+                path = path.Substring(0, starIndex).TrimEnd('/');
+            if (path.Length == 0)
+                _matchesEveryPath = true;
+            else
+                _prefixPaths.Add(path);
+        }
+
+        public bool MayOverlap(string path)
+        {
+            if (_matchesEveryPath || _exactPaths.Contains(path) || _prefixPaths.Contains(path))
+                return true;
+
+            for (var separator = path.IndexOf('/'); separator >= 0; separator = path.IndexOf('/', separator + 1))
+            {
+                if (_prefixPaths.Contains(path.Substring(0, separator)))
+                    return true;
+            }
+
+            return false;
+        }
+    }
 }

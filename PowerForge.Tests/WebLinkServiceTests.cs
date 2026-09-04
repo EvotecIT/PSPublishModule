@@ -640,6 +640,133 @@ public sealed class WebLinkServiceTests
     }
 
     [Fact]
+    public void ExportApache_IndexesFiftyThousandNonOverlappingPrecedingRedirects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-overlap-scale-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var outPath = Path.Combine(root, "links.conf");
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var redirects = Enumerable.Range(1, 50_000)
+                .Select(index => new LinkRedirectRule
+                {
+                    Id = $"legacy-{index:D5}",
+                    SourceHost = "evo.yt",
+                    SourcePath = $"/legacy-{index:D5}",
+                    TargetUrl = $"https://legacy.example.test/items/{index}",
+                    Status = 301,
+                    Priority = 2_000,
+                    AllowExternal = true
+                })
+                .ToArray();
+            var shortlinks = Enumerable.Range(1, 50_000)
+                .Select(index => new LinkShortlinkRule
+                {
+                    Slug = $"current-{index:D5}",
+                    Host = "evo.yt",
+                    TargetUrl = $"https://current.example.test/items/{index}",
+                    Status = 302,
+                    Owner = "scale-test",
+                    AllowExternal = true
+                })
+                .ToArray();
+
+            var result = WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects = redirects,
+                Shortlinks = shortlinks
+            }, new WebLinkApacheExportOptions
+            {
+                OutputPath = outPath,
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/evotec-share/publisher/maps/current/shortlinks.map",
+                Hosts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["short"] = "evo.yt" }
+            });
+
+            Assert.Equal(100_000, result.RuleCount);
+            Assert.Equal(50_000, result.ShortlinkMapEntryCount);
+            Assert.Equal(50_000, File.ReadLines(mapPath).Count());
+            var apache = File.ReadAllText(outPath);
+            Assert.Contains("RewriteRule ^/?legacy-00001/?$", apache, StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^/?current-", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void ExportApache_IndexedOverlapPreservesHostWildcardPrefixAndRegexPriority()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-overlap-semantics-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var mapPath = Path.Combine(root, "shortlinks.txt");
+            var result = WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects =
+                [
+                    new LinkRedirectRule
+                    {
+                        Id = "host-exact",
+                        SourceHost = "www.evo.yt",
+                        SourcePath = "/go/reserved",
+                        TargetUrl = "/exact-wins",
+                        Status = 301,
+                        Priority = 2_000
+                    },
+                    new LinkRedirectRule
+                    {
+                        Id = "global-prefix",
+                        SourceHost = "*",
+                        SourcePath = "/go/global",
+                        MatchType = LinkRedirectMatchType.Prefix,
+                        TargetUrl = "/prefix-wins/{path}",
+                        Status = 301,
+                        Priority = 2_000
+                    },
+                    new LinkRedirectRule
+                    {
+                        Id = "host-regex",
+                        SourceHost = "regex.example.test",
+                        SourcePath = "^/legacy-[0-9]+$",
+                        MatchType = LinkRedirectMatchType.Regex,
+                        TargetUrl = "/regex-wins",
+                        Status = 301,
+                        Priority = 2_000
+                    }
+                ],
+                Shortlinks =
+                [
+                    new LinkShortlinkRule { Slug = "reserved", Host = "evo.yt", TargetUrl = "/short-exact", Status = 302 },
+                    new LinkShortlinkRule { Slug = "global/child", Host = "elsewhere.test", TargetUrl = "/short-prefix", Status = 302 },
+                    new LinkShortlinkRule { Slug = "unrelated", Host = "regex.example.test", TargetUrl = "/short-regex", Status = 302 },
+                    new LinkShortlinkRule { Slug = "safe", Host = "evo.yt", TargetUrl = "/short-safe", Status = 302 }
+                ]
+            }, new WebLinkApacheExportOptions
+            {
+                OutputPath = Path.Combine(root, "links.conf"),
+                ShortlinkMapOutputPath = mapPath,
+                ShortlinkMapRuntimePath = "/var/lib/powerforge/maps/shortlinks.map"
+            });
+
+            Assert.Equal(7, result.RuleCount);
+            Assert.Equal(
+                ["302:evo.yt:go/safe /short-safe"],
+                File.ReadAllLines(mapPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void ExportApache_RequiresBothIndexedMapPaths()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-links-map-options-" + Guid.NewGuid().ToString("N"));
