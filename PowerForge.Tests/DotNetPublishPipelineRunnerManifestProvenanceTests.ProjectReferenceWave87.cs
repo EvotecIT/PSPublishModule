@@ -297,6 +297,33 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void BuildControlCandidates_IncludeOnlyProjectLocalDefaultNuGetLockFile()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string repository = Directory.CreateDirectory(Path.Combine(root, "repository")).FullName;
+            string projectDirectory = Directory.CreateDirectory(Path.Combine(repository, "src", "App")).FullName;
+            string projectPath = Path.Combine(projectDirectory, "App.csproj");
+
+            string[] candidates = DotNetPublishPipelineRunner
+                .EnumerateAncestorBuildControlCandidatePaths(projectPath)
+                .ToArray();
+            StringComparer comparer = OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+
+            Assert.Contains(Path.Combine(projectDirectory, "packages.lock.json"), candidates, comparer);
+            Assert.DoesNotContain(Path.Combine(repository, "packages.lock.json"), candidates, comparer);
+            Assert.DoesNotContain(Path.Combine(root, "packages.lock.json"), candidates, comparer);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
     public void ControlledResolutionItems_DropProofOnlyInfrastructurePaths()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

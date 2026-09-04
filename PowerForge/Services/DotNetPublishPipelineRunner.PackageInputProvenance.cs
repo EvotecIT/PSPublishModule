@@ -195,6 +195,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static IEnumerable<string> EnumerateAncestorBuildControlCandidatePaths(string projectPath)
     {
+        string projectDirectory = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        yield return Path.Combine(projectDirectory, "packages.lock.json");
+
         string[] names =
         [
             "Directory.Build.props",
@@ -203,11 +206,10 @@ public sealed partial class DotNetPublishPipelineRunner
             "global.json",
             "NuGet.Config",
             "nuget.config",
-            "packages.lock.json",
             "Directory.Build.rsp",
             "MSBuild.rsp"
         ];
-        string current = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        string current = projectDirectory;
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
