@@ -16,7 +16,9 @@ public enum PowerForgeReleaseProgressPhase
     /// <summary>Opt-in VirusTotal Monitor publisher registration lane.</summary>
     VirusTotal = 5,
     /// <summary>Apple exact-source validation, archive, export, and release automation lane.</summary>
-    AppleApps = 6
+    AppleApps = 6,
+    /// <summary>Consumer-owned checks against the complete staged release.</summary>
+    Validation = 7
 }
 
 /// <summary>Receives structured high-level progress for a unified release.</summary>

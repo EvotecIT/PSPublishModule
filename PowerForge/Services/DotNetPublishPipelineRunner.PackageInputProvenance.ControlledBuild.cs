@@ -1,6 +1,4 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
-using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -179,7 +177,6 @@ public sealed partial class DotNetPublishPipelineRunner
             try
             {
                 Directory.CreateDirectory(destination);
-                var sources = new List<string>();
                 foreach (KeyValuePair<string, string> package in archivePathsByPackageKey.OrderBy(
                              entry => entry.Key,
                              StringComparer.OrdinalIgnoreCase))
@@ -204,21 +201,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    string packageSource = Path.Combine(
-                        destination,
-                        CreateControlledPackageSourceDirectoryName(package.Key));
-                    Directory.CreateDirectory(packageSource);
-                    string destinationPath = Path.Combine(packageSource, Path.GetFileName(cached.SourcePath));
+                    string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
                         return false;
                     }
                     cached.Archive.CopyTo(destinationPath);
-                    sources.Add(packageSource);
                 }
-                packageSources = sources.Count == 0
-                    ? new[] { destination }
-                    : sources.ToArray();
+                packageSources = new[] { destination };
                 return true;
             }
             catch
@@ -228,13 +218,6 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
-        private static string CreateControlledPackageSourceDirectoryName(string packageKey)
-        {
-            using SHA256 sha256 = SHA256.Create();
-            return BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(packageKey)))
-                .Replace("-", string.Empty)
-                .ToLowerInvariant();
-        }
     }
 
     private sealed partial class VerifiedPackageArchive

@@ -138,21 +138,21 @@ public sealed partial class DotNetRepositoryReleaseService
                 spec.TimeStampServer = stamp;
             }
 
-            if (signAssemblyOutputs && signAssemblies is null)
+            if (!spec.WhatIf && signAssemblyOutputs && signAssemblies is null)
             {
                 result.Success = false;
                 result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
                 return result;
             }
 
-            if (signAssemblyOutputs && validateAssemblySigning is null)
+            if (!spec.WhatIf && signAssemblyOutputs && validateAssemblySigning is null)
             {
                 result.Success = false;
                 result.ErrorMessage = "Assembly signing was requested, but no assembly signing preflight handler was provided.";
                 return result;
             }
 
-            if (signAssemblyOutputs)
+            if (!spec.WhatIf && signAssemblyOutputs)
             {
                 try
                 {
@@ -171,7 +171,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
             }
 
-            if (signNuGetPackages)
+            if (!spec.WhatIf && signNuGetPackages)
             {
                 signingSha256 = _getCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);
                 if (signingSha256 is null)

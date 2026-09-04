@@ -35,3 +35,21 @@ internal sealed class PowerForgeModulePackageReleaseCheckpoint
     /// </summary>
     public DotNetRepositoryReleaseResult Release { get; set; } = new();
 }
+
+/// <summary>Publication outcome for one module-owned NuGet package lane.</summary>
+internal sealed class PowerForgeModulePackagePublicationResult
+{
+    public string Name { get; set; } = string.Empty;
+
+    public bool Success { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
+    public string? PublishSource { get; set; }
+
+    public string[] PublishedPackages { get; set; } = Array.Empty<string>();
+
+    public string[] SkippedDuplicatePackages { get; set; } = Array.Empty<string>();
+
+    public string[] FailedPackages { get; set; } = Array.Empty<string>();
+}

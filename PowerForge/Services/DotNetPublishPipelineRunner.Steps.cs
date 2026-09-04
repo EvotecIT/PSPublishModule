@@ -71,7 +71,10 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var styles = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            var restoreCombinations = target.RestoreCombinations is { Length: > 0 }
+                ? target.RestoreCombinations
+                : target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+            var styles = restoreCombinations
                 .Where(combination => string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
                 .Where(combination => string.IsNullOrWhiteSpace(framework)
                     || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
@@ -142,7 +145,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var baselineProperties = BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework);
         var runtimes = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Where(target => string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .SelectMany(target => target.RestoreCombinations is { Length: > 0 }
+                ? target.RestoreCombinations
+                : target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
             .Where(combination => string.IsNullOrWhiteSpace(framework)
                 || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
             .Select(combination => combination.Runtime)
@@ -283,7 +288,15 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
-        var args = new List<string> { "build", target.ProjectPath, "-c", plan.Configuration, "--nologo" };
+        var args = new List<string>
+        {
+            "build",
+            target.ProjectPath,
+            "-c",
+            plan.Configuration,
+            "--nologo",
+            "--no-incremental"
+        };
         if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
         if (plan.Restore) args.Add("--no-restore");
@@ -310,6 +323,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
         var style = styleOverride ?? target.Publish.Style;
+        var publishStep = new DotNetPublishStep
+        {
+            TargetName = target.Name,
+            Framework = tfm,
+            Runtime = rid,
+            Style = style
+        };
         var tokens = BuildPublishOutputTokens(plan, target, tfm, rid, style);
         string outputDir = ResolvePublishOutputDirectory(plan, target, tfm, rid, style);
 
@@ -318,7 +338,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Sign?.Enabled == true)
         {
             signingProvenance = verifiedSourceProvenance ??
-                ReadPortableInventorySourceProvenance(plan, outputDir);
+                ReadPortableInventorySourceProvenance(plan, outputDir, publishStep: publishStep);
         }
 
         EnsureOutputDirectoryUnlocked(
@@ -408,12 +428,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 signingProvenance = ReadPortableInventorySourceProvenance(
                     plan,
                     outputDir,
-                    plannedPublishGeneratedPaths);
+                    plannedPublishGeneratedPaths,
+                    publishStep);
                 provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                     signingProvenance.PublishInputFiles,
                     signingProvenance.NoBuildPublishInputs));
                 provenanceLease?.ValidateUnchanged();
-                string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+                string executable = ResolvePrimaryExecutable(
+                    outputDir,
+                    rid,
+                    EnumerateEffectiveExecutableIdentities(target))
                     ?? throw new InvalidOperationException(
                         "Signed portable output does not contain a primary executable matching the configured project identity.");
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
@@ -646,6 +670,9 @@ public sealed partial class DotNetPublishPipelineRunner
             // Command-line global properties ensure the publisher-signed ProductVersion carries the exact source object ID.
             merged["SourceRevisionId"] = plan.SourceRevision;
             merged["IncludeSourceRevisionInInformationalVersion"] = "true";
+            // Keep Source Link, PDB IDs, and PE MVIDs stable between the real release
+            // build and detached provenance rebuilds rooted at different paths.
+            merged["ContinuousIntegrationBuild"] = "true";
         }
 
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);

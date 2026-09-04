@@ -75,6 +75,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 artefact.BundleId,
                 archivePayload,
                 sign);
+            var publishStep = new DotNetPublishStep
+            {
+                TargetName = artefact.Target,
+                Framework = artefact.Framework,
+                Runtime = artefact.Runtime,
+                Style = artefact.Style
+            };
             SourceProvenance provenance = verifiedProvenanceByArtifact is not null &&
                                           verifiedProvenanceByArtifact.TryGetValue(
                                               BuildArtifactProvenanceKey(artefact),
@@ -83,7 +90,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 : ReadPortableInventorySourceProvenance(
                     plan,
                     outputDirectory,
-                    EnumerateBundleGeneratedArtefactPaths(artefacts));
+                    EnumerateBundleGeneratedArtefactPaths(artefacts),
+                    publishStep);
             string portableVersion = FirstText(versionInfo.ProductVersion, versionInfo.FileVersion);
             PowerForgePortablePayloadInventory inventory = archivePayload
                 ? PowerForgePortablePayloadInventoryCms.CreateFromArchive(
