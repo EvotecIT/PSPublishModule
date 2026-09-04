@@ -85,6 +85,48 @@ public sealed class WebCliLinksTests
     }
 
     [Fact]
+    public void HandleSubCommand_LinksExportApache_WritesIndexedShortlinkMap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-map-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var configPath = WriteSiteFixture(root, duplicateRedirects: false);
+            var mapPath = Path.Combine(root, "Build", "shortlinks.txt");
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "links",
+                new[]
+                {
+                    "export-apache", "--config", configPath,
+                    "--shortlink-map-out", mapPath,
+                    "--shortlink-map-runtime-path", "/var/lib/evotec-share/publisher/maps/release-1/shortlinks.map"
+                },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal(
+                "302:evo.yt:discord https://discord.gg/example" + Environment.NewLine,
+                File.ReadAllText(mapPath));
+
+            var outputPath = Path.Combine(root, "deploy", "apache", "link-service-redirects.conf");
+            var apache = File.ReadAllText(outputPath);
+            Assert.Contains(
+                "RewriteMap powerforge_shortlinks \"dbm:/var/lib/evotec-share/publisher/maps/release-1/shortlinks.map\"",
+                apache,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("RewriteRule ^/?discord/?$", apache, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void HandleSubCommand_LinksExportApache_AppendsConfiguredAndRepeatedShortlinkSources()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-links-overlays-" + Guid.NewGuid().ToString("N"));

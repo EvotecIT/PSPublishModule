@@ -297,7 +297,8 @@ public sealed partial class DotNetPublishPipelineRunner
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSourceList);
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -306,7 +307,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledEnvironment,
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
+            {
                 return CacheAll(false);
+            }
 
             int jsonStart = process.StdOut.IndexOf('{');
             int jsonEnd = process.StdOut.LastIndexOf('}');
@@ -384,7 +387,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static void AppendControlledProofSafeguards(
         ICollection<string> arguments,
         string nuGetConfig,
-        string packageSource)
+        string packageSource,
+        string? lockFilePath = null)
     {
         arguments.Add("-noAutoResponse");
         arguments.Add("-maxCpuCount:1");
@@ -396,7 +400,12 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:RestoreNoCache=true");
         arguments.Add("-p:RestoreIgnoreFailedSources=false");
         arguments.Add("-p:RestoreLockedMode=false");
-        arguments.Add("-p:RestoreForceEvaluate=true");
+        if (!string.IsNullOrWhiteSpace(lockFilePath))
+        {
+            arguments.Add("-p:RestorePackagesWithLockFile=true");
+            arguments.Add("-p:RestoreForceEvaluate=true");
+            arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(lockFilePath!));
+        }
         arguments.Add("-p:NuGetAudit=false");
         arguments.Add("-p:RunAnalyzers=false");
         arguments.Add("-p:RunAnalyzersDuringBuild=false");
@@ -691,7 +700,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyCollection<string>? controlledBuildEnvironmentVariableNames = null,
             IReadOnlyCollection<string>? trustedBuildPackages = null,
             bool requiresSdkPackageEvidence = true,
-            IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties = null)
+            IReadOnlyDictionary<string, string>? sdkPackageEvidenceGlobalProperties = null,
+            bool requiresPrebuiltProjectReferenceOutputProof = true)
         {
             ProjectPath = projectPath;
             TargetFramework = targetFramework;
@@ -711,9 +721,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 .OrderBy(packageId => packageId, StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
             RequiresSdkPackageEvidence = requiresSdkPackageEvidence;
-            SdkPackageEvidenceGlobalProperties = new Dictionary<string, string>(
-                sdkPackageEvidenceGlobalProperties ?? new Dictionary<string, string>(),
-                StringComparer.OrdinalIgnoreCase);
+            var sdkEvidenceProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in
+                     sdkPackageEvidenceGlobalProperties ?? new Dictionary<string, string>())
+            {
+                sdkEvidenceProperties[property.Key] = property.Value;
+            }
+            SdkPackageEvidenceGlobalProperties = sdkEvidenceProperties;
+            RequiresPrebuiltProjectReferenceOutputProof = requiresPrebuiltProjectReferenceOutputProof;
         }
 
         internal string ProjectPath { get; }
@@ -726,6 +741,11 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyCollection<string> TrustedBuildPackages { get; }
         internal bool RequiresSdkPackageEvidence { get; }
         internal IReadOnlyDictionary<string, string> SdkPackageEvidenceGlobalProperties { get; }
+        internal bool RequiresPrebuiltProjectReferenceOutputProof { get; }
+        internal bool DisablesProjectReferenceBuilds
+            => GlobalProperties.TryGetValue("BuildProjectReferences", out string? value) &&
+               bool.TryParse(value.Trim(), out bool buildProjectReferences) &&
+               !buildProjectReferences;
 
         internal IReadOnlyDictionary<string, string> ReadEffectiveGlobalProperties()
         {
@@ -741,9 +761,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal IReadOnlyDictionary<string, string> ReadSdkPackageEvidenceGlobalProperties()
         {
-            var properties = new Dictionary<string, string>(
-                ReadEffectiveGlobalProperties(),
-                StringComparer.OrdinalIgnoreCase);
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in ReadEffectiveGlobalProperties())
+                properties[property.Key] = property.Value;
             foreach (KeyValuePair<string, string> property in SdkPackageEvidenceGlobalProperties)
                 properties[property.Key] = property.Value;
             return properties;
@@ -767,7 +787,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ControlledBuildEnvironmentVariableNames,
                 TrustedBuildPackages,
                 RequiresSdkPackageEvidence,
-                SdkPackageEvidenceGlobalProperties);
+                SdkPackageEvidenceGlobalProperties,
+                RequiresPrebuiltProjectReferenceOutputProof);
 
         internal ProjectEvaluationRequest ForProject(EvaluatedProjectReference projectReference)
         {
@@ -807,8 +828,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 properties,
                 EnvironmentVariables,
                 ControlledBuildEnvironmentVariableNames,
-                TrustedBuildPackages,
-                requiresSdkPackageEvidence: false);
+                trustedBuildPackages: TrustedBuildPackages,
+                requiresSdkPackageEvidence: true,
+                sdkPackageEvidenceGlobalProperties: SdkPackageEvidenceGlobalProperties,
+                requiresPrebuiltProjectReferenceOutputProof: RequiresPrebuiltProjectReferenceOutputProof);
         }
 
         internal string BuildVisitKey()
@@ -855,6 +878,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             AppendProjectReferenceKeySegment(key, "SdkPackageEvidence");
             AppendProjectReferenceKeySegment(key, RequiresSdkPackageEvidence ? "Required" : "Inherited");
+            AppendProjectReferenceKeySegment(key, "PrebuiltProjectReferenceOutputProof");
+            AppendProjectReferenceKeySegment(
+                key,
+                RequiresPrebuiltProjectReferenceOutputProof ? "Required" : "NotRequired");
             return key.ToString();
         }
     }
@@ -887,7 +914,8 @@ public sealed partial class DotNetPublishPipelineRunner
             string? customAfterMicrosoftCommonTargets,
             string? packageId,
             string? packageVersion,
-            string? packageValidationBaselineVersion)
+            string? packageValidationBaselineVersion,
+            bool consumesPrebuiltProjectReferenceOutputs)
         {
             BuildInputs = buildInputs;
             MsBuildInputs = msBuildInputs;
@@ -908,6 +936,7 @@ public sealed partial class DotNetPublishPipelineRunner
             PackageId = packageId;
             PackageVersion = packageVersion;
             PackageValidationBaselineVersion = packageValidationBaselineVersion;
+            ConsumesPrebuiltProjectReferenceOutputs = consumesPrebuiltProjectReferenceOutputs;
         }
 
         internal string[] BuildInputs { get; }
@@ -929,6 +958,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? PackageId { get; }
         internal string? PackageVersion { get; }
         internal string? PackageValidationBaselineVersion { get; }
+        internal bool ConsumesPrebuiltProjectReferenceOutputs { get; }
     }
 
     private sealed class EvaluatedProjectReference

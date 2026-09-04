@@ -316,9 +316,16 @@ public sealed partial class DotNetRepositoryReleaseService
             suppressCompanionSymbols));
 
     internal static PackagePushResult PushPackage(DotNetNuGetPushRequest request)
+        => PushPackage(request, CancellationToken.None);
+
+    internal static PackagePushResult PushPackage(
+        DotNetNuGetPushRequest request,
+        CancellationToken cancellationToken)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (IsLocalPublishSource(request.Source) &&
             request.PackagePath.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
@@ -328,11 +335,12 @@ public sealed partial class DotNetRepositoryReleaseService
                 request.Source,
                 request.SkipDuplicate,
                 out var localResult);
+            cancellationToken.ThrowIfCancellationRequested();
             return localResult;
         }
 
         var push = new DotNetNuGetClient()
-            .PushPackageAsync(request)
+            .PushPackageAsync(request, cancellationToken)
             .GetAwaiter()
             .GetResult();
         return ClassifyNuGetPushOutcome(push.ExitCode, request.SkipDuplicate, push.StdErr, push.StdOut);

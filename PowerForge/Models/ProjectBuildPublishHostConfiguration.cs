@@ -61,4 +61,7 @@ public sealed class ProjectBuildPublishHostConfiguration
 
     /// <summary>Whether an already-published NuGet package should be treated as a successful skip.</summary>
     public bool SkipDuplicate { get; set; } = true;
+
+    /// <summary>Whether symbol packages are published as separate artifacts for local feeds.</summary>
+    public bool IncludeSymbols { get; set; }
 }

@@ -127,6 +127,13 @@ public sealed class DotNetPublishTargetPlan
 
     /// <summary>Resolved framework/runtime/style publish combinations for this target.</summary>
     public DotNetPublishTargetCombination[] Combinations { get; set; } = Array.Empty<DotNetPublishTargetCombination>();
+
+    /// <summary>
+    /// Restore combinations retained from configuration when execution-time filters select
+    /// only part of a runtime matrix. This keeps comprehensive NuGet lock files valid while
+    /// limiting build and publish steps to the requested combinations.
+    /// </summary>
+    public DotNetPublishTargetCombination[] RestoreCombinations { get; set; } = Array.Empty<DotNetPublishTargetCombination>();
 }
 
 /// <summary>

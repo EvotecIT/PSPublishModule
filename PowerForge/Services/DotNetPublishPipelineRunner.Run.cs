@@ -65,6 +65,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var stepReports = new List<DotNetPublishRunReportStep>();
         PublishProvenanceLease? manifestProvenanceLease = null;
         SourceProvenance? sharedPublishProvenance = null;
+        string? sharedPublishProvenanceScopeKey = null;
         var publishProvenanceByArtifact = new Dictionary<string, SourceProvenance>(StringComparer.OrdinalIgnoreCase);
         string[] plannedPublishGeneratedPaths = Array.Empty<string>();
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState =
@@ -127,12 +128,15 @@ public sealed partial class DotNetPublishPipelineRunner
                                 manifestProvenanceLease.Dispose();
                                 manifestProvenanceLease = null;
                                 sharedPublishProvenance = null;
+                                sharedPublishProvenanceScopeKey = null;
                             }
 
                             if ((plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
                                 .Any(static target => target?.Publish?.Sign?.Enabled == true))
                             {
-                                _ = ReadPortableInventorySourceProvenance(plan);
+                                _ = ReadPortableInventorySourceProvenance(
+                                    plan,
+                                    publishStep: string.IsNullOrWhiteSpace(step.TargetName) ? null : step);
                             }
                             Build(plan, step);
                             break;
@@ -150,12 +154,28 @@ public sealed partial class DotNetPublishPipelineRunner
                             PublishProvenanceLease? provenanceLease = null;
                             if (requiresPublishProvenance)
                             {
-                                if (sharedPublishProvenance is null)
+                                string provenanceScopeKey = BuildPublishProvenanceScopeKey(step);
+                                if (sharedPublishProvenance is null ||
+                                    !string.Equals(
+                                        sharedPublishProvenanceScopeKey,
+                                        provenanceScopeKey,
+                                        StringComparison.OrdinalIgnoreCase))
                                 {
+                                    if (manifestProvenanceLease is not null)
+                                    {
+                                        manifestProvenanceLease.ValidateUnchanged();
+                                        sharedPublishProvenance?.ValidateCurrentSource();
+                                        manifestProvenanceLease.Dispose();
+                                        manifestProvenanceLease = null;
+                                        sharedPublishProvenance = null;
+                                        sharedPublishProvenanceScopeKey = null;
+                                    }
+
                                     SourceProvenance initialProvenance =
                                         ReadPortableInventorySourceProvenance(
                                             plan,
-                                            additionalGeneratedPaths: plannedPublishGeneratedPaths);
+                                            additionalGeneratedPaths: plannedPublishGeneratedPaths,
+                                            publishStep: step);
                                     PublishProvenanceLease candidateLease = PublishProvenanceLease.Create(
                                         PublishProvenanceLease.BuildGuardedPaths(
                                             initialProvenance.PublishInputFiles,
@@ -165,7 +185,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                         SourceProvenance confirmedProvenance =
                                             ReadPortableInventorySourceProvenance(
                                                 plan,
-                                                additionalGeneratedPaths: plannedPublishGeneratedPaths);
+                                                additionalGeneratedPaths: plannedPublishGeneratedPaths,
+                                                publishStep: step);
                                         candidateLease.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                                             confirmedProvenance.PublishInputFiles,
                                             confirmedProvenance.NoBuildPublishInputs));
@@ -173,6 +194,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                         confirmedProvenance.ValidateCurrentSource();
                                         manifestProvenanceLease = candidateLease;
                                         sharedPublishProvenance = confirmedProvenance;
+                                        sharedPublishProvenanceScopeKey = provenanceScopeKey;
                                     }
                                     catch
                                     {
@@ -259,6 +281,7 @@ public sealed partial class DotNetPublishPipelineRunner
                                     plan.ProjectRoot,
                                     cleanTrackedGeneratedProvenanceState,
                                     msiReservationOwner));
+                            ValidatePublishProvenanceEntries(publishProvenanceByArtifact);
                             FinalizePortableEvidence(plan, artefacts, publishProvenanceByArtifact);
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
@@ -496,6 +519,14 @@ public sealed partial class DotNetPublishPipelineRunner
             artefact.Runtime,
             artefact.Style.ToString());
 
+    private static string BuildPublishProvenanceScopeKey(DotNetPublishStep step)
+        => string.Join(
+            "|",
+            step.TargetName,
+            step.Framework,
+            step.Runtime,
+            step.Style.ToString());
+
     private static void ValidateManifestProvenance(
         PublishProvenanceLease? provenanceLease,
         SourceProvenance? provenance,
@@ -567,6 +598,19 @@ public sealed partial class DotNetPublishPipelineRunner
         if (provenances.All(provenance => ReferenceEquals(provenance, sharedProvenance)))
             return sharedProvenance;
 
+        return CombineSourceProvenances(provenances);
+    }
+
+    internal static SourceProvenance CombineSourceProvenances(
+        IReadOnlyCollection<SourceProvenance> provenances)
+    {
+        if (provenances.Count == 0)
+            throw new ArgumentException("At least one source provenance is required.", nameof(provenances));
+
+        SourceProvenance sharedProvenance = provenances.First();
+        if (provenances.All(provenance => ReferenceEquals(provenance, sharedProvenance)))
+            return sharedProvenance;
+
         string?[] revisions = provenances
             .Select(static provenance => provenance.Revision)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -602,6 +646,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (SourceProvenance provenance in provenances)
                     provenance.ValidateCurrentSource(additionalTrackedGeneratedPaths);
             });
+    }
+
+    internal static void ValidatePublishProvenanceEntries(
+        IReadOnlyDictionary<string, SourceProvenance> publishProvenanceByArtifact)
+    {
+        foreach (SourceProvenance provenance in publishProvenanceByArtifact.Values.Distinct())
+            provenance.ValidateCurrentSource();
     }
 
 }

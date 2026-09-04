@@ -118,7 +118,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? buildProjectPaths = null,
         string? buildConfiguration = null,
         DotNetPublishPlan? buildPlan = null,
-        IEnumerable<string>? sourceRootPaths = null)
+        IEnumerable<string>? sourceRootPaths = null,
+        DotNetPublishStep? buildStep = null)
     {
         var gitRevision = ReadGitText(projectRoot, "rev-parse HEAD");
         var environmentRevision = Environment.GetEnvironmentVariable("GITHUB_SHA")?.Trim();
@@ -180,7 +181,8 @@ public sealed partial class DotNetPublishPipelineRunner
             sourceRootPaths,
             buildProjectPaths,
             buildConfiguration,
-            buildPlan);
+            buildPlan,
+            buildStep);
         var postEvaluationTrackedStatus = ReadGitRawText(
             gitRoot!,
             "status --porcelain=v1 -z --untracked-files=no");
@@ -374,12 +376,12 @@ public sealed partial class DotNetPublishPipelineRunner
         SourceDirtyScope dirtyScope)
     {
         if (!dirtyScope.BuildInputsResolved)
-        {
-            string detail = string.IsNullOrWhiteSpace(dirtyScope.BuildInputFailureReason)
-                ? string.Empty
-                : ": " + dirtyScope.BuildInputFailureReason;
-            return new[] { "MSBuild input evaluation failed" + detail };
-        }
+            return new[]
+            {
+                string.IsNullOrWhiteSpace(dirtyScope.BuildInputFailureReason)
+                    ? "MSBuild input evaluation failed"
+                    : dirtyScope.BuildInputFailureReason!
+            };
         string[] projectDirectories = dirtyScope.ProjectDirectories;
         HashSet<string> buildInputs = dirtyScope.BuildInputs;
         HashSet<string> sourceInputs = dirtyScope.SourceInputs;

@@ -42,6 +42,10 @@ public sealed class WebLinkApacheExportOptions
 {
     /// <summary>Output file path.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Optional output path for a validated text source used to build an Apache DBM shortlink map.</summary>
+    public string? ShortlinkMapOutputPath { get; set; }
+    /// <summary>Optional absolute DBM map path referenced by the generated Apache configuration.</summary>
+    public string? ShortlinkMapRuntimePath { get; set; }
     /// <summary>When true, emit explanatory comments at the top of the output.</summary>
     public bool IncludeHeader { get; set; } = true;
     /// <summary>When true, emit <c>ErrorDocument 404 /404.html</c>.</summary>
@@ -57,6 +61,10 @@ public sealed class WebLinkApacheExportResult
 {
     /// <summary>Resolved output path.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Resolved text-map output path when indexed shortlink export is enabled.</summary>
+    public string? ShortlinkMapOutputPath { get; set; }
     /// <summary>Number of emitted rewrite rules.</summary>
     public int RuleCount { get; set; }
+    /// <summary>Number of exact shortlinks emitted through the indexed Apache map.</summary>
+    public int ShortlinkMapEntryCount { get; set; }
 }

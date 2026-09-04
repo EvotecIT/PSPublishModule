@@ -13,7 +13,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<string>? sourceRootPaths,
         IEnumerable<string>? buildProjectPaths,
         string? buildConfiguration,
-        DotNetPublishPlan? buildPlan)
+        DotNetPublishPlan? buildPlan,
+        DotNetPublishStep? buildStep)
     {
         var scope = new SourceDirtyScope();
         foreach (string path in explicitInputPaths ?? Array.Empty<string>())
@@ -25,6 +26,7 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths,
             buildConfiguration,
             buildPlan,
+            buildStep,
             out string[] projectDirectories,
             out HashSet<string> buildInputs,
             out HashSet<string> sourceInputs,

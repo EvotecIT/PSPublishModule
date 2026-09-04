@@ -55,6 +55,13 @@ internal static partial class WebPipelineRunner
         var skipValidation = GetBool(step, "skipValidation") ?? GetBool(step, "skip-validation") ?? false;
         var includeHeader = GetBool(step, "includeHeader") ?? GetBool(step, "include-header") ?? true;
         var include404 = GetBool(step, "includeErrorDocument404") ?? GetBool(step, "include-error-document-404") ?? false;
+        var shortlinkMapOutputPath = ResolvePath(baseDir,
+            GetString(step, "shortlinkMapOut") ??
+            GetString(step, "shortlink-map-out") ??
+            GetString(step, "shortlinkMapOutputPath") ??
+            GetString(step, "shortlink-map-output-path"));
+        var shortlinkMapRuntimePath = GetString(step, "shortlinkMapRuntimePath") ??
+                                      GetString(step, "shortlink-map-runtime-path");
 
         var loaded = LoadLinksSpec(step, baseDir);
         var linkOptions = BuildLinkLoadOptions(step, baseDir, loaded);
@@ -86,6 +93,8 @@ internal static partial class WebPipelineRunner
         var export = WebLinkService.ExportApache(dataSet, new WebLinkApacheExportOptions
         {
             OutputPath = outputPath,
+            ShortlinkMapOutputPath = shortlinkMapOutputPath,
+            ShortlinkMapRuntimePath = shortlinkMapRuntimePath,
             IncludeHeader = includeHeader,
             IncludeErrorDocument404 = include404,
             Hosts = linkOptions.Hosts,

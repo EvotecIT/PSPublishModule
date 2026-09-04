@@ -1601,6 +1601,52 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_WhatIfPlansSignedOutputsWithoutSigningHandlers()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
+            File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
+            {
+                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "  <PropertyGroup>",
+                "    <TargetFramework>net8.0</TargetFramework>",
+                "    <PackageId>Sample.Package</PackageId>",
+                "    <VersionPrefix>1.2.3</VersionPrefix>",
+                "    <IsPackable>true</IsPackable>",
+                "  </PropertyGroup>",
+                "</Project>"
+            }));
+
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                OutputPath = Path.Combine(root.FullName, "packages"),
+                Pack = true,
+                Publish = false,
+                UpdateVersions = false,
+                WhatIf = true,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true,
+                SignPackages = true
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(spec);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            var project = Assert.Single(result.Projects);
+            Assert.Equal(
+                Path.Combine(root.FullName, "packages", "Sample.Package.1.2.3.nupkg"),
+                Assert.Single(project.Packages));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Theory]
     [InlineData(5_400_000, "1h 30.0m")]
     [InlineData(65_000, "1.1m")]

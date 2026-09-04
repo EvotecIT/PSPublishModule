@@ -71,7 +71,10 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var styles = (target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            var restoreCombinations = target.RestoreCombinations is { Length: > 0 }
+                ? target.RestoreCombinations
+                : target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>();
+            var styles = restoreCombinations
                 .Where(combination => string.Equals(combination.Runtime, runtime, StringComparison.OrdinalIgnoreCase))
                 .Where(combination => string.IsNullOrWhiteSpace(framework)
                     || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
@@ -100,19 +103,6 @@ public sealed partial class DotNetPublishPipelineRunner
                         merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
                 }
 
-                if (style == DotNetPublishStyle.SelfContained)
-                {
-                    if (!merged.ContainsKey("SelfContained"))
-                        merged["SelfContained"] = "true";
-                    // Keep restore on the single-file superset so one committed lock can serve
-                    // both portable single-file and multi-file self-contained release lanes.
-                    // Build and publish still force PublishSingleFile=false for this style.
-                    if (!merged.ContainsKey("PublishSingleFile"))
-                        merged["PublishSingleFile"] = "true";
-                    if (target.Publish.ReadyToRun.HasValue && !merged.ContainsKey("PublishReadyToRun"))
-                        merged["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
-                }
-
                 if (style == DotNetPublishStyle.AotSpeed || style == DotNetPublishStyle.AotSize)
                 {
                     if (!merged.ContainsKey("SelfContained"))
@@ -134,35 +124,13 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
-        var args = new List<string> { "restore", projectPath, "--nologo", "--disable-build-servers" };
-        Dictionary<string, string> properties = BuildRestoreMsBuildProperties(
-            plan,
-            projectPath,
-            runtime,
-            framework);
-        bool hasExplicitRuntimeIdentifiers = properties.TryGetValue(
-            "RuntimeIdentifiers",
-            out string? configuredRuntimeIdentifiers) &&
-            !string.IsNullOrWhiteSpace(configuredRuntimeIdentifiers);
-        if (hasExplicitRuntimeIdentifiers)
-        {
-            properties.Remove("RuntimeIdentifiers");
-            string[] configuredRuntimes = configuredRuntimeIdentifiers!
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(value => value.Trim())
-                .Where(value => value.Length > 0)
-                .ToArray();
-            args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(configuredRuntimes)}");
-        }
+        var args = new List<string> { "restore", projectPath, "--nologo" };
+        var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, projectPath, runtime, framework);
+        if (runtimeIdentifiers.Length <= 1)
+            args.AddRange(new[] { "-r", runtime });
         else
-        {
-            var runtimeIdentifiers = BuildRestoreRuntimeIdentifiers(plan, projectPath, runtime, framework);
-            if (runtimeIdentifiers.Length <= 1)
-                args.AddRange(new[] { "-r", runtime });
-            else
-                args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
-        }
-        args.AddRange(BuildMsBuildPropertyArgs(properties));
+            args.Add($"/p:RuntimeIdentifiers={BuildMsBuildListPropertyValue(runtimeIdentifiers)}");
+        args.AddRange(BuildMsBuildPropertyArgs(BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework)));
         return args;
     }
 
@@ -177,7 +145,9 @@ public sealed partial class DotNetPublishPipelineRunner
         var baselineProperties = BuildRestoreMsBuildProperties(plan, projectPath, runtime, framework);
         var runtimes = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Where(target => string.Equals(target.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(target => target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
+            .SelectMany(target => target.RestoreCombinations is { Length: > 0 }
+                ? target.RestoreCombinations
+                : target.Combinations ?? Array.Empty<DotNetPublishTargetCombination>())
             .Where(combination => string.IsNullOrWhiteSpace(framework)
                 || string.Equals(combination.Framework, framework, StringComparison.OrdinalIgnoreCase))
             .Select(combination => combination.Runtime)
@@ -284,7 +254,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var label = string.IsNullOrWhiteSpace(runtime) ? string.Empty : $" ({runtime})";
             _logger.Info($"Build{label} -> {path}");
 
-            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
+            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo" };
             if (!string.IsNullOrWhiteSpace(runtime))
             {
                 args.AddRange(new[] { "-r", runtime! });
@@ -322,7 +292,8 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             "build",
             target.ProjectPath,
-            "-c", plan.Configuration,
+            "-c",
+            plan.Configuration,
             "--nologo",
             "--disable-build-servers",
             "--no-incremental",
@@ -354,6 +325,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
         var style = styleOverride ?? target.Publish.Style;
+        var publishStep = new DotNetPublishStep
+        {
+            TargetName = target.Name,
+            Framework = tfm,
+            Runtime = rid,
+            Style = style
+        };
         var tokens = BuildPublishOutputTokens(plan, target, tfm, rid, style);
         string outputDir = ResolvePublishOutputDirectory(plan, target, tfm, rid, style);
 
@@ -362,7 +340,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Sign?.Enabled == true)
         {
             signingProvenance = verifiedSourceProvenance ??
-                ReadPortableInventorySourceProvenance(plan, outputDir);
+                ReadPortableInventorySourceProvenance(plan, outputDir, publishStep: publishStep);
         }
 
         EnsureOutputDirectoryUnlocked(
@@ -452,12 +430,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 signingProvenance = ReadPortableInventorySourceProvenance(
                     plan,
                     outputDir,
-                    plannedPublishGeneratedPaths);
+                    plannedPublishGeneratedPaths,
+                    publishStep);
                 provenanceLease?.EnsureCovers(PublishProvenanceLease.BuildGuardedPaths(
                     signingProvenance.PublishInputFiles,
                     signingProvenance.NoBuildPublishInputs));
                 provenanceLease?.ValidateUnchanged();
-                string executable = ResolvePrimaryExecutable(outputDir, rid, target.ExecutableIdentities)
+                string executable = ResolvePrimaryExecutable(
+                    outputDir,
+                    rid,
+                    EnumerateEffectiveExecutableIdentities(target))
                     ?? throw new InvalidOperationException(
                         "Signed portable output does not contain a primary executable matching the configured project identity.");
                 FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(executable);
@@ -625,7 +607,6 @@ public sealed partial class DotNetPublishPipelineRunner
             target.ProjectPath,
             "-c", plan.Configuration,
             "--nologo",
-            "--disable-build-servers",
             "-f", framework,
             "--output", outputDir
         };
@@ -691,20 +672,9 @@ public sealed partial class DotNetPublishPipelineRunner
             // Command-line global properties ensure the publisher-signed ProductVersion carries the exact source object ID.
             merged["SourceRevisionId"] = plan.SourceRevision;
             merged["IncludeSourceRevisionInInformationalVersion"] = "true";
-        }
-
-        // Release builds must use stable source identities across the primary
-        // checkout and the independent controlled rebuild. This also keeps
-        // SourceLink content deterministic when those checkouts have different
-        // physical paths (as they do on macOS and hosted runners).
-        merged["ContinuousIntegrationBuild"] = "true";
-        if (!target.Publish.KeepSymbols)
-        {
-            // Avalonia and other post-processors can otherwise retain the
-            // checkout-specific PDB path in the release assembly even when the
-            // portable symbol itself is excluded from the package.
-            merged["DebugType"] = "None";
-            merged["DebugSymbols"] = "false";
+            // Keep Source Link, PDB IDs, and PE MVIDs stable between the real release
+            // build and detached provenance rebuilds rooted at different paths.
+            merged["ContinuousIntegrationBuild"] = "true";
         }
 
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);

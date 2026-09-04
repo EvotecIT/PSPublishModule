@@ -43,11 +43,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedProperties,
                         graphBuildNodes),
                     out controlledGitRoot,
-                    out string? controlledProjectPath,
-                    out string? checkoutFailureReason))
+                    out string? controlledProjectPath))
             {
-                failureReason = "controlled source checkout could not be created: " +
-                    (checkoutFailureReason ?? "unknown reason");
+                failureReason = "the controlled source checkout could not be created.";
                 return false;
             }
             if (!TryCreateControlledBuildEnvironment(
@@ -58,7 +56,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
-                failureReason = "controlled build environment could not be created";
+                failureReason = "the controlled build environment could not be created.";
                 return false;
             }
             if (!TryCreateControlledPublishInputPlaceholders(
@@ -68,17 +66,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     executableMsBuildInputs,
                     request.GlobalProperties))
             {
-                failureReason = "controlled publish placeholders could not be created";
+                failureReason = "controlled publish-input placeholders could not be created.";
                 return false;
             }
 
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
             var offlinePackageSources = new List<string>();
+            int packageCatalogIndex = 0;
             foreach (VerifiedPackageInputCatalog packageCatalog in graphVerifiedPackages)
             {
+                string catalogSource = Directory.CreateDirectory(Path.Combine(
+                    offlinePackageSource,
+                    packageCatalogIndex++.ToString(System.Globalization.CultureInfo.InvariantCulture))).FullName;
                 if (!packageCatalog.TrySeedControlledPackageSource(
-                        offlinePackageSource,
+                        catalogSource,
                         controlledSourceRoot,
                         controlledProjectPath!,
                         request.TrustedBuildPackages,
@@ -86,7 +88,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string catalogFailureReason,
                         allowSdkManagedToolchainPackages: true))
                 {
-                    failureReason = "verified offline package source could not be created: " + catalogFailureReason;
+                    failureReason = "the verified offline package source could not be seeded: " + catalogFailureReason;
                     return false;
                 }
                 offlinePackageSources.AddRange(catalogSources);
@@ -104,7 +106,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     out string projectMetadataFailureReason))
             {
-                failureReason = "controlled project metadata source could not be created: " +
+                failureReason = "the controlled project metadata source could not be created: " +
                     projectMetadataFailureReason;
                 return false;
             }
@@ -126,17 +128,32 @@ public sealed partial class DotNetPublishPipelineRunner
             string offlinePackageSourceList = string.Join(";", distinctOfflinePackageSources);
 
             if (!TryBuildControlledPublishProjectGraph(
-                    request,
-                    controlledProjectPath!,
                     graphBuildNodes,
                     controlledGitRoot!,
                     controlledSourceRoot,
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
-                    out string graphBuildFailureReason))
+                    controlledOutputRoot,
+                    out string? controlledGraphFailureReason))
             {
-                failureReason = "controlled project graph build failed: " + graphBuildFailureReason;
+                failureReason = "the controlled project-reference graph could not be built" +
+                    (string.IsNullOrWhiteSpace(controlledGraphFailureReason)
+                        ? "."
+                        : $": {controlledGraphFailureReason}");
+                return false;
+            }
+            if (!TryRestoreControlledPublishRoot(
+                    request,
+                    controlledGitRoot!,
+                    controlledSourceRoot,
+                    controlledProjectPath!,
+                    controlledEnvironment,
+                    controlledNuGetConfig,
+                    offlinePackageSourceList,
+                    controlledOutputRoot))
+            {
+                failureReason = "the controlled root project could not be restored.";
                 return false;
             }
 
@@ -146,8 +163,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledProjectPath!,
                 "-nologo",
                 "-verbosity:quiet",
-                "-restore",
-                "-target:Build;ComputeFilesToPublish",
+                "-target:Rebuild;ComputeFilesToPublish",
                 "-getItem:ResolvedFileToPublish"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -156,10 +172,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledGitRoot!,
                     controlledSourceRoot))
             {
-                failureReason = "controlled project properties could not be mapped";
+                failureReason = "controlled project evaluation properties could not be remapped.";
                 return false;
             }
-            arguments.Add("-p:BuildProjectReferences=false");
+            // The graph nodes are restored and validated independently above. Rebuild the
+            // final root graph without recursive restore so referenced assembly identities
+            // match the real root prebuild as well as its portable PDB metadata.
+            arguments.Add("-p:BuildProjectReferences=true");
             arguments.Add("-p:RestoreRecursive=false");
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
@@ -167,17 +186,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedPathMap,
                     out string controlledPathMap))
             {
-                failureReason = "controlled path map could not be created";
+                failureReason = "the controlled PathMap could not be constructed.";
                 return false;
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSourceList);
-            AppendControlledPackageLockIsolation(
-                arguments,
-                Path.Combine(controlledOutputRoot, "unused-packages.lock.json"));
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -188,8 +205,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (process.ExitCode != 0 || process.TimedOut)
             {
                 failureReason = process.TimedOut
-                    ? "controlled publish evaluation timed out"
-                    : $"controlled publish evaluation exited with code {process.ExitCode}" +
+                    ? "the controlled root publish-input evaluation timed out."
+                    : $"the controlled root publish-input evaluation exited with code {process.ExitCode}." +
                       ReadControlledProcessFailureDetail(process);
                 return false;
             }
@@ -201,7 +218,7 @@ public sealed partial class DotNetPublishPipelineRunner
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
             {
-                failureReason = "controlled publish evaluation returned no JSON payload";
+                failureReason = "the controlled root publish-input evaluation returned no readable item JSON.";
                 return false;
             }
             using JsonDocument document = JsonDocument.Parse(
@@ -235,13 +252,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     !item.Metadata.TryGetValue("RelativePath", out string? relativePath) ||
                     !IsControlledPublishRelativePath(relativePath))
                 {
-                    failureReason = "controlled publish item has an invalid relative path";
+                    failureReason = "a controlled publish item has no safe RelativePath.";
                     return false;
                 }
 
                 if (IsSameOrBelowBuildInputPath(item.FullPath, offlinePackageSource))
                 {
-                    failureReason = "controlled publish item resolves inside the offline package source";
+                    failureReason = "a controlled publish item resolved inside the temporary offline package source.";
                     return false;
                 }
                 if (IsTrustedExternalBuildInfrastructurePath(
@@ -272,7 +289,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         packageCatalogs,
                         out IReadOnlyDictionary<string, string> mappedMetadata))
                 {
-                    failureReason = "controlled publish item metadata could not be mapped";
+                    failureReason = $"metadata for controlled publish item '{item.FullPath}' could not be mapped safely.";
                     return false;
                 }
 
@@ -322,13 +339,10 @@ public sealed partial class DotNetPublishPipelineRunner
             publishInputs = results.ToArray();
             return true;
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
             publishInputs = Array.Empty<EvaluatedPublishInput>();
-            string nativeCode = exception is System.ComponentModel.Win32Exception win32Exception
-                ? $" (native error {win32Exception.NativeErrorCode})"
-                : string.Empty;
-            failureReason = $"{exception.GetType().Name}{nativeCode} while reading controlled publish inputs";
+            failureReason = "controlled publish-input evaluation threw " + ex.GetType().Name + ".";
             return false;
         }
         finally
@@ -430,6 +444,54 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool IsAsciiLetterOrDigit(char value)
         => value is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
 
+    private static bool TryRestoreControlledPublishRoot(
+        ProjectEvaluationRequest request,
+        string originalGitRoot,
+        string controlledSourceRoot,
+        string controlledProjectPath,
+        IReadOnlyDictionary<string, string?> controlledEnvironment,
+        string controlledNuGetConfig,
+        string offlinePackageSourceList,
+        string controlledOutputRoot)
+    {
+        try
+        {
+            var arguments = new List<string>
+            {
+                "restore",
+                controlledProjectPath,
+                "-nologo",
+                "-verbosity:quiet",
+                "-p:RestoreRecursive=false"
+            };
+            if (!TryAppendControlledProjectEvaluationProperties(
+                    arguments,
+                    request,
+                    originalGitRoot,
+                    controlledSourceRoot))
+            {
+                return false;
+            }
+            AppendControlledProofSafeguards(
+                arguments,
+                controlledNuGetConfig,
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "root-packages.lock.json"));
+
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(controlledProjectPath)!,
+                arguments,
+                controlledEnvironment,
+                TimeSpan.FromMinutes(5));
+            return process.ExitCode == 0 && !process.TimedOut;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>
         BuildControlledPublishProjectContexts(
             ProjectEvaluationRequest rootRequest,
@@ -465,69 +527,22 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static bool TryBuildControlledPublishProjectGraph(
-        ProjectEvaluationRequest rootRequest,
-        string controlledRootProjectPath,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         string originalGitRoot,
         string controlledSourceRoot,
         IReadOnlyDictionary<string, string?> controlledEnvironment,
         string controlledNuGetConfig,
         string offlinePackageSourceList,
-        out string failureReason)
+        string controlledOutputRoot,
+        out string? failureReason)
     {
-        failureReason = string.Empty;
-        var restoreArguments = new List<string>
-        {
-            "msbuild",
-            controlledRootProjectPath,
-            "-nologo",
-            "-maxCpuCount:1",
-            "-nodeReuse:false",
-            "-verbosity:quiet",
-            "-target:Restore"
-        };
-        if (!TryAppendControlledProjectEvaluationProperties(
-                restoreArguments,
-                rootRequest,
-                originalGitRoot,
-                controlledSourceRoot))
-        {
-            failureReason = "root restore properties could not be remapped";
-            return false;
-        }
-        AppendControlledProofSafeguards(
-            restoreArguments,
-            controlledNuGetConfig,
-            offlinePackageSourceList);
-        AppendControlledRootGraphRestoreOverrides(
-            restoreArguments,
-            Path.Combine(Path.GetDirectoryName(controlledSourceRoot)!, "unused-packages.lock.json"));
-        // Each graph node has already contributed a committed package lock and
-        // the offline source contains only byte-verified archives from those
-        // locks. Re-evaluate the root graph against that closed package universe
-        // so target-specific locks can produce the complete referenced assets
-        // graph without requiring unrelated target frameworks in every lock.
-        var restoreProcess = RunBuildInputEvaluationProcess(
-            "dotnet",
-            Path.GetDirectoryName(controlledRootProjectPath)!,
-            restoreArguments,
-            controlledEnvironment,
-            TimeSpan.FromMinutes(5));
-        if (restoreProcess.ExitCode != 0 || restoreProcess.TimedOut)
-        {
-            failureReason = restoreProcess.TimedOut
-                ? "root graph restore timed out"
-                : "root graph restore failed with code " + restoreProcess.ExitCode +
-                  ReadControlledProcessFailureDetail(restoreProcess);
-            return false;
-        }
-
+        failureReason = null;
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string originalProjectPath = Path.GetFullPath(node.Request.ProjectPath);
             if (!IsSameOrBelowBuildInputPath(originalProjectPath, originalGitRoot))
             {
-                failureReason = "project path is outside the original Git root";
+                failureReason = $"project '{originalProjectPath}' is outside the controlled Git root.";
                 return false;
             }
             string controlledProjectPath = Path.GetFullPath(Path.Combine(
@@ -536,7 +551,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!IsSameOrBelowBuildInputPath(controlledProjectPath, controlledSourceRoot) ||
                 !File.Exists(controlledProjectPath))
             {
-                failureReason = $"controlled project is unavailable: '{Path.GetFileName(originalProjectPath)}'";
+                failureReason = $"controlled project '{originalProjectPath}' is missing or outside the controlled checkout.";
                 return false;
             }
 
@@ -548,6 +563,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 "-maxCpuCount:1",
                 "-nodeReuse:false",
                 "-verbosity:quiet",
+                "-restore",
                 "-target:Build"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -556,7 +572,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     originalGitRoot,
                     controlledSourceRoot))
             {
-                failureReason = $"project properties could not be remapped: '{Path.GetFileName(originalProjectPath)}'";
+                failureReason = $"properties for controlled project '{originalProjectPath}' could not be remapped.";
                 return false;
             }
             arguments.Add("-p:BuildProjectReferences=false");
@@ -567,14 +583,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     node.PathMap,
                     out string controlledPathMap))
             {
-                failureReason = $"path map could not be created: '{Path.GetFileName(originalProjectPath)}'";
+                failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
                 return false;
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
             AppendControlledProofSafeguards(
                 arguments,
                 controlledNuGetConfig,
-                offlinePackageSourceList);
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "packages.lock.json"));
 
             var process = RunBuildInputEvaluationProcess(
                 "dotnet",
@@ -584,32 +601,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(5));
             if (process.ExitCode != 0 || process.TimedOut)
             {
+                string? detail = TailLines(
+                    string.IsNullOrWhiteSpace(process.StdErr) ? process.StdOut : process.StdErr,
+                    maxLines: 8,
+                    maxChars: 2000);
                 failureReason = process.TimedOut
-                    ? $"build timed out: '{Path.GetFileName(originalProjectPath)}'"
-                    : $"build failed with code {process.ExitCode}: '{Path.GetFileName(originalProjectPath)}'" +
-                      ReadControlledProcessFailureDetail(process);
+                    ? $"project '{originalProjectPath}' timed out."
+                    : $"project '{originalProjectPath}' exited with code {process.ExitCode}.";
+                if (!string.IsNullOrWhiteSpace(detail))
+                {
+                    failureReason += " " + detail!.Trim();
+                }
                 return false;
             }
         }
         return true;
-    }
-
-    internal static void AppendControlledRootGraphRestoreOverrides(
-        ICollection<string> arguments,
-        string unusedLockFilePath)
-    {
-        AppendControlledPackageLockIsolation(arguments, unusedLockFilePath);
-        arguments.Add("-p:BuildProjectReferences=true");
-        arguments.Add("-p:RestoreRecursive=true");
-        arguments.Add("-p:WarningsNotAsErrors=NU1510");
-    }
-
-    internal static void AppendControlledPackageLockIsolation(
-        ICollection<string> arguments,
-        string unusedLockFilePath)
-    {
-        arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(unusedLockFilePath));
-        arguments.Add("-p:RestorePackagesWithLockFile=false");
     }
 
     private static string ReadControlledProcessFailureDetail(
@@ -628,6 +634,26 @@ public sealed partial class DotNetPublishPipelineRunner
         return string.IsNullOrWhiteSpace(detail)
             ? string.Empty
             : ": " + RedactCommandLineSecrets(detail);
+    }
+
+    internal static void AppendControlledRootGraphRestoreOverrides(
+        ICollection<string> arguments,
+        string unusedLockFilePath)
+    {
+        AppendControlledPackageLockIsolation(arguments, unusedLockFilePath);
+        arguments.Add("-p:BuildProjectReferences=true");
+        arguments.Add("-p:RestoreRecursive=true");
+        arguments.Add("-p:WarningsNotAsErrors=NU1510");
+    }
+
+    internal static void AppendControlledPackageLockIsolation(
+        ICollection<string> arguments,
+        string unusedLockFilePath)
+    {
+        arguments.Add("-p:RestoreLockedMode=false");
+        arguments.Add("-p:RestoreForceEvaluate=true");
+        arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(unusedLockFilePath));
+        arguments.Add("-p:RestorePackagesWithLockFile=false");
     }
 
     private static bool TryAppendControlledProjectEvaluationProperties(
@@ -675,6 +701,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("RestoreRecursive", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("PathMap", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
