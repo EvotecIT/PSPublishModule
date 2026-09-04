@@ -217,6 +217,42 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     .GetValue(cache));
                 Assert.Equal(2, paths.Count);
                 Assert.Single(hashes.Keys.Cast<object>());
+
+                string controlledSourceRoot = Directory.CreateDirectory(
+                    Path.Combine(root, "controlled-source")).FullName;
+                string controlledProjectPath = Path.Combine(controlledSourceRoot, "App.csproj");
+                File.WriteAllText(controlledProjectPath, "<Project />");
+                string packageSource = Path.Combine(root, "verified-source");
+                MethodInfo seed = cacheType.GetMethod(
+                    "TrySeedControlledPackageSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var archivePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["sdk.test.package|1.0.0"] = firstPath
+                };
+                object?[] FirstSeedArguments() =>
+                [
+                    packageSource,
+                    archivePaths,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
+                    controlledSourceRoot,
+                    controlledProjectPath,
+                    new[] { "sdk.test.package" },
+                    null,
+                    null,
+                    null,
+                    false
+                ];
+
+                object?[] firstSeed = FirstSeedArguments();
+                Assert.True(Assert.IsType<bool>(seed.Invoke(cache, firstSeed)), firstSeed[8]?.ToString());
+                File.Delete(firstPath);
+                File.Delete(secondPath);
+                object?[] repeatedSeed = FirstSeedArguments();
+                Assert.True(
+                    Assert.IsType<bool>(seed.Invoke(cache, repeatedSeed)),
+                    repeatedSeed[8]?.ToString());
             }
             finally
             {

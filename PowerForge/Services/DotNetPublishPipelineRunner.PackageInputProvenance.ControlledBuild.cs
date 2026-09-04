@@ -253,13 +253,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
-                        var existingInfo = new FileInfo(destinationPath);
-                        var sourceInfo = new FileInfo(cached.SourcePath);
-                        if (existingInfo.Length != sourceInfo.Length ||
-                            !string.Equals(
-                                ComputeSha256Hex(File.ReadAllBytes(destinationPath)),
-                                ComputeSha256Hex(File.ReadAllBytes(cached.SourcePath)),
-                                StringComparison.OrdinalIgnoreCase))
+                        // SDK-evidence archives can originate in an isolated root that is
+                        // removed after admission. Revalidate the already-seeded package
+                        // against the cached NuGet content hash instead of reopening that
+                        // intentionally short-lived source path.
+                        using VerifiedPackageArchive? existingArchive =
+                            VerifiedPackageArchive.TryOpen(
+                                destinationPath,
+                                cached.ExpectedContentHash);
+                        if (existingArchive is null)
                         {
                             failureReason = $"offline package destination conflicts: '{package.Key}'";
                             return false;
