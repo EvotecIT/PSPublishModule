@@ -400,6 +400,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:RestoreNoCache=true");
         arguments.Add("-p:RestoreIgnoreFailedSources=false");
         arguments.Add("-p:RestoreLockedMode=false");
+        arguments.Add("-p:WarningsNotAsErrors=NU1510");
         if (!string.IsNullOrWhiteSpace(lockFilePath))
         {
             arguments.Add("-p:RestorePackagesWithLockFile=true");

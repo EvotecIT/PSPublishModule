@@ -49,6 +49,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             value.StartsWith("-p:RestorePackagesWithLockFile=", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(arguments, value =>
             value.StartsWith("-p:NuGetLockFilePath=", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("-p:WarningsNotAsErrors=NU1510", arguments.Last(value =>
+            value.StartsWith("-p:WarningsNotAsErrors=", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
