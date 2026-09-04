@@ -389,6 +389,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:RestoreAdditionalProjectFallbackFolders=");
         arguments.Add("-p:RestoreAdditionalProjectSources=");
         arguments.Add("-p:RestoreRecursive=false");
+        arguments.Add("-p:WarningsNotAsErrors=NU1510");
     }
 
     private static bool IsSafeSdkEvidencePropertyName(string name)
