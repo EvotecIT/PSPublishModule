@@ -378,7 +378,7 @@ try {
         $selectedModules = @($packet.modules)
         if ($ModuleId) { $selectedModules = @($selectedModules | Where-Object { $_.id -in $ModuleId }) }
         foreach ($entry in $selectedModules) {
-            Write-Host "[$($entry.id)] acquire, analyze, lock, build, import, invoke"
+            Write-Host "[$($entry.id)] acquire, census, analyze, lock, build, import, invoke"
             try {
                 if ($entry.revisionKind -ne 'PSGalleryPackageVersion' -or $entry.revision -ne $entry.version -or $entry.restorePolicy -ne 'IsolatedExactPackage') {
                     throw "Unsupported corpus acquisition contract for $($entry.id)."
@@ -390,6 +390,11 @@ try {
                 $entryPoint = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $entry.entryPoint) -Label 'Corpus entry point'
                 if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw "Corpus entry point does not exist: $entryPoint" }
 
+                $census = Invoke-PowerForgeJson -Arguments @('powershell', 'census', $entryPoint, '--framework', $packet.targetFramework) -WorkingDirectory $runRoot
+                $censusProduct = $census.Json.result.products[0]
+                $regionCandidates = @($censusProduct.regionCandidates | Where-Object { $null -ne $_ } | ForEach-Object {
+                    ConvertTo-PortableRegionCandidate -Candidate $_ -SourceRoot $sourceRoot
+                })
                 $analysis = Invoke-PowerForgeJson -Arguments @('powershell', 'analyze', $entryPoint, '--kind', 'dll', '--mode', $packet.mode, '--framework', $packet.targetFramework, '--resource-mode', $packet.resourceMode) -WorkingDirectory $runRoot
                 $lockPath = Join-Path $runRoot ('locks/' + $entry.id + '.lock.json')
                 Write-Utf8Json -Path $lockPath -Value $analysis.Json.result.dependencyGraph
@@ -398,6 +403,10 @@ try {
                 $manifest = $build.Json.result.manifest
                 if ($manifest.dependencyGraph.lockSha256 -ne $analysis.Json.result.dependencyGraph.lockSha256) { throw 'Build did not consume the analyzed dependency lock.' }
                 $probe = Invoke-CleanModuleProbe -ManifestPath $build.Json.result.artifactPath -ProbeScript $entry.probeScript -WorkingDirectory $runRoot
+                $counts = Get-LedgerSummary -Ledger $manifest.unitDispositionLedger
+                if ([int] $censusProduct.promotedTypedRegions -ne [int] $counts.promotedTypedRegions) {
+                    throw "Census/artifact promoted-region mismatch: census=$($censusProduct.promotedTypedRegions), artifact=$($counts.promotedTypedRegions)."
+                }
                 $moduleResults.Add([ordered]@{
                     id = $entry.id
                     version = $entry.version
@@ -409,8 +418,12 @@ try {
                     cleanImport = $true
                     invocation = $probe.Json.probeSucceeded
                     exportedCommands = $probe.Json.exportedCommands
-                    counts = Get-LedgerSummary -Ledger $manifest.unitDispositionLedger
-                    durationMilliseconds = [ordered]@{ analyze = $analysis.DurationMilliseconds; build = $build.DurationMilliseconds; probe = $probe.DurationMilliseconds }
+                    counts = $counts
+                    regionCandidates = $regionCandidates.Count
+                    rejectedTypedRegions = @($regionCandidates | Where-Object { -not $_.promoted }).Count
+                    regionDecisionSummary = @(Get-RegionCandidateDecisionSummary -Candidates $regionCandidates)
+                    regionCandidateDecisions = $regionCandidates
+                    durationMilliseconds = [ordered]@{ census = $census.DurationMilliseconds; analyze = $analysis.DurationMilliseconds; build = $build.DurationMilliseconds; probe = $probe.DurationMilliseconds }
                     succeeded = $true
                 })
             } catch {
@@ -575,6 +588,13 @@ try {
     $compareModules = -not $SkipModules -and -not $ModuleId
     $compareStrict = -not $SkipStrictPrograms
     $regressions = @(Compare-PublicBaseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Modules @($moduleResults) -StrictPrograms @($strictResults) -Rid $RuntimeIdentifier -CompareModules $compareModules -CompareStrict $compareStrict)
+    $regionDecisionRows = @($moduleResults | Where-Object succeeded | ForEach-Object {
+        $module = $_
+        @($module.regionCandidateDecisions) | ForEach-Object {
+            [pscustomobject]@{ WorkloadId = $module.id; ScenarioFamily = $module.scenarioFamily; Candidate = $_ }
+        }
+    })
+    $crossWorkloadRetainedRegionFrontier = @(Get-CrossWorkloadRetainedRegionFrontier -Rows $regionDecisionRows)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
@@ -590,6 +610,7 @@ try {
         }
         modules = @($moduleResults)
         strictPrograms = @($strictResults)
+        crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
         regressions = $regressions
         baselineScope = [ordered]@{ hybrid = if ($compareModules) { 'Full' } else { 'IdentityOnly' }; strict = if ($compareStrict) { 'Full' } else { 'IdentityOnly' } }
         summary = [ordered]@{
@@ -600,11 +621,13 @@ try {
             failures = $failedModules + $failedStrict
             regressions = $regressions.Count
             promotedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.counts.promotedTypedRegions })
+            regionCandidates = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.regionCandidates })
+            rejectedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.rejectedTypedRegions })
         }
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Host "Evidence: $EvidencePath"
-    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
+    Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); retained candidates: $($evidence.summary.rejectedTypedRegions)/$($evidence.summary.regionCandidates); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
     if ($evidence.summary.failures -gt 0 -or $evidence.summary.regressions -gt 0) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {

@@ -360,6 +360,34 @@ public sealed class PowerShellCompilationCensusTests
     }
 
     [Fact]
+    public void Run_AssessesDynamicCompleteModuleThroughHybridRuntimeRetention()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Dynamic Module Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
+        File.WriteAllText(
+            Path.Combine(root, "Module.psm1"),
+            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+        File.WriteAllText(Path.Combine(root, "Public", "Get-Proof.ps1"), "function Get-Proof { return 1 }");
+        File.WriteAllText(
+            Path.Combine(root, "Module.psd1"),
+            "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0' }");
+        try
+        {
+            var result = new PowerShellCompilationCensusRunner().Run(new[] { root }, "net10.0");
+            var product = Assert.Single(result.Products);
+
+            Assert.True(result.Passed);
+            Assert.Equal(1, product.SourceFiles);
+            Assert.True(product.Coverage.PostEmissionEvaluated);
+            Assert.Equal(0, product.ParseErrorFiles);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Run_ReportsDisappearingUnitsAsCoverageRegression()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Shrink Tests", Guid.NewGuid().ToString("N"));

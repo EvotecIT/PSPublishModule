@@ -258,7 +258,6 @@ $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 $packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $results = [Collections.Generic.List[object]]::new()
 $frontierRows = [Collections.Generic.List[object]]::new()
-$regionDecisionRows = [Collections.Generic.List[object]]::new()
 
 try {
     $selected = @($packet.workloads)
@@ -276,22 +275,12 @@ try {
             $product = $census.Product
             $functionPercentage = if ($product.coverage.totalFunctions) { [Math]::Round(100 * $product.coverage.emittedFunctions / $product.coverage.totalFunctions, 2) } else { $null }
             $unitPercentage = if ($product.totalUnits) { [Math]::Round(100 * $product.compilableUnits / $product.totalUnits, 2) } else { 0.0 }
-            $regionCandidates = @($product.regionCandidates | Where-Object { $null -ne $_ })
-            $regionDecisionSummary = @($regionCandidates |
-                Group-Object -Property decisionCode |
-                Sort-Object -Property @{ Expression = 'Count'; Descending = $true }, Name |
-                ForEach-Object {
-                    [ordered]@{
-                        decisionCode = $_.Name
-                        candidates = $_.Count
-                        exampleReason = [string] $_.Group[0].reason
-                    }
-                })
+            $regionCandidates = @($product.regionCandidates | Where-Object { $null -ne $_ } | ForEach-Object {
+                ConvertTo-PortableRegionCandidate -Candidate $_ -SourceRoot $sourceRoot
+            })
+            $regionDecisionSummary = @(Get-RegionCandidateDecisionSummary -Candidates $regionCandidates)
             foreach ($impact in @($product.functionImpacts)) {
                 $frontierRows.Add([pscustomobject]@{ WorkloadId = $entry.id; Impact = $impact })
-            }
-            foreach ($candidate in @($regionCandidates | Where-Object { -not $_.promoted })) {
-                $regionDecisionRows.Add([pscustomobject]@{ WorkloadId = $entry.id; Candidate = $candidate })
             }
             $results.Add([ordered]@{
                 id = $entry.id
@@ -314,6 +303,7 @@ try {
                 regionCandidates = $regionCandidates.Count
                 rejectedTypedRegions = [int] $product.rejectedTypedRegions
                 regionDecisionSummary = $regionDecisionSummary
+                regionCandidateDecisions = $regionCandidates
                 droppedEligibleFunctions = $product.coverage.droppedEligibleFunctions
                 fallbackFunctions = $product.coverage.fallbackFunctions
                 functionDispositions = @($product.functionDispositions | ForEach-Object {
@@ -362,6 +352,12 @@ try {
     $regionCandidates = [int] (($successful | ForEach-Object { [int] $_.regionCandidates } | Measure-Object -Sum).Sum)
     $rejectedTypedRegions = [int] (($successful | ForEach-Object { [int] $_.rejectedTypedRegions } | Measure-Object -Sum).Sum)
     $parseErrorFiles = [int] (($successful | ForEach-Object { [int] $_.parseErrorFiles } | Measure-Object -Sum).Sum)
+    $regionDecisionRows = @($successful | ForEach-Object {
+        $workload = $_
+        @($workload.regionCandidateDecisions) | ForEach-Object {
+            [pscustomobject]@{ WorkloadId = $workload.id; ScenarioFamily = $workload.scenarioFamily; Candidate = $_ }
+        }
+    })
     $crossWorkloadFrontier = @($frontierRows |
         Group-Object { $_.Impact.featureId } |
         ForEach-Object {
@@ -378,18 +374,7 @@ try {
         } |
         Sort-Object -Property @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'visibleSoleBlockerUnits'; Descending = $true }, @{ Expression = 'affectedUnits'; Descending = $true }, featureId |
         Select-Object -First 20)
-    $crossWorkloadRetainedRegionFrontier = @($regionDecisionRows |
-        Group-Object { $_.Candidate.decisionCode } |
-        ForEach-Object {
-            $group = @($_.Group)
-            [pscustomobject][ordered]@{
-                decisionCode = $_.Name
-                affectedWorkloads = @($group.WorkloadId | Sort-Object -Unique).Count
-                candidates = $group.Count
-                exampleReason = [string] $group[0].Candidate.reason
-            }
-        } |
-        Sort-Object -Property @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'candidates'; Descending = $true }, decisionCode)
+    $crossWorkloadRetainedRegionFrontier = @(Get-CrossWorkloadRetainedRegionFrontier -Rows $regionDecisionRows)
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId

@@ -35,6 +35,124 @@ function Write-Utf8Json {
     [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth $Depth) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
 }
 
+function ConvertTo-PortableRegionCandidate {
+    param([object] $Candidate, [string] $SourceRoot)
+
+    $rootFull = [IO.Path]::GetFullPath($SourceRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $sourcePath = Assert-ContainedPath -Root $rootFull -Path ([string] $Candidate.sourcePath) -Label 'Region candidate source'
+    $relativePath = $sourcePath.Substring($rootFull.Length).TrimStart([char[]] @('\', '/')).Replace('\', '/')
+    $graphProperty = $Candidate.PSObject.Properties['regionGraph']
+    $graph = if ($null -eq $graphProperty) { $null } else { $graphProperty.Value }
+    $regions = if ($null -eq $graph) { @() } else { @($graph.regions | Where-Object { $null -ne $_ }) }
+    $sourceLineSpan = if ([int] $Candidate.startLine -gt 0 -and [int] $Candidate.endLine -ge [int] $Candidate.startLine) {
+        1 + [int] $Candidate.endLine - [int] $Candidate.startLine
+    } else { 0 }
+
+    return [pscustomobject]@{
+        regionId = [string] $Candidate.regionId
+        sourceSha256 = [string] $Candidate.sourceSha256
+        sourceDocumentSha256 = [string] $Candidate.sourceDocumentSha256
+        relativePath = $relativePath
+        sourceName = [string] $Candidate.sourceName
+        sourceLine = [int] $Candidate.sourceLine
+        startOffset = [int] $Candidate.startOffset
+        endOffset = [int] $Candidate.endOffset
+        startLine = [int] $Candidate.startLine
+        startColumn = [int] $Candidate.startColumn
+        endLine = [int] $Candidate.endLine
+        endColumn = [int] $Candidate.endColumn
+        sourceLineSpan = $sourceLineSpan
+        promoted = [bool] $Candidate.promoted
+        decisionCode = [string] $Candidate.decisionCode
+        reason = [string] $Candidate.reason
+        generatedName = [string] $Candidate.generatedName
+        graph = if ($null -eq $graph) { $null } else {
+            [pscustomobject]@{
+                schemaVersion = [int] $graph.schemaVersion
+                regionCount = $regions.Count
+                typedRegions = @($regions | Where-Object execution -eq 'Typed').Count
+                hostedRegions = @($regions | Where-Object execution -eq 'Hosted').Count
+                mixedRegions = @($regions | Where-Object execution -eq 'Mixed').Count
+                hostedCommandBoundarySites = [int] $graph.hostedCommandBoundarySites
+                moduleStateReadBoundarySites = [int] $graph.moduleStateReadBoundarySites
+                moduleStateWriteBoundarySites = [int] $graph.moduleStateWriteBoundarySites
+                staticBoundaryCrossings = [int] $graph.staticBoundaryCrossings
+                staticBoundaryValueTransfers = [int] (($regions | ForEach-Object { [int] $_.staticBoundaryValueTransfers } | Measure-Object -Sum).Sum)
+                staticBoundaryCostUnits = [int] $graph.staticBoundaryCostUnits
+                regions = @($regions | ForEach-Object {
+                    [pscustomobject]@{
+                        regionId = [string] $_.regionId
+                        ordinal = [int] $_.ordinal
+                        execution = [string] $_.execution
+                        startOffset = [int] $_.startOffset
+                        endOffset = [int] $_.endOffset
+                        startLine = [int] $_.startLine
+                        startColumn = [int] $_.startColumn
+                        endLine = [int] $_.endLine
+                        endColumn = [int] $_.endColumn
+                        inputs = @($_.inputs)
+                        outputs = @($_.outputs)
+                        mutations = @($_.mutations)
+                        streams = @($_.streams)
+                        errors = @($_.errors)
+                        ordering = [string] $_.ordering
+                        hostedCommandBoundarySites = [int] $_.hostedCommandBoundarySites
+                        moduleStateReadBoundarySites = [int] $_.moduleStateReadBoundarySites
+                        moduleStateWriteBoundarySites = [int] $_.moduleStateWriteBoundarySites
+                        staticBoundaryCrossings = [int] $_.staticBoundaryCrossings
+                        staticBoundaryValueTransfers = [int] $_.staticBoundaryValueTransfers
+                        staticBoundaryCostUnits = [int] $_.staticBoundaryCostUnits
+                    }
+                })
+            }
+        }
+    }
+}
+
+function Get-RegionCandidateDecisionSummary {
+    param([object[]] $Candidates)
+
+    return @($Candidates |
+        Group-Object -Property decisionCode |
+        Sort-Object -Property @{ Expression = 'Count'; Descending = $true }, Name |
+        ForEach-Object {
+            $group = @($_.Group)
+            [ordered]@{
+                decisionCode = $_.Name
+                promoted = @($group | Where-Object promoted).Count
+                retained = @($group | Where-Object { -not $_.promoted }).Count
+                candidates = $group.Count
+                candidatesWithLoweredGraph = @($group | Where-Object { $null -ne $_.graph }).Count
+                totalStaticBoundaryCostUnits = [int] (($group | ForEach-Object { if ($null -eq $_.graph) { 0 } else { [int] $_.graph.staticBoundaryCostUnits } } | Measure-Object -Sum).Sum)
+                exampleReason = [string] $group[0].reason
+            }
+        })
+}
+
+function Get-CrossWorkloadRetainedRegionFrontier {
+    param([object[]] $Rows)
+
+    return @($Rows |
+        Where-Object { -not $_.Candidate.promoted } |
+        Group-Object { $_.Candidate.decisionCode } |
+        ForEach-Object {
+            $group = @($_.Group)
+            $costs = @($group | ForEach-Object { if ($null -eq $_.Candidate.graph) { 0 } else { [int] $_.Candidate.graph.staticBoundaryCostUnits } })
+            [pscustomobject]@{
+                decisionCode = $_.Name
+                affectedScenarioFamilies = @($group.ScenarioFamily | Sort-Object -Unique).Count
+                affectedWorkloads = @($group.WorkloadId | Sort-Object -Unique).Count
+                candidates = $group.Count
+                candidatesWithLoweredGraph = @($group | Where-Object { $null -ne $_.Candidate.graph }).Count
+                totalStaticBoundaryCostUnits = [int] (($costs | Measure-Object -Sum).Sum)
+                maximumStaticBoundaryCostUnits = [int] (($costs | Measure-Object -Maximum).Maximum)
+                maximumSourceLineSpan = [int] (($group | ForEach-Object { [int] $_.Candidate.sourceLineSpan } | Measure-Object -Maximum).Maximum)
+                exampleReason = [string] $group[0].Candidate.reason
+            }
+        } |
+        Sort-Object -Property @{ Expression = 'affectedScenarioFamilies'; Descending = $true }, @{ Expression = 'affectedWorkloads'; Descending = $true }, @{ Expression = 'candidates'; Descending = $true }, decisionCode)
+}
+
 function Invoke-OwnedProcess {
     param(
         [string] $FileName,

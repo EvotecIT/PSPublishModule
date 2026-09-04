@@ -88,7 +88,10 @@ public sealed partial class PowerShellCompilationCensusRunner
         PowerShellCompilationRegionCandidate[] regionCandidates = Array.Empty<PowerShellCompilationRegionCandidate>();
         if (recurse)
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(path);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(
+                path,
+                mode: PowerShellCompilationMode.Hybrid,
+                allowDynamicModuleRuntimeSources: true);
             var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
                 resolved.Kind,
                 PowerShellCompilationMode.Hybrid);
