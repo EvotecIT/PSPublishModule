@@ -187,6 +187,63 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$null = Write-Output 'hidden'", generated, StringComparison.Ordinal);
         Assert.Contains("result = checked((int)(result + 1))", generated, StringComparison.Ordinal);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest!.UnitDispositionLedger);
+        Assert.Equal(3, ledger.SchemaVersion);
+        var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Invoke-FrontierRegion");
+        var graph = Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph);
+        Assert.Equal(1, graph.SchemaVersion);
+        Assert.Equal(1, graph.HostedCommandBoundarySites);
+        Assert.Equal(2, graph.StaticBoundaryCostUnits);
+        Assert.Collection(
+            graph.Regions,
+            typedPrefix =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Typed, typedPrefix.Execution);
+                Assert.Contains("Parameter:VALUE", typedPrefix.Inputs);
+                Assert.Contains("Local:RESULT", typedPrefix.Outputs);
+                Assert.Contains("Local:RESULT", typedPrefix.Mutations);
+                Assert.Equal(0, typedPrefix.StaticBoundaryCostUnits);
+            },
+            hosted =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Hosted, hosted.Execution);
+                Assert.Equal(new[] { "Success", "Error", "Warning", "Verbose", "Debug", "Information", "Host" }, hosted.Streams);
+                Assert.Equal(new[] { "PowerShellErrorRecord" }, hosted.Errors);
+                Assert.Equal(new[] { "stream:Success" }, hosted.Outputs);
+                Assert.Equal(2, hosted.StaticBoundaryCostUnits);
+            },
+            typedSuffix =>
+            {
+                Assert.Equal(PowerShellCompilationRegionExecution.Typed, typedSuffix.Execution);
+                Assert.Contains("Local:RESULT", typedSuffix.Inputs);
+                Assert.Contains("Local:RESULT", typedSuffix.Mutations);
+                Assert.Contains("stream:Success", typedSuffix.Outputs);
+                Assert.Equal(0, typedSuffix.StaticBoundaryCostUnits);
+            });
+    }
+
+    [Fact]
+    public void Transpile_RegionGraphConservativelyRecordsClrReceiverMutationAndFailureRoute()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Add-RegionValue { [CmdletBinding()] param([System.Collections.Generic.List[int]] $Items) " +
+            "Write-Output 'before'; [void] $Items.Add(1); Write-Output 'after'; return $Items.Count }",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath },
+            "PowerForge.TypedRegionEffects",
+            "CompiledPowerShell",
+            "net10.0");
+
+        var method = Assert.Single(typed.Methods);
+        var graph = Assert.IsType<PowerShellCompilationRegionGraph>(method.RegionGraph);
+        var mutation = Assert.Single(graph.Regions, static region =>
+            region.Execution == PowerShellCompilationRegionExecution.Typed &&
+            region.Mutations.Contains("Parameter:ITEMS", StringComparer.Ordinal));
+        Assert.Contains("Parameter:ITEMS", mutation.Outputs);
+        Assert.Contains("ClrException", mutation.Errors);
+        Assert.Contains(graph.Regions, static region =>
+            region.Ordinal > 0 && region.Inputs.Contains("Parameter:ITEMS", StringComparer.Ordinal));
     }
 
     [Fact]

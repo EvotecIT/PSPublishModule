@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Text;
 
 namespace PowerForge;
 
@@ -43,16 +44,21 @@ internal static class PowerShellTypedExecutableCompiler
         var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
         var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
         var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
-            parsed.Values.Select(static source => source.Document).Append(entryDocument),
+            parsed.Values.Select(static source => source.Document).Append(entryDocument.Document),
             targetFramework,
             Capabilities);
         var emissions = semantic.Lowered.Functions
             .Zip(semantic.Emitted.Methods, static (function, emission) => new SemanticEmission(function, emission))
             .ToArray();
         var entry = emissions.SingleOrDefault(item =>
-            item.Function.Symbol.DocumentId == entryDocument.DocumentId &&
+            item.Function.Symbol.DocumentId == entryDocument.Document.DocumentId &&
             item.Function.Symbol.Name.Equals("Invoke", StringComparison.Ordinal));
         if (entry is null) throw CreateSemanticFailure(semantic, "entrypoint");
+        entry.Emission.RegionGraph = PowerShellLoweredRegionGraphBuilder.Remap(
+            entry.Emission.RegionGraph,
+            entrySource.Document.DocumentId,
+            entrySource.Document.Text,
+            entryDocument.SourceMappings);
 
         var localMethods = new List<PowerShellCSharpMethodEmission>();
         var descriptions = new List<PowerShellCompiledMethod>();
@@ -149,12 +155,26 @@ internal static class PowerShellTypedExecutableCompiler
         }
     }
 
-    private static ParsedSourceDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
+    private static ExecutableEntryDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
     {
         var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
-        var body = string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
-        var source = $"function Invoke {{{Environment.NewLine}{parameterBlock}{Environment.NewLine}{body}{Environment.NewLine}}}";
-        return PowerShellSourceParser.Parse(source, entrySource.Path + ".powerforge-entry.ps1", identityRoot);
+        var builder = new StringBuilder().AppendLine("function Invoke {").AppendLine(parameterBlock);
+        var mappings = new List<PowerShellRegionSourceRemap>();
+        foreach (var statement in statements)
+        {
+            var startOffset = builder.Length;
+            builder.Append(statement.Extent.Text);
+            mappings.Add(new PowerShellRegionSourceRemap(
+                startOffset,
+                builder.Length,
+                statement.Extent.StartOffset,
+                statement.Extent.EndOffset));
+            builder.AppendLine();
+        }
+        builder.Append('}');
+        return new ExecutableEntryDocument(
+            PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot),
+            mappings.ToArray());
     }
 
     private static InvalidOperationException CreateSemanticFailure(PowerShellSemanticCompilationResult result, string owner)
@@ -209,6 +229,7 @@ internal static class PowerShellTypedExecutableCompiler
         description.PowerShellModuleStateReadSiteCount = method.ModuleStateReadSiteCount;
         description.WrittenPowerShellModuleVariables = method.WrittenModuleStateVariableNames;
         description.PowerShellModuleStateWriteSiteCount = method.ModuleStateWriteSiteCount;
+        description.RegionGraph = method.RegionGraph;
         return description;
     }
 
@@ -265,6 +286,18 @@ internal static class PowerShellTypedExecutableCompiler
         internal string Path { get; }
         internal ParsedSourceDocument Document { get; }
         internal ScriptBlockAst Ast => Document.SyntaxRoot;
+    }
+
+    private sealed class ExecutableEntryDocument
+    {
+        internal ExecutableEntryDocument(ParsedSourceDocument document, PowerShellRegionSourceRemap[] sourceMappings)
+        {
+            Document = document;
+            SourceMappings = sourceMappings;
+        }
+
+        internal ParsedSourceDocument Document { get; }
+        internal PowerShellRegionSourceRemap[] SourceMappings { get; }
     }
 
     private sealed class LocalDefinition

@@ -23,6 +23,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.True(result.Manifest!.IrOptimization!.ConstantExpressionsFolded > 0);
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
+        Assert.All(
+            ledger.Entries.Where(static entry => entry.EmittedClrMethod),
+            static entry => Assert.NotEmpty(Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph).Regions));
         var processResult = RunProcess(result.ArtifactPath!);
         Assert.Equal((0, "4", string.Empty),
             (processResult.ExitCode, processResult.StandardOutput.Trim(), processResult.StandardError.Trim()));

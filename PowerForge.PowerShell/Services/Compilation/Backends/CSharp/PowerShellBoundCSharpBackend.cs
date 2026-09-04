@@ -83,12 +83,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
 
         builder.AppendLine("        }").Append("    }");
+        var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
         var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
-        var moduleStateReadSiteCount = PowerShellLoweredModuleStateCollector.CountReadSites(function.Statements);
+        var moduleStateReadSiteCount = regionGraph.ModuleStateReadBoundarySites;
         var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(function.Statements);
-        var moduleStateWriteSiteCount = PowerShellLoweredModuleStateCollector.CountWriteSites(function.Statements);
-        var hostedRegionSiteCount = CountHostedRegionSites(function.Statements);
+        var moduleStateWriteSiteCount = regionGraph.ModuleStateWriteBoundarySites;
+        var hostedRegionSiteCount = regionGraph.HostedCommandBoundarySites;
         var supportsBasicCommandQuerySurface =
             function.RequiresPowerShellCommandRegions &&
             !function.RequiresPowerShellStreams &&
@@ -131,7 +132,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             moduleStateVariableNames: moduleStateVariableNames,
             moduleStateReadSiteCount: moduleStateReadSiteCount,
             writtenModuleStateVariableNames: writtenModuleStateVariableNames,
-            moduleStateWriteSiteCount: moduleStateWriteSiteCount);
+            moduleStateWriteSiteCount: moduleStateWriteSiteCount,
+            regionGraph: regionGraph);
     }
 
     private static void EmitStatement(

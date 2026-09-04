@@ -119,6 +119,28 @@ public sealed class PowerShellCompilationExplanationTests
             new[] { file },
             "net8.0",
             new[] { dependency });
+        var regionGraph = new PowerShellCompilationRegionGraph(new[]
+        {
+            new PowerShellCompilationRegion(
+                "region:test:0:1:Typed",
+                0,
+                PowerShellCompilationRegionExecution.Typed,
+                0,
+                1,
+                4,
+                1,
+                4,
+                20,
+                new[] { "Parameter:Count" },
+                new[] { "stream:Success" },
+                Array.Empty<string>(),
+                new[] { "Success" },
+                Array.Empty<string>(),
+                "AuthoredSequentialSingleEvaluation",
+                0,
+                0,
+                0)
+        });
         var ledger = new PowerShellCompilationUnitDispositionLedger(
             new[]
             {
@@ -140,7 +162,10 @@ public sealed class PowerShellCompilationExplanationTests
                     generatedMemberName: "Get_RandomValue",
                     dependencyCauses: Array.Empty<string>(),
                     boundaryCauses: Array.Empty<string>(),
-                    diagnosticChain: Array.Empty<PowerShellCompilationDispositionCause>())
+                    diagnosticChain: Array.Empty<PowerShellCompilationDispositionCause>(),
+                    moduleStateReadBoundaryCrossings: 0,
+                    moduleStateWriteBoundaryCrossings: 0,
+                    regionGraph: regionGraph)
             },
             Array.Empty<string>());
         var explanation = PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
@@ -151,7 +176,72 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.Equal(PowerShellCompilationDecisionKind.Typed, tracedUnit.Decision);
         Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
         Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
+        Assert.Equal(4, explanation.SchemaVersion);
+        Assert.Equal(3, explanation.SemanticCompatibilityVersion);
+        Assert.Single(Assert.IsType<PowerShellCompilationRegionGraph>(tracedUnit.RegionGraph).Regions);
         Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
+
+        var relocatedGraph = new PowerShellCompilationRegionGraph(new[]
+        {
+            new PowerShellCompilationRegion(
+                "region:relocated:400:420:Typed",
+                0,
+                PowerShellCompilationRegionExecution.Typed,
+                400,
+                420,
+                40,
+                10,
+                40,
+                29,
+                new[] { "Parameter:Count" },
+                new[] { "stream:Success" },
+                Array.Empty<string>(),
+                new[] { "Success" },
+                Array.Empty<string>(),
+                "AuthoredSequentialSingleEvaluation",
+                0,
+                0,
+                0)
+        });
+        PowerShellCompilationUnitDispositionLedger WithGraph(PowerShellCompilationRegionGraph graph) => new(
+            ledger.Entries.Select(entry => new PowerShellCompilationUnitDisposition(
+                entry.UnitId, entry.RelativePath, entry.Name, entry.Kind, entry.StartLine,
+                entry.SemanticEligible, entry.EmittedClrMethod, entry.EmittedBinaryCmdlet,
+                entry.RetainedHostedSource, entry.RuntimeCommandRegions, entry.BoundaryCrossings,
+                entry.ShapingFallback, entry.Omitted, entry.Rejected, entry.GeneratedMemberName,
+                entry.DependencyCauses, entry.BoundaryCauses, entry.DiagnosticChain,
+                entry.ModuleStateReadBoundaryCrossings, entry.ModuleStateWriteBoundaryCrossings, graph)).ToArray(),
+            ledger.DeliveryRuntimeCauses);
+        var relocatedLedger = WithGraph(relocatedGraph);
+        Assert.Equal(
+            explanation.SemanticFingerprintSha256,
+            PowerShellCompilationExplanationService.CreateFinal(plan, relocatedLedger).SemanticFingerprintSha256);
+
+        var categoryChangedGraph = new PowerShellCompilationRegionGraph(new[]
+        {
+            new PowerShellCompilationRegion(
+                "region:test:0:1:Typed",
+                0,
+                PowerShellCompilationRegionExecution.Typed,
+                0,
+                1,
+                4,
+                1,
+                4,
+                20,
+                Array.Empty<string>(),
+                new[] { "stream:Success" },
+                new[] { "Parameter:Count" },
+                new[] { "Success" },
+                Array.Empty<string>(),
+                "AuthoredSequentialSingleEvaluation",
+                0,
+                0,
+                0)
+        });
+        Assert.NotEqual(
+            explanation.SemanticFingerprintSha256,
+            PowerShellCompilationExplanationService.CreateFinal(plan, WithGraph(categoryChangedGraph)).SemanticFingerprintSha256);
 
 #pragma warning disable CS0618 // The regression locks the explicit pre-ledger compatibility contract.
         var compatibility = PowerShellCompilationExplanationService.CreateFinal(
@@ -170,6 +260,47 @@ public sealed class PowerShellCompilationExplanationTests
                 typeof(PowerShellTypedCompilationResult)
             });
         Assert.NotNull(compatibilityOverload?.GetCustomAttributes(typeof(ObsoleteAttribute), inherit: false).SingleOrDefault());
+    }
+
+    [Fact]
+    public void DispositionLedgerReadsSchemaTwoJsonWithoutRegionGraph()
+    {
+        const string json = """
+            {
+              "SchemaVersion": 2,
+              "Entries": [
+                {
+                  "UnitId": "unit:test",
+                  "RelativePath": "Module.psm1",
+                  "Name": "Get-Test",
+                  "Kind": 0,
+                  "StartLine": 1,
+                  "SemanticEligible": true,
+                  "EmittedClrMethod": true,
+                  "EmittedBinaryCmdlet": true,
+                  "RetainedHostedSource": false,
+                  "RuntimeCommandRegions": 0,
+                  "BoundaryCrossings": 0,
+                  "ShapingFallback": false,
+                  "Omitted": false,
+                  "Rejected": false,
+                  "GeneratedMemberName": "Get_Test",
+                  "DependencyCauses": [],
+                  "BoundaryCauses": [],
+                  "DiagnosticChain": [],
+                  "ModuleStateReadBoundaryCrossings": 0,
+                  "ModuleStateWriteBoundaryCrossings": 0
+                }
+              ],
+              "DeliveryRuntimeCauses": []
+            }
+            """;
+
+        var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(
+            JsonSerializer.Deserialize<PowerShellCompilationUnitDispositionLedger>(json));
+
+        Assert.Equal(3, ledger.SchemaVersion);
+        Assert.Null(Assert.Single(ledger.Entries).RegionGraph);
     }
 
     [Fact]

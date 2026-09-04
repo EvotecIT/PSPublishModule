@@ -50,6 +50,11 @@ internal static partial class Program
                 if (unit.Decision == PowerShellCompilationDecisionKind.Typed) logger.Success(line);
                 else if (unit.Decision == PowerShellCompilationDecisionKind.Rejected) logger.Error(line);
                 else logger.Warn(line);
+                if (unit.RegionGraph is not null)
+                {
+                    foreach (var region in unit.RegionGraph.Regions)
+                        logger.Info($"  REGION {region.Ordinal} {region.Execution}: {region.Inputs.Count} inputs, {region.Outputs.Count} outputs, {region.Mutations.Count} mutations, {region.StaticBoundaryCrossings} crossings, cost {region.StaticBoundaryCostUnits}");
+                }
                 foreach (var cause in unit.Causes)
                     logger.Warn($"  {cause.Code} / {cause.FeatureId} at {cause.Line}:{cause.Column}: {cause.Message}");
             }

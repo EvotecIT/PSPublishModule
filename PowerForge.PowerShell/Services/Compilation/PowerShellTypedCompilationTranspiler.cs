@@ -397,6 +397,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.OutputScalarization,
             emitted.HostedRegionSiteCount,
             emitted.RequiresProviderCancellation);
+        method.RegionGraph = emitted.RegionGraph;
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
@@ -568,7 +569,8 @@ internal sealed class PowerShellCSharpMethodEmission
         string[]? moduleStateVariableNames = null,
         int moduleStateReadSiteCount = 0,
         string[]? writtenModuleStateVariableNames = null,
-        int moduleStateWriteSiteCount = 0)
+        int moduleStateWriteSiteCount = 0,
+        PowerShellCompilationRegionGraph? regionGraph = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -598,6 +600,7 @@ internal sealed class PowerShellCSharpMethodEmission
         ModuleStateReadSiteCount = Math.Max(0, moduleStateReadSiteCount);
         WrittenModuleStateVariableNames = writtenModuleStateVariableNames ?? Array.Empty<string>();
         ModuleStateWriteSiteCount = Math.Max(0, moduleStateWriteSiteCount);
+        RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
     }
 
     internal string GeneratedName { get; }
@@ -629,4 +632,5 @@ internal sealed class PowerShellCSharpMethodEmission
     internal int ModuleStateReadSiteCount { get; }
     internal string[] WrittenModuleStateVariableNames { get; }
     internal int ModuleStateWriteSiteCount { get; }
+    internal PowerShellCompilationRegionGraph RegionGraph { get; set; }
 }

@@ -84,7 +84,6 @@ public sealed class PowerShellCompilationUnitDisposition
     }
 
     /// <summary>Creates one final unit disposition with directional parent-module state crossings.</summary>
-    [JsonConstructor]
     public PowerShellCompilationUnitDisposition(
         string unitId,
         string relativePath,
@@ -106,6 +105,55 @@ public sealed class PowerShellCompilationUnitDisposition
         IReadOnlyList<PowerShellCompilationDispositionCause>? diagnosticChain,
         int moduleStateReadBoundaryCrossings,
         int moduleStateWriteBoundaryCrossings)
+        : this(
+            unitId,
+            relativePath,
+            name,
+            kind,
+            startLine,
+            semanticEligible,
+            emittedClrMethod,
+            emittedBinaryCmdlet,
+            retainedHostedSource,
+            runtimeCommandRegions,
+            boundaryCrossings,
+            shapingFallback,
+            omitted,
+            rejected,
+            generatedMemberName,
+            dependencyCauses,
+            boundaryCauses,
+            diagnosticChain,
+            moduleStateReadBoundaryCrossings,
+            moduleStateWriteBoundaryCrossings,
+            regionGraph: null)
+    {
+    }
+
+    /// <summary>Creates one final unit disposition with directional state and canonical region evidence.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationUnitDisposition(
+        string unitId,
+        string relativePath,
+        string name,
+        PowerShellCompilationUnitKind kind,
+        int startLine,
+        bool semanticEligible,
+        bool emittedClrMethod,
+        bool emittedBinaryCmdlet,
+        bool retainedHostedSource,
+        int runtimeCommandRegions,
+        int boundaryCrossings,
+        bool shapingFallback,
+        bool omitted,
+        bool rejected,
+        string generatedMemberName,
+        IReadOnlyList<string>? dependencyCauses,
+        IReadOnlyList<string>? boundaryCauses,
+        IReadOnlyList<PowerShellCompilationDispositionCause>? diagnosticChain,
+        int moduleStateReadBoundaryCrossings,
+        int moduleStateWriteBoundaryCrossings,
+        PowerShellCompilationRegionGraph? regionGraph)
     {
         UnitId = unitId ?? string.Empty;
         RelativePath = relativePath ?? string.Empty;
@@ -134,6 +182,7 @@ public sealed class PowerShellCompilationUnitDisposition
         DependencyCauses = Array.AsReadOnly((dependencyCauses ?? Array.Empty<string>()).ToArray());
         BoundaryCauses = Array.AsReadOnly((boundaryCauses ?? Array.Empty<string>()).ToArray());
         DiagnosticChain = Array.AsReadOnly((diagnosticChain ?? Array.Empty<PowerShellCompilationDispositionCause>()).ToArray());
+        RegionGraph = regionGraph;
     }
 
     /// <summary>Stable relocation-safe authored-unit identity.</summary>
@@ -183,6 +232,9 @@ public sealed class PowerShellCompilationUnitDisposition
     /// <summary>Writes that cross from emitted CLR into the retained parent Hybrid script-module scope.</summary>
     public int ModuleStateWriteBoundaryCrossings { get; }
 
+    /// <summary>Canonical lowered region evidence when this unit has an emitted CLR method.</summary>
+    public PowerShellCompilationRegionGraph? RegionGraph { get; }
+
     /// <summary>Total parent Hybrid script-module state crossings in either direction.</summary>
     [JsonIgnore]
     public int ModuleStateBoundaryCrossings => ModuleStateReadBoundaryCrossings + ModuleStateWriteBoundaryCrossings;
@@ -221,7 +273,7 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     }
 
     /// <summary>Ledger schema version.</summary>
-    public int SchemaVersion => 2;
+    public int SchemaVersion => 3;
     /// <summary>Deterministically ordered authored-unit dispositions.</summary>
     public IReadOnlyList<PowerShellCompilationUnitDisposition> Entries { get; }
     /// <summary>Runtime delivery causes outside an authored compilation unit, such as manifest hooks.</summary>

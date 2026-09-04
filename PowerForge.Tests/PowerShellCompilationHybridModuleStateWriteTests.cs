@@ -24,7 +24,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             [CmdletBinding()]
             param([object] $Value)
             $script:State = $Value
-            return $script:State
+            return $script:sTaTe
         }
         function Set-WriteStateCase {
             [CmdletBinding()]
@@ -104,10 +104,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(setThenGet.RequiresPowerShellModuleStateRead);
         Assert.True(setThenGet.RequiresPowerShellModuleStateWrite);
-        Assert.Equal(new[] { "State" }, setThenGet.RequiredPowerShellModuleVariables);
+        Assert.Equal(new[] { "sTaTe" }, setThenGet.RequiredPowerShellModuleVariables);
         Assert.Equal(new[] { "State" }, setThenGet.WrittenPowerShellModuleVariables);
         Assert.Equal(1, setThenGet.PowerShellModuleStateReadSiteCount);
         Assert.Equal(1, setThenGet.PowerShellModuleStateWriteSiteCount);
+        var setThenGetRegions = Assert.IsType<PowerShellCompilationRegionGraph>(setThenGet.RegionGraph).Regions;
+        Assert.Equal(2, setThenGetRegions.Count);
+        Assert.Contains("ModuleState:STATE", setThenGetRegions[0].Mutations);
+        Assert.Contains("ModuleState:STATE", setThenGetRegions[0].Outputs);
+        Assert.Contains("ModuleState:STATE", setThenGetRegions[1].Inputs);
 
         var abi = PowerShellCompilationAbiBuilder.Create(typed.NamespaceName, typed.TypeName, new[] { setter, getter, setThenGet });
         var setterAbi = Assert.Single(abi.Methods, static method => method.PowerShellName == "Set-WriteState");
@@ -273,6 +278,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var typedOuter = Assert.Single(typed.Methods, static method => method.SourceName == "Set-OuterState");
         Assert.True(typedOuter.RequiresPowerShellModuleStateWrite);
         Assert.Empty(typedOuter.WrittenPowerShellModuleVariables);
+        var outerGraph = Assert.IsType<PowerShellCompilationRegionGraph>(typedOuter.RegionGraph);
+        Assert.Equal(1, outerGraph.ModuleStateWriteBoundarySites);
+        Assert.Equal(PowerShellCompilationRegionExecution.Mixed, Assert.Single(outerGraph.Regions).Execution);
+        Assert.Contains("LocalCall:SET-INNERSTATE/ModuleStateWrite", Assert.Single(outerGraph.Regions).Mutations);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest!.UnitDispositionLedger);
         var outer = Assert.Single(ledger.Entries, static entry => entry.Name == "Set-OuterState");
         Assert.Equal(1, outer.ModuleStateBoundaryCrossings);
@@ -355,13 +364,20 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
 
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(2, ledger.SchemaVersion);
+        Assert.Equal(3, ledger.SchemaVersion);
         var hosted = Assert.Single(ledger.Entries, static entry => entry.Name == "Set-StateFromHostedCommand");
         Assert.Equal(1, hosted.RuntimeCommandRegions);
         Assert.Equal(0, hosted.ModuleStateReadBoundaryCrossings);
         Assert.Equal(1, hosted.ModuleStateWriteBoundaryCrossings);
         Assert.Equal(1, hosted.ModuleStateBoundaryCrossings);
         Assert.Equal(2, hosted.BoundaryCrossings);
+        var hostedGraph = Assert.IsType<PowerShellCompilationRegionGraph>(hosted.RegionGraph);
+        var mixedRegion = Assert.Single(hostedGraph.Regions);
+        Assert.Equal(PowerShellCompilationRegionExecution.Mixed, mixedRegion.Execution);
+        Assert.Equal(1, mixedRegion.HostedCommandBoundarySites);
+        Assert.Equal(1, mixedRegion.ModuleStateWriteBoundarySites);
+        Assert.Contains("ModuleState:STATE", mixedRegion.Mutations);
+        Assert.Equal(3, mixedRegion.StaticBoundaryCostUnits);
         Assert.Equal(1, ledger.ModuleStateReadBoundaryCrossings);
         Assert.Equal(4, ledger.ModuleStateWriteBoundaryCrossings);
 
@@ -387,6 +403,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var roundTripHosted = Assert.Single(roundTrip.Entries, static entry => entry.Name == "Set-StateFromHostedCommand");
         Assert.Equal(1, roundTripHosted.ModuleStateWriteBoundaryCrossings);
         Assert.Equal(0, roundTripHosted.ModuleStateReadBoundaryCrossings);
+        Assert.Equal(3, Assert.IsType<PowerShellCompilationRegionGraph>(roundTripHosted.RegionGraph).StaticBoundaryCostUnits);
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,

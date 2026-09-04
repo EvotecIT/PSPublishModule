@@ -25,13 +25,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
             _ => false
         };
 
-    private static int CountHostedRegionSites(IEnumerable<PowerShellLoweredStatement> statements)
-        => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Count(static statement =>
-               statement is PowerShellLoweredCommandRegionStatement or PowerShellLoweredCommandCaptureStatement) +
-           PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Count(static expression =>
-               expression is PowerShellLoweredCommandAvailabilityExpression or PowerShellLoweredHostedBooleanCommandExpression ||
-               expression is PowerShellLoweredInvocationExpression { RequiresPowerShellCommandRegions: true });
-
     private static bool ContainsNonQueryHostedBoundary(IEnumerable<PowerShellLoweredStatement> statements)
         => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
                statement is PowerShellLoweredCommandRegionStatement or PowerShellLoweredCommandCaptureStatement) ||

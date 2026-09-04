@@ -126,7 +126,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource),
                     diagnosticChain,
                     moduleStateReadBoundaryCrossings,
-                    moduleStateWriteBoundaryCrossings));
+                    moduleStateWriteBoundaryCrossings,
+                    dispositionMethod?.RegionGraph));
             }
         }
 

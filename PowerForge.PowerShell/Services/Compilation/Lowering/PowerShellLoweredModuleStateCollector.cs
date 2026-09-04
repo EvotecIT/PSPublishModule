@@ -3,7 +3,7 @@ namespace PowerForge;
 internal static class PowerShellLoweredModuleStateCollector
 {
     internal static string[] Collect(IEnumerable<PowerShellLoweredStatement> statements)
-        => GetReads(statements)
+        => EnumerateReadSites(statements)
             .Select(static expression => expression.Arguments.FirstOrDefault())
             .OfType<PowerShellLoweredLiteralExpression>()
             .Select(static expression => expression.Value as string)
@@ -15,7 +15,7 @@ internal static class PowerShellLoweredModuleStateCollector
             .ToArray();
 
     internal static int CountReadSites(IEnumerable<PowerShellLoweredStatement> statements)
-        => GetReads(statements).Count();
+        => EnumerateReadSites(statements).Count();
 
     internal static string[] CollectWrites(IEnumerable<PowerShellLoweredStatement> statements)
         => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
@@ -30,7 +30,7 @@ internal static class PowerShellLoweredModuleStateCollector
         => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
             .Count(static statement => statement is PowerShellLoweredModuleVariableAssignmentStatement);
 
-    private static IEnumerable<PowerShellLoweredRuntimeStateExpression> GetReads(
+    internal static IEnumerable<PowerShellLoweredRuntimeStateExpression> EnumerateReadSites(
         IEnumerable<PowerShellLoweredStatement> statements)
         => PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)
             .OfType<PowerShellLoweredRuntimeStateExpression>()

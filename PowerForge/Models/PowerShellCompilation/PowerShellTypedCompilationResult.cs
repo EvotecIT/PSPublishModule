@@ -276,6 +276,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Number of statically emitted writes across the live parent Hybrid script-module boundary.</summary>
     public int PowerShellModuleStateWriteSiteCount { get; internal set; }
 
+    /// <summary>Canonical coarse-region and boundary-transfer graph derived from this method's lowered IR.</summary>
+    public PowerShellCompilationRegionGraph? RegionGraph { get; internal set; }
+
     /// <summary>Whether the generated method expects the names of explicitly bound PowerShell parameters.</summary>
     public bool RequiresPowerShellBoundParameters { get; }
 

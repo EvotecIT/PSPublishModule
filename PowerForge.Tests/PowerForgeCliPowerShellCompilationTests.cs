@@ -102,14 +102,56 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(3, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(4, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(3, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
             var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
             Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
             var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
             Assert.Equal(decision, unit.GetProperty("decision").GetString());
+            Assert.False(unit.TryGetProperty("regionGraph", out _));
             Assert.Equal(24, unit.GetProperty("unitId").GetString()!.Length);
             Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray());
             Assert.DoesNotContain(root, explanation.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Explain_EmitsCanonicalRegionGraphForTypedUnit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Region Graph Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "Input.ps1");
+        const string sourceText = "# retained line 1\r\n\r\n# retained line 3\r\n\r\nreturn 1";
+        File.WriteAllText(source, sourceText);
+        try
+        {
+            var result = await RunCliAsync(
+                FindRepositoryRoot(),
+                $"powershell explain \"{source}\" --kind exe --mode Strict --framework net10.0 --output json");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
+            using var document = JsonDocument.Parse(result.StdOut);
+            var explanation = document.RootElement.GetProperty("result");
+            Assert.Equal(4, explanation.GetProperty("schemaVersion").GetInt32());
+            var unit = Assert.Single(Assert.Single(explanation.GetProperty("files").EnumerateArray())
+                .GetProperty("units").EnumerateArray());
+            Assert.Equal("Typed", unit.GetProperty("decision").GetString());
+            var graph = unit.GetProperty("regionGraph");
+            Assert.Equal(1, graph.GetProperty("schemaVersion").GetInt32());
+            var region = Assert.Single(graph.GetProperty("regions").EnumerateArray());
+            var expectedStartOffset = sourceText.IndexOf("return", StringComparison.Ordinal);
+            Assert.Equal(expectedStartOffset, region.GetProperty("startOffset").GetInt32());
+            Assert.Equal(5, region.GetProperty("startLine").GetInt32());
+            Assert.StartsWith(
+                $"region:{PowerShellSourceParser.CreateDocumentId(source, root)}:{expectedStartOffset}:",
+                region.GetProperty("regionId").GetString(),
+                StringComparison.Ordinal);
+            Assert.Equal(0, graph.GetProperty("staticBoundaryCrossings").GetInt32());
         }
         finally
         {

@@ -74,6 +74,8 @@ public sealed class PowerShellCompilationUnitExplanation
     public int ModuleStateWriteBoundaryCrossings { get; set; }
     /// <summary>Number of typed/hosted boundary crossings.</summary>
     public int BoundaryCrossings { get; set; }
+    /// <summary>Canonical coarse lowered-region evidence for an emitted CLR method.</summary>
+    public PowerShellCompilationRegionGraph? RegionGraph { get; set; }
     /// <summary>Whether artifact shaping retained a runtime path for an eligible unit.</summary>
     public bool ShapingFallback { get; set; }
     /// <summary>Whether the artifact intentionally omits this unit.</summary>
@@ -193,9 +195,9 @@ public sealed class PowerShellCompilationReproductionEvidence
 public sealed class PowerShellCompilationExplanation
 {
     /// <summary>Explanation schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
     /// <summary>Compatibility contract used by semantic fingerprints across supported hosts.</summary>
-    public int SemanticCompatibilityVersion { get; set; } = 2;
+    public int SemanticCompatibilityVersion { get; set; } = 3;
     /// <summary>SHA-256 over semantic decisions with authored coordinates and traversal order removed.</summary>
     public string SemanticFingerprintSha256 { get; set; } = string.Empty;
     /// <summary>Selected compilation mode.</summary>

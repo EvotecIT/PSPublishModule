@@ -51,6 +51,7 @@ public static class PowerShellCompilationExplanationService
             unit.ModuleStateReadBoundaryCrossings = entry.ModuleStateReadBoundaryCrossings;
             unit.ModuleStateWriteBoundaryCrossings = entry.ModuleStateWriteBoundaryCrossings;
             unit.BoundaryCrossings = entry.BoundaryCrossings;
+            unit.RegionGraph = entry.RegionGraph;
             unit.ShapingFallback = entry.ShapingFallback;
             unit.Omitted = entry.Omitted;
             unit.Rejected = entry.Rejected;
@@ -342,6 +343,33 @@ public static class PowerShellCompilationExplanationService
                     Append(unit.ModuleStateWriteBoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
                 Append(unit.BoundaryCrossings.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (explanation.SemanticCompatibilityVersion >= 3)
+                {
+                    if (unit.RegionGraph is null)
+                    {
+                        Append("RegionGraphAbsent");
+                    }
+                    else
+                    {
+                        Append("RegionGraph");
+                        Append(unit.RegionGraph.Regions.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        foreach (var region in unit.RegionGraph.Regions.OrderBy(static item => item.Ordinal))
+                        {
+                            Append("Region");
+                            Append(region.Ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                            Append(region.Execution.ToString());
+                            Append(region.Ordering);
+                            Append(region.HostedCommandBoundarySites.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                            Append(region.ModuleStateReadBoundarySites.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                            Append(region.ModuleStateWriteBoundarySites.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                            AppendSequence("Inputs", region.Inputs);
+                            AppendSequence("Outputs", region.Outputs);
+                            AppendSequence("Mutations", region.Mutations);
+                            AppendSequence("Streams", region.Streams);
+                            AppendSequence("Errors", region.Errors);
+                        }
+                    }
+                }
                 foreach (var parameter in unit.Parameters)
                 {
                     Append(parameter.Name);
@@ -375,6 +403,12 @@ public static class PowerShellCompilationExplanationService
             .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
 
         void Append(string value) => builder.Append(value.Length).Append(':').Append(value).Append('\n');
+        void AppendSequence(string category, IReadOnlyList<string> values)
+        {
+            Append(category);
+            Append(values.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            foreach (var value in values) Append(value);
+        }
     }
 
     private static string NormalizePath(string path)
