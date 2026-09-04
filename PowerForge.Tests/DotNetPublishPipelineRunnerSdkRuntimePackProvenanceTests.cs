@@ -158,6 +158,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Single(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("-p:RestoreSources=C:\\isolated\\verified", arguments);
         Assert.Contains("-p:RestoreOutputPath=C:\\isolated\\obj\\", arguments);
+        Assert.Contains("-p:DisableImplicitLibraryPacksFolder=true", arguments);
         Assert.Contains("-p:DisableImplicitFrameworkReferences=true", arguments);
         Assert.Contains("-p:ImportDirectoryBuildProps=false", arguments);
         Assert.Contains("-p:ImportDirectoryBuildTargets=false", arguments);

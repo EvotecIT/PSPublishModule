@@ -586,6 +586,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static void AppendSyntheticSdkEvidenceProjectIsolationProperties(
         ICollection<string> arguments)
     {
+        arguments.Add("-p:DisableImplicitLibraryPacksFolder=true");
         arguments.Add("-p:DisableImplicitFrameworkReferences=true");
         arguments.Add("-p:ImportDirectoryBuildProps=false");
         arguments.Add("-p:ImportDirectoryBuildTargets=false");

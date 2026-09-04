@@ -633,7 +633,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             // verified archives contain the same package content.
                             continue;
                         }
-                        failureReason = $"package '{entry.Key}' resolved to conflicting archive locations";
+                        failureReason = $"package '{entry.Key}' resolved to conflicting archive locations " +
+                                        $"with different verified hashes (committed {DescribePackageHash(entry.Key, committedPackageHashes)}, " +
+                                        $"SDK evidence {DescribePackageHash(entry.Key, sdkDownloadPackageHashes)})";
                         return false;
                     }
                     archivePathsByPackageKey[entry.Key] = entry.Value;
@@ -663,6 +665,15 @@ public sealed partial class DotNetPublishPipelineRunner
                sdkPackageHashes.TryGetValue(packageKey, out string? sdkHash) &&
                !string.IsNullOrWhiteSpace(committedHash) &&
                string.Equals(committedHash, sdkHash, StringComparison.Ordinal);
+
+        private static string DescribePackageHash(
+            string packageKey,
+            IReadOnlyDictionary<string, string> hashes)
+        {
+            if (!hashes.TryGetValue(packageKey, out string? hash) || string.IsNullOrWhiteSpace(hash))
+                return "missing";
+            return hash!.Length <= 12 ? hash : hash.Substring(0, 12);
+        }
 
         internal bool TryVerify(string path, out bool isPackageInput)
         {
