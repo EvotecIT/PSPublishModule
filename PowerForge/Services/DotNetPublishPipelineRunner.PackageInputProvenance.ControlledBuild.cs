@@ -12,21 +12,41 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> lockedPackageHashes,
             VerifiedPackageArchiveCache archives,
             out Dictionary<string, string> archivePathsByPackageKey)
+            => TryPrimeLockedPackageArchivesDetailed(
+                packageRoots,
+                lockedPackageHashes,
+                archives,
+                out archivePathsByPackageKey,
+                out _);
+
+        private static bool TryPrimeLockedPackageArchivesDetailed(
+            IEnumerable<string> packageRoots,
+            IReadOnlyDictionary<string, string> lockedPackageHashes,
+            VerifiedPackageArchiveCache archives,
+            out Dictionary<string, string> archivePathsByPackageKey,
+            out string? failureReason)
         {
             archivePathsByPackageKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            failureReason = null;
             try
             {
                 foreach (KeyValuePair<string, string> package in lockedPackageHashes)
                 {
                     if (string.IsNullOrWhiteSpace(package.Value))
+                    {
+                        failureReason = $"package '{package.Key}' has no committed content hash";
                         return false;
+                    }
                     int separator = package.Key.LastIndexOf('|');
                     if (separator <= 0 || separator == package.Key.Length - 1)
+                    {
+                        failureReason = "a committed package key is malformed";
                         return false;
+                    }
                     string packageId = package.Key.Substring(0, separator);
                     string packageVersion = package.Key.Substring(separator + 1);
                     string expectedName = packageId + "." + packageVersion + ".nupkg";
-                    string? archivePath = packageRoots
+                    string[] candidates = packageRoots
                         .Select(root => Path.Combine(
                             root,
                             packageId.ToLowerInvariant(),
@@ -39,19 +59,28 @@ public sealed partial class DotNetPublishPipelineRunner
                         .Where(candidate => Path.GetFileName(candidate).Equals(
                             expectedName,
                             StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    if (candidates.Length == 0)
+                    {
+                        failureReason = $"package archive '{packageId} {packageVersion}' was not found in the evaluated package roots";
+                        return false;
+                    }
+                    string? archivePath = candidates
                         .FirstOrDefault(candidate =>
                             archives.TryGetOrOpen(candidate, package.Value) is not null);
                     if (string.IsNullOrWhiteSpace(archivePath))
                     {
+                        failureReason = $"package archive '{packageId} {packageVersion}' did not match its committed content hash";
                         return false;
                     }
                     archivePathsByPackageKey.Add(package.Key, Path.GetFullPath(archivePath!));
                 }
                 return true;
             }
-            catch
+            catch (Exception exception)
             {
                 archivePathsByPackageKey.Clear();
+                failureReason = $"{exception.GetType().Name} while verifying committed package archives";
                 return false;
             }
         }

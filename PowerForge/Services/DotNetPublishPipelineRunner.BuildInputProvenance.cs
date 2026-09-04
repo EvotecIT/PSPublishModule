@@ -946,7 +946,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                if (!VerifiedPackageInputCatalog.TryCreateForEvaluation(
+                if (!VerifiedPackageInputCatalog.TryCreateForEvaluationDetailed(
                         request.ProjectPath,
                         properties,
                         packageRoots,
@@ -954,9 +954,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         request.ReadEffectiveGlobalProperties(),
                         request.EnvironmentVariables,
                         request.RequiresSdkPackageEvidence,
-                        out verifiedPackages))
+                        out verifiedPackages,
+                        out string? packageCatalogFailureReason))
                 {
-                    failureReason = "NuGet package input catalog could not be verified";
+                    failureReason = "NuGet package input catalog could not be verified: " +
+                                    (packageCatalogFailureReason ?? "no additional detail is available");
                     return false;
                 }
                 if (verifiedPackages is not null)

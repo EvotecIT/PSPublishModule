@@ -9,6 +9,59 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public void PublishProvenanceLease_ConsolidatesLargeWatcherSets()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string[] directories = Enumerable.Range(0, 40)
+                .Select(index => Path.Combine(root, "packages", "package-" + index, "1.0.0"))
+                .ToArray();
+            MethodInfo method = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
+                .GetMethod(
+                    "BuildConsolidatedWatcherRoots",
+                    BindingFlags.Static | BindingFlags.NonPublic)!;
+
+            var watcherRoots = Assert.IsAssignableFrom<IReadOnlyDictionary<string, bool>>(
+                method.Invoke(null, [directories, StringComparer.Ordinal]));
+
+            Assert.NotEmpty(watcherRoots);
+            Assert.True(watcherRoots.Count < directories.Length);
+            Assert.All(watcherRoots.Values, Assert.True);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void VerifiedPackageCatalog_AcceptsIsolatedSdkArchiveWithCommittedHash()
+    {
+        Type catalogType = typeof(DotNetPublishPipelineRunner).GetNestedType(
+            "VerifiedPackageInputCatalog",
+            BindingFlags.NonPublic)!;
+        MethodInfo method = catalogType.GetMethod(
+            "HaveSameVerifiedPackageHash",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        const string packageKey = "Microsoft.NET.ILLink.Tasks|10.0.11";
+        var committed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [packageKey] = "same-content-hash"
+        };
+        var sdk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [packageKey] = "same-content-hash"
+        };
+
+        Assert.True((bool)method.Invoke(null, [packageKey, committed, sdk])!);
+        sdk[packageKey] = "different-content-hash";
+        Assert.False((bool)method.Invoke(null, [packageKey, committed, sdk])!);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void VerifiedPackageCatalog_InheritsOnlyPackageKeysVerifiedByChildLock()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

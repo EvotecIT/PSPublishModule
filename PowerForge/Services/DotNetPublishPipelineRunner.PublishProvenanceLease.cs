@@ -138,13 +138,21 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private void StartWatchers()
         {
-            foreach (string directory in _guardedPaths
-                         .Select(FindNearestExistingDirectory)
-                         .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+            StringComparer comparer = IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            string[] directories = _guardedPaths
+                .Select(FindNearestExistingDirectory)
+                .Distinct(comparer)
+                .ToArray();
+            IReadOnlyDictionary<string, bool> watcherRoots = !IsWindows() && directories.Length > 16
+                ? BuildConsolidatedWatcherRoots(directories, comparer)
+                : directories.ToDictionary(directory => directory, _ => false, comparer);
+            foreach (KeyValuePair<string, bool> root in watcherRoots)
             {
-                var watcher = new FileSystemWatcher(directory)
+                var watcher = new FileSystemWatcher(root.Key)
                 {
-                    IncludeSubdirectories = false,
+                    IncludeSubdirectories = root.Value,
                     InternalBufferSize = 64 * 1024,
                     NotifyFilter = NotifyFilters.FileName |
                                    NotifyFilters.LastWrite |
@@ -160,6 +168,74 @@ public sealed partial class DotNetPublishPipelineRunner
                 _watchers.Add(watcher);
             }
         }
+
+        private static IReadOnlyDictionary<string, bool> BuildConsolidatedWatcherRoots(
+            IEnumerable<string> directories,
+            StringComparer comparer)
+        {
+            var roots = new HashSet<string>(
+                directories.Select(Path.GetFullPath),
+                comparer);
+            while (roots.Count > 32)
+            {
+                var candidates = roots
+                    .SelectMany(directory => EnumerateNonRootAncestors(directory)
+                        .Select(ancestor => new { Ancestor = ancestor, Directory = directory }))
+                    .GroupBy(entry => entry.Ancestor, comparer)
+                    .Select(group => new
+                    {
+                        Path = group.Key,
+                        Covered = group.Select(entry => entry.Directory).Distinct(comparer).ToArray()
+                    })
+                    .Where(candidate => candidate.Covered.Length > 1)
+                    .ToArray();
+                if (candidates.Length == 0)
+                    throw new InvalidOperationException("Publish provenance watcher roots could not be consolidated.");
+
+                int coverageNeeded = roots.Count - 31;
+                var sufficientCandidates = candidates
+                    .Where(candidate => candidate.Covered.Length >= coverageNeeded)
+                    .ToArray();
+                var selected = sufficientCandidates.Length > 0
+                    ? sufficientCandidates
+                        .OrderByDescending(candidate => GetPathDepth(candidate.Path))
+                        .ThenByDescending(candidate => candidate.Covered.Length)
+                        .ThenBy(candidate => candidate.Path, comparer)
+                        .First()
+                    : candidates
+                        .OrderByDescending(candidate => candidate.Covered.Length)
+                        .ThenByDescending(candidate => GetPathDepth(candidate.Path))
+                        .ThenBy(candidate => candidate.Path, comparer)
+                        .First();
+                roots.ExceptWith(selected.Covered);
+                roots.Add(selected.Path);
+            }
+
+            return roots.ToDictionary(directory => directory, _ => true, comparer);
+        }
+
+        private static IEnumerable<string> EnumerateNonRootAncestors(string directory)
+        {
+            string? current = Path.GetFullPath(directory);
+            string root = Path.GetPathRoot(current)!;
+            while (!string.IsNullOrWhiteSpace(current) &&
+                   !string.Equals(
+                       current,
+                       root,
+                       IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                yield return current;
+                current = Path.GetDirectoryName(current);
+            }
+        }
+
+        private static int GetPathDepth(string path)
+            => Path.GetFullPath(path)
+                .Substring(Path.GetPathRoot(Path.GetFullPath(path))!.Length)
+                .Split(
+                    new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Length;
 
         internal static string[] BuildGuardedPaths(
             IEnumerable<string> publishInputFiles,

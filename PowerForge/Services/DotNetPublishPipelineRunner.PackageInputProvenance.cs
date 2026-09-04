@@ -503,8 +503,30 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string?>? environmentVariables,
             bool includeSdkPackageEvidence,
             out VerifiedPackageInputCatalog? catalog)
+            => TryCreateForEvaluationDetailed(
+                projectPath,
+                properties,
+                packageRoots,
+                archives,
+                effectiveGlobalProperties,
+                environmentVariables,
+                includeSdkPackageEvidence,
+                out catalog,
+                out _);
+
+        internal static bool TryCreateForEvaluationDetailed(
+            string projectPath,
+            JsonElement properties,
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables,
+            bool includeSdkPackageEvidence,
+            out VerifiedPackageInputCatalog? catalog,
+            out string? failureReason)
         {
             catalog = null;
+            failureReason = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
             string lockFilePath = ReadEvaluatedPath(properties, "NuGetLockFilePath", projectDirectory)
                 ?? Path.Combine(projectDirectory, "packages.lock.json");
@@ -536,6 +558,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(sdkPackageLockFile) &&
                 !TryReadPowerForgeSdkPackageHashes(sdkPackageLockFile!, out sdkPackageLockHashes))
             {
+                failureReason = "the PowerForge SDK package lock could not be read";
                 return false;
             }
             foreach (KeyValuePair<string, string> package in sdkPackageLockHashes)
@@ -543,6 +566,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (hashes.TryGetValue(package.Key, out string? existing) &&
                     !string.Equals(existing, package.Value, StringComparison.Ordinal))
                 {
+                    failureReason = $"package '{package.Key}' has conflicting committed hashes";
                     return false;
                 }
                 hashes[package.Key] = package.Value;
@@ -555,11 +579,12 @@ public sealed partial class DotNetPublishPipelineRunner
             var sdkManagedPackageKeys = new HashSet<string>(
                 sdkPackageLockHashes.Keys,
                 StringComparer.OrdinalIgnoreCase);
-            if (!TryPrimeLockedPackageArchives(
+            if (!TryPrimeLockedPackageArchivesDetailed(
                     allRoots,
                     committedPackageHashes,
                     archives,
-                    out Dictionary<string, string> archivePathsByPackageKey))
+                    out Dictionary<string, string> archivePathsByPackageKey,
+                    out failureReason))
             {
                 return false;
             }
@@ -581,12 +606,14 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (allRoots.Count == 0)
                     return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
-                if (!TryPrimeLockedPackageArchives(
+                if (!TryPrimeLockedPackageArchivesDetailed(
                         allRoots,
                         sdkDownloadPackageHashes,
                         archives,
-                        out Dictionary<string, string> sdkDownloadArchivePaths))
+                        out Dictionary<string, string> sdkDownloadArchivePaths,
+                        out string? sdkArchiveFailureReason))
                 {
+                    failureReason = "SDK-managed " + (sdkArchiveFailureReason ?? "package archives could not be verified");
                     return false;
                 }
                 foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
@@ -596,6 +623,17 @@ public sealed partial class DotNetPublishPipelineRunner
                             Path.GetFullPath(entry.Value),
                             IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                     {
+                        if (HaveSameVerifiedPackageHash(
+                                entry.Key,
+                                committedPackageHashes,
+                                sdkDownloadPackageHashes))
+                        {
+                            // The SDK evidence restore intentionally uses an isolated package
+                            // root. Keep the committed archive as canonical when both independently
+                            // verified archives contain the same package content.
+                            continue;
+                        }
+                        failureReason = $"package '{entry.Key}' resolved to conflicting archive locations";
                         return false;
                     }
                     archivePathsByPackageKey[entry.Key] = entry.Value;
@@ -616,6 +654,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 TryDeleteSdkEvidenceRoot(sdkEvidenceRoot);
             }
         }
+
+        private static bool HaveSameVerifiedPackageHash(
+            string packageKey,
+            IReadOnlyDictionary<string, string> committedPackageHashes,
+            IReadOnlyDictionary<string, string> sdkPackageHashes)
+            => committedPackageHashes.TryGetValue(packageKey, out string? committedHash) &&
+               sdkPackageHashes.TryGetValue(packageKey, out string? sdkHash) &&
+               !string.IsNullOrWhiteSpace(committedHash) &&
+               string.Equals(committedHash, sdkHash, StringComparison.Ordinal);
 
         internal bool TryVerify(string path, out bool isPackageInput)
         {
