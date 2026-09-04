@@ -684,6 +684,12 @@ public sealed partial class DotNetPublishPipelineRunner
             merged["IncludeSourceRevisionInInformationalVersion"] = "true";
         }
 
+        // Release builds must use stable source identities across the primary
+        // checkout and the independent controlled rebuild. This also keeps
+        // SourceLink content deterministic when those checkouts have different
+        // physical paths (as they do on macOS and hosted runners).
+        merged["ContinuousIntegrationBuild"] = "true";
+
         ApplyPublishMsiVersionProperties(merged, plan, target.Name, framework, runtime, style);
         return merged;
     }
