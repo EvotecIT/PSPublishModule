@@ -17,13 +17,15 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         var properties = new Dictionary<string, string>
         {
             ["MonitoringDbProviders"] = "Sqlite,SqlServer",
-            ["Composite"] = "one;two=three%$@"
+            ["Composite"] = "one;two=three%$@",
+            ["RuntimeIdentifiers"] = "win-x64;linux-x64"
         };
 
         string[] arguments = DotNetPublishPipelineRunner.BuildMsBuildPropertyArgs(properties).ToArray();
 
         Assert.Contains("/p:MonitoringDbProviders=Sqlite%2CSqlServer", arguments);
         Assert.Contains("/p:Composite=one%3Btwo%3Dthree%25%24%40", arguments);
+        Assert.Contains("/p:RuntimeIdentifiers=\"win-x64;linux-x64\"", arguments);
     }
 
     [Fact]
@@ -602,6 +604,62 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public async Task RunProcess_ConcurrentlyDrainsNoisyOutputAndErrorStreams()
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcess",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: new[]
+            {
+                typeof(string),
+                typeof(string),
+                typeof(IReadOnlyList<string>),
+                typeof(IReadOnlyDictionary<string, string>)
+            },
+            modifiers: null);
+        Assert.NotNull(method);
+        bool isWindows = DotNetPublishPipelineRunner.IsWindows();
+        string executable = isWindows
+            ? Path.Combine(Environment.SystemDirectory, "cmd.exe")
+            : "/bin/sh";
+        string[] arguments = isWindows
+            ? new[]
+            {
+                "/d",
+                "/s",
+                "/c",
+                "for /L %i in (1,1,12000) do @echo output-%i & @echo error-%i 1>&2"
+            }
+            : new[]
+            {
+                "-c",
+                "i=1; while [ $i -le 12000 ]; do echo output-$i; echo error-$i >&2; i=$((i+1)); done"
+            };
+
+        var invocation = Task.Run(() => method!.Invoke(
+            null,
+            new object?[]
+            {
+                executable,
+                Environment.CurrentDirectory,
+                arguments,
+                null
+            }));
+
+        object? raw = await invocation.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stdout = (string)resultType.GetField("Item2")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("output-12000", stdout, StringComparison.Ordinal);
+        Assert.Contains("error-12000", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
     {
         var plan = new DotNetPublishPlan
@@ -676,6 +734,9 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
         Assert.Equal(sourceRevision, merged["SourceRevisionId"]);
         Assert.Equal("true", merged["IncludeSourceRevisionInInformationalVersion"]);
+        Assert.Equal("true", merged["ContinuousIntegrationBuild"]);
+        Assert.Equal("None", merged["DebugType"]);
+        Assert.Equal("false", merged["DebugSymbols"]);
     }
 
     [Fact]
@@ -710,6 +771,71 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
         Assert.True(firstSingleFile >= 0, "Expected style defaults to request single-file publish.");
         Assert.True(finalSingleFile > firstSingleFile, "Expected merged overrides to win by appearing after style defaults.");
+    }
+
+    [Fact]
+    public void BuildPublishArguments_SelfContainedProducesMultiFileRuntime()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Configuration = "Release"
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var args = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan,
+            target,
+            "net10.0",
+            "osx-arm64",
+            DotNetPublishStyle.SelfContained,
+            "out");
+
+        Assert.Contains("--self-contained", args);
+        Assert.Contains("true", args);
+        Assert.Contains("/p:PublishSingleFile=false", args);
+        Assert.DoesNotContain("/p:IncludeNativeLibrariesForSelfExtract=true", args);
+        Assert.DoesNotContain("/p:PublishAot=true", args);
+    }
+
+    [Fact]
+    public void BuildRestoreMsBuildProperties_SelfContainedUsesSingleFileSupersetLockGraph()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "App.csproj",
+                    Publish = new DotNetPublishPublishOptions(),
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "osx-arm64",
+                            Style = DotNetPublishStyle.SelfContained
+                        }
+                    }
+                }
+            }
+        };
+
+        var properties = DotNetPublishPipelineRunner.BuildRestoreMsBuildProperties(
+            plan,
+            "App.csproj",
+            "osx-arm64",
+            "net10.0");
+
+        Assert.Equal("true", properties["SelfContained"]);
+        Assert.Equal("true", properties["PublishSingleFile"]);
+        Assert.False(properties.ContainsKey("IncludeNativeLibrariesForSelfExtract"));
+        Assert.False(properties.ContainsKey("PublishAot"));
     }
 
     [Fact]

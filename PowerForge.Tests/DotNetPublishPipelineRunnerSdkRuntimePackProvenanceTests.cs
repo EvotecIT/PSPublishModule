@@ -158,6 +158,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         Assert.Single(arguments, value => value.StartsWith("-p:RestoreSources=", StringComparison.OrdinalIgnoreCase));
         Assert.Contains("-p:RestoreSources=C:\\isolated\\verified", arguments);
         Assert.Contains("-p:RestoreOutputPath=C:\\isolated\\obj\\", arguments);
+        Assert.Contains("-p:WarningsNotAsErrors=NU1510", arguments);
+        Assert.Contains("-p:DisableImplicitLibraryPacksFolder=true", arguments);
         Assert.Contains("-p:DisableImplicitFrameworkReferences=true", arguments);
         Assert.Contains("-p:ImportDirectoryBuildProps=false", arguments);
         Assert.Contains("-p:ImportDirectoryBuildTargets=false", arguments);
@@ -215,6 +217,43 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     .GetValue(cache));
                 Assert.Equal(2, paths.Count);
                 Assert.Single(hashes.Keys.Cast<object>());
+
+                string controlledSourceRoot = Directory.CreateDirectory(
+                    Path.Combine(root, "controlled-source")).FullName;
+                string controlledProjectPath = Path.Combine(controlledSourceRoot, "App.csproj");
+                File.WriteAllText(controlledProjectPath, "<Project />");
+                string packageSource = Path.Combine(root, "verified-source");
+                MethodInfo seed = cacheType.GetMethod(
+                    "TrySeedControlledPackageSource",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var archivePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["sdk.test.package|1.0.0"] = firstPath
+                };
+                object?[] FirstSeedArguments() =>
+                [
+                    packageSource,
+                    archivePaths,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase),
+                    controlledSourceRoot,
+                    controlledProjectPath,
+                    new[] { "sdk.test.package" },
+                    null,
+                    null,
+                    null,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    false
+                ];
+
+                object?[] firstSeed = FirstSeedArguments();
+                Assert.True(Assert.IsType<bool>(seed.Invoke(cache, firstSeed)), firstSeed[8]?.ToString());
+                File.Delete(firstPath);
+                File.Delete(secondPath);
+                object?[] repeatedSeed = FirstSeedArguments();
+                Assert.True(
+                    Assert.IsType<bool>(seed.Invoke(cache, repeatedSeed)),
+                    repeatedSeed[8]?.ToString());
             }
             finally
             {

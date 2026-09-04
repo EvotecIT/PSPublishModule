@@ -9,14 +9,74 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void VerifiedPackageCatalog_InheritsOnlyArchivesVerifiedByChildLock()
+    public void PublishProvenanceLease_UsesOneLinuxWatcherForManyDirectories()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string[] guardedPaths = Enumerable.Range(0, 140)
+                .Select(index =>
+                {
+                    string directory = Directory.CreateDirectory(
+                        Path.Combine(root, "inputs", "input-" + index)).FullName;
+                    string path = Path.Combine(directory, "input.props");
+                    File.WriteAllText(path, "<Project />");
+                    return path;
+                })
+                .ToArray();
+            using DotNetPublishPipelineRunner.PublishProvenanceLease lease =
+                DotNetPublishPipelineRunner.PublishProvenanceLease.Create(guardedPaths);
+            FieldInfo linuxWatcherField = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
+                .GetField("_linuxWatcher", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            FieldInfo watchersField = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)
+                .GetField("_watchers", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            Assert.NotNull(linuxWatcherField.GetValue(lease));
+            Assert.Empty(Assert.IsType<List<FileSystemWatcher>>(watchersField.GetValue(lease)));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void VerifiedPackageCatalog_AcceptsIsolatedSdkArchiveWithCommittedHash()
+    {
+        Type catalogType = typeof(DotNetPublishPipelineRunner).GetNestedType(
+            "VerifiedPackageInputCatalog",
+            BindingFlags.NonPublic)!;
+        MethodInfo method = catalogType.GetMethod(
+            "HaveSameVerifiedPackageHash",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        const string packageKey = "Microsoft.NET.ILLink.Tasks|10.0.11";
+        var committed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [packageKey] = "same-content-hash"
+        };
+        var sdk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [packageKey] = "same-content-hash"
+        };
+
+        Assert.True((bool)method.Invoke(null, [packageKey, committed, sdk])!);
+        sdk[packageKey] = "different-content-hash";
+        Assert.False((bool)method.Invoke(null, [packageKey, committed, sdk])!);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void VerifiedPackageCatalog_InheritsOnlyPackageKeysVerifiedByChildLock()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
             string packageRoot = Directory.CreateDirectory(Path.Combine(root, "packages")).FullName;
             string sharedArchive = Path.Combine(packageRoot, "shared.nupkg");
-            string rootOnlyArchive = Path.Combine(packageRoot, "root-only.nupkg");
             Type runnerType = typeof(DotNetPublishPipelineRunner);
             Type catalogType = runnerType.GetNestedType(
                 "VerifiedPackageInputCatalog",
@@ -36,21 +96,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     cache,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
-                        ["Shared.Package/1.0.0"] = sharedArchive
+                        ["Shared.Package|1.0.0"] = sharedArchive
                     },
                     Array.Empty<string>()
                 ]);
                 catalogType.GetMethod(
-                        "InheritSdkManagedArchivePaths",
+                        "InheritSdkManagedPackageKeys",
                         BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(catalog, [new[] { sharedArchive, rootOnlyArchive }]);
+                    .Invoke(catalog, [new[] { "Shared.Package|1.0.0", "Root.Only|1.0.0" }]);
 
                 var inherited = Assert.IsAssignableFrom<IEnumerable<string>>(
                     catalogType.GetProperty(
-                            "SdkManagedArchivePaths",
+                            "SdkManagedPackageKeys",
                             BindingFlags.Instance | BindingFlags.NonPublic)!
                         .GetValue(catalog));
-                Assert.Equal(Path.GetFullPath(sharedArchive), Assert.Single(inherited));
+                Assert.Equal("Shared.Package|1.0.0", Assert.Single(inherited));
             }
             finally
             {
@@ -400,6 +460,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string normalized = DotNetPublishPipelineRunner.NormalizeBuildInputPathRoot(root);
 
         Assert.Equal(root, normalized);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void NormalizeBuildInputPathRoot_CanonicalizesMacOsVarAlias()
+    {
+        if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.OSX))
+        {
+            return;
+        }
+
+        string normalized = DotNetPublishPipelineRunner.NormalizeBuildInputPathRoot(
+            "/var/folders/powerforge");
+
+        Assert.Equal("/private/var/folders/powerforge", normalized);
     }
 
     private static DotNetPublishArtefactResult CreatePublishArtefact(string runtime)

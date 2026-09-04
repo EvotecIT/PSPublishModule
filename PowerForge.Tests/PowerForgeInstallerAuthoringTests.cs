@@ -2045,6 +2045,12 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Include") == "Generated.wxs"));
         Assert.NotNull(doc.Descendants("Compile").SingleOrDefault(e =>
             (string?)e.Attribute("Include") == "Harvest.wxs"));
+        var compileIsolation = doc.Descendants("Target").Single(element =>
+            (string?)element.Attribute("Name") == "PowerForgeRestrictWixCompileItems");
+        Assert.Equal("CoreCompile", (string?)compileIsolation.Attribute("BeforeTargets"));
+        Assert.NotNull(compileIsolation.Descendants("Compile").SingleOrDefault(element =>
+            (string?)element.Attribute("Remove") == "@(Compile)" &&
+            (string?)element.Attribute("Condition") == "'%(Compile.Extension)' != '.wxs'"));
         Assert.Contains("PayloadDir=Artifacts", doc.Descendants("DefineConstants").Single().Value, StringComparison.Ordinal);
     }
 

@@ -76,7 +76,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 root,
                 $"build \"{appProject}\" -c Release -f net10.0 -r win-x64 --no-restore --nologo " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                "/p:ContinuousIntegrationBuild=true");
+                "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
@@ -161,7 +161,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(
                 root,
                 $"build \"{appProject}\" -c Release -f net10.0 -r win-x64 --no-restore --nologo " +
-                "-p:PowerForgeFlavor=Release");
+                "-p:PowerForgeFlavor=Release -p:ContinuousIntegrationBuild=true " +
+                "-p:DebugType=None -p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,

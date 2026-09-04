@@ -106,11 +106,17 @@ public sealed partial class DotNetPublishPipelineRunner
         internal ControlledPublishGraphNode(
             ProjectEvaluationRequest request,
             string? pathMap,
-            IReadOnlyDictionary<string, string> evaluatedProperties)
+            IReadOnlyDictionary<string, string> evaluatedProperties,
+            string? packageId,
+            string? packageVersion,
+            string? packageValidationBaselineVersion)
         {
             Request = request;
             PathMap = pathMap;
             EvaluatedProperties = evaluatedProperties;
+            PackageId = packageId;
+            PackageVersion = packageVersion;
+            PackageValidationBaselineVersion = packageValidationBaselineVersion;
         }
 
         internal ProjectEvaluationRequest Request { get; }
@@ -118,6 +124,12 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? PathMap { get; }
 
         internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
+
+        internal string? PackageId { get; }
+
+        internal string? PackageVersion { get; }
+
+        internal string? PackageValidationBaselineVersion { get; }
     }
 
     private static string[] ReadProjectReferenceItemListNames(
@@ -327,7 +339,10 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(key => new ControlledPublishGraphNode(
                 requestsByEvaluation[key],
                 pathMapsByEvaluation[key],
-                evaluationsByEvaluation[key].EvaluatedProperties))
+                evaluationsByEvaluation[key].EvaluatedProperties,
+                evaluationsByEvaluation[key].PackageId,
+                evaluationsByEvaluation[key].PackageVersion,
+                evaluationsByEvaluation[key].PackageValidationBaselineVersion))
             .ToArray();
         return true;
 

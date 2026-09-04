@@ -328,6 +328,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var msiStagingPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var msiManifestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var msiHarvestPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var installerOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var storeOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var distinctRuntimes = targets
@@ -466,6 +467,38 @@ public sealed partial class DotNetPublishPipelineRunner
                     if (!InstallerMatchesCombo(installer, combo))
                         continue;
 
+                    if (installer.Kind == DotNetPublishInstallerKind.Debian)
+                    {
+                        var debianStep = CreateDebianPackageStep(projectRoot, cfg, installer, t.Name, combo);
+                        if (!spec.DotNet.AllowOutputOutsideProjectRoot)
+                            EnsurePathWithinRoot(projectRoot, debianStep.InstallerOutputPath!, $"Installer '{installer.Id}' output path");
+                        if (!installerOutputPaths.Add(debianStep.InstallerOutputPath!))
+                        {
+                            throw new InvalidOperationException(
+                                $"Installer '{installer.Id}' output path collision detected: {debianStep.InstallerOutputPath}. " +
+                                "Use unique installer IDs or path templates.");
+                        }
+
+                        steps.Add(debianStep);
+                        continue;
+                    }
+
+                    if (installer.Kind == DotNetPublishInstallerKind.MacApp)
+                    {
+                        var macAppStep = CreateMacAppPackageStep(projectRoot, cfg, installer, t.Name, combo);
+                        if (!spec.DotNet.AllowOutputOutsideProjectRoot)
+                            EnsurePathWithinRoot(projectRoot, macAppStep.InstallerOutputPath!, $"Installer '{installer.Id}' output path");
+                        if (!installerOutputPaths.Add(macAppStep.InstallerOutputPath!))
+                        {
+                            throw new InvalidOperationException(
+                                $"Installer '{installer.Id}' output path collision detected: {macAppStep.InstallerOutputPath}. " +
+                                "Use unique installer IDs or path templates.");
+                        }
+
+                        steps.Add(macAppStep);
+                        continue;
+                    }
+
                     var msiStep = CreateMsiPrepareStep(projectRoot, cfg, installer, t.Name, combo);
                     if (!spec.DotNet.AllowOutputOutsideProjectRoot)
                     {
@@ -593,6 +626,7 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
             MsBuildProperties = msbuildProps,
+            TrustedBuildPackages = NormalizeStrings(spec.DotNet.TrustedBuildPackages),
             EnvironmentVariables = resolvedEnvironmentVariables,
             ControlledBuildEnvironmentVariableNames = controlledBuildEnvironmentVariableNames,
             Targets = targets.ToArray(),
@@ -868,6 +902,7 @@ public sealed partial class DotNetPublishPipelineRunner
             NoRestoreInPublish = dotNet.NoRestoreInPublish,
             NoBuildInPublish = dotNet.NoBuildInPublish,
             Runtimes = (dotNet.Runtimes ?? Array.Empty<string>()).ToArray(),
+            TrustedBuildPackages = (dotNet.TrustedBuildPackages ?? Array.Empty<string>()).ToArray(),
             MsBuildProperties = dotNet.MsBuildProperties is null
                 ? null
                 : new Dictionary<string, string>(dotNet.MsBuildProperties, StringComparer.OrdinalIgnoreCase),
@@ -1031,6 +1066,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(i => new DotNetPublishInstaller
             {
                 Id = i.Id,
+                Kind = i.Kind,
                 PrepareFromTarget = i.PrepareFromTarget,
                 PrepareFromBundleId = i.PrepareFromBundleId,
                 Runtimes = NormalizeStrings(i.Runtimes),
@@ -1053,9 +1089,63 @@ public sealed partial class DotNetPublishPipelineRunner
                 SignProfile = i.SignProfile,
                 Sign = DotNetPublishSigningProfileResolver.CloneSignOptions(i.Sign),
                 SignOverrides = DotNetPublishSigningProfileResolver.CloneSignPatch(i.SignOverrides),
-                ClientLicense = CloneMsiClientLicenseOptions(i.ClientLicense)
+                ClientLicense = CloneMsiClientLicenseOptions(i.ClientLicense),
+                Debian = CloneDebianOptions(i.Debian),
+                MacApp = CloneMacAppOptions(i.MacApp)
             })
             .ToArray();
+    }
+
+    private static DotNetPublishDebianOptions? CloneDebianOptions(DotNetPublishDebianOptions? options)
+    {
+        if (options is null)
+            return null;
+
+        return new DotNetPublishDebianOptions
+        {
+            PackageName = options.PackageName,
+            Version = options.Version,
+            Maintainer = options.Maintainer,
+            Description = options.Description,
+            Executable = options.Executable,
+            CommandName = options.CommandName,
+            InstallDirectoryName = options.InstallDirectoryName,
+            Depends = options.Depends,
+            Section = options.Section,
+            Priority = options.Priority,
+            Architecture = options.Architecture,
+            DesktopName = options.DesktopName,
+            DesktopComment = options.DesktopComment,
+            DesktopCategories = options.DesktopCategories,
+            MimeTypes = options.MimeTypes,
+            StartupWmClass = options.StartupWmClass,
+            IconPath = options.IconPath,
+            IconSize = options.IconSize
+        };
+    }
+
+    private static DotNetPublishMacAppOptions? CloneMacAppOptions(DotNetPublishMacAppOptions? options)
+    {
+        if (options is null)
+            return null;
+
+        return new DotNetPublishMacAppOptions
+        {
+            BundleIdentifier = options.BundleIdentifier,
+            BundleName = options.BundleName,
+            Version = options.Version,
+            BuildNumber = options.BuildNumber,
+            Executable = options.Executable,
+            IconPath = options.IconPath,
+            MinimumSystemVersion = options.MinimumSystemVersion,
+            Category = options.Category,
+            Copyright = options.Copyright,
+            DocumentExtensions = NormalizeStrings(options.DocumentExtensions),
+            CodesignIdentity = options.CodesignIdentity,
+            HardenedRuntime = options.HardenedRuntime,
+            Timestamp = options.Timestamp,
+            EntitlementsPath = options.EntitlementsPath
+        };
     }
 
     private static PowerForgeInstallerDefinition? CloneInstallerDefinition(PowerForgeInstallerDefinition? definition)
@@ -2705,6 +2795,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     $"{BuildInstallerFilterSummary(runtimes, frameworks, styles)}");
             }
 
+            DotNetPublishDebianOptions? debian = NormalizeDebianOptions(id, installer, matchingCombinations);
+            DotNetPublishMacAppOptions? macApp = NormalizeMacAppOptions(id, installer, matchingCombinations);
             var authoring = CloneInstallerDefinition(installer.Authoring);
             var harvestComponentGroupId = string.IsNullOrWhiteSpace(installer.HarvestComponentGroupId)
                 && installer.Harvest == DotNetPublishMsiHarvestMode.Auto
@@ -2715,6 +2807,7 @@ public sealed partial class DotNetPublishPipelineRunner
             plans.Add(new DotNetPublishInstallerPlan
             {
                 Id = id,
+                Kind = installer.Kind,
                 PrepareFromTarget = sourceTarget,
                 PrepareFromBundleId = prepareFromBundleId,
                 Runtimes = runtimes,
@@ -2725,7 +2818,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 OutputPath = installer.OutputPath,
                 OutputName = installer.OutputName,
                 InstallerProjectId = installer.InstallerProjectId,
-                InstallerProjectPath = ResolveInstallerProjectPath(id, installer, projectCatalog, projectRoot),
+                InstallerProjectPath = installer.Kind == DotNetPublishInstallerKind.Msi
+                    ? ResolveInstallerProjectPath(id, installer, projectCatalog, projectRoot)
+                    : null,
                 Authoring = authoring,
                 Harvest = installer.Harvest,
                 HarvestPath = installer.HarvestPath,
@@ -2741,11 +2836,227 @@ public sealed partial class DotNetPublishPipelineRunner
                     installer.Sign,
                     installer.SignOverrides,
                     $"Installer '{id}'"),
-                ClientLicense = NormalizeInstallerClientLicense(id, installer.ClientLicense)
+                ClientLicense = NormalizeInstallerClientLicense(id, installer.ClientLicense),
+                Debian = debian,
+                MacApp = macApp
             });
         }
 
         return plans.ToArray();
+    }
+
+    private static DotNetPublishDebianOptions? NormalizeDebianOptions(
+        string installerId,
+        DotNetPublishInstaller installer,
+        IReadOnlyCollection<DotNetPublishTargetCombination> matchingCombinations)
+    {
+        if (installer.Kind != DotNetPublishInstallerKind.Debian)
+        {
+            if (installer.Debian is not null)
+                throw new ArgumentException($"Installer '{installerId}' declares Debian metadata but Kind is not Debian.");
+            return null;
+        }
+
+        if (installer.Debian is null)
+            throw new ArgumentException($"Installer '{installerId}' requires Debian metadata.");
+        if (matchingCombinations.Any(combo => !combo.Runtime.StartsWith("linux-", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"Debian installer '{installerId}' may target only linux-* runtimes.");
+        if (!string.IsNullOrWhiteSpace(installer.InstallerProjectId) ||
+            !string.IsNullOrWhiteSpace(installer.InstallerProjectPath) ||
+            installer.Authoring is not null ||
+            installer.Harvest != DotNetPublishMsiHarvestMode.None ||
+            installer.Versioning is not null ||
+            installer.Sign is not null ||
+            !string.IsNullOrWhiteSpace(installer.SignProfile) ||
+            installer.SignOverrides is not null ||
+            installer.ClientLicense is not null)
+        {
+            throw new ArgumentException(
+                $"Debian installer '{installerId}' cannot use MSI authoring, harvest, versioning, signing, or client-license options.");
+        }
+
+        DotNetPublishDebianOptions result = CloneDebianOptions(installer.Debian)!;
+        result.PackageName = (result.PackageName ?? string.Empty).Trim();
+        result.Version = (result.Version ?? string.Empty).Trim();
+        result.Maintainer = (result.Maintainer ?? string.Empty).Trim();
+        result.Description = (result.Description ?? string.Empty).Trim();
+        result.Executable = (result.Executable ?? string.Empty).Trim();
+        result.CommandName = (result.CommandName ?? string.Empty).Trim();
+        result.InstallDirectoryName = (result.InstallDirectoryName ?? string.Empty).Trim();
+        result.Section = string.IsNullOrWhiteSpace(result.Section) ? "utils" : result.Section.Trim();
+        result.Priority = string.IsNullOrWhiteSpace(result.Priority) ? "optional" : result.Priority.Trim();
+        result.Architecture = NormalizeOptionalDebianText(result.Architecture);
+        result.Depends = NormalizeOptionalDebianText(result.Depends);
+        result.DesktopName = NormalizeOptionalDebianText(result.DesktopName);
+        result.DesktopComment = NormalizeOptionalDebianText(result.DesktopComment);
+        result.DesktopCategories = NormalizeOptionalDebianText(result.DesktopCategories);
+        result.MimeTypes = NormalizeOptionalDebianText(result.MimeTypes);
+        result.StartupWmClass = NormalizeOptionalDebianText(result.StartupWmClass);
+        result.IconPath = NormalizeOptionalDebianText(result.IconPath);
+
+        ValidateDebianToken(result.PackageName, "PackageName", installerId, allowPlusAndDot: true);
+        ValidateDebianToken(result.CommandName, "CommandName", installerId, allowPlusAndDot: true);
+        ValidateDebianToken(result.InstallDirectoryName, "InstallDirectoryName", installerId, allowPlusAndDot: true);
+        ValidateRequiredDebianText(result.Version, "Version", installerId);
+        ValidateRequiredDebianText(result.Maintainer, "Maintainer", installerId);
+        ValidateRequiredDebianText(result.Description, "Description", installerId);
+        ValidateRelativeDebianPath(result.Executable, "Executable", installerId);
+        ValidateRequiredDebianText(result.Section, "Section", installerId);
+        ValidateRequiredDebianText(result.Priority, "Priority", installerId);
+        ValidateOptionalDebianText(result.Depends, "Depends", installerId);
+        ValidateOptionalDebianText(result.DesktopName, "DesktopName", installerId);
+        ValidateOptionalDebianText(result.DesktopComment, "DesktopComment", installerId);
+        ValidateOptionalDebianText(result.DesktopCategories, "DesktopCategories", installerId);
+        ValidateOptionalDebianText(result.MimeTypes, "MimeTypes", installerId);
+        ValidateOptionalDebianText(result.StartupWmClass, "StartupWmClass", installerId);
+        ValidateOptionalDebianText(result.IconPath, "IconPath", installerId);
+        if (result.Architecture is not null)
+            ValidateDebianToken(result.Architecture, "Architecture", installerId, allowPlusAndDot: false);
+        if (result.IconSize <= 0 || result.IconSize > 4096)
+            throw new ArgumentException($"Debian installer '{installerId}' IconSize must be between 1 and 4096.");
+        if (result.IconPath is not null &&
+            !Path.GetExtension(result.IconPath).Equals(".png", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Debian installer '{installerId}' IconPath must reference a PNG file.");
+
+        return result;
+    }
+
+    private static DotNetPublishMacAppOptions? NormalizeMacAppOptions(
+        string installerId,
+        DotNetPublishInstaller installer,
+        IReadOnlyCollection<DotNetPublishTargetCombination> matchingCombinations)
+    {
+        if (installer.Kind != DotNetPublishInstallerKind.MacApp)
+        {
+            if (installer.MacApp is not null)
+                throw new ArgumentException($"Installer '{installerId}' declares MacApp metadata but Kind is not MacApp.");
+            return null;
+        }
+
+        if (installer.MacApp is null)
+            throw new ArgumentException($"Installer '{installerId}' requires MacApp metadata.");
+        if (matchingCombinations.Any(combo => !combo.Runtime.StartsWith("osx-", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"MacApp installer '{installerId}' may target only osx-* runtimes.");
+        if (!string.IsNullOrWhiteSpace(installer.InstallerProjectId) ||
+            !string.IsNullOrWhiteSpace(installer.InstallerProjectPath) ||
+            installer.Authoring is not null ||
+            installer.Harvest != DotNetPublishMsiHarvestMode.None ||
+            installer.Versioning is not null ||
+            installer.Sign is not null ||
+            !string.IsNullOrWhiteSpace(installer.SignProfile) ||
+            installer.SignOverrides is not null ||
+            installer.ClientLicense is not null)
+        {
+            throw new ArgumentException(
+                $"MacApp installer '{installerId}' cannot use MSI authoring, harvest, versioning, signing, or client-license options.");
+        }
+
+        DotNetPublishMacAppOptions result = CloneMacAppOptions(installer.MacApp)!;
+        result.BundleIdentifier = (result.BundleIdentifier ?? string.Empty).Trim();
+        result.BundleName = (result.BundleName ?? string.Empty).Trim();
+        result.Version = (result.Version ?? string.Empty).Trim();
+        result.BuildNumber = string.IsNullOrWhiteSpace(result.BuildNumber) ? "1" : result.BuildNumber.Trim();
+        result.Executable = (result.Executable ?? string.Empty).Trim();
+        result.IconPath = NormalizeOptionalMacText(result.IconPath);
+        result.MinimumSystemVersion = string.IsNullOrWhiteSpace(result.MinimumSystemVersion) ? "13.0" : result.MinimumSystemVersion.Trim();
+        result.Category = NormalizeOptionalMacText(result.Category);
+        result.Copyright = NormalizeOptionalMacText(result.Copyright);
+        result.CodesignIdentity = (result.CodesignIdentity ?? string.Empty).Trim();
+        result.EntitlementsPath = NormalizeOptionalMacText(result.EntitlementsPath);
+        result.DocumentExtensions = NormalizeStrings(result.DocumentExtensions)
+            .Select(extension => extension.TrimStart('.').ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        ValidateRequiredMacText(result.BundleIdentifier, "BundleIdentifier", installerId);
+        if (!result.BundleIdentifier.Contains('.') ||
+            result.BundleIdentifier.Any(character => !(char.IsLetterOrDigit(character) || character is '.' or '-')))
+            throw new ArgumentException($"MacApp installer '{installerId}' BundleIdentifier must be a reverse-DNS identifier.");
+        ValidateRequiredMacText(result.BundleName, "BundleName", installerId);
+        ValidateRequiredMacText(result.Version, "Version", installerId);
+        ValidateRequiredMacText(result.BuildNumber, "BuildNumber", installerId);
+        ValidateRequiredMacText(result.MinimumSystemVersion, "MinimumSystemVersion", installerId);
+        ValidateRelativeMacPath(result.Executable, "Executable", installerId);
+        ValidateOptionalMacText(result.IconPath, "IconPath", installerId);
+        ValidateOptionalMacText(result.Category, "Category", installerId);
+        ValidateOptionalMacText(result.Copyright, "Copyright", installerId);
+        ValidateRequiredMacText(result.CodesignIdentity, "CodesignIdentity", installerId);
+        ValidateMacAppExecutionBoundary(result, installerId);
+        ValidateOptionalMacText(result.EntitlementsPath, "EntitlementsPath", installerId);
+        foreach (string extension in result.DocumentExtensions)
+        {
+            if (extension.Length == 0 || extension.Any(character => !(char.IsLetterOrDigit(character) || character is '-' or '_')))
+                throw new ArgumentException($"MacApp installer '{installerId}' DocumentExtensions contains invalid extension '{extension}'.");
+        }
+        if (result.IconPath is not null &&
+            !Path.GetExtension(result.IconPath).Equals(".png", StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetExtension(result.IconPath).Equals(".icns", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"MacApp installer '{installerId}' IconPath must reference a PNG or ICNS file.");
+
+        return result;
+    }
+
+    private static string? NormalizeOptionalMacText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private static void ValidateRequiredMacText(string value, string property, string installerId)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            throw new ArgumentException($"MacApp installer '{installerId}' {property} is required and must be one line.");
+    }
+
+    private static void ValidateOptionalMacText(string? value, string property, string installerId)
+    {
+        if (value is not null && value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            throw new ArgumentException($"MacApp installer '{installerId}' {property} must be one line.");
+    }
+
+    private static void ValidateRelativeMacPath(string value, string property, string installerId)
+    {
+        ValidateRequiredMacText(value, property, installerId);
+        if (Path.IsPathRooted(value) || value.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries).Any(part => part == ".."))
+            throw new ArgumentException($"MacApp installer '{installerId}' {property} must be a relative path without parent traversal.");
+    }
+
+    private static string? NormalizeOptionalDebianText(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+
+    private static void ValidateRequiredDebianText(string value, string property, string installerId)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            throw new ArgumentException($"Debian installer '{installerId}' {property} is required and must be one line.");
+    }
+
+    private static void ValidateOptionalDebianText(string? value, string property, string installerId)
+    {
+        if (value is not null && value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            throw new ArgumentException($"Debian installer '{installerId}' {property} must be one line.");
+    }
+
+    private static void ValidateDebianToken(
+        string value,
+        string property,
+        string installerId,
+        bool allowPlusAndDot)
+    {
+        ValidateRequiredDebianText(value, property, installerId);
+        bool valid = char.IsLower(value[0]) || char.IsDigit(value[0]);
+        valid &= value.All(character =>
+            char.IsLower(character) || char.IsDigit(character) || character == '-' ||
+            (allowPlusAndDot && (character == '+' || character == '.')));
+        if (!valid)
+            throw new ArgumentException($"Debian installer '{installerId}' {property} contains unsupported characters.");
+    }
+
+    private static void ValidateRelativeDebianPath(string value, string property, string installerId)
+    {
+        ValidateRequiredDebianText(value, property, installerId);
+        string normalized = value.Replace('\\', '/');
+        if (normalized.StartsWith("/", StringComparison.Ordinal) ||
+            normalized.Split('/').Any(segment => segment.Length == 0 || segment == "." || segment == ".."))
+        {
+            throw new ArgumentException($"Debian installer '{installerId}' {property} must be a safe relative path.");
+        }
     }
 
     private static List<DotNetPublishTargetPlan> OrderTargetsForBundleIncludes(
@@ -3137,6 +3448,117 @@ public sealed partial class DotNetPublishPipelineRunner
             HarvestComponentGroupId = harvestComponentGroupId,
             InstallerProjectPath = installer.InstallerProjectPath
         };
+    }
+
+    private static DotNetPublishStep CreateDebianPackageStep(
+        string projectRoot,
+        string configuration,
+        DotNetPublishInstallerPlan installer,
+        string targetName,
+        DotNetPublishTargetCombination combo)
+    {
+        DotNetPublishDebianOptions debian = installer.Debian
+            ?? throw new InvalidOperationException($"Debian installer '{installer.Id}' is missing package metadata.");
+        string architecture = ResolveDebianArchitecture(combo.Runtime, debian.Architecture);
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installer.Id,
+            ["target"] = targetName,
+            ["rid"] = combo.Runtime,
+            ["framework"] = combo.Framework,
+            ["style"] = combo.Style.ToString(),
+            ["configuration"] = configuration,
+            ["version"] = debian.Version,
+            ["package"] = debian.PackageName,
+            ["architecture"] = architecture
+        };
+        string outputDirectoryTemplate = string.IsNullOrWhiteSpace(installer.OutputPath)
+            ? Path.Combine("Artifacts", "DotNetPublish", "Installers", "{installer}", "{rid}")
+            : installer.OutputPath!;
+        string outputNameTemplate = string.IsNullOrWhiteSpace(installer.OutputName)
+            ? "{package}_{version}_{architecture}.deb"
+            : installer.OutputName!;
+        string outputDirectory = ResolvePath(projectRoot, ApplyTemplate(outputDirectoryTemplate, tokens));
+        string outputName = ApplyTemplate(outputNameTemplate, tokens);
+        if (!outputName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase))
+            outputName += ".deb";
+        if (!string.Equals(Path.GetFileName(outputName), outputName, StringComparison.Ordinal))
+            throw new ArgumentException($"Debian installer '{installer.Id}' OutputName must be a file name, not a path.");
+
+        return new DotNetPublishStep
+        {
+            Key = $"debian.package:{installer.Id}:{targetName}:{combo.Framework}:{combo.Runtime}:{combo.Style}",
+            Kind = DotNetPublishStepKind.DebianPackage,
+            Title = "Build Debian package",
+            InstallerId = installer.Id,
+            TargetName = targetName,
+            Framework = combo.Framework,
+            Runtime = combo.Runtime,
+            Style = combo.Style,
+            BundleId = installer.PrepareFromBundleId,
+            InstallerOutputPath = Path.Combine(outputDirectory, outputName)
+        };
+    }
+
+    private static DotNetPublishStep CreateMacAppPackageStep(
+        string projectRoot,
+        string configuration,
+        DotNetPublishInstallerPlan installer,
+        string targetName,
+        DotNetPublishTargetCombination combo)
+    {
+        DotNetPublishMacAppOptions macApp = installer.MacApp
+            ?? throw new InvalidOperationException($"MacApp installer '{installer.Id}' is missing package metadata.");
+        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["installer"] = installer.Id,
+            ["target"] = targetName,
+            ["rid"] = combo.Runtime,
+            ["framework"] = combo.Framework,
+            ["style"] = combo.Style.ToString(),
+            ["configuration"] = configuration,
+            ["version"] = macApp.Version,
+            ["bundle"] = macApp.BundleName
+        };
+        string outputDirectoryTemplate = string.IsNullOrWhiteSpace(installer.OutputPath)
+            ? Path.Combine("Artifacts", "DotNetPublish", "Installers", "{installer}", "{rid}")
+            : installer.OutputPath!;
+        string outputNameTemplate = string.IsNullOrWhiteSpace(installer.OutputName)
+            ? "{bundle}-{version}-{rid}.zip"
+            : installer.OutputName!;
+        string outputDirectory = ResolvePath(projectRoot, ApplyTemplate(outputDirectoryTemplate, tokens));
+        string outputName = ApplyTemplate(outputNameTemplate, tokens);
+        if (!outputName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            outputName += ".zip";
+        if (!string.Equals(Path.GetFileName(outputName), outputName, StringComparison.Ordinal))
+            throw new ArgumentException($"MacApp installer '{installer.Id}' OutputName must be a file name, not a path.");
+
+        return new DotNetPublishStep
+        {
+            Key = $"macapp.package:{installer.Id}:{targetName}:{combo.Framework}:{combo.Runtime}:{combo.Style}",
+            Kind = DotNetPublishStepKind.MacAppPackage,
+            Title = "Build macOS app bundle",
+            InstallerId = installer.Id,
+            TargetName = targetName,
+            Framework = combo.Framework,
+            Runtime = combo.Runtime,
+            Style = combo.Style,
+            BundleId = installer.PrepareFromBundleId,
+            InstallerOutputPath = Path.Combine(outputDirectory, outputName)
+        };
+    }
+
+    private static string ResolveDebianArchitecture(string runtime, string? configured)
+    {
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured!.Trim();
+        if (runtime.Equals("linux-x64", StringComparison.OrdinalIgnoreCase))
+            return "amd64";
+        if (runtime.Equals("linux-arm64", StringComparison.OrdinalIgnoreCase))
+            return "arm64";
+        if (runtime.Equals("linux-arm", StringComparison.OrdinalIgnoreCase))
+            return "armhf";
+        throw new ArgumentException($"Runtime '{runtime}' has no default Debian architecture; configure Debian.Architecture explicitly.");
     }
 
     private static DotNetPublishStep CreateBundleStep(

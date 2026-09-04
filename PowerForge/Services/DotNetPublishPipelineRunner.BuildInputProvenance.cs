@@ -336,7 +336,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var evaluationsByEvaluation = new Dictionary<string, EvaluatedProjectInputs>(StringComparer.Ordinal);
         var trustedBuildInfrastructureRootsByEvaluation =
             new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var sdkManagedArchivePaths = new HashSet<string>(comparison);
+        var sdkManagedPackageKeys = new HashSet<string>(comparison);
         var generatedProjectReferenceOutputs = new List<(ProjectEvaluationRequest Request, GeneratedProjectReferenceOutput Output)>();
         var evaluatedPublishInputs = new List<(string EvaluationKey, EvaluatedPublishInput Input)>();
         using var verifiedPackageArchives = new VerifiedPackageArchiveCache();
@@ -379,14 +379,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (!TryReadEvaluatedProjectInputs(
                         request,
                         verifiedPackageArchives,
-                        sdkManagedArchivePaths,
-                        out EvaluatedProjectInputs? evaluation) || evaluation is null)
+                        sdkManagedPackageKeys,
+                        out EvaluatedProjectInputs? evaluation,
+                        out string? evaluationFailureReason) || evaluation is null)
                 {
                     projectDirectories = directories.ToArray();
-                    failureReason = $"MSBuild input evaluation failed: evaluated project inputs could not be read for '{request.ProjectPath}'" +
+                    failureReason = $"MSBuild input evaluation failed for '{request.ProjectPath}'" +
                         (string.IsNullOrWhiteSpace(request.TargetFramework)
-                            ? "."
-                            : $" ({request.TargetFramework}).");
+                            ? string.Empty
+                            : $" ({request.TargetFramework})") +
+                        $": {evaluationFailureReason ?? "evaluated project inputs could not be read"}.";
                     return false;
                 }
                 foreach (string input in evaluation.BuildInputs)
@@ -567,6 +569,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 provenInputs.Contains(entry.Input.FullPath)))
             .Select(group => group.Key)
             .ToHashSet(comparison);
+        // A project output can be observed first as a generic ReferencePath while an
+        // ancestor evaluation still knows only its own output roots. Once every publish
+        // occurrence has been rebuilt byte-for-byte in the controlled graph, discard that
+        // earlier provisional source classification. The no-build snapshot below retains
+        // the exact path, digest, metadata, and Unix mode as the release-input contract.
+        buildInputs.ExceptWith(fullyProvenGeneratedPublishInputPaths);
+        sourceInputs.ExceptWith(fullyProvenGeneratedPublishInputPaths);
         HashSet<string> evaluatedPublishInputPaths = evaluatedPublishInputs
             .Where(entry => !entry.Input.IsPackageBacked)
             .Select(entry => Path.GetFullPath(entry.Input.FullPath))
@@ -630,16 +639,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
             referencedProject = requestsByEvaluation[referencedProjectKey];
-            if (outputRootsByEvaluation.TryGetValue(referencedProjectKey, out string[]? outputRoots) &&
-                expectedOutputPathsByEvaluation.TryGetValue(
-                    referencedProjectKey,
-                    out string[]? expectedOutputPaths) &&
+            string[] outputRoots = outputRootsByEvaluation.TryGetValue(
+                referencedProjectKey,
+                out string[]? resolvedOutputRoots)
+                ? resolvedOutputRoots
+                : Array.Empty<string>();
+            string[] expectedOutputPaths = expectedOutputPathsByEvaluation.TryGetValue(
+                referencedProjectKey,
+                out string[]? resolvedExpectedOutputPaths)
+                ? resolvedExpectedOutputPaths
+                : Array.Empty<string>();
+            bool hasTrustedGeneratedOutputPath =
+                outputRoots.Length > 0 &&
+                expectedOutputPaths.Length > 0 &&
                 IsTrustedGeneratedOutputPath(
                     output.OutputPath,
                     outputRoots,
                     expectedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
-                    directories) &&
+                    directories);
+            if (hasTrustedGeneratedOutputPath &&
                 TryProveControlledGeneratedOutputs(
                     referencedProject,
                     new[] { output.OutputPath },
@@ -754,6 +773,34 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
+    internal static bool ShouldRetainConfiguredPublishInput(
+        DotNetPublishPlan? plan,
+        string projectPath,
+        string relativePath)
+    {
+        if (plan is null)
+            return true;
+
+        string fullProjectPath = Path.GetFullPath(projectPath);
+        DotNetPublishTargetPlan[] matchingTargets = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+            .Where(target => !string.IsNullOrWhiteSpace(target.ProjectPath) &&
+                Path.GetFullPath(ResolvePath(plan.ProjectRoot, target.ProjectPath))
+                    .Equals(
+                        fullProjectPath,
+                        IsWindows()
+                            ? StringComparison.OrdinalIgnoreCase
+                            : StringComparison.Ordinal))
+            .ToArray();
+        if (matchingTargets.Length == 0)
+            return true;
+
+        return IsFinalPublishInputRetained(
+            relativePath,
+            relativePath,
+            matchingTargets.Any(target => target.Publish.KeepSymbols),
+            matchingTargets.Any(target => target.Publish.KeepDocs));
+    }
+
     private static IEnumerable<ProjectEvaluationRequest> BuildProjectEvaluationRequests(
         IEnumerable<string>? projectPaths,
         string? configuration,
@@ -800,6 +847,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         globalProperties: null,
                         buildPlan!.EnvironmentVariables,
                         buildPlan.ControlledBuildEnvironmentVariableNames,
+                        buildPlan.TrustedBuildPackages,
                         requiresPrebuiltProjectReferenceOutputProof:
                             buildPlan.NoBuildInPublish || target.Publish?.Sign?.Enabled != true);
                     continue;
@@ -818,6 +866,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         properties,
                         buildPlan!.EnvironmentVariables,
                         buildPlan.ControlledBuildEnvironmentVariableNames,
+                        buildPlan.TrustedBuildPackages,
+                        sdkPackageEvidenceGlobalProperties: combination.Style == DotNetPublishStyle.SelfContained
+                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["PublishSingleFile"] = "true"
+                            }
+                            : null,
                         requiresPrebuiltProjectReferenceOutputProof:
                             RequiresPrebuiltProjectReferenceOutputProof(
                                 buildPlan,
@@ -928,6 +983,13 @@ public sealed partial class DotNetPublishPipelineRunner
             if (target.Publish.ReadyToRun.HasValue)
                 properties["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
         }
+        else if (combination.Style == DotNetPublishStyle.SelfContained)
+        {
+            properties["SelfContained"] = "true";
+            properties["PublishSingleFile"] = "false";
+            if (target.Publish.ReadyToRun.HasValue)
+                properties["PublishReadyToRun"] = target.Publish.ReadyToRun.Value.ToString().ToLowerInvariant();
+        }
         else if (combination.Style == DotNetPublishStyle.AotSpeed || combination.Style == DotNetPublishStyle.AotSize)
         {
             properties["SelfContained"] = "true";
@@ -943,10 +1005,12 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryReadEvaluatedProjectInputs(
         ProjectEvaluationRequest request,
         VerifiedPackageArchiveCache verifiedPackageArchives,
-        HashSet<string> knownSdkManagedArchivePaths,
-        out EvaluatedProjectInputs? evaluation)
+        HashSet<string> knownSdkManagedPackageKeys,
+        out EvaluatedProjectInputs? evaluation,
+        out string? failureReason)
     {
         evaluation = null;
+        failureReason = null;
         var arguments = new List<string>
         {
             "msbuild",
@@ -971,6 +1035,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:NuGetPackageFolders",
             "-getProperty:ProjectAssetsFile",
             "-getProperty:NuGetLockFilePath",
+            "-getProperty:PackageId",
+            "-getProperty:PackageVersion",
+            "-getProperty:PackageValidationBaselineVersion",
             "-getProperty:PowerForgeSdkPackageLockFile",
             "-getProperty:MSBuildToolsPath",
             "-getProperty:MSBuildSDKsPath",
@@ -1022,6 +1089,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2));
             if (process.ExitCode != 0 || process.TimedOut)
             {
+                failureReason = process.TimedOut
+                    ? "dotnet msbuild evaluation timed out"
+                    : $"dotnet msbuild evaluation exited with code {process.ExitCode}" +
+                      ReadControlledProcessFailureDetail(process);
                 return false;
             }
 
@@ -1029,6 +1100,7 @@ public sealed partial class DotNetPublishPipelineRunner
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
             {
+                failureReason = "dotnet msbuild evaluation returned no JSON payload";
                 return false;
             }
             using JsonDocument document = JsonDocument.Parse(
@@ -1070,6 +1142,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string? msBuildToolsPath = null;
             string? msBuildSdksPath = null;
             string? customAfterMicrosoftCommonTargets = null;
+            string? packageId = null;
+            string? packageVersion = null;
+            string? packageValidationBaselineVersion = null;
             bool evaluatedBuildProjectReferencesDisabled = false;
             if (root.TryGetProperty("Properties", out JsonElement properties))
             {
@@ -1113,24 +1188,27 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (targetFrameworks.Count == 0)
                     AddSemicolonSeparatedValues(properties, "TargetFramework", targetFrameworks);
 
-                if (!VerifiedPackageInputCatalog.TryCreateForEvaluation(
+                if (!VerifiedPackageInputCatalog.TryCreateForEvaluationDetailed(
                         request.ProjectPath,
                         properties,
                         packageRoots,
                         verifiedPackageArchives,
-                        request.ReadEffectiveGlobalProperties(),
+                        request.ReadSdkPackageEvidenceGlobalProperties(),
                         request.EnvironmentVariables,
                         request.RequiresSdkPackageEvidence,
-                        out verifiedPackages))
+                        out verifiedPackages,
+                        out string? packageCatalogFailureReason))
                 {
+                    failureReason = "NuGet package input catalog could not be verified: " +
+                                    (packageCatalogFailureReason ?? "no additional detail is available");
                     return false;
                 }
                 if (verifiedPackages is not null)
                 {
                     if (request.RequiresSdkPackageEvidence)
-                        knownSdkManagedArchivePaths.UnionWith(verifiedPackages.SdkManagedArchivePaths);
+                        knownSdkManagedPackageKeys.UnionWith(verifiedPackages.SdkManagedPackageKeys);
                     else
-                        verifiedPackages.InheritSdkManagedArchivePaths(knownSdkManagedArchivePaths);
+                        verifiedPackages.InheritSdkManagedPackageKeys(knownSdkManagedPackageKeys);
                 }
                 trustedBuildInfrastructureRoots = ReadTrustedBuildInfrastructureRoots(
                     properties,
@@ -1140,6 +1218,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 customAfterMicrosoftCommonTargets = ReadItemText(
                     properties,
                     "CustomAfterMicrosoftCommonTargets");
+                packageId = ReadItemText(properties, "PackageId");
+                packageVersion = ReadItemText(properties, "PackageVersion");
+                packageValidationBaselineVersion = ReadItemText(
+                    properties,
+                    "PackageValidationBaselineVersion");
                 evaluatedBuildProjectReferencesDisabled =
                     bool.TryParse(
                         ReadItemText(properties, "BuildProjectReferences")?.Trim(),
@@ -1158,6 +1241,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out hasDynamicProjectReferenceTaskOutputs,
                         out dynamicProjectReferences))
                 {
+                    failureReason = "preprocessed project imports could not be evaluated";
                     return false;
                 }
                 importPaths.UnionWith(preprocessedImports);
@@ -1168,6 +1252,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (verifiedPackages is not null &&
                     !verifiedPackages.TrySetControlledBuildInputs(evaluatedImportPaths))
                 {
+                    failureReason = "controlled package build inputs could not be verified";
                     return false;
                 }
                 evaluatedProjectReferenceConditionProperties =
@@ -1184,6 +1269,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             evaluatedProjectReferenceConditionProperties,
                             out taskWideProjectReferencePropertyRemovals))
                     {
+                        failureReason = "project-reference property removals could not be resolved";
                         return false;
                     }
                 }
@@ -1198,6 +1284,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             taskWideProjectReferencePropertyRemovals,
                             out EvaluatedProjectReference[] itemReferences))
                     {
+                        failureReason = "dynamic project references could not be resolved";
                         return false;
                     }
                     foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -1231,6 +1318,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             continue;
                         if (IsAmbientReferenceResolutionItem(itemName) && values.GetArrayLength() > 0)
                         {
+                            failureReason = $"ambient '{itemName}' items are not allowed";
                             return false;
                         }
                         foreach (JsonElement item in values.EnumerateArray())
@@ -1277,9 +1365,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                             hasDynamicProjectReferenceTaskOutputs,
                                         allowAmbiguousEvaluatedAssignments:
                                             hasDynamicProjectReferenceTaskOutputs,
-                                        out EvaluatedProjectReference[] itemReferences) ||
+                                    out EvaluatedProjectReference[] itemReferences) ||
                                     itemReferences.Length == 0)
                                 {
+                                    failureReason = "an evaluated project reference could not be resolved";
                                     return false;
                                 }
                                 foreach (EvaluatedProjectReference rawReference in itemReferences)
@@ -1377,8 +1466,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         intermediateRoot,
                         customAfterMicrosoftCommonTargets,
                         out EvaluatedProjectReference[] resolvedReferences,
-                        out string resolvedItemsJson))
+                        out string resolvedItemsJson,
+                        out string? controlledReferenceFailureReason))
                 {
+                    failureReason = "controlled project references could not be resolved" +
+                        (string.IsNullOrWhiteSpace(controlledReferenceFailureReason)
+                            ? string.Empty
+                            : ": " + controlledReferenceFailureReason);
                     return false;
                 }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
@@ -1408,6 +1502,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         trustedBuildInfrastructureRoots,
                         generatedProjectReferenceOutputs))
                 {
+                    failureReason = "controlled project-reference items could not be processed";
                     return false;
                 }
             }
@@ -1437,11 +1532,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 ResolveExistingCustomAfterTargets(
                     customAfterMicrosoftCommonTargets,
                     Path.GetDirectoryName(request.ProjectPath)!),
+                packageId,
+                packageVersion,
+                packageValidationBaselineVersion,
                 evaluatedBuildProjectReferencesDisabled);
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            failureReason = $"{exception.GetType().Name} while reading evaluated project inputs";
             return false;
         }
     }

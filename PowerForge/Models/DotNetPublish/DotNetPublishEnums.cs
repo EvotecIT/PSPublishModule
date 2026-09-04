@@ -11,6 +11,8 @@ public enum DotNetPublishStyle
     PortableCompat,
     /// <summary>Single-file, self-contained publish (IL + JIT) tuned for size (trimming enabled where supported).</summary>
     PortableSize,
+    /// <summary>Multi-file, self-contained publish (IL + JIT). Intended for platform bundles that sign native libraries in place.</summary>
+    SelfContained,
     /// <summary>Framework-dependent publish (runtime required on target machine). Smaller than self-contained outputs.</summary>
     FrameworkDependent,
     /// <summary>NativeAOT publish optimized for startup/runtime speed.</summary>
@@ -28,6 +30,8 @@ public enum DotNetPublishTargetKind
     Unknown,
     /// <summary>Command-line application.</summary>
     Cli,
+    /// <summary>Desktop graphical application.</summary>
+    Desktop,
     /// <summary>Long-running service application.</summary>
     Service,
     /// <summary>Library / shared component.</summary>
@@ -77,6 +81,19 @@ public enum DotNetPublishMsiHarvestMode
     None,
     /// <summary>Generate a WiX fragment for all files in prepared payload.</summary>
     Auto
+}
+
+/// <summary>
+/// Installer package format produced from a dotnet publish target.
+/// </summary>
+public enum DotNetPublishInstallerKind
+{
+    /// <summary>Windows Installer package authored through WiX.</summary>
+    Msi,
+    /// <summary>Debian package for Debian-family Linux distributions.</summary>
+    Debian,
+    /// <summary>macOS application bundle packaged from a published target.</summary>
+    MacApp
 }
 
 /// <summary>
@@ -219,6 +236,10 @@ public enum DotNetPublishStepKind
     MsiBuild,
     /// <summary>Sign MSI build outputs using configured signing policy.</summary>
     MsiSign,
+    /// <summary>Build a Debian package from a published Linux target.</summary>
+    DebianPackage,
+    /// <summary>Build and sign a macOS application bundle from a published target.</summary>
+    MacAppPackage,
     /// <summary>Build Microsoft Store / MSIX packaging outputs.</summary>
     StorePackage,
     /// <summary>Extract benchmark metrics from JSON/log inputs.</summary>

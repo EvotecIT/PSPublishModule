@@ -49,7 +49,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"restore \"{generatorProject}\" --use-lock-file --nologo");
             RunGit(root, "add src/Generator/packages.lock.json");
             RunGit(root, "commit -m \"lock approved dependencies\"");
-            RunDotNet(root, $"build \"{generatorProject}\" -c Release --no-restore --nologo");
+            RunDotNet(
+                root,
+                $"build \"{generatorProject}\" -c Release --no-restore --nologo " +
+                "-p:ContinuousIntegrationBuild=true -p:DebugType=None -p:DebugSymbols=false");
             string generatorOutput = Path.Combine(
                 generatorDirectory,
                 "bin",
@@ -136,7 +139,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"restore \"{appProject}\" --use-lock-file --nologo");
             RunGit(root, "add src/*/packages.lock.json");
             RunGit(root, "commit -m \"lock approved dependencies\"");
-            RunDotNet(root, $"build \"{libraryProject}\" -c Release -f netstandard2.0 --no-restore --nologo");
+            RunDotNet(
+                root,
+                $"build \"{libraryProject}\" -c Release -f netstandard2.0 --no-restore --nologo " +
+                "-p:ContinuousIntegrationBuild=true -p:DebugType=None -p:DebugSymbols=false");
             string libraryOutput = Path.Combine(libraryDirectory, "bin", "Release", "netstandard2.0", "Library.dll");
             string outputSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(libraryOutput)));
             var plan = new DotNetPublishPlan

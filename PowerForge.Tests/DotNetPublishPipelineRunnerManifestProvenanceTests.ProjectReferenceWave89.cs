@@ -185,7 +185,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             null,
             null,
             null,
+            null,
             true,
+            null,
             true
         ]);
         object projectReference = referenceConstructor.Invoke(

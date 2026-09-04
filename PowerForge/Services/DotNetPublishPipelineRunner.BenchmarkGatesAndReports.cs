@@ -304,14 +304,21 @@ public sealed partial class DotNetPublishPipelineRunner
             Steps = (steps ?? Array.Empty<DotNetPublishRunReportStep>()).ToArray(),
             Artefacts = new DotNetPublishRunReportArtefacts
             {
-                PublishCount = result.Artefacts?.Length ?? 0,
+                PublishCount = result.Artefacts?.Count(a => a.Category != DotNetPublishArtefactCategory.Installer) ?? 0,
+                InstallerCount =
+                    (result.Artefacts?.Count(a => a.Category == DotNetPublishArtefactCategory.Installer) ?? 0) +
+                    (result.MsiBuilds?.Length ?? 0),
                 MsiPrepareCount = result.MsiPrepares?.Length ?? 0,
                 MsiBuildCount = result.MsiBuilds?.Length ?? 0,
-                TotalPublishBytes = result.Artefacts?.Sum(a => a.TotalBytes) ?? 0
+                TotalPublishBytes = result.Artefacts?
+                    .Where(a => a.Category != DotNetPublishArtefactCategory.Installer)
+                    .Sum(a => a.TotalBytes) ?? 0
             },
             Signing = new DotNetPublishRunReportSigning
             {
-                PublishFilesSigned = result.Artefacts?.Sum(a => a.SignedFiles) ?? 0,
+                PublishFilesSigned = result.Artefacts?
+                    .Where(a => a.Category != DotNetPublishArtefactCategory.Installer)
+                    .Sum(a => a.SignedFiles) ?? 0,
                 MsiFilesSigned = result.MsiBuilds?.Sum(m => m.SignedFiles?.Length ?? 0) ?? 0
             },
             Gates = result.BenchmarkGates ?? Array.Empty<DotNetPublishBenchmarkGateResult>()
@@ -333,10 +340,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         markdown.AppendLine("## Artifacts");
         markdown.AppendLine();
-        markdown.AppendLine("| Publish | MSI prepares | MSI builds | Signed publish files | Signed MSI files | Publish bytes |");
-        markdown.AppendLine("| ---: | ---: | ---: | ---: | ---: | ---: |");
+        markdown.AppendLine("| Publish | Installers | MSI prepares | MSI builds | Signed publish files | Signed MSI files | Publish bytes |");
+        markdown.AppendLine("| ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
         markdown.AppendLine(
-            $"| {report.Artefacts.PublishCount} | {report.Artefacts.MsiPrepareCount} | {report.Artefacts.MsiBuildCount} | {report.Signing.PublishFilesSigned} | {report.Signing.MsiFilesSigned} | {report.Artefacts.TotalPublishBytes} |");
+            $"| {report.Artefacts.PublishCount} | {report.Artefacts.InstallerCount} | {report.Artefacts.MsiPrepareCount} | {report.Artefacts.MsiBuildCount} | {report.Signing.PublishFilesSigned} | {report.Signing.MsiFilesSigned} | {report.Artefacts.TotalPublishBytes} |");
         markdown.AppendLine();
 
         markdown.AppendLine("## Benchmark Gates");

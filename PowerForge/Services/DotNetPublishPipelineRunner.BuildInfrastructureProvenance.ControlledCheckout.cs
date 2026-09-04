@@ -487,9 +487,31 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
         out string? gitRoot,
         out string? controlledProjectPath)
+        => TryCreateControlledSourceCheckout(
+            projectPath,
+            checkoutRoot,
+            evaluatedBuildInputs,
+            evaluatedMsBuildInputs,
+            evaluatedGlobalProperties,
+            evaluatedProjectContexts,
+            out gitRoot,
+            out controlledProjectPath,
+            out _);
+
+    private static bool TryCreateControlledSourceCheckout(
+        string projectPath,
+        string checkoutRoot,
+        IReadOnlyCollection<string> evaluatedBuildInputs,
+        IReadOnlyCollection<string> evaluatedMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
+        out string? gitRoot,
+        out string? controlledProjectPath,
+        out string? failureReason)
     {
         gitRoot = null;
         controlledProjectPath = null;
+        failureReason = null;
         try
         {
             string projectDirectory = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
@@ -498,17 +520,26 @@ public sealed partial class DotNetPublishPipelineRunner
             if (string.IsNullOrWhiteSpace(gitRoot) ||
                 string.IsNullOrWhiteSpace(revision) ||
                 !IsSameOrBelowBuildInputPath(projectPath, gitRoot!))
+            {
+                failureReason = "project Git root or revision could not be resolved";
                 return false;
+            }
 
             string relativeProjectPath = FrameworkCompatibility.GetRelativePath(
                 Path.GetFullPath(gitRoot!),
                 Path.GetFullPath(projectPath));
             controlledProjectPath = Path.GetFullPath(Path.Combine(checkoutRoot, relativeProjectPath));
             if (!IsSameOrBelowBuildInputPath(controlledProjectPath, checkoutRoot))
+            {
+                failureReason = "controlled project path escaped the checkout root";
                 return false;
+            }
 
             if (!TryCollectControlledGitFilterNames(gitRoot!, revision!, out string[] filterNames))
+            {
+                failureReason = "Git filter configuration could not be inventoried";
                 return false;
+            }
             var checkout = RunBuildInputEvaluationProcess(
                 "git",
                 gitRoot!,
@@ -524,7 +555,22 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(2),
                 BuildControlledGitConfiguration(filterNames));
             if (checkout.ExitCode != 0 || checkout.TimedOut || !File.Exists(controlledProjectPath))
+            {
+                string checkoutDetail = string.Join(" | ", checkout.StdErr
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Trim())
+                    .Where(line => line.Length > 0)
+                    .Reverse()
+                    .Take(6)
+                    .Reverse());
+                failureReason = checkout.TimedOut
+                    ? "detached Git checkout timed out"
+                    : $"detached Git checkout failed with code {checkout.ExitCode}" +
+                      (string.IsNullOrWhiteSpace(checkoutDetail)
+                          ? string.Empty
+                          : ": " + RedactCommandLineSecrets(checkoutDetail));
                 return false;
+            }
             if (!TryVerifyControlledGitConfiguration(
                     gitRoot!,
                     revision!,
@@ -533,10 +579,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     checkoutRoot,
                     revision!,
                     filterNames))
+            {
+                failureReason = "Git filter configuration changed in the controlled checkout";
                 return false;
+            }
 
             if (!TryInitializeControlledSubmodules(checkoutRoot, filterNames))
+            {
+                failureReason = "controlled submodules could not be initialized";
                 return false;
+            }
 
             var controlledBuildInputs = new HashSet<string>(
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
@@ -552,7 +604,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 string relativeInput = FrameworkCompatibility.GetRelativePath(gitRoot!, fullInput);
                 string controlledInput = Path.GetFullPath(Path.Combine(checkoutRoot, relativeInput));
                 if (!IsSameOrBelowBuildInputPath(controlledInput, checkoutRoot))
+                {
+                    failureReason = "evaluated build input escaped the controlled checkout";
                     return false;
+                }
                 if (File.Exists(controlledInput))
                     controlledBuildInputs.Add(controlledInput);
             }
@@ -570,7 +625,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 string relativeInput = FrameworkCompatibility.GetRelativePath(gitRoot!, fullInput);
                 string controlledInput = Path.GetFullPath(Path.Combine(checkoutRoot, relativeInput));
                 if (!IsSameOrBelowBuildInputPath(controlledInput, checkoutRoot))
+                {
+                    failureReason = "evaluated MSBuild input escaped the controlled checkout";
                     return false;
+                }
                 if (File.Exists(controlledInput))
                     controlledMsBuildInputs.Add(controlledInput);
             }
@@ -587,7 +645,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         checkoutRoot,
                         projectDirectory,
                         out string controlledValue))
+                {
+                    failureReason = $"global property '{property.Key}' could not be mapped";
                     return false;
+                }
                 controlledGlobalProperties[property.Key] = controlledValue;
             }
 
@@ -601,13 +662,19 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 string fullProjectPath = Path.GetFullPath(project.Key);
                 if (!IsSameOrBelowBuildInputPath(fullProjectPath, gitRoot!))
+                {
+                    failureReason = "project evaluation context was outside the Git root";
                     return false;
+                }
                 string controlledContextProjectPath = Path.GetFullPath(Path.Combine(
                     checkoutRoot,
                     FrameworkCompatibility.GetRelativePath(gitRoot!, fullProjectPath)));
                 if (!IsSameOrBelowBuildInputPath(controlledContextProjectPath, checkoutRoot) ||
                     !controlledMsBuildInputs.Contains(controlledContextProjectPath))
+                {
+                    failureReason = $"project evaluation context was not in the controlled MSBuild inputs: '{Path.GetFileName(fullProjectPath)}'";
                     return false;
+                }
 
                 var contexts = new List<IReadOnlyDictionary<string, string>>();
                 foreach (IReadOnlyDictionary<string, string> context in project.Value)
@@ -617,13 +684,26 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         if (!controlledPropertyNames.Contains(property.Key))
                             continue;
+                        // These are intrinsic to the independently selected dotnet/MSBuild
+                        // toolchain. Replaying the original checkout's absolute SDK paths as
+                        // project context would either escape the controlled checkout or let a
+                        // source project redirect trusted tool execution. The controlled process
+                        // resolves them from its verified dotnet host instead.
+                        if (property.Key.Equals("MSBuildToolsPath", StringComparison.OrdinalIgnoreCase) ||
+                            property.Key.Equals("MSBuildSDKsPath", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
                         if (!TryRemapControlledBuildValue(
                                 property.Value,
                                 gitRoot!,
                                 checkoutRoot,
-                                Path.GetDirectoryName(fullProjectPath)!,
-                                out string controlledValue))
+                            Path.GetDirectoryName(fullProjectPath)!,
+                            out string controlledValue))
+                        {
+                            failureReason = $"project property '{property.Key}' could not be mapped for '{Path.GetFileName(fullProjectPath)}'";
                             return false;
+                        }
                         controlledContext[property.Key] = controlledValue;
                     }
                     contexts.Add(controlledContext);
@@ -638,8 +718,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledGlobalProperties,
                     Path.GetDirectoryName(controlledProjectPath!)!,
                     controlledProjectPath,
-                    controlledProjectContexts))
+                    controlledProjectContexts,
+                    out string? buildInputFailureReason))
+            {
+                failureReason = "controlled checkout contains an unverified build file input: " +
+                    (buildInputFailureReason ?? "unknown reason");
                 return false;
+            }
 
             string? controlledRevision = ReadGitText(checkoutRoot, "rev-parse HEAD");
             if (!TryVerifyControlledGitConfiguration(
@@ -651,6 +736,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     revision!,
                     filterNames))
             {
+                failureReason = "Git filter configuration changed after controlled input validation";
                 return false;
             }
             var controlledStatus = RunBuildInputEvaluationProcess(
@@ -666,13 +752,17 @@ public sealed partial class DotNetPublishPipelineRunner
                 environmentVariables: null,
                 TimeSpan.FromMinutes(1),
                 BuildControlledGitConfiguration(filterNames));
-            return string.Equals(revision, controlledRevision, StringComparison.OrdinalIgnoreCase) &&
-                   controlledStatus.ExitCode == 0 &&
-                   !controlledStatus.TimedOut &&
-                   controlledStatus.StdOut.Length == 0;
+            bool valid = string.Equals(revision, controlledRevision, StringComparison.OrdinalIgnoreCase) &&
+                         controlledStatus.ExitCode == 0 &&
+                         !controlledStatus.TimedOut &&
+                         controlledStatus.StdOut.Length == 0;
+            if (!valid)
+                failureReason = "controlled checkout revision or clean-status verification failed";
+            return valid;
         }
-        catch
+        catch (Exception exception)
         {
+            failureReason = $"{exception.GetType().Name} while creating the controlled checkout";
             return false;
         }
     }

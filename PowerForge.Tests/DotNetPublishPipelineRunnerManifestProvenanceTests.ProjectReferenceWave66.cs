@@ -337,8 +337,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         DotNetPublishPipelineRunner.AppendControlledProofSafeguards(
             arguments,
             "isolated.config",
-            "isolated-source",
-            "isolated.lock.json");
+            "isolated-source");
 
         Assert.Contains("-p:KeyContainerName=", arguments);
     }

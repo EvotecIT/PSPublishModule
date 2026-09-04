@@ -232,6 +232,9 @@ public sealed partial class DotNetPublishPipelineRunner
 
     internal static IEnumerable<string> EnumerateAncestorBuildControlCandidatePaths(string projectPath)
     {
+        string projectDirectory = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        yield return Path.Combine(projectDirectory, "packages.lock.json");
+
         string[] names =
         [
             "Directory.Build.props",
@@ -240,11 +243,10 @@ public sealed partial class DotNetPublishPipelineRunner
             "global.json",
             "NuGet.Config",
             "nuget.config",
-            "packages.lock.json",
             "Directory.Build.rsp",
             "MSBuild.rsp"
         ];
-        string current = Path.GetFullPath(Path.GetDirectoryName(projectPath)!);
+        string current = projectDirectory;
         StringComparison comparison = IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -462,8 +464,11 @@ public sealed partial class DotNetPublishPipelineRunner
         private readonly HashSet<string> _sdkManagedArchivePaths;
         private readonly Dictionary<string, HashSet<string>> _controlledBuildInputsByArchive = new(
             IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        private string? _sdkEvidenceFailureReason;
 
-        internal IEnumerable<string> SdkManagedArchivePaths => _sdkManagedArchivePaths;
+        internal IEnumerable<string> SdkManagedPackageKeys => _archivePathsByPackageKey
+            .Where(package => _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
+            .Select(package => package.Key);
 
         private VerifiedPackageInputCatalog(
             IEnumerable<string> packageRoots,
@@ -485,13 +490,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         }
 
-        internal void InheritSdkManagedArchivePaths(IEnumerable<string> archivePaths)
+        internal void InheritSdkManagedPackageKeys(IEnumerable<string> packageKeys)
         {
-            var verifiedArchivePaths = new HashSet<string>(
-                _archivePathsByPackageKey.Values.Select(Path.GetFullPath),
-                IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
             _sdkManagedArchivePaths.UnionWith(
-                archivePaths.Select(Path.GetFullPath).Where(verifiedArchivePaths.Contains));
+                packageKeys
+                    .Where(_archivePathsByPackageKey.ContainsKey)
+                    .Select(packageKey => Path.GetFullPath(_archivePathsByPackageKey[packageKey])));
         }
 
         internal static bool TryCreate(
@@ -536,8 +540,30 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string?>? environmentVariables,
             bool includeSdkPackageEvidence,
             out VerifiedPackageInputCatalog? catalog)
+            => TryCreateForEvaluationDetailed(
+                projectPath,
+                properties,
+                packageRoots,
+                archives,
+                effectiveGlobalProperties,
+                environmentVariables,
+                includeSdkPackageEvidence,
+                out catalog,
+                out _);
+
+        internal static bool TryCreateForEvaluationDetailed(
+            string projectPath,
+            JsonElement properties,
+            IEnumerable<string> packageRoots,
+            VerifiedPackageArchiveCache archives,
+            IReadOnlyDictionary<string, string>? effectiveGlobalProperties,
+            IReadOnlyDictionary<string, string?>? environmentVariables,
+            bool includeSdkPackageEvidence,
+            out VerifiedPackageInputCatalog? catalog,
+            out string? failureReason)
         {
             catalog = null;
+            failureReason = null;
             string projectDirectory = Path.GetDirectoryName(projectPath)!;
             string lockFilePath = ReadEvaluatedPath(properties, "NuGetLockFilePath", projectDirectory)
                 ?? Path.Combine(projectDirectory, "packages.lock.json");
@@ -569,6 +595,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!string.IsNullOrWhiteSpace(sdkPackageLockFile) &&
                 !TryReadPowerForgeSdkPackageHashes(sdkPackageLockFile!, out sdkPackageLockHashes))
             {
+                failureReason = "the PowerForge SDK package lock could not be read";
                 return false;
             }
             foreach (KeyValuePair<string, string> package in sdkPackageLockHashes)
@@ -576,6 +603,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (hashes.TryGetValue(package.Key, out string? existing) &&
                     !string.Equals(existing, package.Value, StringComparison.Ordinal))
                 {
+                    failureReason = $"package '{package.Key}' has conflicting committed hashes";
                     return false;
                 }
                 hashes[package.Key] = package.Value;
@@ -588,14 +616,16 @@ public sealed partial class DotNetPublishPipelineRunner
             var sdkManagedPackageKeys = new HashSet<string>(
                 sdkPackageLockHashes.Keys,
                 StringComparer.OrdinalIgnoreCase);
-            if (!TryPrimeLockedPackageArchives(
+            if (!TryPrimeLockedPackageArchivesDetailed(
                     allRoots,
                     committedPackageHashes,
                     archives,
-                    out Dictionary<string, string> archivePathsByPackageKey))
+                    out Dictionary<string, string> archivePathsByPackageKey,
+                    out failureReason))
             {
                 return false;
             }
+            string? sdkEvidenceFailureReason = null;
             string? sdkEvidenceRoot = includeSdkPackageEvidence
                 ? AddSdkManagedPackageHashes(
                     projectPath,
@@ -606,18 +636,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     effectiveGlobalProperties,
                     environmentVariables,
                     archivePathsByPackageKey,
-                    archives)
+                    archives,
+                    out sdkEvidenceFailureReason)
                 : null;
             try
             {
                 if (allRoots.Count == 0)
                     return !hasCommittedLock && sdkDownloadPackageHashes.Count == 0;
-                if (!TryPrimeLockedPackageArchives(
+                if (!TryPrimeLockedPackageArchivesDetailed(
                         allRoots,
                         sdkDownloadPackageHashes,
                         archives,
-                        out Dictionary<string, string> sdkDownloadArchivePaths))
+                        out Dictionary<string, string> sdkDownloadArchivePaths,
+                        out string? sdkArchiveFailureReason))
                 {
+                    failureReason = "SDK-managed " + (sdkArchiveFailureReason ?? "package archives could not be verified");
                     return false;
                 }
                 foreach (KeyValuePair<string, string> entry in sdkDownloadArchivePaths)
@@ -627,6 +660,19 @@ public sealed partial class DotNetPublishPipelineRunner
                             Path.GetFullPath(entry.Value),
                             IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                     {
+                        if (HaveSameVerifiedPackageHash(
+                                entry.Key,
+                                committedPackageHashes,
+                                sdkDownloadPackageHashes))
+                        {
+                            // The SDK evidence restore intentionally uses an isolated package
+                            // root. Keep the committed archive as canonical when both independently
+                            // verified archives contain the same package content.
+                            continue;
+                        }
+                        failureReason = $"package '{entry.Key}' resolved to conflicting archive locations " +
+                                        $"with different verified hashes (committed {DescribePackageHash(entry.Key, committedPackageHashes)}, " +
+                                        $"SDK evidence {DescribePackageHash(entry.Key, sdkDownloadPackageHashes)})";
                         return false;
                     }
                     archivePathsByPackageKey[entry.Key] = entry.Value;
@@ -639,12 +685,31 @@ public sealed partial class DotNetPublishPipelineRunner
                     archives,
                     archivePathsByPackageKey,
                     sdkManagedPackageKeys);
+                catalog._sdkEvidenceFailureReason = sdkEvidenceFailureReason;
                 return true;
             }
             finally
             {
                 TryDeleteSdkEvidenceRoot(sdkEvidenceRoot);
             }
+        }
+
+        private static bool HaveSameVerifiedPackageHash(
+            string packageKey,
+            IReadOnlyDictionary<string, string> committedPackageHashes,
+            IReadOnlyDictionary<string, string> sdkPackageHashes)
+            => committedPackageHashes.TryGetValue(packageKey, out string? committedHash) &&
+               sdkPackageHashes.TryGetValue(packageKey, out string? sdkHash) &&
+               !string.IsNullOrWhiteSpace(committedHash) &&
+               string.Equals(committedHash, sdkHash, StringComparison.Ordinal);
+
+        private static string DescribePackageHash(
+            string packageKey,
+            IReadOnlyDictionary<string, string> hashes)
+        {
+            if (!hashes.TryGetValue(packageKey, out string? hash) || string.IsNullOrWhiteSpace(hash))
+                return "missing";
+            return hash!.Length <= 12 ? hash : hash.Substring(0, 12);
         }
 
         internal bool TryVerify(string path, out bool isPackageInput)

@@ -15,11 +15,52 @@ internal sealed partial class PowerForgeReleaseService
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
         var verifiedSourceCommit = VerifySharedReleaseSourceCommit(plan.ProjectRoot, sourceCommit, releaseConfigPath);
+        ValidateNativeInstallerReleaseVersions(plan, sharedReleaseVersion);
         if (string.IsNullOrWhiteSpace(sharedReleaseVersion))
             return;
 
         foreach (var entry in BuildSharedReleaseVersionProperties(sharedReleaseVersion!, verifiedSourceCommit))
             plan.MsBuildProperties[entry.Key] = entry.Value;
+    }
+
+    internal static void ValidateNativeInstallerReleaseVersions(DotNetPublishPlan plan, string? sharedReleaseVersion)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+
+        foreach (DotNetPublishInstallerPlan installer in plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+        {
+            string? nativeVersion = installer.Kind switch
+            {
+                DotNetPublishInstallerKind.Debian => installer.Debian?.Version,
+                DotNetPublishInstallerKind.MacApp => installer.MacApp?.Version,
+                _ => null
+            };
+            if (nativeVersion is null)
+                continue;
+
+            string? effectiveReleaseVersion = sharedReleaseVersion;
+            if (string.IsNullOrWhiteSpace(effectiveReleaseVersion))
+            {
+                DotNetPublishTargetPlan? target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                    .FirstOrDefault(candidate => string.Equals(
+                        candidate.Name,
+                        installer.PrepareFromTarget,
+                        StringComparison.OrdinalIgnoreCase));
+                effectiveReleaseVersion = target?.Version;
+                if (string.IsNullOrWhiteSpace(effectiveReleaseVersion))
+                {
+                    throw new InvalidOperationException(
+                        $"Native installer '{installer.Id}' cannot be bound to a release version because target '{installer.PrepareFromTarget}' has no resolved version.");
+                }
+            }
+
+            if (!string.Equals(nativeVersion.Trim(), effectiveReleaseVersion!.Trim(), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Native installer '{installer.Id}' version '{nativeVersion}' does not match release version '{effectiveReleaseVersion}'.");
+            }
+        }
     }
 
     /// <summary>

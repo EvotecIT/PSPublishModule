@@ -19,10 +19,12 @@ public sealed partial class DotNetPublishPipelineRunner
         string? originalIntermediateRoot,
         string? customAfterMicrosoftCommonTargets,
         out EvaluatedProjectReference[] references,
-        out string resolvedItemsJson)
+        out string resolvedItemsJson,
+        out string? failureReason)
     {
         references = Array.Empty<EvaluatedProjectReference>();
         resolvedItemsJson = string.Empty;
+        failureReason = null;
         string controlledOutputRoot = Path.Combine(
             Path.GetTempPath(),
             "powerforge-project-references-" + Guid.NewGuid().ToString("N"));
@@ -35,10 +37,16 @@ public sealed partial class DotNetPublishPipelineRunner
                 Path.GetDirectoryName(request.ProjectPath)!,
                 "rev-parse --show-toplevel");
             if (string.IsNullOrWhiteSpace(contextGitRoot))
+            {
+                failureReason = "Git root could not be resolved";
                 return false;
+            }
             string? trackedInputList = ReadGitRawText(contextGitRoot!, "ls-files -z");
             if (trackedInputList is null)
+            {
+                failureReason = "tracked Git inputs could not be listed";
                 return false;
+            }
             var trackedInputPaths = new HashSet<string>(
                 trackedInputList.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(path => path.Replace('\\', '/').TrimStart('/')),
@@ -130,8 +138,13 @@ public sealed partial class DotNetPublishPipelineRunner
                     request.ReadEffectiveGlobalProperties(),
                     projectContexts,
                     out originalGitRoot,
-                    out string? controlledProjectPath))
+                    out string? controlledProjectPath,
+                    out string? checkoutFailureReason))
+            {
+                failureReason = "controlled source checkout could not be created: " +
+                    (checkoutFailureReason ?? "unknown reason");
                 return false;
+            }
             if (!TryCreateControlledBuildEnvironment(
                     request.EnvironmentVariables,
                     request.ControlledBuildEnvironmentVariableNames,
@@ -140,6 +153,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
+                failureReason = "controlled build environment could not be created";
                 return false;
             }
 
@@ -151,10 +165,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     offlinePackageSource,
                     controlledSourceRoot,
                     controlledProjectPath!,
+                    request.TrustedBuildPackages,
                     out offlinePackageSources,
+                    out string packageSourceFailureReason,
                     evaluatedConditionProperties,
                     allowSdkManagedToolchainPackages: true))
             {
+                failureReason = "verified package source could not be seeded: " +
+                    packageSourceFailureReason;
                 return false;
             }
             string controlledNuGetConfig = Path.Combine(controlledOutputRoot, "NuGet.Config");
@@ -183,7 +201,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (executableMsBuildInputs.Contains(originalCustomAfterTargets, pathComparer))
                 {
                     if (!IsSameOrBelowBuildInputPath(originalCustomAfterTargets, originalGitRoot!))
+                    {
+                        failureReason = "custom targets path is outside the Git root";
                         return false;
+                    }
 
                     string relativeCustomAfterTargets = FrameworkCompatibility.GetRelativePath(
                         originalGitRoot!,
@@ -196,6 +217,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             controlledSourceRoot) ||
                         !File.Exists(controlledCustomAfterTargets))
                     {
+                        failureReason = "custom targets could not be mapped into the controlled checkout";
                         return false;
                     }
                 }
@@ -262,6 +284,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     originalGitRoot!,
                     controlledSourceRoot))
             {
+                failureReason = "project evaluation properties could not be mapped";
                 return false;
             }
             AddProjectReferenceExecutionProperties(
@@ -290,7 +313,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(5),
                 controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
+            {
+                failureReason = process.TimedOut
+                    ? "controlled ResolveReferences timed out"
+                    : $"controlled ResolveReferences exited with code {process.ExitCode}" +
+                      ReadControlledProcessFailureDetail(process);
                 return false;
+            }
 
             int itemsMarker = process.StdOut.LastIndexOf("\"Items\"", StringComparison.Ordinal);
             int jsonStart = itemsMarker < 0
@@ -298,14 +327,21 @@ public sealed partial class DotNetPublishPipelineRunner
                 : process.StdOut.LastIndexOf('{', itemsMarker);
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
+            {
+                failureReason = "controlled ResolveReferences returned no JSON payload";
                 return false;
+            }
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items))
+            {
+                failureReason = "controlled ResolveReferences returned no item payload";
                 return false;
+            }
             if (!controlledEnvironment.TryGetValue("NUGET_PACKAGES", out string? controlledPackageRoot) ||
                 string.IsNullOrWhiteSpace(controlledPackageRoot))
             {
+                failureReason = "controlled package root is unavailable";
                 return false;
             }
             if (!TryMapControlledResolutionItems(
@@ -318,7 +354,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledPackageRoot!,
                     verifiedPackages,
                     out resolvedItemsJson))
+            {
+                failureReason = "controlled resolution items could not be mapped";
                 return false;
+            }
             using JsonDocument mappedDocument = JsonDocument.Parse(resolvedItemsJson);
             if (!TryReadControlledProjectReferences(
                     mappedDocument.RootElement,
@@ -329,17 +368,22 @@ public sealed partial class DotNetPublishPipelineRunner
                     taskWidePropertyRemovals,
                     allowAmbiguousEvaluatedAssignments,
                     out EvaluatedProjectReference[] controlledReferences))
+            {
+                failureReason = "controlled project-reference items could not be parsed";
                 return false;
+            }
             references = controlledReferences
                 .GroupBy(BuildEvaluatedProjectReferenceKey, StringComparer.Ordinal)
                 .Select(group => group.First())
                 .ToArray();
             return true;
         }
-        catch
+        catch (Exception exception)
         {
             references = Array.Empty<EvaluatedProjectReference>();
             resolvedItemsJson = string.Empty;
+            failureReason = exception.GetType().Name +
+                " while resolving controlled project references";
             return false;
         }
         finally

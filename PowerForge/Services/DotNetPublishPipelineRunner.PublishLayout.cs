@@ -71,6 +71,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 break;
             }
+            case DotNetPublishStyle.SelfContained:
+            {
+                args.Add("--self-contained");
+                args.Add("true");
+                args.Add("/p:PublishSingleFile=false");
+                break;
+            }
             case DotNetPublishStyle.AotSpeed:
             case DotNetPublishStyle.AotSize:
             {

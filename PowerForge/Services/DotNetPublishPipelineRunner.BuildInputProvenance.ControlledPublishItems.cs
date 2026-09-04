@@ -1,5 +1,8 @@
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
@@ -22,7 +25,7 @@ public sealed partial class DotNetPublishPipelineRunner
         publishInputs = Array.Empty<EvaluatedPublishInput>();
         failureReason = null;
         string controlledOutputRoot = Path.Combine(
-            Path.GetTempPath(),
+            NormalizeBuildInputPathRoot(Path.GetTempPath()),
             "pfpi-" + Guid.NewGuid().ToString("N"));
         string controlledSourceRoot = Path.Combine(controlledOutputRoot, "source");
         string? controlledGitRoot = null;
@@ -70,27 +73,45 @@ public sealed partial class DotNetPublishPipelineRunner
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
             var offlinePackageSources = new List<string>();
-            int packageCatalogIndex = 0;
             foreach (VerifiedPackageInputCatalog packageCatalog in graphVerifiedPackages)
             {
-                string catalogSource = Directory.CreateDirectory(Path.Combine(
-                    offlinePackageSource,
-                    packageCatalogIndex++.ToString(System.Globalization.CultureInfo.InvariantCulture))).FullName;
+                // All graph catalogs feed one content-verified source. The seeder reuses an
+                // existing identical archive and fails closed when the same package identity
+                // resolves to different bytes. Avoiding one full source copy per project keeps
+                // large desktop graphs within a bounded temporary-disk footprint.
                 if (!packageCatalog.TrySeedControlledPackageSource(
-                        catalogSource,
+                        offlinePackageSource,
                         controlledSourceRoot,
                         controlledProjectPath!,
+                        request.TrustedBuildPackages,
                         out string[] catalogSources,
+                        out string catalogFailureReason,
                         evaluatedProperties,
                         allowSdkManagedToolchainPackages: true))
                 {
-                    failureReason = "the verified offline package source could not be seeded.";
+                    failureReason = "the verified offline package source could not be seeded: " + catalogFailureReason;
                     return false;
                 }
                 offlinePackageSources.AddRange(catalogSources);
             }
             if (offlinePackageSources.Count == 0)
                 offlinePackageSources.Add(offlinePackageSource);
+            if (!TrySeedControlledProjectMetadataPackages(
+                    graphBuildNodes.SelectMany(node => new[]
+                    {
+                        new KeyValuePair<string?, string?>(node.PackageId, node.PackageVersion),
+                        new KeyValuePair<string?, string?>(
+                            node.PackageId,
+                            node.PackageValidationBaselineVersion)
+                    }).Where(identity => !string.IsNullOrWhiteSpace(identity.Value)),
+                    offlinePackageSource,
+                    out string projectMetadataFailureReason))
+            {
+                failureReason = "the controlled project metadata source could not be created: " +
+                    projectMetadataFailureReason;
+                return false;
+            }
+            offlinePackageSources.Add(offlinePackageSource);
             string[] distinctOfflinePackageSources = offlinePackageSources
                 .Distinct(IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
                 .ToArray();
@@ -186,7 +207,8 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 failureReason = process.TimedOut
                     ? "the controlled root publish-input evaluation timed out."
-                    : $"the controlled root publish-input evaluation exited with code {process.ExitCode}.";
+                    : $"the controlled root publish-input evaluation exited with code {process.ExitCode}." +
+                      ReadControlledProcessFailureDetail(process);
                 return false;
             }
 
@@ -255,7 +277,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string originalInputPath,
                         out bool isPackageBacked))
                 {
-                    failureReason = $"controlled publish item '{item.FullPath}' could not be mapped to its original input.";
+                    failureReason = "controlled publish item path could not be mapped: " +
+                        RedactCommandLineSecrets(item.FullPath);
                     return false;
                 }
                 if (!TryMapControlledPublishMetadata(
@@ -337,6 +360,90 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
     }
+
+    internal static bool TrySeedControlledProjectMetadataPackages(
+        IEnumerable<KeyValuePair<string?, string?>> identities,
+        string packageSource,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+        try
+        {
+            Directory.CreateDirectory(packageSource);
+            foreach (KeyValuePair<string?, string?> identity in identities)
+            {
+                string packageId = identity.Key?.Trim() ?? string.Empty;
+                string packageVersion = identity.Value?.Trim() ?? string.Empty;
+                if (!IsSafeControlledProjectPackageId(packageId) ||
+                    !NuGetVersion.TryParse(packageVersion, out NuGetVersion? parsedVersion))
+                {
+                    failureReason = $"project package identity is invalid: '{packageId}' '{packageVersion}'";
+                    return false;
+                }
+
+                string normalizedVersion = parsedVersion.ToNormalizedString();
+                string packagePath = Path.Combine(
+                    packageSource,
+                    packageId.ToLowerInvariant() + "." + normalizedVersion.ToLowerInvariant() + ".nupkg");
+                if (File.Exists(packagePath))
+                    continue;
+
+                string temporaryPath = packagePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    using (var archive = ZipFile.Open(temporaryPath, ZipArchiveMode.Create))
+                    {
+                        ZipArchiveEntry nuspecEntry = archive.CreateEntry(
+                            packageId + ".nuspec",
+                            CompressionLevel.Optimal);
+                        using Stream stream = nuspecEntry.Open();
+                        using var writer = new StreamWriter(
+                            stream,
+                            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                        XNamespace nuspec = "http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd";
+                        new XDocument(
+                            new XElement(
+                                nuspec + "package",
+                                new XElement(nuspec + "metadata",
+                                    new XElement(nuspec + "id", packageId),
+                                    new XElement(nuspec + "version", normalizedVersion),
+                                    new XElement(nuspec + "authors", "PowerForge"),
+                                    new XElement(
+                                        nuspec + "description",
+                                        "Metadata-only placeholder for a controlled ProjectReference restore."))))
+                            .Save(writer, SaveOptions.DisableFormatting);
+                    }
+                    File.Move(temporaryPath, packagePath);
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath))
+                        File.Delete(temporaryPath);
+                }
+            }
+            return true;
+        }
+        catch (Exception exception)
+        {
+            failureReason = exception.GetBaseException().Message;
+            return false;
+        }
+    }
+
+    private static bool IsSafeControlledProjectPackageId(string packageId)
+    {
+        if (packageId.Length is < 1 or > 100 ||
+            !IsAsciiLetterOrDigit(packageId[0]) ||
+            !IsAsciiLetterOrDigit(packageId[packageId.Length - 1]))
+        {
+            return false;
+        }
+        return packageId.All(character =>
+            IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
+    }
+
+    private static bool IsAsciiLetterOrDigit(char value)
+        => value is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
 
     private static bool TryRestoreControlledPublishRoot(
         ProjectEvaluationRequest request,
@@ -512,6 +619,44 @@ public sealed partial class DotNetPublishPipelineRunner
         return true;
     }
 
+    private static string ReadControlledProcessFailureDetail(
+        (int ExitCode, string StdOut, string StdErr, bool TimedOut) process)
+    {
+        string output = string.IsNullOrWhiteSpace(process.StdErr)
+            ? process.StdOut
+            : process.StdErr;
+        string detail = string.Join(" | ", output
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0)
+            .Reverse()
+            .Take(6)
+            .Reverse());
+        return string.IsNullOrWhiteSpace(detail)
+            ? string.Empty
+            : ": " + RedactCommandLineSecrets(detail);
+    }
+
+    internal static void AppendControlledRootGraphRestoreOverrides(
+        ICollection<string> arguments,
+        string unusedLockFilePath)
+    {
+        AppendControlledPackageLockIsolation(arguments, unusedLockFilePath);
+        arguments.Add("-p:BuildProjectReferences=true");
+        arguments.Add("-p:RestoreRecursive=true");
+        arguments.Add("-p:WarningsNotAsErrors=NU1510");
+    }
+
+    internal static void AppendControlledPackageLockIsolation(
+        ICollection<string> arguments,
+        string unusedLockFilePath)
+    {
+        arguments.Add("-p:RestoreLockedMode=false");
+        arguments.Add("-p:RestoreForceEvaluate=true");
+        arguments.Add("-p:NuGetLockFilePath=" + EscapeMsBuildPropertyValue(unusedLockFilePath));
+        arguments.Add("-p:RestorePackagesWithLockFile=false");
+    }
+
     private static bool TryAppendControlledProjectEvaluationProperties(
         ICollection<string> arguments,
         ProjectEvaluationRequest request,
@@ -571,10 +716,42 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 return false;
             }
+            if (property.Key.Equals("RuntimeIdentifiers", StringComparison.OrdinalIgnoreCase))
+            {
+                request.GlobalProperties.TryGetValue(
+                    "RuntimeIdentifier",
+                    out string? selectedRuntimeIdentifier);
+                string[] controlledRuntimeIdentifiers = SelectControlledRuntimeIdentifiers(
+                    controlledValue,
+                    selectedRuntimeIdentifier);
+                if (controlledRuntimeIdentifiers.Length > 0)
+                {
+                    arguments.Add("-p:RuntimeIdentifiers=" +
+                        BuildMsBuildListPropertyValue(controlledRuntimeIdentifiers));
+                }
+                continue;
+            }
             arguments.Add("-p:" + property.Key + "=" + EscapeMsBuildPropertyValue(controlledValue));
         }
 
         return true;
+    }
+
+    internal static string[] SelectControlledRuntimeIdentifiers(
+        string runtimeIdentifiers,
+        string? selectedRuntimeIdentifier)
+    {
+        if (string.IsNullOrWhiteSpace(selectedRuntimeIdentifier))
+            return Array.Empty<string>();
+
+        string selected = selectedRuntimeIdentifier!.Trim();
+        return runtimeIdentifiers
+            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => value.Trim())
+            .Where(value => value.Equals(selected, StringComparison.OrdinalIgnoreCase))
+            .Take(1)
+            .DefaultIfEmpty(selected)
+            .ToArray();
     }
 
     private static bool TryCreateControlledPublishInputPlaceholders(

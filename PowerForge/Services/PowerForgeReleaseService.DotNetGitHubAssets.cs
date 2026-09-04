@@ -25,7 +25,9 @@ internal sealed partial class PowerForgeReleaseService
         error = null;
         var targetRunnableAssets = new List<(DotNetPublishArtefactResult Artefact, string Path, bool Direct)>();
         DotNetPublishArtefactResult[] targetArtefacts = (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
-            .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
+            .Where(entry =>
+                string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase) &&
+                entry.Category != DotNetPublishArtefactCategory.Installer)
             .ToArray();
         foreach (DotNetPublishArtefactResult artefact in targetArtefacts)
         {
@@ -45,20 +47,37 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         runnableAssets.AddRange(targetRunnableAssets.Select(entry => entry.Path));
-        runnableAssets.AddRange(
+        if (!TryAddRequiredDotNetReleaseOutputs(
+                runnableAssets,
+            (result.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+            .Where(entry =>
+                string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase) &&
+                entry.Category == DotNetPublishArtefactCategory.Installer)
+            .Select(entry => entry.OutputFiles ?? Array.Empty<string>()),
+                target.Name,
+                "native installer",
+                out error))
+            return false;
+        if (!TryAddRequiredDotNetReleaseOutputs(
+                runnableAssets,
             (result.MsiBuilds ?? Array.Empty<DotNetPublishMsiBuildResult>())
             .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(entry => entry.OutputFiles ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(Path.GetFullPath));
-        runnableAssets.AddRange(
+            .Select(entry => entry.OutputFiles ?? Array.Empty<string>()),
+                target.Name,
+                "MSI",
+                out error))
+            return false;
+        if (!TryAddRequiredDotNetReleaseOutputs(
+                runnableAssets,
             (result.StorePackages ?? Array.Empty<DotNetPublishStorePackageResult>())
             .Where(entry => string.Equals(entry.Target, target.Name, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(entry => (entry.OutputFiles ?? Array.Empty<string>())
+            .Select(entry => (entry.OutputFiles ?? Array.Empty<string>())
                 .Concat(entry.UploadFiles ?? Array.Empty<string>())
-                .Concat(entry.SymbolFiles ?? Array.Empty<string>()))
-            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(Path.GetFullPath));
+                .Concat(entry.SymbolFiles ?? Array.Empty<string>())),
+                target.Name,
+                "Store package",
+                out error))
+            return false;
         if (runnableAssets.Count == 0)
         {
             error = $"No runnable release artifact was produced for DotNet publish target '{target.Name}'.";
@@ -75,6 +94,42 @@ internal sealed partial class PowerForgeReleaseService
             safeTarget,
             out List<string> directEvidenceAssets);
         runnableAssets.AddRange(directEvidenceAssets);
+        return true;
+    }
+
+    private static bool TryAddRequiredDotNetReleaseOutputs(
+        ICollection<string> runnableAssets,
+        IEnumerable<IEnumerable<string>> declaredOutputGroups,
+        string targetName,
+        string outputKind,
+        out string? error)
+    {
+        error = null;
+        foreach (IEnumerable<string> declaredOutputGroup in declaredOutputGroups)
+        {
+            string[] declaredPaths = declaredOutputGroup.ToArray();
+            if (declaredPaths.Length == 0)
+            {
+                error = $"A declared {outputKind} result for DotNet publish target '{targetName}' contains no output files.";
+                return false;
+            }
+            foreach (string? declaredPath in declaredPaths)
+            {
+                if (string.IsNullOrWhiteSpace(declaredPath))
+                {
+                    error = $"A declared {outputKind} output for DotNet publish target '{targetName}' has an empty path.";
+                    return false;
+                }
+
+                string fullPath = Path.GetFullPath(declaredPath);
+                if (!File.Exists(fullPath))
+                {
+                    error = $"A declared {outputKind} output is missing for DotNet publish target '{targetName}': {fullPath}";
+                    return false;
+                }
+                runnableAssets.Add(fullPath);
+            }
+        }
         return true;
     }
 

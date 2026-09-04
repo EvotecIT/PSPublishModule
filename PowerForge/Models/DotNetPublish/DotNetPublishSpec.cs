@@ -130,6 +130,9 @@ public sealed class DotNetPublishInstaller
     /// <summary>Installer identifier used in paths and step keys.</summary>
     public string Id { get; set; } = string.Empty;
 
+    /// <summary>Installer package format. Defaults to MSI for compatibility.</summary>
+    public DotNetPublishInstallerKind Kind { get; set; } = DotNetPublishInstallerKind.Msi;
+
     /// <summary>Source publish target name this installer prepares payloads from.</summary>
     public string PrepareFromTarget { get; set; } = string.Empty;
 
@@ -255,6 +258,127 @@ public sealed class DotNetPublishInstaller
     /// Optional client-license injection passed to MSI build as an MSBuild property.
     /// </summary>
     public DotNetPublishMsiClientLicenseOptions? ClientLicense { get; set; }
+
+    /// <summary>Debian package metadata used when <see cref="Kind"/> is <see cref="DotNetPublishInstallerKind.Debian"/>.</summary>
+    public DotNetPublishDebianOptions? Debian { get; set; }
+
+    /// <summary>macOS app-bundle metadata used when <see cref="Kind"/> is <see cref="DotNetPublishInstallerKind.MacApp"/>.</summary>
+    public DotNetPublishMacAppOptions? MacApp { get; set; }
+}
+
+/// <summary>
+/// Declarative metadata for a macOS application bundle produced from a dotnet publish output.
+/// </summary>
+public sealed class DotNetPublishMacAppOptions
+{
+    /// <summary>Reverse-DNS application identifier.</summary>
+    public string BundleIdentifier { get; set; } = string.Empty;
+
+    /// <summary>Application name shown by Finder.</summary>
+    public string BundleName { get; set; } = string.Empty;
+
+    /// <summary>User-facing semantic version written to CFBundleShortVersionString.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>Monotonic build version written to CFBundleVersion.</summary>
+    public string BuildNumber { get; set; } = "1";
+
+    /// <summary>Executable path relative to the published payload root.</summary>
+    public string Executable { get; set; } = string.Empty;
+
+    /// <summary>Optional PNG or ICNS icon source path, resolved from the project root.</summary>
+    public string? IconPath { get; set; }
+
+    /// <summary>Minimum supported macOS version.</summary>
+    public string MinimumSystemVersion { get; set; } = "13.0";
+
+    /// <summary>Optional App Store category UTI, for example public.app-category.productivity.</summary>
+    public string? Category { get; set; }
+
+    /// <summary>Optional copyright string.</summary>
+    public string? Copyright { get; set; }
+
+    /// <summary>File-name extensions registered as documents the application can open.</summary>
+    public string[] DocumentExtensions { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// codesign identity. Use '-' only for local ad-hoc proof; direct distribution requires a
+    /// Developer ID Application identity and subsequent notarization through PowerForge's Apple release flow.
+    /// </summary>
+    public string CodesignIdentity { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Enable hardened runtime when signing with an Apple identity. Defaults to true. PowerForge omits
+    /// hardened runtime for local ad-hoc signing because nested libraries cannot share an Apple Team ID.
+    /// </summary>
+    public bool HardenedRuntime { get; set; } = true;
+
+    /// <summary>Request a trusted timestamp for non-ad-hoc signatures. Defaults to true.</summary>
+    public bool Timestamp { get; set; } = true;
+
+    /// <summary>Optional entitlements plist path, resolved from the project root.</summary>
+    public string? EntitlementsPath { get; set; }
+
+}
+
+/// <summary>
+/// Declarative Debian desktop-package metadata.
+/// </summary>
+public sealed class DotNetPublishDebianOptions
+{
+    /// <summary>Lower-case Debian package name.</summary>
+    public string PackageName { get; set; } = string.Empty;
+
+    /// <summary>Debian package version.</summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>Package maintainer identity.</summary>
+    public string Maintainer { get; set; } = string.Empty;
+
+    /// <summary>Short package description.</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>Executable path relative to the published payload root.</summary>
+    public string Executable { get; set; } = string.Empty;
+
+    /// <summary>Command installed under /usr/bin.</summary>
+    public string CommandName { get; set; } = string.Empty;
+
+    /// <summary>Directory name installed under /opt.</summary>
+    public string InstallDirectoryName { get; set; } = string.Empty;
+
+    /// <summary>Optional Debian dependency expression.</summary>
+    public string? Depends { get; set; }
+
+    /// <summary>Debian section. Defaults to utils.</summary>
+    public string Section { get; set; } = "utils";
+
+    /// <summary>Debian priority. Defaults to optional.</summary>
+    public string Priority { get; set; } = "optional";
+
+    /// <summary>Optional architecture override; otherwise inferred from the Linux runtime identifier.</summary>
+    public string? Architecture { get; set; }
+
+    /// <summary>Optional desktop application name. When set, a desktop entry is installed.</summary>
+    public string? DesktopName { get; set; }
+
+    /// <summary>Optional desktop comment.</summary>
+    public string? DesktopComment { get; set; }
+
+    /// <summary>Optional semicolon-terminated desktop categories.</summary>
+    public string? DesktopCategories { get; set; }
+
+    /// <summary>Optional semicolon-terminated MIME types.</summary>
+    public string? MimeTypes { get; set; }
+
+    /// <summary>Optional startup WM class.</summary>
+    public string? StartupWmClass { get; set; }
+
+    /// <summary>Optional PNG icon source path, resolved from the project root.</summary>
+    public string? IconPath { get; set; }
+
+    /// <summary>Icon size used in the hicolor theme path. Defaults to 256.</summary>
+    public int IconSize { get; set; } = 256;
 }
 
 /// <summary>
@@ -1091,6 +1215,12 @@ public sealed class DotNetPublishDotNetOptions
     /// Optional MSBuild properties passed to build/publish (as <c>/p:Name=Value</c>).
     /// </summary>
     public Dictionary<string, string>? MsBuildProperties { get; set; }
+
+    /// <summary>
+    /// Package IDs whose lock-file-verified build assets may execute during a controlled release build.
+    /// Versions and archive content remain pinned by the committed package lock.
+    /// </summary>
+    public string[] TrustedBuildPackages { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Optional environment variables supplied to dotnet restore/build/publish commands.

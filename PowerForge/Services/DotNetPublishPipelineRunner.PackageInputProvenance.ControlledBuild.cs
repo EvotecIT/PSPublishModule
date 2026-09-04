@@ -12,21 +12,41 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> lockedPackageHashes,
             VerifiedPackageArchiveCache archives,
             out Dictionary<string, string> archivePathsByPackageKey)
+            => TryPrimeLockedPackageArchivesDetailed(
+                packageRoots,
+                lockedPackageHashes,
+                archives,
+                out archivePathsByPackageKey,
+                out _);
+
+        private static bool TryPrimeLockedPackageArchivesDetailed(
+            IEnumerable<string> packageRoots,
+            IReadOnlyDictionary<string, string> lockedPackageHashes,
+            VerifiedPackageArchiveCache archives,
+            out Dictionary<string, string> archivePathsByPackageKey,
+            out string? failureReason)
         {
             archivePathsByPackageKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            failureReason = null;
             try
             {
                 foreach (KeyValuePair<string, string> package in lockedPackageHashes)
                 {
                     if (string.IsNullOrWhiteSpace(package.Value))
+                    {
+                        failureReason = $"package '{package.Key}' has no committed content hash";
                         return false;
+                    }
                     int separator = package.Key.LastIndexOf('|');
                     if (separator <= 0 || separator == package.Key.Length - 1)
+                    {
+                        failureReason = "a committed package key is malformed";
                         return false;
+                    }
                     string packageId = package.Key.Substring(0, separator);
                     string packageVersion = package.Key.Substring(separator + 1);
                     string expectedName = packageId + "." + packageVersion + ".nupkg";
-                    string? archivePath = packageRoots
+                    string[] candidates = packageRoots
                         .Select(root => Path.Combine(
                             root,
                             packageId.ToLowerInvariant(),
@@ -39,19 +59,28 @@ public sealed partial class DotNetPublishPipelineRunner
                         .Where(candidate => Path.GetFileName(candidate).Equals(
                             expectedName,
                             StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    if (candidates.Length == 0)
+                    {
+                        failureReason = $"package archive '{packageId} {packageVersion}' was not found in the evaluated package roots";
+                        return false;
+                    }
+                    string? archivePath = candidates
                         .FirstOrDefault(candidate =>
                             archives.TryGetOrOpen(candidate, package.Value) is not null);
                     if (string.IsNullOrWhiteSpace(archivePath))
                     {
+                        failureReason = $"package archive '{packageId} {packageVersion}' did not match its committed content hash";
                         return false;
                     }
                     archivePathsByPackageKey.Add(package.Key, Path.GetFullPath(archivePath!));
                 }
                 return true;
             }
-            catch
+            catch (Exception exception)
             {
                 archivePathsByPackageKey.Clear();
+                failureReason = $"{exception.GetType().Name} while verifying committed package archives";
                 return false;
             }
         }
@@ -113,7 +142,9 @@ public sealed partial class DotNetPublishPipelineRunner
             string destination,
             string controlledSourceRoot,
             string controlledProjectPath,
+            IReadOnlyCollection<string> trustedBuildPackages,
             out string[] packageSources,
+            out string failureReason,
             IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages = false)
             => _archives.TrySeedControlledPackageSource(
@@ -123,7 +154,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 _controlledBuildInputsByArchive,
                 controlledSourceRoot,
                 controlledProjectPath,
+                trustedBuildPackages,
                 out packageSources,
+                out failureReason,
+                _sdkEvidenceFailureReason,
                 evaluatedProperties,
                 allowSdkManagedToolchainPackages);
     }
@@ -172,11 +206,15 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, HashSet<string>> controlledBuildInputsByArchive,
             string controlledSourceRoot,
             string controlledProjectPath,
+            IReadOnlyCollection<string> trustedBuildPackages,
             out string[] packageSources,
+            out string failureReason,
+            string? sdkEvidenceFailureReason,
             IReadOnlyDictionary<string, string> evaluatedProperties,
             bool allowSdkManagedToolchainPackages)
         {
             packageSources = Array.Empty<string>();
+            failureReason = string.Empty;
             try
             {
                 Directory.CreateDirectory(destination);
@@ -187,6 +225,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     string archivePath = package.Value;
                     if (!_archives.TryGetValue(Path.GetFullPath(archivePath), out CacheEntry? cached))
                     {
+                        failureReason = $"verified package archive is unavailable: '{package.Key}'";
                         return false;
                     }
                     IReadOnlyCollection<string> controlledBuildInputs =
@@ -195,7 +234,12 @@ public sealed partial class DotNetPublishPipelineRunner
                             out HashSet<string>? inputs)
                             ? inputs
                             : Array.Empty<string>();
-                    if (!(allowSdkManagedToolchainPackages &&
+                    string packageId = package.Key.Split(new[] { '|' }, 2)[0];
+                    bool explicitlyTrustedBuildPackage = trustedBuildPackages.Contains(
+                        packageId,
+                        StringComparer.OrdinalIgnoreCase);
+                    if (!explicitlyTrustedBuildPackage &&
+                        !(allowSdkManagedToolchainPackages &&
                           sdkManagedArchivePaths.Contains(Path.GetFullPath(archivePath))) &&
                         !cached.Archive.HasOnlyControlledBuildInputs(
                             controlledBuildInputs,
@@ -203,21 +247,40 @@ public sealed partial class DotNetPublishPipelineRunner
                             controlledProjectPath,
                             evaluatedProperties))
                     {
+                        string sdkDetail = IsTrustedSdkAutoReferencedPackageId(packageId) &&
+                                           !string.IsNullOrWhiteSpace(sdkEvidenceFailureReason)
+                            ? "; SDK evidence: " + sdkEvidenceFailureReason
+                            : string.Empty;
+                        failureReason = $"package contains an unverified build input: '{package.Key}'{sdkDetail}";
                         return false;
                     }
                     string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
-                        return false;
+                        // SDK-evidence archives can originate in an isolated root that is
+                        // removed after admission. Revalidate the already-seeded package
+                        // against the cached NuGet content hash instead of reopening that
+                        // intentionally short-lived source path.
+                        using VerifiedPackageArchive? existingArchive =
+                            VerifiedPackageArchive.TryOpen(
+                                destinationPath,
+                                cached.ExpectedContentHash);
+                        if (existingArchive is null)
+                        {
+                            failureReason = $"offline package destination conflicts: '{package.Key}'";
+                            return false;
+                        }
+                        continue;
                     }
                     cached.Archive.CopyTo(destinationPath);
                 }
                 packageSources = new[] { destination };
                 return true;
             }
-            catch
+            catch (Exception exception)
             {
                 packageSources = Array.Empty<string>();
+                failureReason = $"{exception.GetType().Name} while creating the verified offline package source";
                 return false;
             }
         }

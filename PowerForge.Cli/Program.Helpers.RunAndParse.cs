@@ -672,6 +672,8 @@ internal static partial class Program
             if (step.Kind == DotNetPublishStepKind.MsiPrepare) continue;
             if (step.Kind == DotNetPublishStepKind.MsiBuild) continue;
             if (step.Kind == DotNetPublishStepKind.MsiSign) continue;
+            if (step.Kind == DotNetPublishStepKind.DebianPackage) continue;
+            if (step.Kind == DotNetPublishStepKind.MacAppPackage) continue;
             if (step.Kind == DotNetPublishStepKind.StorePackage) continue;
             if (step.Kind == DotNetPublishStepKind.BenchmarkExtract) continue;
             if (step.Kind == DotNetPublishStepKind.BenchmarkGate) continue;
@@ -742,6 +744,7 @@ internal static partial class Program
                         }
 
                         AppendMsiPrepareSteps(rebuilt, plan, t, framework, rid.Trim(), style);
+                        AppendDirectInstallerPackageSteps(rebuilt, plan, t, framework, rid.Trim(), style);
                         AppendStorePackageSteps(rebuilt, plan, t, framework, rid.Trim(), style);
                     }
                 }
@@ -804,6 +807,7 @@ internal static partial class Program
         foreach (var installer in plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
         {
             if (installer is null) continue;
+            if (installer.Kind != DotNetPublishInstallerKind.Msi) continue;
             if (!string.Equals(installer.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -903,6 +907,106 @@ internal static partial class Program
                     });
                 }
             }
+        }
+    }
+
+    static void AppendDirectInstallerPackageSteps(
+        List<DotNetPublishStep> rebuilt,
+        DotNetPublishPlan plan,
+        DotNetPublishTargetPlan target,
+        string framework,
+        string runtime,
+        DotNetPublishStyle style)
+    {
+        if (rebuilt is null || plan is null || target is null)
+            return;
+
+        foreach (var installer in plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
+        {
+            if (installer is null || installer.Kind == DotNetPublishInstallerKind.Msi) continue;
+            if (!string.Equals(installer.PrepareFromTarget, target.Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if ((installer.Runtimes?.Length ?? 0) > 0 &&
+                !installer.Runtimes!.Any(value => string.Equals(value, runtime, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if ((installer.Frameworks?.Length ?? 0) > 0 &&
+                !installer.Frameworks!.Any(value => string.Equals(value, framework, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if ((installer.Styles?.Length ?? 0) > 0 && !installer.Styles!.Contains(style))
+                continue;
+
+            var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["installer"] = installer.Id ?? string.Empty,
+                ["target"] = target.Name ?? string.Empty,
+                ["rid"] = runtime ?? string.Empty,
+                ["framework"] = framework ?? string.Empty,
+                ["style"] = style.ToString(),
+                ["configuration"] = plan.Configuration ?? "Release"
+            };
+            string defaultOutputName;
+            DotNetPublishStepKind stepKind;
+            string title;
+            if (installer.Kind == DotNetPublishInstallerKind.Debian)
+            {
+                DotNetPublishDebianOptions debian = installer.Debian
+                    ?? throw new InvalidOperationException($"Debian installer '{installer.Id}' is missing package metadata.");
+                string architecture = string.IsNullOrWhiteSpace(debian.Architecture)
+                    ? string.Equals(runtime, "linux-x64", StringComparison.OrdinalIgnoreCase) ? "amd64"
+                    : string.Equals(runtime, "linux-arm64", StringComparison.OrdinalIgnoreCase) ? "arm64"
+                    : string.Equals(runtime, "linux-arm", StringComparison.OrdinalIgnoreCase) ? "armhf"
+                    : throw new InvalidOperationException($"Cannot infer a Debian architecture from runtime '{runtime}'.")
+                    : debian.Architecture!;
+                tokens["version"] = debian.Version;
+                tokens["package"] = debian.PackageName;
+                tokens["architecture"] = architecture;
+                defaultOutputName = "{package}_{version}_{architecture}.deb";
+                stepKind = DotNetPublishStepKind.DebianPackage;
+                title = "Build Debian package";
+            }
+            else if (installer.Kind == DotNetPublishInstallerKind.MacApp)
+            {
+                DotNetPublishMacAppOptions macApp = installer.MacApp
+                    ?? throw new InvalidOperationException($"MacApp installer '{installer.Id}' is missing package metadata.");
+                tokens["version"] = macApp.Version;
+                tokens["bundle"] = macApp.BundleName;
+                defaultOutputName = "{bundle}-{version}-{rid}.zip";
+                stepKind = DotNetPublishStepKind.MacAppPackage;
+                title = "Build macOS app bundle";
+            }
+            else
+            {
+                continue;
+            }
+
+            string outputTemplate = string.IsNullOrWhiteSpace(installer.OutputPath)
+                ? "Artifacts/DotNetPublish/Installers/{installer}/{rid}"
+                : installer.OutputPath!;
+            string outputNameTemplate = string.IsNullOrWhiteSpace(installer.OutputName)
+                ? defaultOutputName
+                : installer.OutputName!;
+            string outputDirectory = ResolveDotNetPublishPath(plan.ProjectRoot, ReplaceDotNetPublishTemplate(outputTemplate, tokens));
+            string outputName = ReplaceDotNetPublishTemplate(outputNameTemplate, tokens);
+            string requiredExtension = installer.Kind == DotNetPublishInstallerKind.Debian ? ".deb" : ".zip";
+            if (!outputName.EndsWith(requiredExtension, StringComparison.OrdinalIgnoreCase))
+                outputName += requiredExtension;
+            string outputPath = Path.Combine(outputDirectory, outputName);
+            if (!plan.AllowOutputOutsideProjectRoot)
+                EnsureDotNetPublishPathWithinRoot(plan.ProjectRoot, outputPath, $"Installer '{installer.Id}' output path");
+
+            rebuilt.Add(new DotNetPublishStep
+            {
+                Key = $"{(installer.Kind == DotNetPublishInstallerKind.Debian ? "debian" : "macapp")}.package:{installer.Id}:{target.Name}:{framework}:{runtime}:{style}",
+                Kind = stepKind,
+                Title = title,
+                InstallerId = installer.Id,
+                BundleId = installer.PrepareFromBundleId,
+                TargetName = target.Name,
+                Framework = framework,
+                Runtime = runtime,
+                Style = style,
+                InstallerOutputPath = outputPath
+            });
         }
     }
 
