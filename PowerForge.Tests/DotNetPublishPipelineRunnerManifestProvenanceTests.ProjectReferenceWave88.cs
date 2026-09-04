@@ -14,7 +14,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
-            string[] directories = Enumerable.Range(0, 40)
+            string[] directories = Enumerable.Range(0, 100)
                 .Select(index => Path.Combine(root, "packages", "package-" + index, "1.0.0"))
                 .ToArray();
             MethodInfo method = typeof(DotNetPublishPipelineRunner.PublishProvenanceLease)

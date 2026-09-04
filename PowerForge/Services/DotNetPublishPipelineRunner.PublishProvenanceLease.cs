@@ -6,12 +6,14 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     internal sealed class PublishProvenanceLease : IDisposable
     {
+        private const int MaximumWatcherInstances = 64;
         private readonly HashSet<string> _guardedPaths;
         private readonly HashSet<string> _absentDirectoryAncestors;
         private readonly Dictionary<string, string?> _expectedHashes;
         private readonly List<FileStream> _leases = new();
         private readonly List<FileSystemWatcher> _watchers = new();
         private int _changed;
+        private string? _changeDescription;
         private bool _disposed;
 
         private PublishProvenanceLease(IEnumerable<string> paths)
@@ -87,7 +89,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven project or import input changed while publish was running.");
+                    "A proven project or import input changed while publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher lost mutation evidence") + ".");
             }
             if (_absentDirectoryAncestors.Any(Directory.Exists))
             {
@@ -118,7 +121,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (Volatile.Read(ref _changed) != 0)
             {
                 throw new InvalidOperationException(
-                    "A proven project or import input changed while publish was running.");
+                    "A proven project or import input changed while publish was running: " +
+                    (_changeDescription ?? "the filesystem watcher lost mutation evidence") + ".");
             }
         }
 
@@ -145,7 +149,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Select(FindNearestExistingDirectory)
                 .Distinct(comparer)
                 .ToArray();
-            IReadOnlyDictionary<string, bool> watcherRoots = !IsWindows() && directories.Length > 16
+            IReadOnlyDictionary<string, bool> watcherRoots = !IsWindows() && directories.Length > MaximumWatcherInstances
                 ? BuildConsolidatedWatcherRoots(directories, comparer)
                 : directories.ToDictionary(directory => directory, _ => false, comparer);
             foreach (KeyValuePair<string, bool> root in watcherRoots)
@@ -163,7 +167,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 watcher.Created += MarkChanged;
                 watcher.Deleted += MarkChanged;
                 watcher.Renamed += MarkChanged;
-                watcher.Error += (_, _) => Interlocked.Exchange(ref _changed, 1);
+                watcher.Error += (_, _) => RecordChange("the filesystem watcher buffer overflowed");
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
             }
@@ -176,7 +180,7 @@ public sealed partial class DotNetPublishPipelineRunner
             var roots = new HashSet<string>(
                 directories.Select(Path.GetFullPath),
                 comparer);
-            while (roots.Count > 32)
+            while (roots.Count > MaximumWatcherInstances)
             {
                 var candidates = roots
                     .SelectMany(directory => EnumerateNonRootAncestors(directory)
@@ -192,7 +196,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (candidates.Length == 0)
                     throw new InvalidOperationException("Publish provenance watcher roots could not be consolidated.");
 
-                int coverageNeeded = roots.Count - 31;
+                int coverageNeeded = roots.Count - (MaximumWatcherInstances - 1);
                 var sufficientCandidates = candidates
                     .Where(candidate => candidate.Covered.Length >= coverageNeeded)
                     .ToArray();
@@ -254,15 +258,21 @@ public sealed partial class DotNetPublishPipelineRunner
         private void MarkChanged(object sender, FileSystemEventArgs args)
         {
             if (AffectsGuardedPath(args.FullPath))
-                Interlocked.Exchange(ref _changed, 1);
+                RecordChange($"{args.ChangeType} '{args.FullPath}'");
         }
 
         private void MarkChanged(object sender, RenamedEventArgs args)
         {
             if (AffectsGuardedPath(args.FullPath) || AffectsGuardedPath(args.OldFullPath))
             {
-                Interlocked.Exchange(ref _changed, 1);
+                RecordChange($"renamed '{args.OldFullPath}' to '{args.FullPath}'");
             }
+        }
+
+        private void RecordChange(string description)
+        {
+            Interlocked.CompareExchange(ref _changeDescription, description, null);
+            Interlocked.Exchange(ref _changed, 1);
         }
 
         private bool AffectsGuardedPath(string changedPath)
