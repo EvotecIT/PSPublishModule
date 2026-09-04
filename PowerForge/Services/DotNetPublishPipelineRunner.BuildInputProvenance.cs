@@ -632,18 +632,48 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
             referencedProject = requestsByEvaluation[referencedProjectKey];
+            string[] outputRoots = outputRootsByEvaluation.TryGetValue(
+                referencedProjectKey,
+                out string[]? resolvedOutputRoots)
+                ? resolvedOutputRoots
+                : Array.Empty<string>();
+            string[] expectedOutputPaths = expectedOutputPathsByEvaluation.TryGetValue(
+                referencedProjectKey,
+                out string[]? resolvedExpectedOutputPaths)
+                ? resolvedExpectedOutputPaths
+                : Array.Empty<string>();
             bool hasTrustedGeneratedOutputPath =
-                outputRootsByEvaluation.TryGetValue(referencedProjectKey, out string[]? outputRoots) &&
-                expectedOutputPathsByEvaluation.TryGetValue(referencedProjectKey, out string[]? expectedOutputPaths) &&
+                outputRoots.Length > 0 &&
+                expectedOutputPaths.Length > 0 &&
                 IsTrustedGeneratedOutputPath(
                     output.OutputPath,
                     outputRoots,
                     expectedOutputPaths,
                     Path.GetDirectoryName(referencedProject.ProjectPath)!,
                     directories);
+            if (!hasTrustedGeneratedOutputPath)
+            {
+                referencedProject.GlobalProperties.TryGetValue(
+                    "RuntimeIdentifier",
+                    out string? referencedRuntimeIdentifier);
+                string expectedOutputSummary = string.Join(
+                    ", ",
+                    expectedOutputPaths.Take(4));
+                string outputRootSummary = string.Join(
+                    ", ",
+                    outputRoots.Take(4));
+                projectDirectories = directories.ToArray();
+                failureReason =
+                    $"generated project-reference output '{output.OutputPath}' is not an expected output for " +
+                    $"'{referencedProject.ProjectPath}' (framework " +
+                    $"'{referencedProject.TargetFramework ?? "<unset>"}', runtime " +
+                    $"'{referencedRuntimeIdentifier ?? "<unset>"}'). Expected path(s): " +
+                    $"{(expectedOutputSummary.Length == 0 ? "<none>" : expectedOutputSummary)}. " +
+                    $"Output root(s): {(outputRootSummary.Length == 0 ? "<none>" : outputRootSummary)}.";
+                return false;
+            }
             string? controlledOutputFailureReason = null;
-            if (hasTrustedGeneratedOutputPath &&
-                TryProveControlledGeneratedOutputs(
+            if (TryProveControlledGeneratedOutputs(
                     referencedProject,
                     new[] { output.OutputPath },
                     buildInputsByEvaluation.TryGetValue(
@@ -687,8 +717,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 continue;
             }
 
-            if (hasTrustedGeneratedOutputPath &&
-                !string.IsNullOrWhiteSpace(controlledOutputFailureReason))
+            if (!string.IsNullOrWhiteSpace(controlledOutputFailureReason))
             {
                 projectDirectories = directories.ToArray();
                 failureReason = $"controlled generated-output proof failed for '{output.OutputPath}': " +
