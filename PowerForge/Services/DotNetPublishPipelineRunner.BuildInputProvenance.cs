@@ -1449,9 +1449,13 @@ public sealed partial class DotNetPublishPipelineRunner
                         intermediateRoot,
                         customAfterMicrosoftCommonTargets,
                         out EvaluatedProjectReference[] resolvedReferences,
-                        out string resolvedItemsJson))
+                        out string resolvedItemsJson,
+                        out string? controlledReferenceFailureReason))
                 {
-                    failureReason = "controlled project references could not be resolved";
+                    failureReason = "controlled project references could not be resolved" +
+                        (string.IsNullOrWhiteSpace(controlledReferenceFailureReason)
+                            ? string.Empty
+                            : ": " + controlledReferenceFailureReason);
                     return false;
                 }
                 foreach (EvaluatedProjectReference reference in MergeResolvedProjectReferenceContexts(
