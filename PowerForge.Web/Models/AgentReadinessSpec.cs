@@ -50,7 +50,7 @@ public sealed class AgentWebMcpToolSpec
     public string Route { get; set; } = "/";
     /// <summary>Short description presented to agents.</summary>
     public string Description { get; set; } = string.Empty;
-    /// <summary>Implementation kind. PowerForge currently generates the site-search kind.</summary>
+    /// <summary>Implementation kind. Use site-search for the generated search runtime or page-tool for a product-owned page adapter.</summary>
     public string Kind { get; set; } = "custom";
     /// <summary>Whether invoking the tool only reads state.</summary>
     public bool ReadOnly { get; set; } = true;
@@ -89,6 +89,8 @@ public sealed class AgentApacheSupportSpec
     public bool MarkdownNegotiation { get; set; } = true;
     /// <summary>Emit Content-Type and CORS headers for generated discovery resources.</summary>
     public bool DiscoveryResourceHeaders { get; set; } = true;
+    /// <summary>Enable Brotli, with gzip fallback, for JSON responses when the Apache modules are available.</summary>
+    public bool JsonCompression { get; set; } = true;
 }
 
 /// <summary>Security headers that agent and AI-readiness scanners commonly expect.</summary>

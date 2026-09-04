@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 This document is the single source of truth for:
 
@@ -73,13 +73,13 @@ Legend:
 
 ### Search
 
-- **Have**: Search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites.
-  - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
-- **Have**: A fallback search surface and a reusable read-only WebMCP `site-search` runtime, with route-scoped readiness verification and truthful `agents.json` reporting.
-  - Code: `PowerForge.Web/Services/WebSiteBuilder.SearchSurface.cs`, `PowerForge.Web/Services/WebSiteBuilder.WebMcp.cs`, `PowerForge.Web/Services/WebAgentReadiness.WebMcp.cs`
+- **Have**: Compact search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites. Generated manifests include artifact byte counts and SHA-256 digests; arbitrary page runtime/presentation metadata is excluded from search records.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs`, `PowerForge.Web/Services/WebSiteBuilder.SearchIndex.cs`, `PowerForge.Web/Services/WebSearchIndexPolicy.cs`
+- **Have**: A fallback search surface and a reusable read-only WebMCP `site-search` runtime, with bounded index loading and responses, route-scoped readiness verification, repeatable Chromium execution, compression diagnostics, and truthful `agents.json` reporting.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.SearchSurface.cs`, `PowerForge.Web/Services/WebSiteBuilder.WebMcp.cs`, `PowerForge.Web/Services/WebAgentReadiness.WebMcp.cs`, `PowerForge.Web/Services/WebMcpBehavioralTester.cs`
   - Docs: `Docs/PowerForge.Web.AgentReadiness.md`, `Docs/PowerForge.Web.WebMcpRollout.md`
 - **Partial**: Rich search UI/UX remains theme-owned; themes can bind their ranking and visible interaction through `PowerForgeWebMcpSearch.bindAdapter(...)`.
-- **Partial**: Phase 2 portfolio deployment is limited to established public documentation sites. Authenticated and state-changing Phase 3 tools require a product-specific task and safety contract before engine expansion.
+- **Partial**: Phase 2 portfolio deployment is limited to established public documentation sites. PowerForge can verify product-owned `page-tool` adapters, while the first Phase 3 pilots remain bounded to OfficeIMO browser-local conversion and DomainDetective public DNS queries. Authenticated and consequential tools still require a product-specific task and safety contract.
 
 ### SEO + Discovery
 

@@ -676,7 +676,7 @@ public static partial class WebSiteBuilder
                 Project = item.ProjectSlug,
                 Language = normalizedLanguage,
                 TranslationKey = item.TranslationKey,
-                Meta = item.Meta.Count == 0 ? null : item.Meta
+                Meta = BuildSearchMeta(item)
             });
         }
         if (entries.Count == 0)
@@ -691,7 +691,7 @@ public static partial class WebSiteBuilder
         var searchDir = Path.Combine(outputRoot, "search");
         Directory.CreateDirectory(searchDir);
         var searchPath = Path.Combine(searchDir, "index.json");
-        WriteAllTextIfChanged(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
+        var aggregateArtifact = WriteSearchIndexArtifact(outputRoot, searchPath, entries);
 
         // Emit per-language search shards so the manifest and client-side fallbacks never
         // advertise a language URL that is missing in root-language deployment artifacts.
@@ -700,6 +700,7 @@ public static partial class WebSiteBuilder
             .Where(static language => !string.IsNullOrWhiteSpace(language))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var languageShards = new List<Dictionary<string, object?>>();
         if (languages.Length > 0)
         {
             foreach (var language in languages)
@@ -710,7 +711,8 @@ public static partial class WebSiteBuilder
                 var shardDir = Path.Combine(searchDir, language);
                 Directory.CreateDirectory(shardDir);
                 var shardPath = Path.Combine(shardDir, "index.json");
-                WriteAllTextIfChanged(shardPath, JsonSerializer.Serialize(shard, WebJson.Options));
+                var artifact = WriteSearchIndexArtifact(outputRoot, shardPath, shard);
+                languageShards.Add(ToSearchManifestArtifact(artifact, "language", language));
             }
         }
 
@@ -720,32 +722,18 @@ public static partial class WebSiteBuilder
             .Where(static collection => !string.IsNullOrWhiteSpace(collection))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        foreach (var collection in collections)
+        var collectionShardSpecs = AllocateCollectionSearchShardSpecs(collections);
+        foreach (var collectionShard in collectionShardSpecs)
         {
-            var token = Slugify(collection);
-            if (string.IsNullOrWhiteSpace(token))
-                continue;
             var shard = entries
-                .Where(entry => string.Equals(entry.Collection, collection, StringComparison.OrdinalIgnoreCase))
+                .Where(entry => string.Equals(entry.Collection, collectionShard.Collection, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            var collectionDir = Path.Combine(searchDir, "collections", token);
+            var collectionDir = Path.Combine(searchDir, "collections", collectionShard.Token);
             Directory.CreateDirectory(collectionDir);
             var collectionPath = Path.Combine(collectionDir, "index.json");
-            WriteAllTextIfChanged(collectionPath, JsonSerializer.Serialize(shard, WebJson.Options));
-            collectionShards.Add(new Dictionary<string, object?>
-            {
-                ["collection"] = collection,
-                ["path"] = $"/search/collections/{token}/index.json",
-                ["count"] = shard.Length
-            });
+            var artifact = WriteSearchIndexArtifact(outputRoot, collectionPath, shard);
+            collectionShards.Add(ToSearchManifestArtifact(artifact, "collection", collectionShard.Collection));
         }
-
-        var languageShards = languages.Select(language => new Dictionary<string, object?>
-        {
-            ["language"] = language,
-            ["path"] = $"/search/{language}/index.json",
-            ["count"] = entries.Count(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
-        }).ToArray();
 
         var webMcpSearchTools = ResolveWebMcpSiteSearchTools(spec);
         var searchPagePaths = webMcpSearchTools.Length == 0
@@ -755,8 +743,12 @@ public static partial class WebSiteBuilder
                 .ToArray();
         var manifest = new Dictionary<string, object?>
         {
-            ["entryCount"] = entries.Count,
+            ["entryCount"] = aggregateArtifact.Count,
+            ["totalEntryCount"] = aggregateArtifact.SourceCount,
+            ["searchIndexTruncated"] = aggregateArtifact.Truncated,
             ["searchIndexPath"] = "/search/index.json",
+            ["searchIndexBytes"] = aggregateArtifact.Bytes,
+            ["searchIndexSha256"] = aggregateArtifact.Sha256,
             ["languageShards"] = languageShards,
             ["collectionShards"] = collectionShards,
             ["searchPagePath"] = searchPagePaths[0],

@@ -895,8 +895,8 @@
         "route": { "type": "string", "pattern": "^/" },
         "Description": { "type": "string", "minLength": 1 },
         "description": { "type": "string", "minLength": 1 },
-        "Kind": { "type": "string", "minLength": 1 },
-        "kind": { "type": "string", "minLength": 1 },
+        "Kind": { "type": "string", "enum": ["site-search", "page-tool"] },
+        "kind": { "type": "string", "enum": ["site-search", "page-tool"] },
         "ReadOnly": { "type": "boolean" },
         "readOnly": { "type": "boolean" }
       }
@@ -930,7 +930,9 @@
         "MarkdownNegotiation": { "type": "boolean" },
         "markdownNegotiation": { "type": "boolean" },
         "DiscoveryResourceHeaders": { "type": "boolean" },
-        "discoveryResourceHeaders": { "type": "boolean" }
+        "discoveryResourceHeaders": { "type": "boolean" },
+        "JsonCompression": { "type": "boolean" },
+        "jsonCompression": { "type": "boolean" }
       }
     },
     "AgentSecurityHeadersSpec": {
