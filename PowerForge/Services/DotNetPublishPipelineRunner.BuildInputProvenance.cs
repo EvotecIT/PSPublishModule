@@ -578,10 +578,11 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             if (publishInput.IsPackageBacked)
                 continue;
+            bool isTrustedSdkGeneratedOutput = IsTrustedSdkGeneratedOutput(publishInput.FullPath);
             bool trustedGeneratedOutput =
                 (publishInput.IsSdkDefined ||
                  (publishInput.IsProjectDefined && publishInput.IsControlledEquivalent)) &&
-                IsTrustedSdkGeneratedOutput(publishInput.FullPath) &&
+                isTrustedSdkGeneratedOutput &&
                 (buildPlan?.NoBuildInPublish != true ||
                  (provenNoBuildPublishInputsByEvaluation.TryGetValue(
                       evaluationKey,
@@ -589,6 +590,25 @@ public sealed partial class DotNetPublishPipelineRunner
                   provenInputs.Contains(publishInput.FullPath)));
             if (trustedGeneratedOutput)
                 continue;
+
+            bool isBelowEvaluatedGeneratedRoot = generatedRootsByEvaluation.Values.Any(roots =>
+                IsBelowGeneratedBuildRoot(publishInput.FullPath, roots));
+            if (isBelowEvaluatedGeneratedRoot)
+            {
+                bool hasNoBuildProof = provenNoBuildPublishInputsByEvaluation.TryGetValue(
+                    evaluationKey,
+                    out HashSet<string>? diagnosticProvenInputs) &&
+                    diagnosticProvenInputs.Contains(publishInput.FullPath);
+                projectDirectories = directories.ToArray();
+                failureReason =
+                    $"controlled publish input '{publishInput.FullPath}' was rebuilt but rejected " +
+                    $"(SDK-defined: {publishInput.IsSdkDefined}; project-defined: " +
+                    $"{publishInput.IsProjectDefined}; byte-and-mode equivalent: " +
+                    $"{publishInput.IsControlledEquivalent}; trusted generated path: " +
+                    $"{isTrustedSdkGeneratedOutput}; no-build proof: {hasNoBuildProof}; " +
+                    $"single physical link: {HasSinglePhysicalLink(publishInput.FullPath)}).";
+                return false;
+            }
 
             buildInputs.Add(publishInput.FullPath);
             if (File.Exists(publishInput.FullPath) &&
