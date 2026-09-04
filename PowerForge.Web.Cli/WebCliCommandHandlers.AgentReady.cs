@@ -9,7 +9,7 @@ internal static partial class WebCliCommandHandlers
     private static int HandleAgentReady(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         if (subArgs.Length == 0)
-            return Fail("agent-ready requires an operation: prepare, verify, or scan.", outputJson, logger, "web.agent-ready");
+            return Fail("agent-ready requires an operation: prepare, verify, scan, or exercise.", outputJson, logger, "web.agent-ready");
 
         var operation = subArgs[0].Trim();
         var args = subArgs.Skip(1).ToArray();
@@ -18,7 +18,8 @@ internal static partial class WebCliCommandHandlers
             "prepare" => HandleAgentReadyPrepare(args, outputJson, logger, outputSchemaVersion),
             "verify" => HandleAgentReadyVerify(args, outputJson, logger, outputSchemaVersion),
             "scan" => HandleAgentReadyScan(args, outputJson, logger, outputSchemaVersion),
-            _ => Fail("agent-ready operation must be prepare, verify, or scan.", outputJson, logger, "web.agent-ready")
+            "exercise" => HandleAgentReadyExercise(args, outputJson, logger, outputSchemaVersion),
+            _ => Fail("agent-ready operation must be prepare, verify, scan, or exercise.", outputJson, logger, "web.agent-ready")
         };
     }
 
@@ -147,6 +148,49 @@ internal static partial class WebCliCommandHandlers
         foreach (var warning in result.Warnings)
             logger.Warn(warning);
 
+        return exitCode;
+    }
+
+    private static int HandleAgentReadyExercise(string[] args, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        var url = TryGetOptionValue(args, "--url");
+        var query = TryGetOptionValue(args, "--query");
+        var toolName = TryGetOptionValue(args, "--tool") ?? "search_site";
+        var limit = TryParseInt(TryGetOptionValue(args, "--limit")) ?? 0;
+        var timeoutMs = TryParseInt(TryGetOptionValue(args, "--timeout-ms")) ?? 30_000;
+        if (string.IsNullOrWhiteSpace(url))
+            return Fail("Missing required --url.", outputJson, logger, "web.agent-ready.exercise");
+        if (string.IsNullOrWhiteSpace(query))
+            return Fail("Missing required --query.", outputJson, logger, "web.agent-ready.exercise");
+
+        var result = WebMcpBehavioralTester.TestSiteSearchAsync(new WebMcpBehavioralTestOptions
+        {
+            Url = url,
+            ToolName = toolName,
+            Query = query,
+            Limit = limit,
+            TimeoutMs = timeoutMs,
+            EnsureBrowserInstalled = HasOption(args, "--ensure-browser"),
+            Headless = !HasOption(args, "--headed")
+        }).GetAwaiter().GetResult();
+        var exitCode = result.Success ? 0 : 1;
+
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = "web.agent-ready.exercise",
+                Success = result.Success,
+                ExitCode = exitCode,
+                Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebMcpBehavioralTestResult)
+            });
+            return exitCode;
+        }
+
+        logger.Info($"WebMCP exercise: {(result.Success ? "passed" : "failed")} ({result.Returned}/{result.TotalMatches} results, {result.OutputCharacters} output characters)");
+        foreach (var error in result.Errors)
+            logger.Error(error);
         return exitCode;
     }
 

@@ -96,6 +96,32 @@
         }
       }
     },
+    "Validation": {
+      "type": [ "object", "null" ],
+      "additionalProperties": false,
+      "properties": {
+        "AfterStaging": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [ "FilePath" ],
+            "properties": {
+              "Enabled": { "type": "boolean" },
+              "Name": { "type": [ "string", "null" ] },
+              "FilePath": { "type": "string", "minLength": 1 },
+              "WorkingDirectory": { "type": [ "string", "null" ] },
+              "Environment": {
+                "type": "object",
+                "additionalProperties": { "type": [ "string", "null" ] }
+              },
+              "TimeoutSeconds": { "type": "integer", "minimum": 1 },
+              "PreferWindowsPowerShell": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
     "GitHub": {
       "type": "object",
       "additionalProperties": false,

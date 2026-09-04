@@ -418,7 +418,10 @@ public sealed class ModuleBuildHostService
 
         if (request.RequireReusableOutput)
         {
-            arguments.Add("if (-not $buildScriptCommand.Parameters.ContainsKey('NoDotnetBuild') -or -not $buildScriptCommand.Parameters.ContainsKey('StagingPath')) { throw 'Deferred module publication requires the legacy build script to expose NoDotnetBuild and StagingPath parameters.' }");
+            arguments.Add("$requiredCheckpointParameters = @('NoDotnetBuild', 'StagingPath', 'ReuseStaging', 'IncludeProjectPackages', 'IncludeModulePublishing', 'SkipInstall')");
+            arguments.Add("$missingCheckpointParameters = @($requiredCheckpointParameters | Where-Object { -not $buildScriptCommand.Parameters.ContainsKey($_) })");
+            arguments.Add("if ($missingCheckpointParameters.Count -ne 0) { throw \"Deferred module publication requires the legacy build script to expose checkpoint parameters: $($missingCheckpointParameters -join ', ').\" }");
+            arguments.Add("if (-not $buildScriptCommand.Parameters.ContainsKey('RunMode') -and -not $buildScriptCommand.Parameters.ContainsKey('ConfigurationGateMode')) { throw 'Deferred module publication requires the legacy build script to expose RunMode or ConfigurationGateMode.' }");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Configuration))
@@ -470,13 +473,17 @@ public sealed class ModuleBuildHostService
         if (request.NoSign)
             arguments.Add("$buildScriptArguments['NoSign'] = $true");
 
-        if (request.SignModule)
+        if (request.SignModule || request.SignModuleWasSpecified)
         {
-            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) { $buildScriptArguments['SignModule'] = $true }");
+            arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('SignModule')) {{ $buildScriptArguments['SignModule'] = ${request.SignModule.ToString().ToLowerInvariant()} }}");
         }
 
         arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeProjectPackages')) {{ $buildScriptArguments['IncludeProjectPackages'] = ${request.IncludeProjectPackages.ToString().ToLowerInvariant()} }}");
         arguments.Add($"if ($buildScriptCommand.Parameters.ContainsKey('IncludeModulePublishing')) {{ $buildScriptArguments['IncludeModulePublishing'] = ${request.IncludeModulePublishing.ToString().ToLowerInvariant()} }}");
+        if (request.ReuseStaging)
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('ReuseStaging')) { $buildScriptArguments['ReuseStaging'] = $true }");
+        if (request.SkipInstall)
+            arguments.Add("if ($buildScriptCommand.Parameters.ContainsKey('SkipInstall')) { $buildScriptArguments['SkipInstall'] = $true }");
 
         AddOptionalStringArgument(arguments, "CertificateThumbprint", request.CertificateThumbprint);
         AddOptionalSwitchArgument(arguments, "SignIncludeBinaries", request.SignIncludeBinaries);

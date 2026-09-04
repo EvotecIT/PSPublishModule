@@ -16,9 +16,11 @@ public sealed partial class DotNetPublishPipelineRunner
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         IReadOnlyDictionary<string, string> evaluatedProperties,
-        out EvaluatedPublishInput[] publishInputs)
+        out EvaluatedPublishInput[] publishInputs,
+        out string? failureReason)
     {
         publishInputs = Array.Empty<EvaluatedPublishInput>();
+        failureReason = null;
         string controlledOutputRoot = Path.Combine(
             Path.GetTempPath(),
             "pfpi-" + Guid.NewGuid().ToString("N"));
@@ -40,6 +42,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     out controlledGitRoot,
                     out string? controlledProjectPath))
             {
+                failureReason = "the controlled source checkout could not be created.";
                 return false;
             }
             if (!TryCreateControlledBuildEnvironment(
@@ -50,6 +53,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.GetDirectoryName(request.ProjectPath)!,
                     out IReadOnlyDictionary<string, string?> controlledEnvironment))
             {
+                failureReason = "the controlled build environment could not be created.";
                 return false;
             }
             if (!TryCreateControlledPublishInputPlaceholders(
@@ -59,6 +63,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     executableMsBuildInputs,
                     request.GlobalProperties))
             {
+                failureReason = "controlled publish-input placeholders could not be created.";
                 return false;
             }
 
@@ -79,6 +84,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         evaluatedProperties,
                         allowSdkManagedToolchainPackages: true))
                 {
+                    failureReason = "the verified offline package source could not be seeded.";
                     return false;
                 }
                 offlinePackageSources.AddRange(catalogSources);
@@ -108,8 +114,26 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
+                    controlledOutputRoot,
+                    out string? controlledGraphFailureReason))
+            {
+                failureReason = "the controlled project-reference graph could not be built" +
+                    (string.IsNullOrWhiteSpace(controlledGraphFailureReason)
+                        ? "."
+                        : $": {controlledGraphFailureReason}");
+                return false;
+            }
+            if (!TryRestoreControlledPublishRoot(
+                    request,
+                    controlledGitRoot!,
+                    controlledSourceRoot,
+                    controlledProjectPath!,
+                    controlledEnvironment,
+                    controlledNuGetConfig,
+                    offlinePackageSourceList,
                     controlledOutputRoot))
             {
+                failureReason = "the controlled root project could not be restored.";
                 return false;
             }
 
@@ -119,8 +143,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledProjectPath!,
                 "-nologo",
                 "-verbosity:quiet",
-                "-restore",
-                "-target:Build;ComputeFilesToPublish",
+                "-target:Rebuild;ComputeFilesToPublish",
                 "-getItem:ResolvedFileToPublish"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -129,15 +152,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledGitRoot!,
                     controlledSourceRoot))
             {
+                failureReason = "controlled project evaluation properties could not be remapped.";
                 return false;
             }
-            arguments.Add("-p:BuildProjectReferences=false");
+            // The graph nodes are restored and validated independently above. Rebuild the
+            // final root graph without recursive restore so referenced assembly identities
+            // match the real root prebuild as well as its portable PDB metadata.
+            arguments.Add("-p:BuildProjectReferences=true");
+            arguments.Add("-p:RestoreRecursive=false");
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
                     controlledGitRoot!,
                     evaluatedPathMap,
                     out string controlledPathMap))
             {
+                failureReason = "the controlled PathMap could not be constructed.";
                 return false;
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
@@ -155,6 +184,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
             {
+                failureReason = process.TimedOut
+                    ? "the controlled root publish-input evaluation timed out."
+                    : $"the controlled root publish-input evaluation exited with code {process.ExitCode}.";
                 return false;
             }
 
@@ -164,7 +196,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 : process.StdOut.LastIndexOf('{', itemsMarker);
             int jsonEnd = process.StdOut.LastIndexOf('}');
             if (jsonStart < 0 || jsonEnd < jsonStart)
+            {
+                failureReason = "the controlled root publish-input evaluation returned no readable item JSON.";
                 return false;
+            }
             using JsonDocument document = JsonDocument.Parse(
                 process.StdOut.Substring(jsonStart, jsonEnd - jsonStart + 1));
             if (!document.RootElement.TryGetProperty("Items", out JsonElement items) ||
@@ -196,11 +231,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     !item.Metadata.TryGetValue("RelativePath", out string? relativePath) ||
                     !IsControlledPublishRelativePath(relativePath))
                 {
+                    failureReason = "a controlled publish item has no safe RelativePath.";
                     return false;
                 }
 
                 if (IsSameOrBelowBuildInputPath(item.FullPath, offlinePackageSource))
+                {
+                    failureReason = "a controlled publish item resolved inside the temporary offline package source.";
                     return false;
+                }
                 if (IsTrustedExternalBuildInfrastructurePath(
                         item.FullPath,
                         trustedBuildInfrastructureRoots))
@@ -216,6 +255,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         out string originalInputPath,
                         out bool isPackageBacked))
                 {
+                    failureReason = $"controlled publish item '{item.FullPath}' could not be mapped to its original input.";
                     return false;
                 }
                 if (!TryMapControlledPublishMetadata(
@@ -227,6 +267,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         packageCatalogs,
                         out IReadOnlyDictionary<string, string> mappedMetadata))
                 {
+                    failureReason = $"metadata for controlled publish item '{item.FullPath}' could not be mapped safely.";
                     return false;
                 }
 
@@ -276,9 +317,10 @@ public sealed partial class DotNetPublishPipelineRunner
             publishInputs = results.ToArray();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
             publishInputs = Array.Empty<EvaluatedPublishInput>();
+            failureReason = "controlled publish-input evaluation threw " + ex.GetType().Name + ".";
             return false;
         }
         finally
@@ -293,6 +335,54 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 // Temporary controlled-build cleanup is best effort.
             }
+        }
+    }
+
+    private static bool TryRestoreControlledPublishRoot(
+        ProjectEvaluationRequest request,
+        string originalGitRoot,
+        string controlledSourceRoot,
+        string controlledProjectPath,
+        IReadOnlyDictionary<string, string?> controlledEnvironment,
+        string controlledNuGetConfig,
+        string offlinePackageSourceList,
+        string controlledOutputRoot)
+    {
+        try
+        {
+            var arguments = new List<string>
+            {
+                "restore",
+                controlledProjectPath,
+                "-nologo",
+                "-verbosity:quiet",
+                "-p:RestoreRecursive=false"
+            };
+            if (!TryAppendControlledProjectEvaluationProperties(
+                    arguments,
+                    request,
+                    originalGitRoot,
+                    controlledSourceRoot))
+            {
+                return false;
+            }
+            AppendControlledProofSafeguards(
+                arguments,
+                controlledNuGetConfig,
+                offlinePackageSourceList,
+                Path.Combine(controlledOutputRoot, "root-packages.lock.json"));
+
+            var process = RunBuildInputEvaluationProcess(
+                "dotnet",
+                Path.GetDirectoryName(controlledProjectPath)!,
+                arguments,
+                controlledEnvironment,
+                TimeSpan.FromMinutes(5));
+            return process.ExitCode == 0 && !process.TimedOut;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -337,19 +427,25 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string?> controlledEnvironment,
         string controlledNuGetConfig,
         string offlinePackageSourceList,
-        string controlledOutputRoot)
+        string controlledOutputRoot,
+        out string? failureReason)
     {
+        failureReason = null;
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string originalProjectPath = Path.GetFullPath(node.Request.ProjectPath);
             if (!IsSameOrBelowBuildInputPath(originalProjectPath, originalGitRoot))
+            {
+                failureReason = $"project '{originalProjectPath}' is outside the controlled Git root.";
                 return false;
+            }
             string controlledProjectPath = Path.GetFullPath(Path.Combine(
                 controlledSourceRoot,
                 FrameworkCompatibility.GetRelativePath(originalGitRoot, originalProjectPath)));
             if (!IsSameOrBelowBuildInputPath(controlledProjectPath, controlledSourceRoot) ||
                 !File.Exists(controlledProjectPath))
             {
+                failureReason = $"controlled project '{originalProjectPath}' is missing or outside the controlled checkout.";
                 return false;
             }
 
@@ -370,15 +466,18 @@ public sealed partial class DotNetPublishPipelineRunner
                     originalGitRoot,
                     controlledSourceRoot))
             {
+                failureReason = $"properties for controlled project '{originalProjectPath}' could not be remapped.";
                 return false;
             }
             arguments.Add("-p:BuildProjectReferences=false");
+            arguments.Add("-p:RestoreRecursive=false");
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
                     originalGitRoot,
                     node.PathMap,
                     out string controlledPathMap))
             {
+                failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
                 return false;
             }
             arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
@@ -395,7 +494,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromMinutes(5),
                 controlledOutputRoot);
             if (process.ExitCode != 0 || process.TimedOut)
+            {
+                string? detail = TailLines(
+                    string.IsNullOrWhiteSpace(process.StdErr) ? process.StdOut : process.StdErr,
+                    maxLines: 8,
+                    maxChars: 2000);
+                failureReason = process.TimedOut
+                    ? $"project '{originalProjectPath}' timed out."
+                    : $"project '{originalProjectPath}' exited with code {process.ExitCode}.";
+                if (!string.IsNullOrWhiteSpace(detail))
+                {
+                    failureReason += " " + detail!.Trim();
+                }
                 return false;
+            }
         }
         return true;
     }
@@ -445,6 +557,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (property.Key.Equals("Configuration", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("BuildProjectReferences", StringComparison.OrdinalIgnoreCase) ||
+                property.Key.Equals("RestoreRecursive", StringComparison.OrdinalIgnoreCase) ||
                 property.Key.Equals("PathMap", StringComparison.OrdinalIgnoreCase))
             {
                 continue;

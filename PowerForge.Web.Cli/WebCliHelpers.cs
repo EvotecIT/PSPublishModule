@@ -143,7 +143,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
         Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
         Console.WriteLine("  powerforge-web links validate --config <site.json> [--shortlink-source <file>] [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
-        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--shortlink-source <file>] [--out <file>] [--include-404] [--output json]");
+        Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--shortlink-source <file>] [--out <file>] [--shortlink-map-out <file> --shortlink-map-runtime-path <absolute-path>] [--include-404] [--output json]");
         Console.WriteLine("  powerforge-web links import-wordpress --source <pretty-links.csv> --config <site.json> [--out <shortlinks.json>] [--owner <name>] [--tag <tag>] [--output json]");
         Console.WriteLine("  powerforge-web links report-404 --site-root <dir> [--source <access.log|observations.csv>] [--out <report.json>] [--review-csv <file>] [--output json]");
         Console.WriteLine("  powerforge-web links promote-404 --source <404-suggestions.json> --config <site.json> [--out <redirects.json>] [--review-csv <file>] [--enable] [--output json]");
@@ -164,6 +164,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web agent-ready prepare --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready verify --site-root <dir> [--config <site.json>] [--base-url <url>] [--fail-on-failures] [--output json]");
         Console.WriteLine("  powerforge-web agent-ready scan [--config <site.json>] [--url <url>] [--timeout-ms <n>] [--fail-on-failures] [--output json]");
+        Console.WriteLine("  powerforge-web agent-ready exercise --url <search-page> --query <text> [--tool <name>] [--limit <1-5>] [--ensure-browser] [--headed] [--output json]");
         Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
         Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");

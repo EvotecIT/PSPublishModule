@@ -108,9 +108,9 @@ New-BenchmarkSuite 'ties' -OutputRoot '{{escapedRoot}}' {
             }
         });
 
-        Assert.Contains("| baseline narrowly faster | Current | Run | 1.00x (100ms) | 1.04x (104ms) | Managed tied with Other |", markdown);
-        Assert.Contains("| baseline narrowly slower | Current | Run | 1.00x (104ms) | 0.96x (100ms) | Managed tied with Other |", markdown);
-        Assert.Contains("| baseline materially slower | Current | Run | 1.00x (106ms) | 0.94x (100ms) | Managed slower than Other |", markdown);
+        Assert.Contains("| baseline narrowly faster | Current | Run | 1.00x (100ms) | 1.04x (104ms) | Fastest: Managed, Other (tie) |", markdown);
+        Assert.Contains("| baseline narrowly slower | Current | Run | 1.00x (104ms) | 0.96x (100ms) | Fastest: Other, Managed (tie) |", markdown);
+        Assert.Contains("| baseline materially slower | Current | Run | 1.00x (106ms) | 0.94x (100ms) | Fastest: Other |", markdown);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ New-BenchmarkSuite 'ties' -OutputRoot '{{escapedRoot}}' {
             }
         });
 
-        Assert.Contains("Managed slower than Other", markdown);
+        Assert.Contains("Fastest: Other", markdown);
         Assert.DoesNotContain("tied", markdown, StringComparison.OrdinalIgnoreCase);
     }
 }

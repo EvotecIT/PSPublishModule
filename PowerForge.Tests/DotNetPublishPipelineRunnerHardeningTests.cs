@@ -1007,6 +1007,196 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public void BuildRestoreRuntimeIdentifiers_UsesConfiguredMatrixWhenExecutionIsFiltered()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    ProjectPath = "Service.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        }
+                    },
+                    RestoreCombinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        }
+                    }
+                }
+            }
+        };
+
+        var runtimes = DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+            plan,
+            "Service.csproj",
+            "win-x64",
+            "net10.0");
+
+        Assert.Equal(new[] { "linux-x64", "win-x64" }, runtimes);
+        Assert.Equal(
+            "/p:RuntimeIdentifiers=\"linux-x64;win-x64\"",
+            DotNetPublishPipelineRunner.BuildRestoreArguments(
+                plan,
+                "Service.csproj",
+                "win-x64",
+                "net10.0")[3]);
+    }
+
+    [Fact]
+    public void RetainConfiguredRestoreCombinations_PreservesOnlySelectedFrameworkAndStyleMatrix()
+    {
+        var selectedPlan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    Name = "CLI",
+                    ProjectPath = "Cli.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        }
+                    }
+                }
+            }
+        };
+        var configuredPlan = new DotNetPublishPlan
+        {
+            Targets = new[]
+            {
+                new DotNetPublishTargetPlan
+                {
+                    Name = "CLI",
+                    ProjectPath = "Cli.csproj",
+                    Combinations = new[]
+                    {
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "linux-x64",
+                            Style = DotNetPublishStyle.PortableCompat
+                        },
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net9.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        }
+                    }
+                }
+            }
+        };
+
+        PowerForgeReleaseService.RetainConfiguredRestoreCombinations(selectedPlan, configuredPlan);
+
+        Assert.Collection(
+            selectedPlan.Targets[0].RestoreCombinations,
+            combination =>
+            {
+                Assert.Equal("net10.0", combination.Framework);
+                Assert.Equal("win-x64", combination.Runtime);
+                Assert.Equal(DotNetPublishStyle.FrameworkDependent, combination.Style);
+            },
+            combination =>
+            {
+                Assert.Equal("net10.0", combination.Framework);
+                Assert.Equal("linux-x64", combination.Runtime);
+                Assert.Equal(DotNetPublishStyle.FrameworkDependent, combination.Style);
+            });
+    }
+
+    [Fact]
+    public void RetainConfiguredRestoreCombinations_IncludesSelectedRuntimeOutsideConfiguredMatrix()
+    {
+        var selectedCombination = new DotNetPublishTargetCombination
+        {
+            Framework = "net10.0",
+            Runtime = "osx-x64",
+            Style = DotNetPublishStyle.FrameworkDependent
+        };
+        var selectedPlan = new DotNetPublishPlan
+        {
+            Targets =
+            [
+                new DotNetPublishTargetPlan
+                {
+                    Name = "CLI",
+                    ProjectPath = "Cli.csproj",
+                    Combinations = [selectedCombination]
+                }
+            ]
+        };
+        var configuredPlan = new DotNetPublishPlan
+        {
+            Targets =
+            [
+                new DotNetPublishTargetPlan
+                {
+                    Name = "CLI",
+                    ProjectPath = "Cli.csproj",
+                    Combinations =
+                    [
+                        new DotNetPublishTargetCombination
+                        {
+                            Framework = "net10.0",
+                            Runtime = "win-x64",
+                            Style = DotNetPublishStyle.FrameworkDependent
+                        }
+                    ]
+                }
+            ]
+        };
+
+        PowerForgeReleaseService.RetainConfiguredRestoreCombinations(selectedPlan, configuredPlan);
+
+        Assert.Contains(
+            selectedPlan.Targets[0].RestoreCombinations,
+            combination => ReferenceEquals(combination, selectedCombination));
+        Assert.Equal(
+            new[] { "osx-x64", "win-x64" },
+            DotNetPublishPipelineRunner.BuildRestoreRuntimeIdentifiers(
+                selectedPlan,
+                "Cli.csproj",
+                "osx-x64",
+                "net10.0"));
+    }
+
+    [Fact]
     public void BuildRestoreArguments_DoesNotForceTopLevelFrameworkAcrossProjectReferences()
     {
         var plan = new DotNetPublishPlan

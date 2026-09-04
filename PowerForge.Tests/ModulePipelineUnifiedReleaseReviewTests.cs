@@ -181,7 +181,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     }
 
     [Fact]
-    public void Run_PreflightsSynchronizedModuleVersionBeforePublishingNuGet()
+    public void Run_RejectsIncompatibleSynchronizedVersionBeforePublishingNuGet()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -288,8 +288,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var exception = Assert.Throws<InvalidOperationException>(() => runner.Run(spec));
 
-            Assert.Contains("not greater than repository version", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal(1, dependencyBuildCalls);
+            Assert.Contains("cannot produce a version greater than current version", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, dependencyBuildCalls);
             Assert.Equal(0, nugetPublishCalls);
             Assert.Empty(hostedOperations.PublishedModuleVersions);
         }

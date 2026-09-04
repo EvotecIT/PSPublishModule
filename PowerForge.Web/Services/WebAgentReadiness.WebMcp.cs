@@ -1,4 +1,5 @@
-using System.Text.Json;
+using System.IO.Compression;
+using System.Text;
 using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using HtmlTinkerX;
@@ -16,7 +17,8 @@ public static partial class WebAgentReadiness
         if (!spec.WebMcp)
             return;
 
-        var seenRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenSiteSearchRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var tool in spec.WebMcpTools ?? Array.Empty<AgentWebMcpToolSpec>())
         {
             if (tool is null)
@@ -28,15 +30,24 @@ public static partial class WebAgentReadiness
                 throw new ArgumentException($"WebMCP tool '{tool.Name}' requires a description.");
             if (string.IsNullOrWhiteSpace(tool.Kind))
                 throw new ArgumentException($"WebMCP tool '{tool.Name}' requires an implementation kind.");
-            if (!string.Equals(tool.Kind.Trim(), "site-search", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException($"WebMCP tool '{tool.Name}' uses unsupported implementation kind '{tool.Kind}'. PowerForge Phase 1 supports 'site-search'.");
-            if (!tool.ReadOnly)
+            var kind = tool.Kind.Trim();
+            if (!string.Equals(kind, "site-search", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(kind, "page-tool", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"WebMCP tool '{tool.Name}' uses unsupported implementation kind '{tool.Kind}'. PowerForge supports 'site-search' and 'page-tool'.");
+            }
+            if (string.Equals(kind, "site-search", StringComparison.OrdinalIgnoreCase) && !tool.ReadOnly)
                 throw new ArgumentException($"WebMCP tool '{tool.Name}' uses the read-only 'site-search' implementation and cannot be declared writable.");
 
             ValidateWebMcpRoute(tool.Route, toolName);
             var normalizedRoute = NormalizeWebMcpDocumentRoute(NormalizeWebMcpRoute(tool.Route));
-            if (!seenRoutes.Add(normalizedRoute))
+            if (!seenTools.Add($"{normalizedRoute}\n{toolName}"))
+                throw new ArgumentException($"WebMCP tool '{tool.Name}' is configured more than once for route '{normalizedRoute}'.");
+            if (string.Equals(kind, "site-search", StringComparison.OrdinalIgnoreCase) &&
+                !seenSiteSearchRoutes.Add(normalizedRoute))
+            {
                 throw new ArgumentException($"Only one WebMCP site-search tool can be configured for route '{normalizedRoute}'.");
+            }
         }
     }
 
@@ -101,16 +112,30 @@ public static partial class WebAgentReadiness
 
             var html = File.ReadAllText(htmlPath);
             var pageUri = new Uri(siteBaseUri, NormalizeWebMcpDocumentRoute(route).TrimStart('/'));
+            if (IsPageTool(tool))
+            {
+                if (!TryParsePageWebMcpTool(html, tool, pageUri, out var pageScripts, out var pageDocumentBaseUri, out var pageParseMessage))
+                    return new WebMcpEvaluation(false, $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {pageParseMessage}", htmlPath);
+                if (!ScriptsResolveInsideRenderedSite(siteRoot, siteBaseUri, pageUri, pageDocumentBaseUri, pageScripts))
+                {
+                    return new WebMcpEvaluation(
+                        false,
+                        $"WebMCP page tool '{tool.Name}' at '{route}' does not load a marked product adapter from the same rendered site.",
+                        htmlPath);
+                }
+                continue;
+            }
+
             if (!TryParseWebMcpPage(html, tool, pageUri, out var scripts, out var documentBaseUri, out var indexUri, out var parseMessage))
                 return new WebMcpEvaluation(false, $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {parseMessage}", htmlPath);
 
-            if (!TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, indexUri, out var indexPath) ||
-                !File.Exists(indexPath) ||
-                !IsSearchIndexJsonArray(File.ReadAllText(indexPath)))
+            var indexMessage = "the referenced resource is outside the rendered site.";
+            var indexPathResolved = TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, indexUri, out var indexPath);
+            if (!indexPathResolved || !TryValidateLocalSearchIndex(indexPath, out indexMessage))
             {
                 return new WebMcpEvaluation(
                     false,
-                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference an existing JSON-array search index inside the rendered site.",
+                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference a usable JSON-array search index inside the rendered site: {indexMessage}",
                     indexPath ?? htmlPath);
             }
 
@@ -165,6 +190,23 @@ public static partial class WebAgentReadiness
                 return;
             }
 
+            if (IsPageTool(tool))
+            {
+                if (!TryParsePageWebMcpTool(page.Text, tool, finalPageUri, out var pageScripts, out var pageDocumentBaseUri, out var pageParseMessage))
+                {
+                    AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
+                        $"WebMCP tool '{tool.Name}' at '{route}' is not ready: {pageParseMessage}", routeUrl);
+                    return;
+                }
+                if (!await RemoteScriptsResolveSameOriginAsync(http, finalPageUri, pageDocumentBaseUri, pageScripts, cancellationToken).ConfigureAwait(false))
+                {
+                    AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
+                        $"WebMCP page tool '{tool.Name}' at '{route}' does not load a marked product adapter from the same origin.", routeUrl);
+                    return;
+                }
+                continue;
+            }
+
             if (!TryParseWebMcpPage(page.Text, tool, finalPageUri, out var scripts, out var documentBaseUri, out var indexUri, out var parseMessage))
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
@@ -172,16 +214,48 @@ public static partial class WebAgentReadiness
                 return;
             }
 
-            var index = await TryGetTextAsync(http, indexUri.AbsoluteUri, null, cancellationToken).ConfigureAwait(false);
-            var finalIndexUri = index.Response?.RequestMessage?.RequestUri;
+            var index = await TryGetBoundedSearchIndexAsync(http, indexUri.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+            var finalIndexUri = index.FinalUri;
+            var entryCount = 0;
+            var decodedBytes = 0;
+            var indexMessage = index.Message;
+            var validIndex = index.Success && WebSearchIndexPolicy.TryValidateJsonArray(
+                index.Text,
+                out entryCount,
+                out decodedBytes,
+                out indexMessage);
             if (!index.Success ||
                 finalIndexUri is null ||
                 !HasSameOrigin(finalPageUri, finalIndexUri) ||
-                !IsSearchIndexJsonArray(index.Text))
+                !validIndex)
             {
                 AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "fail",
-                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference a usable same-origin JSON-array search index.", indexUri.AbsoluteUri);
+                    $"WebMCP tool '{tool.Name}' at '{route}' does not reference a usable same-origin search index: {index.Message}; {indexMessage}", indexUri.AbsoluteUri);
                 return;
+            }
+
+            var compressed = index.HasContentEncoding;
+            if (decodedBytes >= WebSearchIndexPolicy.CompressionRecommendationBytes && !compressed)
+            {
+                AddCheck(
+                    checks,
+                    $"webmcp-index-compression-{tool.Name}",
+                    "performance",
+                    $"WebMCP search index compression ({tool.Name})",
+                    "warn",
+                    $"The {decodedBytes}-byte decoded search index is delivered without Content-Encoding. Enable Brotli or gzip for JSON responses.",
+                    indexUri.AbsoluteUri);
+            }
+            else
+            {
+                AddCheck(
+                    checks,
+                    $"webmcp-index-delivery-{tool.Name}",
+                    "performance",
+                    $"WebMCP search index delivery ({tool.Name})",
+                    "pass",
+                    $"The search index contains {entryCount} entries and {decodedBytes} decoded bytes{(compressed ? " with HTTP compression" : string.Empty)}.",
+                    indexUri.AbsoluteUri);
             }
 
             if (!await RemoteScriptsContainCanonicalSiteSearchRuntimeAsync(http, finalPageUri, documentBaseUri, scripts, cancellationToken).ConfigureAwait(false))
@@ -195,6 +269,75 @@ public static partial class WebAgentReadiness
         var configured = string.Join(", ", spec.WebMcpTools.Select(static tool => $"{tool.Name} at {NormalizeRoute(tool.Route)}"));
         AddCheck(checks, "webmcp", "api-auth-mcp-skill-discovery", "WebMCP", "pass",
             $"Current imperative WebMCP registration is present for {configured}.", baseUrl);
+    }
+
+    private static bool IsPageTool(AgentWebMcpToolSpec tool) =>
+        string.Equals(tool.Kind.Trim(), "page-tool", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryParsePageWebMcpTool(
+        string html,
+        AgentWebMcpToolSpec tool,
+        Uri pageUri,
+        out IElement[] markedScripts,
+        out Uri documentBaseUri,
+        out string message)
+    {
+        markedScripts = Array.Empty<IElement>();
+        documentBaseUri = pageUri;
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            message = "the route returned empty HTML.";
+            return false;
+        }
+
+        try
+        {
+            var document = HtmlParser.ParseWithAngleSharp(html);
+            documentBaseUri = ResolveWebMcpDocumentBase(document, pageUri);
+            var surfaces = document.QuerySelectorAll("[data-webmcp-page-tool]")
+                .Where(surface => string.Equals(surface.GetAttribute("data-webmcp-tool-name"), tool.Name, StringComparison.Ordinal))
+                .ToArray();
+            if (surfaces.Length != 1)
+            {
+                message = $"the route must contain exactly one data-webmcp-page-tool surface for '{tool.Name}'.";
+                return false;
+            }
+
+            var surface = surfaces[0];
+            if (!string.Equals(surface.GetAttribute("data-webmcp-tool-description"), tool.Description, StringComparison.Ordinal))
+            {
+                message = $"the page-tool surface for '{tool.Name}' does not declare its configured description.";
+                return false;
+            }
+            var expectedReadOnly = tool.ReadOnly ? "true" : "false";
+            if (!string.Equals(surface.GetAttribute("data-webmcp-read-only"), expectedReadOnly, StringComparison.OrdinalIgnoreCase))
+            {
+                message = $"the page-tool surface for '{tool.Name}' does not declare data-webmcp-read-only='{expectedReadOnly}'.";
+                return false;
+            }
+
+            var markedCandidates = document.QuerySelectorAll("script[data-powerforge-webmcp]")
+                .Where(script => string.Equals(script.GetAttribute("data-webmcp-tool-name"), tool.Name, StringComparison.Ordinal))
+                .ToArray();
+            var documentElements = document.All.ToArray();
+            var surfaceIndex = Array.IndexOf(documentElements, surface);
+            markedScripts = markedCandidates
+                .Where(script => CanExecuteAfterSurface(script, documentElements, surfaceIndex))
+                .ToArray();
+            if (markedScripts.Length == 0)
+            {
+                message = $"no product adapter marked for WebMCP tool '{tool.Name}' can execute after its page-tool surface exists.";
+                return false;
+            }
+
+            message = string.Empty;
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            message = $"the route HTML could not be parsed ({ex.GetType().Name}).";
+            return false;
+        }
     }
 
     private static bool TryParseWebMcpPage(
@@ -394,6 +537,65 @@ public static partial class WebAgentReadiness
         return false;
     }
 
+    private static bool ScriptsResolveInsideRenderedSite(
+        string siteRoot,
+        Uri siteBaseUri,
+        Uri pageUri,
+        Uri documentBaseUri,
+        IEnumerable<IElement> scripts)
+    {
+        foreach (var script in scripts)
+        {
+            var source = script.GetAttribute("src");
+            if (string.IsNullOrWhiteSpace(source) ||
+                !Uri.TryCreate(documentBaseUri, source, out var assetUri) ||
+                !HasSameOrigin(pageUri, assetUri))
+            {
+                continue;
+            }
+
+            if (TryResolveLocalWebMcpResourcePath(siteRoot, siteBaseUri, assetUri, out var assetPath) &&
+                File.Exists(assetPath) &&
+                new FileInfo(assetPath).Length > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> RemoteScriptsResolveSameOriginAsync(
+        HttpClient http,
+        Uri pageUri,
+        Uri documentBaseUri,
+        IEnumerable<IElement> scripts,
+        CancellationToken cancellationToken)
+    {
+        foreach (var script in scripts)
+        {
+            var source = script.GetAttribute("src");
+            if (string.IsNullOrWhiteSpace(source) ||
+                !Uri.TryCreate(documentBaseUri, source, out var assetUri) ||
+                !HasSameOrigin(pageUri, assetUri))
+            {
+                continue;
+            }
+
+            var asset = await TryGetTextAsync(http, assetUri.AbsoluteUri, null, cancellationToken).ConfigureAwait(false);
+            var finalAssetUri = asset.Response?.RequestMessage?.RequestUri;
+            if (asset.Success &&
+                finalAssetUri is not null &&
+                HasSameOrigin(pageUri, finalAssetUri) &&
+                !string.IsNullOrWhiteSpace(asset.Text))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool HasSameOrigin(Uri left, Uri right) =>
         string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(left.Host, right.Host, StringComparison.OrdinalIgnoreCase) &&
@@ -467,21 +669,113 @@ public static partial class WebAgentReadiness
         return true;
     }
 
-    private static bool IsSearchIndexJsonArray(string? json)
+    private static bool TryValidateLocalSearchIndex(string? path, out string message)
     {
-        if (string.IsNullOrWhiteSpace(json))
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            message = "the referenced file does not exist.";
             return false;
+        }
+
+        var length = new FileInfo(path).Length;
+        if (length > WebSearchIndexPolicy.MaximumDecodedBytes)
+        {
+            message = $"the search index is {length} bytes; the WebMCP limit is {WebSearchIndexPolicy.MaximumDecodedBytes} bytes.";
+            return false;
+        }
 
         try
         {
-            using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Array;
+            return WebSearchIndexPolicy.TryValidateJsonArray(
+                File.ReadAllText(path),
+                out _,
+                out _,
+                out message);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            message = $"the search index could not be read ({ex.GetType().Name}).";
             return false;
         }
     }
 
+    private static async Task<WebMcpIndexResult> TryGetBoundedSearchIndexAsync(
+        HttpClient http,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.AcceptEncoding.ParseAdd("br, gzip, deflate");
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            var finalUri = response.RequestMessage?.RequestUri;
+            var hasContentEncoding = response.Content.Headers.ContentEncoding.Count > 0;
+            if (!response.IsSuccessStatusCode)
+                return new WebMcpIndexResult(false, $"HTTP {(int)response.StatusCode}", string.Empty, finalUri, hasContentEncoding);
+
+            if (response.Content.Headers.ContentLength is > WebSearchIndexPolicy.MaximumDecodedBytes &&
+                response.Content.Headers.ContentEncoding.Count == 0)
+            {
+                return new WebMcpIndexResult(
+                    false,
+                    $"the response Content-Length exceeds {WebSearchIndexPolicy.MaximumDecodedBytes} bytes",
+                    string.Empty,
+                    finalUri,
+                    hasContentEncoding);
+            }
+
+            await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var decoded = WrapSearchIndexStream(source, response.Content.Headers.ContentEncoding);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81_920];
+            while (true)
+            {
+                var read = await decoded.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                    break;
+                if (buffer.Length + read > WebSearchIndexPolicy.MaximumDecodedBytes)
+                {
+                    return new WebMcpIndexResult(
+                        false,
+                        $"the decoded response exceeds {WebSearchIndexPolicy.MaximumDecodedBytes} bytes",
+                        string.Empty,
+                        finalUri,
+                        hasContentEncoding);
+                }
+                buffer.Write(chunk, 0, read);
+            }
+
+            var text = new UTF8Encoding(false, true).GetString(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+            return new WebMcpIndexResult(true, $"HTTP {(int)response.StatusCode}", text, finalUri, hasContentEncoding);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new WebMcpIndexResult(false, ex.Message, string.Empty, null, false);
+        }
+    }
+
+    private static Stream WrapSearchIndexStream(Stream source, ICollection<string> contentEncodings)
+    {
+        if (contentEncodings.Count == 0)
+            return source;
+        if (contentEncodings.Count != 1)
+            throw new InvalidDataException("Search index responses with multiple Content-Encoding values are not supported.");
+
+        return contentEncodings.Single().Trim().ToLowerInvariant() switch
+        {
+            "br" => new BrotliStream(source, CompressionMode.Decompress, leaveOpen: false),
+            "gzip" => new GZipStream(source, CompressionMode.Decompress, leaveOpen: false),
+            "deflate" => new DeflateStream(source, CompressionMode.Decompress, leaveOpen: false),
+            var encoding => throw new InvalidDataException($"Unsupported search index Content-Encoding '{encoding}'.")
+        };
+    }
+
     private sealed record WebMcpEvaluation(bool Success, string Message, string Target);
+    private sealed record WebMcpIndexResult(
+        bool Success,
+        string Message,
+        string Text,
+        Uri? FinalUri,
+        bool HasContentEncoding);
 }

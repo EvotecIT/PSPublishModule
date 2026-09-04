@@ -205,21 +205,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         return false;
                     }
-                    int separator = package.Key.LastIndexOf('|');
-                    if (separator <= 0 || separator == package.Key.Length - 1)
-                        return false;
-                    string packageId = package.Key.Substring(0, separator);
-                    string packageVersion = package.Key.Substring(separator + 1);
-                    string destinationPath = Path.Combine(
-                        destination,
-                        packageId + "." + packageVersion + ".nupkg");
+                    string destinationPath = Path.Combine(destination, Path.GetFileName(cached.SourcePath));
                     if (File.Exists(destinationPath))
                     {
                         return false;
                     }
                     cached.Archive.CopyTo(destinationPath);
                 }
-                packageSources = [destination];
+                packageSources = new[] { destination };
                 return true;
             }
             catch

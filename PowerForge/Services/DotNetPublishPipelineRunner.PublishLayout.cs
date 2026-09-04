@@ -241,6 +241,11 @@ public sealed partial class DotNetPublishPipelineRunner
             if (File.Exists(zipPath)) File.Delete(zipPath);
 
             ZipFile.CreateFromDirectory(outputDir, zipPath);
+            ApplyArchiveExecutablePermissions(
+                outputDir,
+                rid,
+                zipPath,
+                EnumerateEffectiveExecutableIdentities(target));
             return zipPath;
         }
         catch (Exception ex)
@@ -249,6 +254,42 @@ public sealed partial class DotNetPublishPipelineRunner
             return null;
         }
     }
+
+    internal static void ApplyArchiveExecutablePermissions(
+        string outputRoot,
+        string runtime,
+        string archivePath,
+        IEnumerable<string> expectedIdentities)
+    {
+        if (runtime.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string? executablePath = ResolvePrimaryExecutable(
+            outputRoot,
+            runtime,
+            expectedIdentities);
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return;
+        }
+
+        PowerForgeToolReleaseService.ApplyArchiveExecutablePermissions(
+            runtime,
+            outputRoot,
+            archivePath,
+            executablePath);
+    }
+
+    internal static IEnumerable<string> EnumerateEffectiveExecutableIdentities(
+        DotNetPublishTargetPlan target)
+        => (target.ExecutableIdentities ?? Array.Empty<string>())
+            .Concat(string.IsNullOrWhiteSpace(target.Publish?.RenameTo)
+                ? Array.Empty<string>()
+                : new[] { target.Publish!.RenameTo! })
+            .Where(static identity => !string.IsNullOrWhiteSpace(identity))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     internal static string? ResolvePrimaryExecutable(
         string root,

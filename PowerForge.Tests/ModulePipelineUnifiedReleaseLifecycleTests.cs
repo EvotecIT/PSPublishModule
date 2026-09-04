@@ -8,6 +8,74 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineUnifiedReleaseTests
 {
     [Fact]
+    public void Run_BuildGate_DoesNotRunPublishLifecycleActions()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "2.0.10");
+            var events = new List<string>();
+            var hosted = new FakeHostedOperations(events)
+            {
+                ModuleAction = (action, context) =>
+                {
+                    events.Add(context.Stage.ToString());
+                    return CreateActionResult(action, context, succeeded: true);
+                }
+            };
+            var runner = CreateRunner(
+                hosted,
+                (_, _, _) => throw new InvalidOperationException("Package builds should not run."));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "2.0.10",
+                    StagingPath = stagingPath
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            At = ModulePipelineActionStage.BeforePublish,
+                            InlineScript = "Write-Output ignored"
+                        }
+                    },
+                    new ConfigurationActionSegment
+                    {
+                        Configuration = new ModulePipelineActionConfiguration
+                        {
+                            At = ModulePipelineActionStage.AfterPublish,
+                            InlineScript = "Write-Output ignored"
+                        }
+                    },
+                    new ConfigurationGateSegment
+                    {
+                        Configuration = new GateConfiguration { Mode = ConfigurationGateMode.Build }
+                    }
+                }
+            };
+
+            var result = runner.Run(spec);
+
+            Assert.Empty(events);
+            Assert.Empty(result.ActionResults);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Run_PreservesDependencyActionOrderingWithoutVersionSynchronization()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

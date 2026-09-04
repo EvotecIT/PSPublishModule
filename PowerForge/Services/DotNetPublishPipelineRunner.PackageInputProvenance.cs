@@ -11,6 +11,43 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    internal static bool TryReadPowerForgeRestorePackageHashes(
+        JsonElement root,
+        out Dictionary<string, string> hashes)
+    {
+        hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!root.TryGetProperty("powerForgeRestorePackages", out JsonElement packages))
+            return true;
+        if (packages.ValueKind != JsonValueKind.Object)
+            return false;
+
+        foreach (JsonProperty package in packages.EnumerateObject())
+        {
+            int separator = package.Name.IndexOf('|');
+            if (separator <= 0 ||
+                separator != package.Name.LastIndexOf('|') ||
+                separator == package.Name.Length - 1 ||
+                package.Value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(package.Value.GetString()) ||
+                !NuGetVersion.TryParse(package.Name.Substring(separator + 1), out NuGetVersion? version))
+            {
+                hashes.Clear();
+                return false;
+            }
+
+            string key = package.Name.Substring(0, separator) + "|" + version!.ToNormalizedString();
+            string contentHash = package.Value.GetString()!;
+            if (hashes.TryGetValue(key, out string? existing) &&
+                !string.Equals(existing, contentHash, StringComparison.Ordinal))
+            {
+                hashes.Clear();
+                return false;
+            }
+            hashes[key] = contentHash;
+        }
+        return true;
+    }
+
     internal static bool ShouldRefreshLockedRestoreOutputs(DotNetPublishPlan? plan)
         => plan?.NoRestoreInPublish != true;
 
@@ -745,6 +782,24 @@ public sealed partial class DotNetPublishPipelineRunner
                             hashes[key] = value;
                         }
                     }
+                }
+
+                if (!TryReadPowerForgeRestorePackageHashes(
+                        document.RootElement,
+                        out Dictionary<string, string> restorePackageHashes))
+                {
+                    hashes.Clear();
+                    return false;
+                }
+                foreach (KeyValuePair<string, string> package in restorePackageHashes)
+                {
+                    if (hashes.TryGetValue(package.Key, out string? existing) &&
+                        !string.Equals(existing, package.Value, StringComparison.Ordinal))
+                    {
+                        hashes.Clear();
+                        return false;
+                    }
+                    hashes[package.Key] = package.Value;
                 }
 
                 return hashes.Count > 0;

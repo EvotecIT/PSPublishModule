@@ -751,10 +751,18 @@ public sealed partial class ModulePipelineRunner
         ExecutePackageBuildsAfterModule(plan, session, state);
         ValidateRequestedReleaseVersion(plan, state);
 
-        ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
-        ExecutePublishOperations(plan, session, buildResult, state);
-        ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+        var publishingEnabled = plan.GateMode is null or ConfigurationGateMode.Publish;
+        if (publishingEnabled)
+        {
+            ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
+            ValidateFinalizedPackedArtefactIntegrity(state);
+            ExecutePublishOperations(plan, session, buildResult, state);
+            ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
+        }
+        else
+        {
+            ExecutePublishOperations(plan, session, buildResult, state);
+        }
 
         state.ReleaseCoordinationResult ??= PrepareUnifiedReleaseAssets(plan, state, publishId: null);
 

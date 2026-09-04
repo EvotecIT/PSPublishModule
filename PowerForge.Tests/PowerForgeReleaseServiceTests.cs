@@ -5548,6 +5548,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         var msi = Path.Combine(root, "IntelligenceX.Chat.Installer.msi");
         var storeUpload = Path.Combine(root, "IntelligenceX.Chat.Store.msixupload");
         var dotNetManifest = Path.Combine(root, "dotnet-manifest.json");
+        var dotNetChecksums = Path.Combine(root, "SHA256SUMS.txt");
         var authorizedConfig = Path.Combine(
             root,
             ".release.authorized.1.2.3.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json");
@@ -5557,6 +5558,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         File.WriteAllText(msi, "msi", new UTF8Encoding(false));
         File.WriteAllText(storeUpload, "upload", new UTF8Encoding(false));
         File.WriteAllText(dotNetManifest, "{}", new UTF8Encoding(false));
+        File.WriteAllText(dotNetChecksums, "dotnet checksums", new UTF8Encoding(false));
         File.WriteAllText(authorizedConfig, "{ \"effective\": true }", new UTF8Encoding(false));
 
         try
@@ -5629,6 +5631,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     Succeeded = true,
                     ManifestJsonPath = dotNetManifest,
+                    ChecksumsPath = dotNetChecksums,
                     Artefacts = new[]
                     {
                         new DotNetPublishArtefactResult
@@ -5701,6 +5704,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(File.Exists(Path.Combine(stageRoot, "installer", Path.GetFileName(msi))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "store", Path.GetFileName(storeUpload))));
             Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", Path.GetFileName(dotNetManifest))));
+            Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", "DotNetPublish.SHA256SUMS.txt")));
             Assert.True(File.Exists(Path.Combine(stageRoot, "metadata", Path.GetFileName(authorizedConfig))));
             Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(package)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
             Assert.Contains(Path.Combine(stageRoot, "nuget", Path.GetFileName(symbolPackage)), result.ReleaseAssets, StringComparer.OrdinalIgnoreCase);
@@ -5715,6 +5719,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains("*" + Path.GetFileName(package), checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("*" + Path.GetFileName(symbolPackage), checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("*" + Path.GetFileName(bundleZip), checksumText, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("*DotNetPublish.SHA256SUMS.txt", checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("*" + Path.GetFileName(authorizedConfig), checksumText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("nuget/", checksumText.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(package.Replace('\\', '/'), checksumText, StringComparison.OrdinalIgnoreCase);

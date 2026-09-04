@@ -370,7 +370,7 @@ public sealed partial class BenchmarkServicesTests
         });
 
         Assert.Contains("| Scenario | Variables | Host | Operation | Managed | ModuleFast | Result |", markdown);
-        Assert.Contains("| SingleModule | ModuleName=PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Managed fastest |", markdown);
+        Assert.Contains("| SingleModule | ModuleName=PSScriptAnalyzer | Core-7.6.3 | Install | 1.00x (1.00s) | 1.50x (1.50s) | Fastest: Managed |", markdown);
         Assert.DoesNotContain("Baseline Value", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -434,8 +434,8 @@ public sealed partial class BenchmarkServicesTests
         });
 
         Assert.Contains("| Scenario | Variables | Host | Operation | Metric | Managed | Other | Result |", markdown);
-        Assert.Contains("| case | Rows=10 | Current | Run | MedianMs | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
-        Assert.Contains("| case | Rows=20 | Current | Run | P95Ms | 1.00x (15ms) | 2.00x (30ms) | Managed fastest |", markdown);
+        Assert.Contains("| case | Rows=10 | Current | Run | MedianMs | 1.00x (10ms) | 2.00x (20ms) | Fastest: Managed |", markdown);
+        Assert.Contains("| case | Rows=20 | Current | Run | P95Ms | 1.00x (15ms) | 2.00x (30ms) | Fastest: Managed |", markdown);
     }
 
     [Fact]
@@ -494,8 +494,8 @@ public sealed partial class BenchmarkServicesTests
         });
 
         Assert.Contains("| Scenario | Host | Operation | Baseline | Managed | Other | Result |", markdown);
-        Assert.Contains("| case | Current | Run | Managed | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
-        Assert.Contains("| case | Current | Run | Other | 0.50x (10ms) | 1.00x (20ms) | Other slower than Managed |", markdown);
+        Assert.Contains("| case | Current | Run | Managed | 1.00x (10ms) | 2.00x (20ms) | Fastest: Managed |", markdown);
+        Assert.Contains("| case | Current | Run | Other | 0.50x (10ms) | 1.00x (20ms) | Fastest: Managed |", markdown);
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public sealed partial class BenchmarkServicesTests
         });
 
         Assert.Contains("| Scenario | Variables | Host | Operation | Managed | Other | Result |", markdown);
-        Assert.Contains("| Cold | ModuleName=PSScriptAnalyzer | Current | Run | 1.00x (10ms) | 2.00x (20ms) | Managed fastest |", markdown);
+        Assert.Contains("| Cold | ModuleName=PSScriptAnalyzer | Current | Run | 1.00x (10ms) | 2.00x (20ms) | Fastest: Managed |", markdown);
     }
 
     [Fact]
@@ -566,7 +566,7 @@ public sealed partial class BenchmarkServicesTests
             }
         });
 
-        Assert.Contains("| case | Current | Run | 1.00x (10ms) | Skipped | Managed only successful |", markdown);
+        Assert.Contains("| case | Current | Run | 1.00x (10ms) | Skipped | Only Managed measured; others skipped |", markdown);
         Assert.DoesNotContain("Failed", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -601,8 +601,48 @@ public sealed partial class BenchmarkServicesTests
             }
         });
 
-        Assert.Contains("| case | Current | Run | RowsPerSecond | 1.00x (1000) | 1.20x (1200) | Managed baseline |", markdown);
+        Assert.Contains("| case | Current | Run | RowsPerSecond | 1.00x (1000) | 1.20x (1200) | Reference: Managed |", markdown);
         Assert.DoesNotContain("1.00s", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MarkdownRenderer_RendersSingleEngineRowsAsMeasurements()
+    {
+        var markdown = new BenchmarkMarkdownRenderer().RenderComparisonTable(new[]
+        {
+            new BenchmarkComparisonRow
+            {
+                Scenario = "parse",
+                Operation = "Run",
+                Engine = "EvtxECmd",
+                Host = "Current",
+                BaselineEngine = "EvtxECmd",
+                Metric = "MedianMs",
+                Status = "Succeeded",
+                Actual = 17530,
+                Baseline = 17530,
+                Ratio = 1
+            },
+            new BenchmarkComparisonRow
+            {
+                Scenario = "parse",
+                Operation = "Run",
+                Engine = "EvtxECmd",
+                Host = "Current",
+                BaselineEngine = "EvtxECmd",
+                Metric = "OutputBytes",
+                Status = "Succeeded",
+                Actual = 0,
+                Baseline = 0
+            }
+        });
+
+        Assert.Contains("| Scenario | Host | Operation | Metric | EvtxECmd |", markdown);
+        Assert.Contains("| parse | Current | Run | MedianMs | 17.53s |", markdown);
+        Assert.Contains("| parse | Current | Run | OutputBytes | 0 |", markdown);
+        Assert.DoesNotContain("Result", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("1.00x", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("successful", markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -671,7 +711,7 @@ public sealed partial class BenchmarkServicesTests
         Assert.Single(output);
         var text = File.ReadAllText(readme);
         Assert.Contains("Other", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Managed", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Reference: Managed", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("old", text, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -1,6 +1,6 @@
 # PowerForge.Web WebMCP Rollout
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 WebMCP is a progressive enhancement for browser-based agents. It lets a page
 publish structured tools that reuse the page's existing user-visible behavior.
@@ -37,6 +37,12 @@ Complete in the engine and deployed on the Evotec website.
 
 - `site-search` is read-only and bounded.
 - The runtime uses the generated same-origin search index.
+- Tool output is capped at 1,500 characters, with three results by default and
+  five at most.
+- Generic index generation and loading are capped at 8 MiB decoded and 5,000
+  entries; the manifest records source/emitted counts and truncation.
+- Search indexes exclude presentation/runtime front matter, retain explicit
+  search aliases and keywords, and publish byte/hash evidence in the manifest.
 - Route, index, runtime integrity, tool name, and description are verified.
 - `agents.json` reports WebMCP only after rendered-artifact verification passes.
 - A theme can bind its existing search implementation instead of maintaining a
@@ -64,10 +70,21 @@ surfaces, unpublished sites, and hosts that do not currently resolve.
 
 ### Phase 3: Product and authenticated tools
 
-Definition is required per product before implementation. Likely candidates
-include diagnostics, document conversion, playground operations, or support
-workflows, but a product page is not evidence that the corresponding browser
-action exists safely.
+Definition is required per product before implementation. The first bounded
+pilots are:
+
+- OfficeIMO browser-local conversion, attached only to the existing converter
+  UI and its existing in-browser document services. The tool may operate only
+  on a file already selected in the visible page and must leave the result,
+  warnings, and download action visible. Document bytes stay in the browser.
+- DomainDetective public DNS queries, attached only to the existing raw-query
+  playground and its current DNS engine. Inputs are a normalized public domain
+  name and an allowlisted record type; the bounded response is untrusted remote
+  data and must also render in the playground.
+
+SyncSE remains outside this phase: its public site has no concrete safe workflow
+that benefits from a page tool. Authenticated synchronization, licensing,
+administration, support submission, and deletion remain disabled.
 
 Phase 3 starts only when a product has a concrete task inventory and every tool
 maps to existing application behavior. Generic business logic still belongs in
@@ -106,6 +123,8 @@ Every non-search tool must have all of these before it can be enabled:
    and transaction identity without logging secrets or document contents.
 10. Tests for authorization, input bounds, cancellation, duplicate execution,
     confirmation, and visible UI synchronization.
+11. A product adapter explicitly associated with the exact configured tool
+    name, so sibling tools on the same page cannot satisfy each other's proof.
 
 Until browser confirmation and declarative-form behavior settle across the
 standard and implementations, state-changing tools remain product-specific and
@@ -122,6 +141,10 @@ A site rollout is complete only when all of these are true:
 - the actual `/search/` page still works without WebMCP;
 - browser inspection with WebMCP enabled shows the expected tool and a real
   invocation returns bounded results while updating the visible page;
+- `agent-ready exercise` passes against every deployed search page;
+- each product-owned `page-tool` is invoked against the deployed page with
+  representative valid and invalid inputs, and its visible result/error state
+  matches the bounded callback response;
 - the live deployment scan passes against the final public origin;
 - no response sends `Origin-Agent-Cluster: ?0` or an effective
   `Permissions-Policy` that disables `tools` for the document;

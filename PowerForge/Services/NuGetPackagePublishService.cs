@@ -7,7 +7,7 @@ namespace PowerForge;
 internal sealed class NuGetPackagePublishService
 {
     private readonly ILogger _logger;
-    private readonly Func<DotNetNuGetPushRequest, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
+    private readonly Func<DotNetNuGetPushRequest, CancellationToken, DotNetRepositoryReleaseService.PackagePushResult> _pushPackage;
     private readonly string? _workingDirectory;
 
     public NuGetPackagePublishService(
@@ -16,7 +16,9 @@ internal sealed class NuGetPackagePublishService
         string? workingDirectory = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _pushPackage = pushPackage ?? PushPackage;
+        _pushPackage = pushPackage is null
+            ? PushPackage
+            : (request, _) => pushPackage(request);
         _workingDirectory = workingDirectory;
     }
 
@@ -81,7 +83,8 @@ internal sealed class NuGetPackagePublishService
                     request.SkipDuplicate,
                     request.WorkingDirectory ?? _workingDirectory,
                     timeout: null,
-                    suppressCompanionSymbols: true))
+                    suppressCompanionSymbols: true),
+                CancellationToken.None)
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -119,7 +122,8 @@ internal sealed class NuGetPackagePublishService
         bool publishFailFast = true,
         bool suppressCompanionSymbols = false,
         Action? remotePublishAttempted = null,
-        IProjectBuildProgressReporter? progress = null)
+        IProjectBuildProgressReporter? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (packages is null)
             throw new ArgumentNullException(nameof(packages));
@@ -165,6 +169,7 @@ internal sealed class NuGetPackagePublishService
 
         foreach (var package in packagePaths)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var item = progressItems[package];
             var watch = Stopwatch.StartNew();
             detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Started, "publishing");
@@ -227,6 +232,7 @@ internal sealed class NuGetPackagePublishService
             }
 
             remotePublishAttempted?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
             var pushResult = _pushPackage(new DotNetNuGetPushRequest(
                     package,
                     apiKey,
@@ -234,7 +240,8 @@ internal sealed class NuGetPackagePublishService
                     skipDuplicate,
                     _workingDirectory,
                     timeout: null,
-                    suppressCompanionSymbols))
+                    suppressCompanionSymbols),
+                cancellationToken)
                 ?? new DotNetRepositoryReleaseService.PackagePushResult
                 {
                     Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
@@ -297,6 +304,8 @@ internal sealed class NuGetPackagePublishService
         return result;
     }
 
-    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(DotNetNuGetPushRequest request)
-        => DotNetRepositoryReleaseService.PushPackage(request);
+    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(
+        DotNetNuGetPushRequest request,
+        CancellationToken cancellationToken)
+        => DotNetRepositoryReleaseService.PushPackage(request, cancellationToken);
 }
