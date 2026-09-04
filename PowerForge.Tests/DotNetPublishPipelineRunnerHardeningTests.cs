@@ -604,6 +604,62 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     }
 
     [Fact]
+    public async Task RunProcess_ConcurrentlyDrainsNoisyOutputAndErrorStreams()
+    {
+        var method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "RunProcess",
+            BindingFlags.Static | BindingFlags.NonPublic,
+            binder: null,
+            types: new[]
+            {
+                typeof(string),
+                typeof(string),
+                typeof(IReadOnlyList<string>),
+                typeof(IReadOnlyDictionary<string, string>)
+            },
+            modifiers: null);
+        Assert.NotNull(method);
+        bool isWindows = DotNetPublishPipelineRunner.IsWindows();
+        string executable = isWindows
+            ? Path.Combine(Environment.SystemDirectory, "cmd.exe")
+            : "/bin/sh";
+        string[] arguments = isWindows
+            ? new[]
+            {
+                "/d",
+                "/s",
+                "/c",
+                "for /L %i in (1,1,12000) do @echo output-%i & @echo error-%i 1>&2"
+            }
+            : new[]
+            {
+                "-c",
+                "i=1; while [ $i -le 12000 ]; do echo output-$i; echo error-$i >&2; i=$((i+1)); done"
+            };
+
+        var invocation = Task.Run(() => method!.Invoke(
+            null,
+            new object?[]
+            {
+                executable,
+                Environment.CurrentDirectory,
+                arguments,
+                null
+            }));
+
+        object? raw = await invocation.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.NotNull(raw);
+        var resultType = raw!.GetType();
+        var exitCode = (int)resultType.GetField("Item1")!.GetValue(raw)!;
+        var stdout = (string)resultType.GetField("Item2")!.GetValue(raw)!;
+        var stderr = (string)resultType.GetField("Item3")!.GetValue(raw)!;
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("output-12000", stdout, StringComparison.Ordinal);
+        Assert.Contains("error-12000", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildPublishMsBuildProperties_MergesGlobalTargetAndStyleOverrides()
     {
         var plan = new DotNetPublishPlan
