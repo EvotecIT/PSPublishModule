@@ -73,14 +73,14 @@ public sealed partial class DotNetPublishPipelineRunner
             string offlinePackageSource = Directory.CreateDirectory(
                 Path.Combine(controlledOutputRoot, "packages-source")).FullName;
             var offlinePackageSources = new List<string>();
-            int packageCatalogIndex = 0;
             foreach (VerifiedPackageInputCatalog packageCatalog in graphVerifiedPackages)
             {
-                string catalogSource = Directory.CreateDirectory(Path.Combine(
-                    offlinePackageSource,
-                    packageCatalogIndex++.ToString(System.Globalization.CultureInfo.InvariantCulture))).FullName;
+                // All graph catalogs feed one content-verified source. The seeder reuses an
+                // existing identical archive and fails closed when the same package identity
+                // resolves to different bytes. Avoiding one full source copy per project keeps
+                // large desktop graphs within a bounded temporary-disk footprint.
                 if (!packageCatalog.TrySeedControlledPackageSource(
-                        catalogSource,
+                        offlinePackageSource,
                         controlledSourceRoot,
                         controlledProjectPath!,
                         request.TrustedBuildPackages,
